@@ -1,0 +1,130 @@
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { db } from '../../storage/db.ts';
+import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
+import type { Cart } from '../../domain/cart.ts';
+import { activeScreenSignal } from '../state/screen.ts';
+import {
+  voidConfirmingSignal,
+  voidErrorSignal,
+  voidSelectionIndexSignal,
+  voidableSalesSignal,
+} from '../state/void-sale.ts';
+import {
+  cancelVoidConfirmation,
+  confirmVoid,
+  exitVoidScreen,
+  loadVoidableSales,
+  moveVoidSelection,
+  selectForVoid,
+} from './void-controller.ts';
+
+beforeEach(async () => {
+  await db.open();
+  await db.products.add({
+    id: 'p1',
+    sku: 'SKU-1',
+    barcodes: ['111'],
+    name: 'Arroz 1kg',
+    price: 100,
+    taxRate: 0.21,
+    category: 'almacen',
+    tracksStock: true,
+  });
+  await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
+
+  voidableSalesSignal.value = [];
+  voidSelectionIndexSignal.value = null;
+  voidConfirmingSignal.value = false;
+  voidErrorSignal.value = null;
+});
+
+afterEach(async () => {
+  db.close();
+  await db.delete();
+});
+
+const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+
+describe('loadVoidableSales', () => {
+  it('carga las ventas cerradas, más recientes primero', async () => {
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+
+    await loadVoidableSales();
+
+    expect(voidableSalesSignal.value).toHaveLength(2);
+    expect(voidSelectionIndexSignal.value).toBe(0);
+  });
+
+  it('no selecciona nada si no hay ventas', async () => {
+    await loadVoidableSales();
+
+    expect(voidableSalesSignal.value).toEqual([]);
+    expect(voidSelectionIndexSignal.value).toBeNull();
+  });
+});
+
+describe('flujo de confirmación', () => {
+  it('selectForVoid entra en modo confirmación', async () => {
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    await loadVoidableSales();
+
+    selectForVoid();
+
+    expect(voidConfirmingSignal.value).toBe(true);
+  });
+
+  it('cancelVoidConfirmation vuelve a la lista sin anular nada', async () => {
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    await loadVoidableSales();
+    selectForVoid();
+
+    cancelVoidConfirmation();
+
+    expect(voidConfirmingSignal.value).toBe(false);
+    await expect(db.sales.where('status').equals('voided').count()).resolves.toBe(0);
+  });
+
+  it('confirmVoid anula la venta seleccionada y sale de la pantalla', async () => {
+    activeScreenSignal.value = 'void';
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    if (!closed.ok) throw new Error('setup falló');
+    await loadVoidableSales();
+    selectForVoid();
+
+    await confirmVoid();
+
+    const stored = await db.sales.get(closed.value.id);
+    expect(stored?.status).toBe('voided');
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+});
+
+describe('exitVoidScreen', () => {
+  it('limpia el estado y vuelve a la pantalla de venta', () => {
+    activeScreenSignal.value = 'void';
+    voidableSalesSignal.value = [
+      {
+        id: 's1',
+        lines: [],
+        payments: [],
+        total: 0,
+        status: 'closed',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    exitVoidScreen();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(voidableSalesSignal.value).toEqual([]);
+  });
+});
+
+describe('moveVoidSelection', () => {
+  it('no hace nada si no hay ventas', () => {
+    moveVoidSelection(1);
+    expect(voidSelectionIndexSignal.value).toBeNull();
+  });
+});
