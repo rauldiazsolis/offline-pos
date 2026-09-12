@@ -1,0 +1,17 @@
+/* Al imprimir, solo se ve el comprobante — nada del resto de la pantalla. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .receipt,
+  .receipt * {
+    visibility: visible;
+  }
+  .receipt {
+    position: absolute;
+    inset: 0;
+  }
+  .receipt-no-print {
+    display: none;
+  }
+}
