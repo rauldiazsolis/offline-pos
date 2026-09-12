@@ -17,6 +17,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@preact/signals": "^2.11.2",
     "dexie": "^4.4.6",
     "flexsearch": "^0.8.212",
     "preact": "^10.29.8",
