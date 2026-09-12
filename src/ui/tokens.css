@@ -1,0 +1,43 @@
+/**
+ * Design tokens básicos — ver "UX keyboard-first" en CLAUDE.md.
+ *
+ * Solo la base mínima para no bloquear Fase 1: color, espaciado, tipografía
+ * y foco visible, en un único tema claro. Nombradas por rol (--color-bg, no
+ * --color-white) para poder envolverlas en un @media/[data-theme] de dark
+ * mode el día que se decida, sin tocar ningún componente que las consuma.
+ */
+:root {
+  /* color */
+  --color-bg: #ffffff;
+  --color-surface: #f4f4f5;
+  --color-text: #18181b;
+  --color-text-muted: #71717a;
+  --color-border: #d4d4d8;
+  --color-accent: #2563eb;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-focus-ring: #2563eb;
+
+  /* espaciado */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* tipografía — mono para códigos de barra/SKU en la barra de comandos */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  --font-size-base: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 28px;
+
+  /* foco — visible siempre, nunca depende de :hover (ver CLAUDE.md) */
+  --focus-ring-width: 2px;
+}
+
+*:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: 2px;
+}

@@ -1,106 +1,29 @@
-import { useState } from 'preact/hooks';
-import heroImg from './assets/hero.png';
-import preactLogo from './assets/preact.svg';
-import viteLogo from './assets/vite.svg';
-import './app.css';
+import './tokens.css';
 
+/**
+ * Placeholder de Fase 0: confirma que el pipeline (Vite + Preact + tokens
+ * CSS) funciona de punta a punta. Se reemplaza por la pantalla de venta en
+ * Fase 1 — ver CLAUDE.md.
+ */
 export function App() {
-  const [count, setCount] = useState(0);
-
   return (
-    <>
-      <section id="center">
-        <div class="hero">
-          <img src={heroImg} class="base" width="170" height="179" alt="" />
-          <img src={preactLogo} class="framework" alt="Preact logo" />
-          <img src={viteLogo} class="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/app.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          class="counter"
-          onClick={() => {
-            setCount((count) => count + 1);
-          }}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div class="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg class="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img class="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://preactjs.com/" target="_blank">
-                <img class="button-icon" src={preactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg class="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg class="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg class="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg class="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg class="button-icon" role="presentation" aria-hidden="true">
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div class="ticks"></div>
-      <section id="spacer"></section>
-    </>
+    <main
+      style={{
+        minHeight: '100svh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 'var(--space-2)',
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
+      <h1 style={{ fontSize: 'var(--font-size-xl)', margin: 0 }}>offline-pos</h1>
+      <p style={{ fontSize: 'var(--font-size-base)', color: 'var(--color-text-muted)', margin: 0 }}>
+        Fase 0 — base del proyecto
+      </p>
+    </main>
   );
 }
