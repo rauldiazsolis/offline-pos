@@ -1,3 +1,5 @@
+import type { Discount, Sale } from './sale.ts';
+
 /**
  * Result<T> casero — ver "Manejo de errores" en CLAUDE.md.
  *
@@ -13,15 +15,29 @@
  * Record<string, unknown> genérico) y los `switch` sobre ErrorCode quedan
  * exhaustivos en la UI/traductor.
  *
- * Las dos entradas de abajo son placeholders de ejemplo (los mismos que
- * ilustra CLAUDE.md) para fijar la forma del tipo y dejar `ok`/`err`
- * testeables desde ya — no corresponden todavía a ningún caso implementado.
- * Se reemplazan por los códigos reales a medida que Fase 1 los necesite; si
- * un código deja de usarse, se saca de acá.
+ * Se va poblando con los códigos reales a medida que el dominio los
+ * necesita. Si un código deja de usarse, se saca de acá.
  */
 export type ErrorMeta = {
+  // cart.ts
+  'cart/invalid-quantity': { quantity: number };
+  'cart/line-not-found': { lineIndex: number };
+  'cart/nothing-to-subtract': { productId: string };
+  'cart/invalid-discount': { discount: Discount };
+  'cart/invalid-freeform-line': { field: 'description' | 'unitPrice' | 'qty' };
+
+  // sale.ts
   'sale/insufficient-stock': { productId: string; requested: number; available: number };
-  'sync/invalid-payload': { issues: { path: string; message: string }[] };
+  'sale/empty-cart': undefined;
+  'sale/invalid-payment-amount': { index: number };
+  'sale/insufficient-payment': { total: number; paid: number };
+  'sale/not-closed': { status: Sale['status'] };
+  'sale/already-voided': undefined;
+
+  // catalog.ts
+  'catalog/duplicate-sku': { sku: string };
+  'catalog/duplicate-barcode': { barcode: string };
+  'catalog/invalid-fixture': { issues: { path: string; message: string }[] };
 };
 
 export type ErrorCode = keyof ErrorMeta;
