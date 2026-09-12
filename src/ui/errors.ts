@@ -40,6 +40,8 @@ export function describeError(failure: Failure): string {
       return 'El catálogo de ejemplo tiene datos inválidos.';
     case 'catalog/seed-failed':
       return `No se pudo cargar el catálogo (${failure.meta.message}).`;
+    case 'sale/persist-failed':
+      return `No se pudo guardar la venta (${failure.meta.message}). Reintentá antes de cerrar la pantalla.`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

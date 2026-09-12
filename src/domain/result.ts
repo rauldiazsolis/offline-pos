@@ -41,6 +41,9 @@ export type ErrorMeta = {
 
   // storage/seed-catalog.ts
   'catalog/seed-failed': { message: string };
+
+  // storage/sale-repository.ts
+  'sale/persist-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;
