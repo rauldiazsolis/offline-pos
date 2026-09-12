@@ -90,4 +90,14 @@ describe('CommandBarInput', () => {
     fireEvent.input(input, { target: { value: '$1000' } });
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('con solo "/" muestra la lista completa de comandos disponibles', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/' } });
+
+    expect(screen.getByText('/COBRAR', { exact: false })).not.toBeNull();
+    expect(screen.getByText('/ANULAR', { exact: false })).not.toBeNull();
+  });
 });

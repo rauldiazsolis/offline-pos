@@ -8,10 +8,12 @@ import {
   submitCommandBar,
   triggerCheckout,
 } from '../keyboard/command-bar-controller.ts';
+import { AVAILABLE_COMMANDS } from '../keyboard/commands.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
@@ -84,6 +86,8 @@ export function CommandBarInput() {
 
   const searchResults = searchResultsSignal.value;
   const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
+  const parsed = parsedSignal.value;
+  const showCommandList = parsed.kind === 'command' && parsed.name === '';
 
   return (
     <div>
@@ -111,6 +115,16 @@ export function CommandBarInput() {
           <p role="alert" style={{ margin: 0, color: 'var(--color-danger)' }}>
             {commandBarErrorSignal.value}
           </p>
+        ) : showCommandList ? (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {AVAILABLE_COMMANDS.map((command) => (
+              <li key={command.name} style={{ padding: 'var(--space-1) var(--space-2)' }}>
+                <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
+                {' — '}
+                {command.description}
+              </li>
+            ))}
+          </ul>
         ) : searchResults.length > 0 ? (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {searchResults.map((result, index) => (
