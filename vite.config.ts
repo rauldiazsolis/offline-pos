@@ -1,5 +1,5 @@
 import preact from '@preact/preset-vite';
-import { defineConfig } from 'vitest/config';
+import { defaultExclude, defineConfig } from 'vitest/config';
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -8,5 +8,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: false,
+    // e2e/ es de Playwright, no de Vitest — sin esto, sus *.spec.ts colisionan.
+    exclude: [...defaultExclude, 'e2e/**'],
   },
 });

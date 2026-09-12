@@ -14,7 +14,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@preact/preset-vite": "^2.10.6",
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^24.13.3",
