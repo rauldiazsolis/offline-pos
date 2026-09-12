@@ -45,6 +45,12 @@ export type ErrorMeta = {
   // storage/sale-repository.ts
   'sale/persist-failed': { message: string };
   'sale/not-found': { saleId: string };
+
+  // sync/config.ts, sync/engine.ts, connectors/rest-fetch-connector.ts
+  'sync/invalid-payload': { issues: { path: string; message: string }[] };
+  'sync/request-failed': { status?: number; message: string };
+  'sync/config-missing': undefined;
+  'sync/config-invalid': { issues: { path: string; message: string }[] };
 };
 
 export type ErrorCode = keyof ErrorMeta;

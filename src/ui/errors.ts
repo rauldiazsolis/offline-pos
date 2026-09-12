@@ -44,6 +44,16 @@ export function describeError(failure: Failure): string {
       return `No se pudo guardar la venta (${failure.meta.message}). Reintentá antes de cerrar la pantalla.`;
     case 'sale/not-found':
       return 'No se encontró esa venta.';
+    case 'sync/invalid-payload':
+      return 'El servidor devolvió datos con un formato inesperado.';
+    case 'sync/request-failed':
+      return failure.meta.status !== undefined
+        ? `El servidor respondió con un error (${String(failure.meta.status)}).`
+        : `No se pudo conectar con el servidor (${failure.meta.message}).`;
+    case 'sync/config-missing':
+      return 'No hay conexión configurada todavía. Usá /CONFIG.';
+    case 'sync/config-invalid':
+      return 'La configuración de conexión guardada es inválida. Usá /CONFIG para corregirla.';
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;
