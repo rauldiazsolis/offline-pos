@@ -1,11 +1,11 @@
-import { useState } from 'preact/hooks'
-import heroImg from './assets/hero.png'
-import preactLogo from './assets/preact.svg'
-import viteLogo from './assets/vite.svg'
-import './app.css'
+import { useState } from 'preact/hooks';
+import heroImg from './assets/hero.png';
+import preactLogo from './assets/preact.svg';
+import viteLogo from './assets/vite.svg';
+import './app.css';
 
 export function App() {
-  const [count, setCount] = useState(0)
+  const [count, setCount] = useState(0);
 
   return (
     <>
@@ -24,7 +24,9 @@ export function App() {
         <button
           type="button"
           class="counter"
-          onClick={() => setCount((count) => count + 1)}
+          onClick={() => {
+            setCount((count) => count + 1);
+          }}
         >
           Count is {count}
         </button>
@@ -100,5 +102,5 @@ export function App() {
       <div class="ticks"></div>
       <section id="spacer"></section>
     </>
-  )
+  );
 }

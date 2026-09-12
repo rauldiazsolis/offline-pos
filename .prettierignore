@@ -1,0 +1,9 @@
+dist
+coverage
+playwright-report
+test-results
+pnpm-lock.yaml
+
+# Documentos de prosa, formateados a mano — no tocar tablas/wrapping.
+CLAUDE.md
+pos-web-diseno-arquitectura.md
