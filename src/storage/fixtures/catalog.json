@@ -1,0 +1,242 @@
+[
+  {
+    "sku": "ALM-001",
+    "barcodes": ["7791234000011"],
+    "name": "Arroz 1kg",
+    "price": 1200,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 40
+  },
+  {
+    "sku": "ALM-002",
+    "barcodes": ["7791234000028"],
+    "name": "Fideos 500g",
+    "price": 900,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 50
+  },
+  {
+    "sku": "ALM-003",
+    "barcodes": ["7791234000035"],
+    "name": "Aceite de girasol 900ml",
+    "price": 2600,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 30
+  },
+  {
+    "sku": "ALM-004",
+    "barcodes": ["7791234000042"],
+    "name": "Yerba mate 1kg",
+    "price": 3400,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 25
+  },
+  {
+    "sku": "ALM-005",
+    "barcodes": ["7791234000059"],
+    "name": "Azúcar 1kg",
+    "price": 1100,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 45
+  },
+  {
+    "sku": "ALM-006",
+    "barcodes": ["7791234000066"],
+    "name": "Harina 000 1kg",
+    "price": 950,
+    "taxRate": 0.21,
+    "category": "almacen",
+    "tracksStock": true,
+    "initialStock": 35
+  },
+  {
+    "sku": "BEB-001",
+    "barcodes": ["7791234000073"],
+    "name": "Agua mineral 1.5L",
+    "price": 800,
+    "taxRate": 0.21,
+    "category": "bebidas",
+    "tracksStock": true,
+    "initialStock": 60
+  },
+  {
+    "sku": "BEB-002",
+    "barcodes": ["7791234000080"],
+    "name": "Gaseosa cola 1.5L",
+    "price": 1500,
+    "taxRate": 0.21,
+    "category": "bebidas",
+    "tracksStock": true,
+    "initialStock": 50
+  },
+  {
+    "sku": "BEB-003",
+    "barcodes": ["7791234000097"],
+    "name": "Jugo de naranja 1L",
+    "price": 1300,
+    "taxRate": 0.21,
+    "category": "bebidas",
+    "tracksStock": true,
+    "initialStock": 30
+  },
+  {
+    "sku": "BEB-004",
+    "barcodes": ["7791234000103"],
+    "name": "Cerveza lata 473ml",
+    "price": 1100,
+    "taxRate": 0.21,
+    "category": "bebidas",
+    "tracksStock": true,
+    "initialStock": 48
+  },
+  {
+    "sku": "BEB-005",
+    "barcodes": ["7791234000110"],
+    "name": "Agua saborizada 500ml",
+    "price": 700,
+    "taxRate": 0.21,
+    "category": "bebidas",
+    "tracksStock": true,
+    "initialStock": 40
+  },
+  {
+    "sku": "KIO-001",
+    "barcodes": ["7791234000127"],
+    "name": "Alfajor triple",
+    "price": 650,
+    "taxRate": 0.21,
+    "category": "kiosco",
+    "tracksStock": true,
+    "initialStock": 80
+  },
+  {
+    "sku": "KIO-002",
+    "barcodes": ["7791234000134"],
+    "name": "Chicles menta",
+    "price": 350,
+    "taxRate": 0.21,
+    "category": "kiosco",
+    "tracksStock": true,
+    "initialStock": 100
+  },
+  {
+    "sku": "KIO-003",
+    "barcodes": ["7791234000141"],
+    "name": "Barrita de cereal",
+    "price": 500,
+    "taxRate": 0.21,
+    "category": "kiosco",
+    "tracksStock": true,
+    "initialStock": 70
+  },
+  {
+    "sku": "KIO-004",
+    "barcodes": ["7791234000158"],
+    "name": "Papas fritas 45g",
+    "price": 800,
+    "taxRate": 0.21,
+    "category": "kiosco",
+    "tracksStock": true,
+    "initialStock": 65
+  },
+  {
+    "sku": "KIO-005",
+    "barcodes": ["7791234000165"],
+    "name": "Caramelos surtidos",
+    "price": 300,
+    "taxRate": 0.21,
+    "category": "kiosco",
+    "tracksStock": true,
+    "initialStock": 90
+  },
+  {
+    "sku": "LIM-001",
+    "barcodes": ["7791234000172"],
+    "name": "Detergente 750ml",
+    "price": 1400,
+    "taxRate": 0.21,
+    "category": "limpieza",
+    "tracksStock": true,
+    "initialStock": 28
+  },
+  {
+    "sku": "LIM-002",
+    "barcodes": ["7791234000189"],
+    "name": "Lavandina 1L",
+    "price": 900,
+    "taxRate": 0.21,
+    "category": "limpieza",
+    "tracksStock": true,
+    "initialStock": 32
+  },
+  {
+    "sku": "LIM-003",
+    "barcodes": ["7791234000196"],
+    "name": "Papel higiénico x4",
+    "price": 1800,
+    "taxRate": 0.21,
+    "category": "limpieza",
+    "tracksStock": true,
+    "initialStock": 26
+  },
+  {
+    "sku": "LIM-004",
+    "barcodes": ["7791234000202"],
+    "name": "Esponja de cocina",
+    "price": 400,
+    "taxRate": 0.21,
+    "category": "limpieza",
+    "tracksStock": true,
+    "initialStock": 55
+  },
+  {
+    "sku": "PAN-001",
+    "barcodes": ["7791234000219"],
+    "name": "Pan lactal",
+    "price": 1600,
+    "taxRate": 0.105,
+    "category": "panaderia",
+    "tracksStock": true,
+    "initialStock": 20
+  },
+  {
+    "sku": "PAN-002",
+    "barcodes": ["7791234000226"],
+    "name": "Medialunas x6",
+    "price": 1900,
+    "taxRate": 0.105,
+    "category": "panaderia",
+    "tracksStock": true,
+    "initialStock": 15
+  },
+  {
+    "sku": "SER-001",
+    "barcodes": [],
+    "name": "Envío a domicilio",
+    "price": 800,
+    "taxRate": 0.21,
+    "category": "servicios",
+    "tracksStock": false,
+    "initialStock": 0
+  },
+  {
+    "sku": "SER-002",
+    "barcodes": [],
+    "name": "Recarga de celular",
+    "price": 1000,
+    "taxRate": 0,
+    "category": "servicios",
+    "tracksStock": false,
+    "initialStock": 0
+  }
+]

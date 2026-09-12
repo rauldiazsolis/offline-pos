@@ -38,6 +38,9 @@ export type ErrorMeta = {
   'catalog/duplicate-sku': { sku: string };
   'catalog/duplicate-barcode': { barcode: string };
   'catalog/invalid-fixture': { issues: { path: string; message: string }[] };
+
+  // storage/seed-catalog.ts
+  'catalog/seed-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;
