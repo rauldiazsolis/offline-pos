@@ -46,4 +46,10 @@ describe('loadCatalogRepository', () => {
     const stock = await repo.getStock('p1');
     expect(stock?.quantity).toBe(10);
   });
+
+  it('encuentra un producto por id', async () => {
+    const repo = await loadCatalogRepository();
+    const found = await repo.getProduct('p1');
+    expect(found?.name).toBe('Arroz 1kg');
+  });
 });

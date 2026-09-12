@@ -13,6 +13,8 @@ import { FlexSearchCatalogSearch } from './flexsearch-catalog-search.ts';
 export type CatalogRepository = {
   search(query: string, limit?: number): CatalogSearchResult[];
   findByBarcodeOrSku(code: string): Promise<Product | undefined>;
+  /** Lookup por id — para resolver el producto de una línea de carrito/venta ya armada. */
+  getProduct(productId: string): Promise<Product | undefined>;
   getStock(productId: string): Promise<StockItem | undefined>;
 };
 
@@ -29,6 +31,7 @@ export async function loadCatalogRepository(): Promise<CatalogRepository> {
       }
       return db.products.where('sku').equals(code).first();
     },
+    getProduct: (productId) => db.products.get(productId),
     getStock: (productId) => db.stock.get(productId),
   };
 }

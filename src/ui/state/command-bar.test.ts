@@ -22,6 +22,7 @@ beforeEach(() => {
   setCatalogRepository({
     search: (query) => (query === 'arroz' ? [fakeResult] : []),
     findByBarcodeOrSku: () => Promise.resolve(undefined),
+    getProduct: () => Promise.resolve(undefined),
     getStock: () => Promise.resolve(undefined),
   });
 });
