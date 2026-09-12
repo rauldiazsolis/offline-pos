@@ -1,0 +1,86 @@
+/**
+ * Resultado de interpretar el buffer de la barra de comandos, según el
+ * orden de prioridad fijo de §7 del doc de diseño (ver también "UX
+ * keyboard-first" en CLAUDE.md). Función pura, sin DOM: recibe el buffer
+ * completo tal cual está en el input en este instante — no hay estado
+ * parcial que arrastrar entre llamadas.
+ */
+export type ParsedCommand =
+  | { kind: 'typing' } // buffer vacío, o a mitad de escribir algo que todavía no es accionable ni un error
+  | { kind: 'command'; name: string; args: string[] } // '/', name === '' cuando el buffer es solo '/'
+  | { kind: 'reserved-customer' } // '@', no-op reservado: no hay Customer todavía en Fase 1
+  | { kind: 'freeform-line'; description: string; amount: number }
+  | { kind: 'pending-numeric' } // solo dígitos, ambiguo cantidad-vs-código: no dispara búsqueda aún
+  | { kind: 'barcode'; code: string; qty: number }
+  | { kind: 'search'; query: string; qty: number }
+  | { kind: 'parse-error'; message: string };
+
+/**
+ * Fase 1: heurística simple para el separador decimal (coma si está
+ * presente, como en `$1500,50`). Reemplazar por `Intl.NumberFormat` con el
+ * locale configurado por terminal cuando exista esa config (ver §7 del
+ * doc de diseño) — no hay locale configurable todavía.
+ */
+function parseAmount(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
+  const value = Number(normalized);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+export function parseCommandBar(buffer: string, options: { finalizing: boolean }): ParsedCommand {
+  const { finalizing } = options;
+
+  if (buffer === '') {
+    return { kind: 'typing' };
+  }
+
+  if (buffer.startsWith('/')) {
+    const parts = buffer.slice(1).trim().split(/\s+/).filter(Boolean);
+    return { kind: 'command', name: (parts[0] ?? '').toUpperCase(), args: parts.slice(1) };
+  }
+
+  if (buffer.startsWith('@')) {
+    return { kind: 'reserved-customer' };
+  }
+
+  const dollarIndex = buffer.lastIndexOf('$');
+  if (dollarIndex !== -1) {
+    const description = buffer.slice(0, dollarIndex).trim();
+    const amount = parseAmount(buffer.slice(dollarIndex + 1));
+
+    if (amount !== undefined && description !== '') {
+      return { kind: 'freeform-line', description, amount };
+    }
+    if (finalizing) {
+      return { kind: 'parse-error', message: 'Línea libre inválida: usá "descripción$monto"' };
+    }
+    return { kind: 'typing' };
+  }
+
+  const quantityMatch = /^(-?\d+)\*(.*)$/.exec(buffer);
+  const qty = quantityMatch ? Number.parseInt(quantityMatch[1] ?? '1', 10) : 1;
+  const rest = quantityMatch ? (quantityMatch[2] ?? '') : buffer;
+
+  if (rest === '') {
+    if (finalizing) {
+      return {
+        kind: 'parse-error',
+        message: 'Falta el código o la búsqueda después de la cantidad',
+      };
+    }
+    return { kind: 'typing' };
+  }
+
+  if (/^\d+$/.test(rest)) {
+    if (!finalizing) {
+      return { kind: 'pending-numeric' };
+    }
+    return { kind: 'barcode', code: rest, qty };
+  }
+
+  return { kind: 'search', query: rest, qty };
+}
