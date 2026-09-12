@@ -21,8 +21,8 @@ beforeEach(() => {
   commandBarBufferSignal.value = '';
   setCatalogRepository({
     search: (query) => (query === 'arroz' ? [fakeResult] : []),
-    findByBarcodeOrSku: () => Promise.resolve(undefined),
-    getProduct: () => Promise.resolve(undefined),
+    findByBarcodeOrSku: () => undefined,
+    getProduct: () => undefined,
     getStock: () => Promise.resolve(undefined),
   });
 });

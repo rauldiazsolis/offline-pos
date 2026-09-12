@@ -32,8 +32,8 @@ beforeEach(() => {
   cartSignal.value = { lines: [] };
   setCatalogRepository({
     search: (query) => (query.toLowerCase().includes('arroz') ? [arrozResult] : []),
-    findByBarcodeOrSku: () => Promise.resolve(undefined),
-    getProduct: () => Promise.resolve(undefined),
+    findByBarcodeOrSku: () => undefined,
+    getProduct: () => undefined,
     getStock: () => Promise.resolve({ productId: 'p1', quantity: 10, updatedAt: '' }),
   });
 });

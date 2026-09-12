@@ -45,7 +45,7 @@ async function addByProduct(product: Product, qty: number): Promise<void> {
 
 async function addByCode(code: string, qty: number): Promise<void> {
   const repo = getCatalogRepository();
-  const product = await repo.findByBarcodeOrSku(code);
+  const product = repo.findByBarcodeOrSku(code);
   if (product === undefined) {
     commandBarErrorSignal.value = `No se encontró ningún producto con "${code}".`;
     return;
@@ -164,10 +164,8 @@ export async function setSelectedCartLineQuantity(qty: number): Promise<void> {
 
   if (line.kind === 'product') {
     const repo = getCatalogRepository();
-    const [product, stock] = await Promise.all([
-      repo.getProduct(line.productId),
-      repo.getStock(line.productId),
-    ]);
+    const product = repo.getProduct(line.productId);
+    const stock = await repo.getStock(line.productId);
     applyCartResult(
       setLineQuantity(cartSignal.value, index, qty, {
         ...(product !== undefined ? { product } : {}),

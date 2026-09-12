@@ -6,15 +6,21 @@ import { FlexSearchCatalogSearch } from './flexsearch-catalog-search.ts';
 
 /**
  * Repositorio de catálogo para la capa de UI: búsqueda difusa por nombre,
- * lookup exacto por código de barras/SKU, y consulta de stock. Se arma una
- * sola vez en el bootstrap de la app (ver `ui/bootstrap.ts`) a partir del
- * catálogo ya sembrado en Dexie.
+ * lookup exacto por código de barras/SKU/id, y consulta de stock. Se arma
+ * una sola vez en el bootstrap de la app a partir del catálogo ya sembrado
+ * en Dexie.
+ *
+ * El catálogo es estático en Fase 1 (sin altas/bajas en caliente) y ya está
+ * todo en memoria para el índice de búsqueda — así que products/barcodes/sku
+ * se resuelven sync desde ahí, sin volver a golpear Dexie. Solo `getStock`
+ * sigue siendo async: es lo único que puede cambiar durante la sesión (una
+ * venta/anulación lo actualiza), así que se lee siempre fresco.
  */
 export type CatalogRepository = {
   search(query: string, limit?: number): CatalogSearchResult[];
-  findByBarcodeOrSku(code: string): Promise<Product | undefined>;
+  findByBarcodeOrSku(code: string): Product | undefined;
   /** Lookup por id — para resolver el producto de una línea de carrito/venta ya armada. */
-  getProduct(productId: string): Promise<Product | undefined>;
+  getProduct(productId: string): Product | undefined;
   getStock(productId: string): Promise<StockItem | undefined>;
 };
 
@@ -22,16 +28,20 @@ export async function loadCatalogRepository(): Promise<CatalogRepository> {
   const products = await db.products.toArray();
   const search = new FlexSearchCatalogSearch(products);
 
+  const productsById = new Map(products.map((product) => [product.id, product]));
+  const productsByBarcode = new Map<string, Product>();
+  const productsBySku = new Map<string, Product>();
+  for (const product of products) {
+    productsBySku.set(product.sku, product);
+    for (const barcode of product.barcodes) {
+      productsByBarcode.set(barcode, product);
+    }
+  }
+
   return {
     search: (query, limit) => search.search(query, limit),
-    findByBarcodeOrSku: async (code) => {
-      const byBarcode = await db.products.where('barcodes').equals(code).first();
-      if (byBarcode !== undefined) {
-        return byBarcode;
-      }
-      return db.products.where('sku').equals(code).first();
-    },
-    getProduct: (productId) => db.products.get(productId),
+    findByBarcodeOrSku: (code) => productsByBarcode.get(code) ?? productsBySku.get(code),
+    getProduct: (productId) => productsById.get(productId),
     getStock: (productId) => db.stock.get(productId),
   };
 }

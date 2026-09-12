@@ -31,14 +31,12 @@ describe('loadCatalogRepository', () => {
 
   it('encuentra un producto por código de barras', async () => {
     const repo = await loadCatalogRepository();
-    const found = await repo.findByBarcodeOrSku('111');
-    expect(found?.id).toBe('p1');
+    expect(repo.findByBarcodeOrSku('111')?.id).toBe('p1');
   });
 
   it('encuentra un producto por sku si no matchea ningún barcode', async () => {
     const repo = await loadCatalogRepository();
-    const found = await repo.findByBarcodeOrSku('SKU-1');
-    expect(found?.id).toBe('p1');
+    expect(repo.findByBarcodeOrSku('SKU-1')?.id).toBe('p1');
   });
 
   it('devuelve el stock de un producto', async () => {
@@ -49,7 +47,6 @@ describe('loadCatalogRepository', () => {
 
   it('encuentra un producto por id', async () => {
     const repo = await loadCatalogRepository();
-    const found = await repo.getProduct('p1');
-    expect(found?.name).toBe('Arroz 1kg');
+    expect(repo.getProduct('p1')?.name).toBe('Arroz 1kg');
   });
 });
