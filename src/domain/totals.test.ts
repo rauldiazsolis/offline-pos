@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateTotals } from './totals.ts';
+import { calculateLineTotal, calculateTotals } from './totals.ts';
 import type { Cart } from './cart.ts';
 
 describe('calculateTotals', () => {
@@ -48,5 +48,25 @@ describe('calculateTotals', () => {
 
   it('devuelve todo en 0 para un carrito vacío', () => {
     expect(calculateTotals({ lines: [] })).toEqual({ subtotal: 0, discountTotal: 0, total: 0 });
+  });
+});
+
+describe('calculateLineTotal', () => {
+  it('devuelve qty * unitPrice sin descuento', () => {
+    expect(calculateLineTotal({ kind: 'product', productId: 'p1', qty: 3, unitPrice: 50 })).toBe(
+      150,
+    );
+  });
+
+  it('resta el descuento de la línea', () => {
+    expect(
+      calculateLineTotal({
+        kind: 'freeform',
+        description: 'Envío',
+        qty: 1,
+        unitPrice: 100,
+        discount: { type: 'amount', value: 30 },
+      }),
+    ).toBe(70);
   });
 });

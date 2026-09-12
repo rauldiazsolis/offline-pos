@@ -1,5 +1,5 @@
 import type { Cart } from './cart.ts';
-import type { Discount } from './sale.ts';
+import type { Discount, SaleLine } from './sale.ts';
 
 export type Totals = { subtotal: number; discountTotal: number; total: number };
 
@@ -10,6 +10,12 @@ function discountAmount(discount: Discount | undefined, lineSubtotal: number): n
   const amount =
     discount.type === 'amount' ? discount.value : lineSubtotal * (discount.value / 100);
   return Math.min(amount, lineSubtotal);
+}
+
+/** Total de una línea individual, ya con su descuento aplicado (si tiene). */
+export function calculateLineTotal(line: SaleLine): number {
+  const lineSubtotal = line.unitPrice * line.qty;
+  return lineSubtotal - discountAmount(line.discount, lineSubtotal);
 }
 
 /**
