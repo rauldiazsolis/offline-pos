@@ -1,3 +1,5 @@
+import { parseAmount } from '../parse-amount.ts';
+
 /**
  * Resultado de interpretar el buffer de la barra de comandos, según el
  * orden de prioridad fijo de §7 del doc de diseño (ver también "UX
@@ -14,22 +16,6 @@ export type ParsedCommand =
   | { kind: 'barcode'; code: string; qty: number }
   | { kind: 'search'; query: string; qty: number }
   | { kind: 'parse-error'; message: string };
-
-/**
- * Fase 1: heurística simple para el separador decimal (coma si está
- * presente, como en `$1500,50`). Reemplazar por `Intl.NumberFormat` con el
- * locale configurado por terminal cuando exista esa config (ver §7 del
- * doc de diseño) — no hay locale configurable todavía.
- */
-function parseAmount(raw: string): number | undefined {
-  const trimmed = raw.trim();
-  if (trimmed === '') {
-    return undefined;
-  }
-  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
-  const value = Number(normalized);
-  return Number.isFinite(value) && value > 0 ? value : undefined;
-}
 
 export function parseCommandBar(buffer: string, options: { finalizing: boolean }): ParsedCommand {
   const { finalizing } = options;
