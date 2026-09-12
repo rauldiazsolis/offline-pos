@@ -1,5 +1,5 @@
 import { useSignalEffect } from '@preact/signals';
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { calculateTotals } from '../../domain/totals.ts';
 import {
@@ -25,7 +25,7 @@ import {
 export function CheckoutScreen() {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     inputRef.current?.focus();
   }, []);
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import { calculateLineTotal } from '../../domain/totals.ts';
 import type { SaleLine } from '../../domain/sale.ts';
@@ -30,7 +30,7 @@ export function ReceiptScreen() {
   const containerRef = useRef<HTMLDivElement>(null);
   const sale = receiptSaleSignal.value;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     containerRef.current?.focus();
   }, []);
 

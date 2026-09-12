@@ -20,6 +20,19 @@ import { parseCommandBar } from './parse-command-bar.ts';
  * comandos y el estado en signals. `domain/` no sabe que esto existe.
  */
 
+/**
+ * Agregar un producto es async (lookup de stock vía Dexie). Sin este
+ * rastreo, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después podría
+ * abrir el cobro antes de que el producto termine de sumarse al carrito —
+ * una carrera real, no solo teórica (la agarró el test e2e de cobro).
+ * `triggerCheckout` espera esto antes de cambiar de pantalla.
+ */
+let pendingCartOperation: Promise<void> = Promise.resolve();
+
+function trackPendingCartOperation(promise: Promise<void>): void {
+  pendingCartOperation = promise;
+}
+
 function applyCartResult(result: Result<Cart>): boolean {
   if (result.ok) {
     cartSignal.value = result.value;
@@ -54,7 +67,8 @@ async function addByCode(code: string, qty: number): Promise<void> {
 }
 
 /** `/COBRAR`, también disparado por `Ctrl+Enter` desde cualquier estado de la barra. */
-export function triggerCheckout(): void {
+export async function triggerCheckout(): Promise<void> {
+  await pendingCartOperation;
   activeScreenSignal.value = 'checkout';
   clearBuffer();
 }
@@ -71,7 +85,7 @@ function runCommand(name: string, _args: string[]): void {
       // leyendo parsedSignal directamente — acá no hay nada que ejecutar.
       return;
     case 'COBRAR':
-      triggerCheckout();
+      void triggerCheckout();
       return;
     case 'ANULAR':
       triggerVoid();
@@ -111,7 +125,7 @@ export function submitCommandBar(): void {
       }
       return;
     case 'barcode':
-      void addByCode(parsed.code, parsed.qty);
+      trackPendingCartOperation(addByCode(parsed.code, parsed.qty));
       return;
     case 'search': {
       const results = searchResultsSignal.value;
@@ -121,7 +135,7 @@ export function submitCommandBar(): void {
         commandBarErrorSignal.value = 'No hay resultados para agregar.';
         return;
       }
-      void addByProduct(selected.product, parsed.qty);
+      trackPendingCartOperation(addByProduct(selected.product, parsed.qty));
     }
   }
 }
@@ -151,8 +165,7 @@ export function removeSelectedCartLine(): void {
   }
 }
 
-/** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
-export async function setSelectedCartLineQuantity(qty: number): Promise<void> {
+async function doSetSelectedCartLineQuantity(qty: number): Promise<void> {
   const index = cartSelectionIndexSignal.value;
   if (index === null) {
     return;
@@ -176,4 +189,11 @@ export async function setSelectedCartLineQuantity(qty: number): Promise<void> {
   }
 
   applyCartResult(setLineQuantity(cartSignal.value, index, qty));
+}
+
+/** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
+export function setSelectedCartLineQuantity(qty: number): Promise<void> {
+  const promise = doSetSelectedCartLineQuantity(qty);
+  trackPendingCartOperation(promise);
+  return promise;
 }

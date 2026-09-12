@@ -1,5 +1,5 @@
 import { useSignalEffect } from '@preact/signals';
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import { formatMoney } from '../format.ts';
 import {
@@ -25,7 +25,7 @@ import {
 export function VoidSaleScreen() {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void loadVoidableSales();
     containerRef.current?.focus();
   }, []);

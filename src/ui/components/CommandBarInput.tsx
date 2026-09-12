@@ -45,7 +45,7 @@ export function CommandBarInput() {
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {
     if (event.ctrlKey && event.key === 'Enter') {
       event.preventDefault();
-      triggerCheckout();
+      void triggerCheckout();
       return;
     }
 
