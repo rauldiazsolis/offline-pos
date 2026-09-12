@@ -164,12 +164,53 @@ visible (nunca depender de `:hover`), locale configurable por terminal para `Int
 
 ## Testing
 
-Vitest + Testing Library para unit/componentes; Playwright para el flujo end-to-end, en particular
-para simular offline real (`context.setOffline(true)`) — cualquier feature del flujo de venta debe
-poder probarse sin red.
+Vitest + Testing Library para unit/componentes (sin `@testing-library/jest-dom`: su tipado no tiene
+una versión compatible a la vez con Vitest 5 y con el `@testing-library/dom` que trae
+`@testing-library/preact` — los tests de componentes usan aserciones planas de DOM,
+`expect(x).not.toBeNull()` en vez de `toBeInTheDocument()`). Los tests de `storage/` que tocan Dexie
+importan `'fake-indexeddb/auto'` al principio del archivo para darle IndexedDB a Vitest/jsdom.
+
+Playwright (`e2e/`, config en `playwright.config.ts`, solo Chromium) para el flujo end-to-end,
+corriendo contra el build real (`pnpm build && pnpm preview`, no el dev server) — en particular para
+simular offline real (`context.setOffline(true)`, siempre **después** de cargar la app una vez, no
+antes). `vite.config.ts` excluye `e2e/**` de Vitest para que sus `*.spec.ts` no colisionen con el
+`include` por defecto. Los specs leen el estado persistido directo de IndexedDB
+(`indexedDB.open('offline-pos')`) en vez de importar módulos de la app, para no acoplar el test al
+código interno.
+
+## Patrones establecidos en Fase 1
+
+- **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
+  intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
+  y la implementación concreta vive en `storage/` (`flexsearch-catalog-search.ts`) — inversión de
+  dependencias, no una excepción a "domain/ no importa infraestructura". Al elegir la librería
+  concreta, preferir la que no tenga dependencias propias de terceros cuando haya opciones
+  equivalentes.
+- **Traductor de errores exhaustivo**: `ui/errors.ts` tiene un único `switch` sobre `ErrorCode` con
+  chequeo `never` en el `default` — si se agrega un código a `ErrorMeta` y no se traduce acá, no
+  compila. Todo el código de UI muestra errores de negocio a través de esta función, nunca
+  formateando un `Failure` a mano en otro lado.
+- **Un signal por responsabilidad, agrupados por concern en `ui/state/`**: `cart.ts`,
+  `command-bar.ts`, `checkout.ts`, `receipt.ts`, `screen.ts`, `void-sale.ts` — cada uno expone sus
+  signals y, si hace falta, una función de reset. `activeScreenSignal` (`ui/state/screen.ts`) es un
+  switch simple (`'sale' | 'checkout' | 'receipt' | 'void'`) que `ui/app.tsx` usa para elegir qué
+  pantalla montar; agregar una pantalla nueva es sumar un valor al tipo y un `case` al switch.
+- **`useLayoutEffect`, no `useEffect`, para foco imperativo al montar una pantalla**: `useEffect` en
+  Preact se difiere a un frame (vía rAF) — una tecla enviada muy rápido después de montar (un test
+  e2e, o un cajero rápido con lector de código de barras) puede llegar antes de que el foco se haya
+  movido y perderse. Las pantallas de cobro/comprobante/anulación usan `useLayoutEffect` (sincrónico,
+  antes del paint) por esto — lo encontró un test e2e real, no es una precaución teórica.
+- **Operaciones de carrito async trackeadas contra navegación**: agregar un producto implica un
+  lookup de stock (async, Dexie). `command-bar-controller.ts` guarda la promesa en curso
+  (`pendingCartOperation`) y `triggerCheckout` la espera antes de cambiar de pantalla — sin esto,
+  `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después de agregar un producto podía abrir el
+  cobro (o cerrar la venta) antes de que el producto terminara de sumarse al carrito.
 
 ## Estado del proyecto
 
-Repo en Fase 0 (scaffolding) según el roadmap del documento de diseño (§11). Antes de armar
-estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no adelantar
-features de una fase posterior (ej. no implementar sync antes de tener el MVP de venta offline).
+Fase 1 (MVP de venta offline) completa: catálogo sembrado desde fixture, carrito, barra de comandos
+completa (búsqueda, código de barras, línea libre, cantidad, lista de comandos con `/`), cobro,
+cierre de venta persistido en IndexedDB, comprobante con impresión (`window.print()`), y anulación
+de venta (RF-06, adelantada desde el roadmap original). Sin sync ni backend todavía — eso es Fase 2.
+Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
+adelantar features de una fase posterior.
