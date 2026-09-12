@@ -44,6 +44,7 @@ export type ErrorMeta = {
 
   // storage/sale-repository.ts
   'sale/persist-failed': { message: string };
+  'sale/not-found': { saleId: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Cart } from '../domain/cart.ts';
 import { db } from './db.ts';
-import { closeSaleAndPersist } from './sale-repository.ts';
+import { closeSaleAndPersist, voidSaleAndPersist } from './sale-repository.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -84,6 +84,71 @@ describe('closeSaleAndPersist', () => {
     if (result.ok) {
       const movements = await db.stockMovements.where('saleId').equals(result.value.id).toArray();
       expect(movements).toEqual([]);
+    }
+  });
+});
+
+describe('voidSaleAndPersist', () => {
+  it('anula la venta y revierte el stock', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!closed.ok) throw new Error('setup falló');
+
+    const result = await voidSaleAndPersist(closed.value.id, { reason: 'error de cobro' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.status).toBe('voided');
+      expect(result.value.voidReason).toBe('error de cobro');
+    }
+    const stock = await db.stock.get('p1');
+    expect(stock?.quantity).toBe(10);
+  });
+
+  it('no modifica lines/payments/total/createdAt de la venta original', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!closed.ok) throw new Error('setup falló');
+
+    const result = await voidSaleAndPersist(closed.value.id);
+
+    if (result.ok) {
+      expect(result.value.lines).toEqual(closed.value.lines);
+      expect(result.value.payments).toEqual(closed.value.payments);
+      expect(result.value.total).toBe(closed.value.total);
+      expect(result.value.createdAt).toBe(closed.value.createdAt);
+    }
+  });
+
+  it('registra un movimiento de stock nuevo con reason "sale-void", sin editar el original', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!closed.ok) throw new Error('setup falló');
+
+    await voidSaleAndPersist(closed.value.id);
+
+    const movements = await db.stockMovements.where('saleId').equals(closed.value.id).toArray();
+    expect(movements).toHaveLength(2);
+    expect(movements.find((m) => m.reason === 'sale')?.delta).toBe(-2);
+    expect(movements.find((m) => m.reason === 'sale-void')?.delta).toBe(2);
+  });
+
+  it('rechaza anular una venta inexistente', async () => {
+    const result = await voidSaleAndPersist('no-existe');
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('sale/not-found');
+    }
+  });
+
+  it('rechaza anular una venta ya anulada', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!closed.ok) throw new Error('setup falló');
+    await voidSaleAndPersist(closed.value.id);
+
+    const result = await voidSaleAndPersist(closed.value.id);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('sale/already-voided');
     }
   });
 });
