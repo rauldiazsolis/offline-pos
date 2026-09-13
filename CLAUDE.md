@@ -197,7 +197,10 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
 
 `Ctrl+Enter` = `/COBRAR` desde cualquier estado. Con la barra vacía, `↑/↓` navegan el carrito; con
 texto, navegan resultados. Errores de parseo van en un slot de altura fija reservado (nunca corren
-el layout) y seleccionan todo el input (`.select()`) para reemplazar sin retipear.
+el layout) y seleccionan todo el input (`.select()`) para reemplazar sin retipear. El foco al montar
+y el `.select()` en error se resuelven con los hooks compartidos de `ui/hooks/` (ver "Patrones
+establecidos") — nunca con el atributo HTML `autoFocus`, que no dispara de forma confiable cuando
+Preact desmonta y vuelve a montar una pantalla (el caso real: volver de un popup con Esc).
 
 Comandos disponibles (`ui/keyboard/commands.ts`, se muestran con solo `/`): `/COBRAR`, `/ANULAR`,
 `/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
@@ -215,7 +218,12 @@ offline. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine` direc
 `sync/engine.ts`.
 
 Otros principios no negociables: todo alcanzable en ≤2 pasos sin mouse (RNF-04), foco siempre
-visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`.
+visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`
+(Fase 4 — tercer paso opcional de `/CONFIG`, `ui/format.ts` lo lee en cada llamada, default
+`navigator.language`). "Login de terminal 100% teclado" (PIN + Enter) es un principio del doc de
+diseño que **todavía no está implementado ni asignado a ninguna fase** — no hay modelo de
+usuario/terminal en el dominio (§4). Se decidió dejarlo fuera del alcance de Fase 4 a propósito
+(ver Fase 4 en "Estado del proyecto"); no asumir que existe ningún tipo de autenticación.
 
 ## Testing
 
@@ -235,10 +243,15 @@ código interno.
 
 El motor de sync y el conector REST se testean sin backend real ni librería de mocking HTTP nueva:
 `vi.stubGlobal('fetch', vi.fn())` para el conector, y un `Connector` fake hecho a mano (objeto
-literal con los 5 métodos del puerto) para `sync/engine.ts` — así `syncOnce` se testea contra el
+literal con los métodos del puerto) para `sync/engine.ts` — así `syncOnce` se testea contra el
 puerto, no contra HTTP.
 
-## Patrones establecidos en Fase 1, 2 y 3
+`e2e/keyboard-only.spec.ts` (Fase 4) es la "auditoría de accesibilidad por teclado" del roadmap
+hecha verificable en CI: un test por pantalla popup, navegando solo con teclado, que confirma
+explícitamente que la barra de comandos recupera el foco al volver — no una revisión manual sin
+rastro.
+
+## Patrones establecidos en Fase 1 a 4
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
   intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
@@ -256,11 +269,15 @@ puerto, no contra HTTP.
   switch simple (`'sale' | 'checkout' | 'receipt' | 'void' | 'config'`) que `ui/app.tsx` usa para
   elegir qué pantalla montar; agregar una pantalla nueva es sumar un valor al tipo y un `case` al
   switch.
-- **`useLayoutEffect`, no `useEffect`, para foco imperativo al montar una pantalla**: `useEffect` en
-  Preact se difiere a un frame (vía rAF) — una tecla enviada muy rápido después de montar (un test
-  e2e, o un cajero rápido con lector de código de barras) puede llegar antes de que el foco se haya
-  movido y perderse. Las pantallas de cobro/comprobante/anulación usan `useLayoutEffect` (sincrónico,
-  antes del paint) por esto — lo encontró un test e2e real, no es una precaución teórica.
+- **`useFocusOnMount`/`useSelectOnErrorSignal` (`ui/hooks/`, Fase 4), no código repetido por
+  pantalla**: cada pantalla popup (cobro, config, anulación, comprobante) repetía el mismo
+  `useLayoutEffect(() => ref.current?.focus(), [])` — `useLayoutEffect`, no `useEffect`, porque
+  Preact difiere `useEffect` a un frame (vía rAF) y una tecla enviada muy rápido después de montar
+  puede perderse. Se consolidó en un hook compartido. **`CommandBarInput` no tenía este patrón**:
+  usaba el atributo HTML `autoFocus`, que no dispara de forma confiable cuando Preact desmonta y
+  vuelve a montar un elemento (a diferencia de la carga inicial de la página) — esa inconsistencia
+  era un bug real, reportado por el usuario: el foco se perdía al volver de cualquier popup con Esc.
+  Lección: cualquier foco imperativo en esta app pasa por el hook compartido, nunca por `autoFocus`.
 - **Operaciones de carrito async trackeadas contra navegación**: agregar un producto implica un
   lookup de stock (async, Dexie). `command-bar-controller.ts` guarda la promesa en curso
   (`pendingCartOperation`) y `triggerCheckout` la espera antes de cambiar de pantalla — sin esto,
@@ -303,15 +320,24 @@ puerto, no contra HTTP.
 
 ## Estado del proyecto
 
-Fase 1 (MVP de venta offline), Fase 2 (motor de sync) y Fase 3 (clientes y cuenta corriente)
-completas. Fase 1: catálogo sembrado desde fixture, carrito, barra de comandos completa, cobro,
-comprobante con impresión, anulación de venta (RF-06, adelantada). Fase 2: tabla `outbox` con
-reintentos y backoff exponencial, puerto `Connector` + implementación REST de referencia, pull de
-catálogo por delta, configuración runtime vía `/CONFIG`, sync bajo demanda vía `/SINCRONIZAR`, barra
-de estado real, contrato documentado en `docs/connector-api.openapi.yaml`. Fase 3: identificación de
-cliente vía `@` (adjuntar uno existente o crear uno local nuevo), `CustomerAccount` con pull por
-delta, `/CUENTA` en el cobro con hold síncrono (con red) o evaluación de margen cacheado (sin red),
-confirmación/liberación de hold vía outbox. Sigue Fase 4 (keyboard-first completo — `/COMANDOS`
-completos, gestor de foco global, integración de scanner, auditoría de accesibilidad por teclado).
-Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
-adelantar features de una fase posterior.
+Fases 1 a 4 completas. Fase 1 (MVP de venta offline): catálogo sembrado desde fixture, carrito,
+barra de comandos completa, cobro, comprobante con impresión, anulación de venta (RF-06,
+adelantada). Fase 2 (motor de sync): tabla `outbox` con reintentos y backoff exponencial, puerto
+`Connector` + implementación REST de referencia, pull de catálogo por delta, configuración runtime
+vía `/CONFIG`, sync bajo demanda vía `/SINCRONIZAR`, barra de estado real, contrato documentado en
+`docs/connector-api.openapi.yaml`. Fase 3 (clientes y cuenta corriente): identificación de cliente
+vía `@` (adjuntar uno existente o crear uno local nuevo), `CustomerAccount` con pull por delta,
+`/CUENTA` en el cobro con hold síncrono (con red) o evaluación de margen cacheado (sin red),
+confirmación/liberación de hold vía outbox. Fase 4 (keyboard-first completo): se arregló un bug real
+de foco (`CommandBarInput` no recuperaba el foco al volver de un popup con Esc — usaba `autoFocus`
+nativo en vez del patrón imperativo del resto de la app), consolidado en los hooks compartidos
+`ui/hooks/use-focus-on-mount.ts` y `use-select-on-error.ts`; locale configurable por terminal (tercer
+paso de `/CONFIG`); auditoría de accesibilidad por teclado como tests e2e
+(`e2e/keyboard-only.spec.ts`). "`/COMANDOS` completos" e "integración de scanner" ya estaban
+satisfechos con lo existente, sin cambios de código. **Fuera de alcance, a propósito**: "login de
+terminal" (§7) sigue sin implementar — no se le asignó ninguna fase y no hay modelo de dominio para
+usuarios/terminales; no asumir que existe.
+
+Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
+navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
+el trabajo actual — no adelantar features de una fase posterior.
