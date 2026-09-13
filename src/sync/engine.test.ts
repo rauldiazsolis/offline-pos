@@ -3,13 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../domain/result.ts';
 import { db } from '../storage/db.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
-import { pendingOutboxCountSignal, syncStatusSignal } from '../ui/state/sync.ts';
+import {
+  pendingOutboxCountSignal,
+  syncConfiguredSignal,
+  syncStatusSignal,
+} from '../ui/state/sync.ts';
 import type { Connector, ConnectorPullResult } from './connector.ts';
+import { saveSyncConfig } from './config.ts';
 import { getProductsCursor } from './cursor.ts';
-import { syncOnce } from './engine.ts';
+import { runSyncCycle, syncOnce } from './engine.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
+
+function setOnline(online: boolean): void {
+  Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
+}
 
 function fakeConnector(overrides: Partial<Connector> = {}): Connector {
   return {
@@ -37,6 +46,9 @@ beforeEach(async () => {
 afterEach(async () => {
   db.close();
   await db.delete();
+  localStorage.clear();
+  setOnline(true);
+  vi.unstubAllGlobals();
 });
 
 const sale: Sale = {
@@ -286,5 +298,42 @@ describe('pushOne por tipo de evento', () => {
       { saleId: 'sale-1', voidedAt: now, voidReason: 'error' },
       'void-1',
     );
+  });
+});
+
+describe('runSyncCycle', () => {
+  it('sin red, marca offline y no llama a fetch', async () => {
+    setOnline(false);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await runSyncCycle();
+
+    expect(syncStatusSignal.value).toBe('offline');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sin config guardada, marca syncConfigured en false', async () => {
+    await runSyncCycle();
+
+    expect(syncConfiguredSignal.value).toBe(false);
+  });
+
+  it('con config guardada, arma el conector real y corre un ciclo', async () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ items: [] }),
+      }),
+    );
+
+    await runSyncCycle();
+
+    expect(syncConfiguredSignal.value).toBe(true);
+    expect(syncStatusSignal.value).toBe('online-idle');
   });
 });

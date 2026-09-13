@@ -1,5 +1,6 @@
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { seedCatalogIfEmpty } from '../storage/seed-catalog.ts';
+import { startSyncEngine } from '../sync/engine.ts';
 import { setCatalogRepository } from './state/catalog.ts';
 
 /**
@@ -17,4 +18,6 @@ export async function bootstrap(): Promise<void> {
 
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
+
+  startSyncEngine();
 }

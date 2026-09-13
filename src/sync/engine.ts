@@ -6,11 +6,18 @@ import {
   type OutboxEvent,
 } from '../domain/outbox.ts';
 import type { Result } from '../domain/result.ts';
+import { createRestFetchConnector } from '../connectors/rest-fetch-connector.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { db } from '../storage/db.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
-import { setLastSyncedAt, setPendingOutboxCount, setSyncStatus } from '../ui/state/sync.ts';
+import {
+  setLastSyncedAt,
+  setPendingOutboxCount,
+  setSyncConfigured,
+  setSyncStatus,
+} from '../ui/state/sync.ts';
 import type { Connector } from './connector.ts';
+import { loadSyncConfig } from './config.ts';
 import { getProductsCursor, setProductsCursor } from './cursor.ts';
 
 function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>> {
@@ -92,4 +99,43 @@ export async function syncOnce(connector: Connector, now: string): Promise<void>
   }
   setSyncStatus('online-idle');
   setLastSyncedAt(now);
+}
+
+/**
+ * Arma el `Connector` real desde la config guardada y corre un ciclo. Acá
+ * viven los chequeos de entorno (¿hay red? ¿hay config?) que `syncOnce` no
+ * conoce a propósito — así queda testeable de forma aislada.
+ */
+export async function runSyncCycle(): Promise<void> {
+  if (!navigator.onLine) {
+    setSyncStatus('offline');
+    return;
+  }
+
+  const configResult = loadSyncConfig();
+  if (!configResult.ok) {
+    setSyncConfigured(false);
+    return;
+  }
+  setSyncConfigured(true);
+
+  const connector = createRestFetchConnector(configResult.value);
+  await syncOnce(connector, new Date().toISOString());
+}
+
+const SYNC_INTERVAL_MS = 15_000;
+
+/**
+ * Loop de sync mientras la pestaña está abierta (`setInterval` + evento
+ * `online`) — NO la Background Sync API de Service Worker, eso es
+ * explícitamente Fase 7 (PWA). Se llama una sola vez desde `ui/bootstrap.ts`.
+ */
+export function startSyncEngine(): void {
+  void runSyncCycle();
+  setInterval(() => {
+    void runSyncCycle();
+  }, SYNC_INTERVAL_MS);
+  window.addEventListener('online', () => {
+    void runSyncCycle();
+  });
 }
