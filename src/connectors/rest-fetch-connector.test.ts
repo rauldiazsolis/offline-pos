@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Customer } from '../domain/customer.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import { createRestFetchConnector } from './rest-fetch-connector.ts';
@@ -138,6 +139,118 @@ describe('pullProducts', () => {
     if (!result.ok) {
       expect(result.error).toBe('sync/invalid-payload');
     }
+  });
+});
+
+const customer: Customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+
+describe('pullCustomers', () => {
+  it('parsea la respuesta y arma el cursor', async () => {
+    const raw = { id: 'c1', name: 'Juan Pérez', creditLimit: 1000, margin: 0, balance: 0 };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ items: [raw], nextCursor: 'cursor-2' })),
+    );
+    const connector = createRestFetchConnector(config);
+
+    const result = await connector.pullCustomers({ since: 'cursor-1' });
+
+    expect(result).toEqual({ ok: true, value: { items: [raw], nextCursor: 'cursor-2' } });
+  });
+
+  it('devuelve sync/invalid-payload si la respuesta no matchea el schema', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ items: [{ id: 'c1' }] })));
+    const connector = createRestFetchConnector(config);
+
+    const result = await connector.pullCustomers({});
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('sync/invalid-payload');
+    }
+  });
+});
+
+describe('pushCustomer', () => {
+  it('hace POST a /customers con Idempotency-Key = id del cliente', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+
+    await connector.pushCustomer(customer, 'c1');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/customers');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toMatchObject({ 'Idempotency-Key': 'c1' });
+  });
+});
+
+describe('requestAccountHold', () => {
+  it('devuelve approved: true con el holdId si el backend aprueba', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ approved: true, holdId: 'hold-1' })),
+    );
+    const connector = createRestFetchConnector(config);
+
+    const result = await connector.requestAccountHold({ customerId: 'c1', amount: 500 }, 'req-1');
+
+    expect(result).toEqual({ ok: true, value: { approved: true, holdId: 'hold-1' } });
+  });
+
+  it('devuelve approved: false con el reasonCode si el backend rechaza', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ approved: false, reasonCode: 'over-limit' })),
+    );
+    const connector = createRestFetchConnector(config);
+
+    const result = await connector.requestAccountHold({ customerId: 'c1', amount: 500 }, 'req-1');
+
+    expect(result).toEqual({ ok: true, value: { approved: false, reasonCode: 'over-limit' } });
+  });
+
+  it('hace POST a /account-holds', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ approved: true, holdId: 'hold-1' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+
+    await connector.requestAccountHold({ customerId: 'c1', amount: 500 }, 'req-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/account-holds',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+});
+
+describe('pushAccountHoldConfirm', () => {
+  it('hace POST a /account-holds/{holdId}/confirm con el saleId', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+
+    await connector.pushAccountHoldConfirm({ holdId: 'hold-1', saleId: 'sale-1' }, 'confirm-1');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/account-holds/hold-1/confirm');
+    expect(init.body).toBe(JSON.stringify({ saleId: 'sale-1' }));
+  });
+});
+
+describe('releaseAccountHold', () => {
+  it('hace DELETE a /account-holds/{holdId}', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+
+    await connector.releaseAccountHold({ holdId: 'hold-1' }, 'release-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/account-holds/hold-1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
   });
 });
 

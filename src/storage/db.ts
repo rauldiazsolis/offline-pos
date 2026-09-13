@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
@@ -19,6 +20,9 @@ class PosDatabase extends Dexie {
   // Dexie usa `Omit<T, 'id'>`, que colapsa una unión discriminada (como
   // OutboxEvent) en un tipo sin los campos específicos de cada variante.
   outbox!: EntityTable<OutboxEvent, 'id', OutboxEvent>;
+  customers!: EntityTable<Customer, 'id'>;
+  customerAccounts!: EntityTable<CustomerAccount, 'customerId'>;
+  accountMovements!: EntityTable<AccountMovement, 'id'>;
 
   constructor() {
     super('offline-pos');
@@ -30,6 +34,11 @@ class PosDatabase extends Dexie {
     });
     this.version(2).stores({
       outbox: 'id, status, createdAt',
+    });
+    this.version(3).stores({
+      customers: 'id, name',
+      customerAccounts: 'customerId',
+      accountMovements: 'id, customerId, saleId, createdAt',
     });
   }
 }

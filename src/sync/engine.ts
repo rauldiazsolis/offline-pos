@@ -1,3 +1,4 @@
+import { splitConnectorCustomer } from '../domain/customer.ts';
 import {
   isDue,
   isSyncStruggling,
@@ -8,8 +9,10 @@ import {
 import type { Result } from '../domain/result.ts';
 import { createRestFetchConnector } from '../connectors/rest-fetch-connector.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
+import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
+import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
   setLastSyncedAt,
   setPendingOutboxCount,
@@ -18,7 +21,12 @@ import {
 } from '../ui/state/sync.ts';
 import type { Connector } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
-import { getProductsCursor, setProductsCursor } from './cursor.ts';
+import {
+  getCustomersCursor,
+  getProductsCursor,
+  setCustomersCursor,
+  setProductsCursor,
+} from './cursor.ts';
 
 function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>> {
   switch (event.type) {
@@ -35,6 +43,15 @@ function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>
         },
         event.id,
       );
+    case 'customer':
+      return connector.pushCustomer(event.customer, event.id);
+    case 'account-hold-confirm':
+      return connector.pushAccountHoldConfirm(
+        { holdId: event.holdId, saleId: event.saleId },
+        event.id,
+      );
+    case 'account-hold-release':
+      return connector.releaseAccountHold({ holdId: event.holdId }, event.id);
     default: {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
@@ -78,6 +95,41 @@ async function pullCatalog(connector: Connector): Promise<void> {
 }
 
 /**
+ * Pull de clientes por delta, mismo criterio que `pullCatalog`: cada fila
+ * cruda se separa en `Customer`/`CustomerAccount` (`splitConnectorCustomer`)
+ * antes de guardarse, así las dos tablas quedan siempre consistentes entre
+ * sí incluso si un cliente todavía no tiene cuenta corriente.
+ */
+async function pullCustomers(connector: Connector): Promise<void> {
+  const since = getCustomersCursor();
+  const result = await connector.pullCustomers(since !== undefined ? { since } : {});
+  if (!result.ok) {
+    return;
+  }
+
+  if (result.value.items.length > 0) {
+    const now = new Date().toISOString();
+    const customers = [];
+    const accounts = [];
+    for (const raw of result.value.items) {
+      const split = splitConnectorCustomer(raw, { now });
+      customers.push(split.customer);
+      if (split.account !== undefined) {
+        accounts.push(split.account);
+      }
+    }
+    await db.customers.bulkPut(customers);
+    if (accounts.length > 0) {
+      await db.customerAccounts.bulkPut(accounts);
+    }
+    setCustomerRepository(await loadCustomerRepository());
+  }
+  if (result.value.nextCursor !== undefined) {
+    setCustomersCursor(result.value.nextCursor);
+  }
+}
+
+/**
  * Un ciclo de sync: push del outbox pendiente + pull de catálogo. Nunca
  * bloquea la UI — el caller (`runSyncCycle`) lo dispara en background.
  * No conoce config ni arma el `Connector`: eso es responsabilidad del
@@ -88,6 +140,7 @@ export async function syncOnce(connector: Connector, now: string): Promise<void>
 
   await pushPending(connector, now);
   await pullCatalog(connector);
+  await pullCustomers(connector);
 
   const events = await db.outbox.toArray();
   const pendingCount = events.filter((event) => event.status === 'pending').length;

@@ -1,14 +1,20 @@
+import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
+import type { CustomerSearchResult } from '../../domain/customer-search.ts';
+import { db } from '../../storage/db.ts';
 import { CommandBarInput } from './CommandBarInput.tsx';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  customerSelectionIndexSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
+import { setCustomerRepository } from '../state/customer-repository.ts';
+import { attachedCustomerSignal } from '../state/customer.ts';
 
 const arrozResult: CatalogSearchResult = {
   product: {
@@ -24,18 +30,36 @@ const arrozResult: CatalogSearchResult = {
   score: 1,
 };
 
-beforeEach(() => {
+const anaResult: CustomerSearchResult = {
+  customer: { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' },
+  score: 1,
+};
+
+beforeEach(async () => {
+  await db.open();
   commandBarBufferSignal.value = '';
   commandBarErrorSignal.value = null;
   searchSelectionIndexSignal.value = null;
+  customerSelectionIndexSignal.value = null;
   cartSelectionIndexSignal.value = null;
   cartSignal.value = { lines: [] };
+  attachedCustomerSignal.value = undefined;
   setCatalogRepository({
     search: (query) => (query.toLowerCase().includes('arroz') ? [arrozResult] : []),
     findByBarcodeOrSku: () => undefined,
     getProduct: () => undefined,
     getStock: () => Promise.resolve({ productId: 'p1', quantity: 10, updatedAt: '' }),
   });
+  setCustomerRepository({
+    search: (query) => (query.toLowerCase().includes('ana') ? [anaResult] : []),
+    getCustomer: () => undefined,
+    getCustomerAccount: () => Promise.resolve(undefined),
+  });
+});
+
+afterEach(async () => {
+  db.close();
+  await db.delete();
 });
 
 describe('CommandBarInput', () => {
@@ -89,6 +113,50 @@ describe('CommandBarInput', () => {
 
     fireEvent.input(input, { target: { value: '$1000' } });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('"@" con match muestra resultados de cliente en vivo', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+
+    expect(screen.getByText('Ana García')).not.toBeNull();
+  });
+
+  it('"@" con match adjunta el cliente existente al confirmar con Enter', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(attachedCustomerSignal.value?.id).toBe('c1');
+  });
+
+  it('"@" sin match ofrece crear un cliente nuevo, y Enter lo crea y adjunta', async () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@Nuevo Cliente' } });
+    expect(screen.getByText('+ Crear cliente "Nuevo Cliente"', { exact: false })).not.toBeNull();
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(attachedCustomerSignal.value?.name).toBe('Nuevo Cliente');
+    });
+  });
+
+  it('"@" vacío + Enter desadjunta el cliente actual', () => {
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '' };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(attachedCustomerSignal.value).toBeUndefined();
   });
 
   it('con solo "/" muestra la lista completa de comandos disponibles', () => {

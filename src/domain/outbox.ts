@@ -1,19 +1,25 @@
+import type { Customer } from './customer.ts';
 import type { Sale } from './sale.ts';
 import type { StockMovement } from './stock.ts';
 
 export type OutboxEventPayload =
   | { type: 'sale'; sale: Sale }
   | { type: 'stock-movement'; movement: StockMovement }
-  | { type: 'sale-void'; saleId: string; voidedAt: string; voidReason?: string };
+  | { type: 'sale-void'; saleId: string; voidedAt: string; voidReason?: string }
+  | { type: 'customer'; customer: Customer }
+  | { type: 'account-hold-confirm'; holdId: string; saleId: string }
+  | { type: 'account-hold-release'; holdId: string };
 
 /**
  * Evento inmutable de sincronización (ver "Patrón outbox" en CLAUDE.md).
  * `id` es también la Idempotency-Key que se envía al conector — para
- * 'sale' y 'stock-movement' es el id de la propia entidad (`Sale.id` /
- * `StockMovement.id`: la entidad ES el evento a sincronizar); 'sale-void'
- * es una operación distinta sobre una venta ya enviada, así que necesita su
- * propio id nuevo (reusar el de la venta mezclaría dos operaciones bajo la
- * misma clave de idempotencia).
+ * 'sale', 'stock-movement' y 'customer' es el id de la propia entidad
+ * (la entidad ES el evento a sincronizar); 'sale-void',
+ * 'account-hold-confirm' y 'account-hold-release' son operaciones
+ * distintas sobre un recurso ya enviado (una venta, un hold aprobado por el
+ * backend), así que cada una necesita su propio id nuevo (reusar el id del
+ * recurso original mezclaría operaciones distintas bajo la misma clave de
+ * idempotencia).
  */
 export type OutboxEvent = OutboxEventPayload & {
   id: string;
@@ -71,6 +77,63 @@ export function buildOutboxEventForVoid(params: {
     saleId: params.saleId,
     voidedAt: params.voidedAt,
     ...(params.voidReason !== undefined ? { voidReason: params.voidReason } : {}),
+    id: params.id,
+    status: 'pending',
+    retries: 0,
+    createdAt: params.now,
+    nextAttemptAt: params.now,
+  };
+}
+
+export function buildOutboxEventForCustomer(customer: Customer, params: { now: string }): OutboxEvent {
+  return {
+    type: 'customer',
+    customer,
+    id: customer.id,
+    status: 'pending',
+    retries: 0,
+    createdAt: params.now,
+    nextAttemptAt: params.now,
+  };
+}
+
+/**
+ * Confirma ante el backend que un hold ya aprobado se usó en `saleId` —
+ * RF-19, encolado en la misma transacción que la venta que lo consumió
+ * (ver `storage/sale-repository.ts`) para que sobreviva a un corte de red
+ * justo después de la aprobación.
+ */
+export function buildOutboxEventForHoldConfirm(params: {
+  id: string;
+  holdId: string;
+  saleId: string;
+  now: string;
+}): OutboxEvent {
+  return {
+    type: 'account-hold-confirm',
+    holdId: params.holdId,
+    saleId: params.saleId,
+    id: params.id,
+    status: 'pending',
+    retries: 0,
+    createdAt: params.now,
+    nextAttemptAt: params.now,
+  };
+}
+
+/**
+ * Libera (best-effort) un hold aprobado que terminó sin usarse — el cobro se
+ * canceló después de que el backend ya lo había aprobado. Si nunca llega a
+ * sincronizarse, el hold expira solo del lado del backend (§6 del diseño).
+ */
+export function buildOutboxEventForHoldRelease(params: {
+  id: string;
+  holdId: string;
+  now: string;
+}): OutboxEvent {
+  return {
+    type: 'account-hold-release',
+    holdId: params.holdId,
     id: params.id,
     status: 'pending',
     retries: 0,

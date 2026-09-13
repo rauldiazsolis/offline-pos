@@ -1,7 +1,9 @@
 import { computed, signal } from '@preact/signals';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
+import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import { parseCommandBar, type ParsedCommand } from '../keyboard/parse-command-bar.ts';
 import { getCatalogRepository } from './catalog.ts';
+import { getCustomerRepository } from './customer-repository.ts';
 
 /** Contenido actual del input de la barra de comandos. */
 export const commandBarBufferSignal = signal('');
@@ -36,3 +38,15 @@ export const searchResultsSignal = computed<CatalogSearchResult[]>(() => {
  * la barra). `null` = nada seleccionado (por defecto, el primer resultado).
  */
 export const searchSelectionIndexSignal = signal<number | null>(null);
+
+/** Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`. */
+export const customerResultsSignal = computed<CustomerSearchResult[]>(() => {
+  const parsed = parsedSignal.value;
+  if (parsed.kind !== 'customer' || parsed.query === '') {
+    return [];
+  }
+  return getCustomerRepository().search(parsed.query);
+});
+
+/** Selección visual (↑/↓) sobre `customerResultsSignal`. */
+export const customerSelectionIndexSignal = signal<number | null>(null);

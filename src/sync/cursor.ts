@@ -9,6 +9,7 @@
  * Result, perder el cursor no rompe nada, solo hace el próximo pull más caro.
  */
 const PRODUCTS_CURSOR_KEY = 'offline-pos:sync-cursor:products';
+const CUSTOMERS_CURSOR_KEY = 'offline-pos:sync-cursor:customers';
 
 export function getProductsCursor(): string | undefined {
   try {
@@ -21,6 +22,22 @@ export function getProductsCursor(): string | undefined {
 export function setProductsCursor(cursor: string): void {
   try {
     localStorage.setItem(PRODUCTS_CURSOR_KEY, cursor);
+  } catch {
+    /* best-effort, ver comentario de arriba */
+  }
+}
+
+export function getCustomersCursor(): string | undefined {
+  try {
+    return localStorage.getItem(CUSTOMERS_CURSOR_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function setCustomersCursor(cursor: string): void {
+  try {
+    localStorage.setItem(CUSTOMERS_CURSOR_KEY, cursor);
   } catch {
     /* best-effort, ver comentario de arriba */
   }

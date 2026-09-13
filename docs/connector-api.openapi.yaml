@@ -11,11 +11,12 @@ info:
 
     Cada recurso está marcado con una extensión `x-pos-status`:
       - `implemented-phase-2`: el POS ya lo consume (motor de sync, Fase 2).
+      - `implemented-phase-3`: el POS ya lo consume (clientes y cuenta
+        corriente, Fase 3).
       - `documented-not-implemented`: forma parte del contrato completo pero
         el POS todavía no tiene el modelo de dominio correspondiente
-        (Customer/CustomerAccount es Fase 3, CashSession es Fase 6) — se
-        documenta igual para que un integrador conozca el contrato final
-        desde ya.
+        (CashSession es Fase 6) — se documenta igual para que un integrador
+        conozca el contrato final desde ya.
 
     Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
     la app) — desacoplada del contrato en sí, cada integración define cómo
@@ -146,31 +147,63 @@ paths:
   /customers:
     get:
       operationId: getCustomers
-      summary: Pull de clientes
-      x-pos-status: documented-not-implemented
+      summary: Pull de clientes (delta por cursor)
+      x-pos-status: implemented-phase-3
       description: |
-        Fase 3 del roadmap. Recurso simple a propósito: si un backend no
-        maneja cuenta corriente, simplemente no manda `creditLimit`/`margin`/
-        `balance` y no tiene que implementar nada más — la separación interna
-        entre `Customer` y `CustomerAccount` (§4 del doc de diseño) es una
-        decisión de organización del dominio del POS, no algo que el
-        integrador deba replicar.
+        Recurso simple a propósito: si un backend no maneja cuenta corriente,
+        simplemente no manda `creditLimit`/`margin`/`balance` y no tiene que
+        implementar nada más — la separación interna entre `Customer` y
+        `CustomerAccount` (§4 del doc de diseño) es una decisión de
+        organización del dominio del POS, no algo que el integrador deba
+        replicar.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Cursor devuelto por una respuesta anterior. Sin este parámetro, trae todos los clientes.
       responses:
         '200':
-          description: Lista de clientes.
+          description: Página de clientes.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Customer'
+                $ref: '#/components/schemas/CustomersPullResponse'
+    post:
+      operationId: postCustomer
+      summary: Alta de un cliente creado localmente en el POS
+      x-pos-status: implemented-phase-3
+      description: |
+        Recurso nuevo, no contemplado en la versión original de §6 — RF-16
+        permite identificar (y dar de alta) un cliente durante la venta sin
+        que eso implique cuenta corriente, pero el contrato original solo
+        tenía el pull. Mismo criterio que `/sales`: idempotente por
+        `Idempotency-Key` = `Customer.id` (la entidad ES el evento). Un
+        cliente dado de alta así solo tiene cuenta corriente una vez que el
+        backend lo registra y lo devuelve con datos de cuenta en un pull
+        posterior.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      responses:
+        '200':
+          description: Cliente aceptado (o ya existente, si la Idempotency-Key se repite).
 
   /account-holds:
     post:
       operationId: postAccountHold
       summary: Bloqueo síncrono de crédito antes de cerrar una venta a cuenta corriente
-      x-pos-status: documented-not-implemented
-      description: Fase 3 del roadmap.
+      x-pos-status: implemented-phase-3
+      description: |
+        Único endpoint del contrato pensado para llamarse de forma síncrona
+        durante el cobro (§5 del doc de diseño) — nunca pasa por el outbox ni
+        se reintenta con backoff.
       requestBody:
         required: true
         content:
@@ -185,22 +218,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountHoldResponse'
 
+  /account-holds/{holdId}/confirm:
+    post:
+      operationId: confirmAccountHold
+      summary: Confirma que un hold ya aprobado se usó en una venta
+      x-pos-status: implemented-phase-3
+      description: |
+        Recurso nuevo, no contemplado en la versión original de §6: el
+        diseño decía que la confirmación de un hold "viaja en el outbox como
+        cualquier evento" (§5) pero el contrato nunca definió el endpoint
+        para eso — mismo tipo de gap que `/sales/{saleId}/void` en Fase 2. Se
+        encola en la misma transacción que la venta que consumió el hold
+        (RF-19: tolerante a que la red se corte justo después de aprobado),
+        con su propia `Idempotency-Key` (no reutiliza la del `POST /sales`).
+      parameters:
+        - name: holdId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [saleId]
+              properties:
+                saleId: { type: string }
+      responses:
+        '200':
+          description: Confirmación aceptada.
+
   /account-holds/{id}:
     delete:
       operationId: deleteAccountHold
       summary: Liberación best-effort de un hold no usado
-      x-pos-status: documented-not-implemented
+      x-pos-status: implemented-phase-3
       description: |
-        Fase 3 del roadmap. Es solo una optimización para liberar antes si
-        se puede — el vencimiento de un hold no confirmado es responsabilidad
-        del backend (timeout propio); si este DELETE nunca llega a
-        sincronizarse, el hold expira solo del lado del backend.
+        Es solo una optimización para liberar antes si se puede — el
+        vencimiento de un hold no confirmado es responsabilidad del backend
+        (timeout propio); si este DELETE nunca llega a sincronizarse, el
+        hold expira solo del lado del backend.
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
           description: Hold liberado (o ya no existía).
@@ -292,9 +359,11 @@ components:
       type: object
       required: [method, amount]
       properties:
-        method: { type: string, enum: [cash, card, other] }
+        method: { type: string, enum: [cash, card, other, account] }
         amount: { type: number }
-        reference: { type: string }
+        reference:
+          type: string
+          description: Para method=account con red, el holdId del bloqueo aprobado (§5, Fase 3).
 
     Sale:
       type: object
@@ -309,6 +378,9 @@ components:
         syncedAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time }
         voidReason: { type: string }
+        customerId:
+          type: string
+          description: Cliente identificado para la venta (RF-16, Fase 3) — independiente de cómo se pagó.
 
     StockMovement:
       type: object
@@ -329,21 +401,7 @@ components:
         voidedAt: { type: string, format: date-time }
         voidReason: { type: string }
 
-    # --- Documentados, no implementados todavía ---
-    CashSession:
-      type: object
-      required: [id, openedAt, openingAmount, sales]
-      properties:
-        id: { type: string }
-        openedAt: { type: string, format: date-time }
-        closedAt: { type: string, format: date-time }
-        openingAmount: { type: number }
-        closingAmount: { type: number }
-        sales:
-          type: array
-          items: { type: string }
-          description: IDs de Sale incluidas en el turno.
-
+    # --- Implementados (Fase 3) ---
     Customer:
       type: object
       required: [id, name]
@@ -357,6 +415,19 @@ components:
           description: Cuenta corriente, opcional — ver §6 del doc de diseño.
         margin: { type: number }
         balance: { type: number }
+        updatedAt: { type: string, format: date-time }
+
+    CustomersPullResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Customer'
+        nextCursor:
+          type: string
+          description: Pasar como `since` en el próximo pull. Ausente cuando no hay más páginas.
 
     AccountHoldRequest:
       type: object
@@ -373,7 +444,23 @@ components:
             approved: { type: boolean, enum: [true] }
             holdId: { type: string }
         - type: object
-          required: [approved, code]
+          required: [approved, reasonCode]
           properties:
             approved: { type: boolean, enum: [false] }
-            code: { type: string }
+            reasonCode: { type: string }
+
+    # --- Documentados, no implementados todavía ---
+    CashSession:
+      type: object
+      required: [id, openedAt, openingAmount, sales]
+      properties:
+        id: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        openingAmount: { type: number }
+        closingAmount: { type: number }
+        sales:
+          type: array
+          items: { type: string }
+          description: IDs de Sale incluidas en el turno.
+

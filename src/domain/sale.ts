@@ -11,7 +11,15 @@ export type SaleLine =
   | { kind: 'product'; productId: string; qty: number; unitPrice: number; discount?: Discount }
   | { kind: 'freeform'; description: string; qty: number; unitPrice: number; discount?: Discount };
 
-export type Payment = { method: 'cash' | 'card' | 'other'; amount: number; reference?: string };
+/**
+ * `'account'` (Fase 3, cuenta corriente) usa `reference` para el `holdId`
+ * cuando el hold se aprobó con red — sin red (RF-18), no hay `holdId`.
+ */
+export type Payment = {
+  method: 'cash' | 'card' | 'other' | 'account';
+  amount: number;
+  reference?: string;
+};
 
 /**
  * Venta cerrada, persistida en IndexedDB. En Fase 1 nunca se persiste una
@@ -23,6 +31,10 @@ export type Payment = { method: 'cash' | 'card' | 'other'; amount: number; refer
  * todavía nadie en Fase 1 — lo agrega recién Fase 2 al confirmar el push,
  * pero se define ya para no tener que tocar el tipo (y todo lo que hace
  * switch/destructuring sobre él) más adelante.
+ *
+ * `customerId` (Fase 3) identifica al cliente de la venta (RF-16) — se puede
+ * adjuntar independientemente de cómo se pague; solo es obligatorio cuando
+ * algún `Payment.method` es `'account'` (ver `closeSale`).
  *
  * Anular una venta (RF-06) es la transición de ciclo de vida
  * status: 'closed' -> 'voided', ya contemplada por el enum — nunca se
@@ -39,4 +51,5 @@ export type Sale = {
   syncedAt?: string;
   voidedAt?: string;
   voidReason?: string;
+  customerId?: string;
 };

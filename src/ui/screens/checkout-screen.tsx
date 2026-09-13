@@ -15,6 +15,7 @@ import {
   checkoutErrorSignal,
   checkoutPaymentsSignal,
 } from '../state/checkout.ts';
+import { attachedCustomerSignal } from '../state/customer.ts';
 
 /**
  * Pantalla de cobro (`/COBRAR` o `Ctrl+Enter`). Un único input, igual que la
@@ -48,7 +49,7 @@ export function CheckoutScreen() {
     }
     if (event.key === 'Enter') {
       event.preventDefault();
-      submitCheckout();
+      void submitCheckout();
     }
   };
 
@@ -99,7 +100,10 @@ export function CheckoutScreen() {
       {checkoutPaymentsSignal.value.length > 0 && (
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', color: 'var(--color-text-muted)' }}>
           {checkoutPaymentsSignal.value.map((payment, index) => (
-            <li key={index}>Pago en efectivo: {formatMoney(payment.amount)}</li>
+            <li key={index}>
+              {payment.method === 'account' ? 'Pago a cuenta corriente' : 'Pago en efectivo'}:{' '}
+              {formatMoney(payment.amount)}
+            </li>
           ))}
         </ul>
       )}
@@ -129,6 +133,7 @@ export function CheckoutScreen() {
       </div>
       <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
         Esc para volver a la venta sin cobrar.
+        {attachedCustomerSignal.value !== undefined && ' "/CUENTA" para cobrar a cuenta corriente.'}
       </p>
     </div>
   );

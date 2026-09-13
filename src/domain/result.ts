@@ -51,6 +51,14 @@ export type ErrorMeta = {
   'sync/request-failed': { status?: number; message: string };
   'sync/config-missing': undefined;
   'sync/config-invalid': { issues: { path: string; message: string }[] };
+
+  // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
+  'account/hold-rejected': { reasonCode: string };
+  'account/offline-limit-exceeded': { missing: number };
+  'account/no-customer-attached': undefined;
+
+  // storage/customer-repository.ts
+  'customer/persist-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

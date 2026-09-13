@@ -2,15 +2,21 @@ import { addFreeformLine, addProductLine, removeLine, setLineQuantity } from '..
 import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
+import { createCustomerLocally, loadCustomerRepository } from '../../storage/customer-repository.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  customerResultsSignal,
+  customerSelectionIndexSignal,
+  parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
+import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
+import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
@@ -23,16 +29,17 @@ import { runSyncCycle } from '../../sync/engine.ts';
  */
 
 /**
- * Agregar un producto es async (lookup de stock vía Dexie). Sin este
- * rastreo, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después podría
- * abrir el cobro antes de que el producto termine de sumarse al carrito —
- * una carrera real, no solo teórica (la agarró el test e2e de cobro).
+ * Agregar un producto es async (lookup de stock vía Dexie), y crear un
+ * cliente nuevo desde `@` también (persiste en Dexie + encola outbox). Sin
+ * este rastreo, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después
+ * podría cambiar de pantalla antes de que la operación termine — una
+ * carrera real, no solo teórica (la agarró el test e2e de cobro en Fase 1).
  * `triggerCheckout` espera esto antes de cambiar de pantalla.
  */
-let pendingCartOperation: Promise<void> = Promise.resolve();
+let pendingBarOperation: Promise<void> = Promise.resolve();
 
-function trackPendingCartOperation(promise: Promise<void>): void {
-  pendingCartOperation = promise;
+function trackPendingBarOperation(promise: Promise<void>): void {
+  pendingBarOperation = promise;
 }
 
 function applyCartResult(result: Result<Cart>): boolean {
@@ -48,6 +55,19 @@ function applyCartResult(result: Result<Cart>): boolean {
 function clearBuffer(): void {
   commandBarBufferSignal.value = '';
   searchSelectionIndexSignal.value = null;
+  customerSelectionIndexSignal.value = null;
+}
+
+/** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
+async function createAndAttachCustomer(name: string): Promise<void> {
+  const result = await createCustomerLocally(name);
+  if (!result.ok) {
+    commandBarErrorSignal.value = describeError(result);
+    return;
+  }
+  setCustomerRepository(await loadCustomerRepository());
+  attachedCustomerSignal.value = result.value;
+  clearBuffer();
 }
 
 async function addByProduct(product: Product, qty: number): Promise<void> {
@@ -70,7 +90,7 @@ async function addByCode(code: string, qty: number): Promise<void> {
 
 /** `/COBRAR`, también disparado por `Ctrl+Enter` desde cualquier estado de la barra. */
 export async function triggerCheckout(): Promise<void> {
-  await pendingCartOperation;
+  await pendingBarOperation;
   activeScreenSignal.value = 'checkout';
   clearBuffer();
 }
@@ -116,9 +136,23 @@ export function submitCommandBar(): void {
     case 'parse-error':
       commandBarErrorSignal.value = parsed.message;
       return;
-    case 'reserved-customer':
-      commandBarErrorSignal.value = 'Identificación de cliente no disponible todavía.';
+    case 'customer': {
+      const results = customerResultsSignal.value;
+      const index = customerSelectionIndexSignal.value ?? 0;
+      const selected = results[index];
+      if (selected !== undefined) {
+        attachedCustomerSignal.value = selected.customer;
+        clearBuffer();
+        return;
+      }
+      if (parsed.query.trim() === '') {
+        resetAttachedCustomer();
+        clearBuffer();
+        return;
+      }
+      trackPendingBarOperation(createAndAttachCustomer(parsed.query.trim()));
       return;
+    }
     case 'command':
       runCommand(parsed.name, parsed.args);
       return;
@@ -135,7 +169,7 @@ export function submitCommandBar(): void {
       }
       return;
     case 'barcode':
-      trackPendingCartOperation(addByCode(parsed.code, parsed.qty));
+      trackPendingBarOperation(addByCode(parsed.code, parsed.qty));
       return;
     case 'search': {
       const results = searchResultsSignal.value;
@@ -145,23 +179,38 @@ export function submitCommandBar(): void {
         commandBarErrorSignal.value = 'No hay resultados para agregar.';
         return;
       }
-      trackPendingCartOperation(addByProduct(selected.product, parsed.qty));
+      trackPendingBarOperation(addByProduct(selected.product, parsed.qty));
     }
   }
 }
 
-/** ↑/↓ sobre el carrito (barra vacía) o sobre los resultados de búsqueda (hay texto). */
-export function moveSelection(direction: 1 | -1): void {
-  const isSearching = commandBarBufferSignal.value !== '';
-  const items = isSearching ? searchResultsSignal.value : cartSignal.value.lines;
-  const selectionSignal = isSearching ? searchSelectionIndexSignal : cartSelectionIndexSignal;
-
-  if (items.length === 0) {
+function moveSelectionOver(
+  itemCount: number,
+  selectionSignal: { value: number | null },
+  direction: 1 | -1,
+): void {
+  if (itemCount === 0) {
     selectionSignal.value = null;
     return;
   }
-  const current = selectionSignal.value ?? (direction === 1 ? -1 : items.length);
-  selectionSignal.value = Math.min(Math.max(current + direction, 0), items.length - 1);
+  const current = selectionSignal.value ?? (direction === 1 ? -1 : itemCount);
+  selectionSignal.value = Math.min(Math.max(current + direction, 0), itemCount - 1);
+}
+
+/**
+ * ↑/↓: sobre el carrito (barra vacía), sobre resultados de producto (hay
+ * texto de búsqueda) o sobre resultados de cliente (`@<query>`).
+ */
+export function moveSelection(direction: 1 | -1): void {
+  if (parsedSignal.value.kind === 'customer') {
+    moveSelectionOver(customerResultsSignal.value.length, customerSelectionIndexSignal, direction);
+    return;
+  }
+
+  const isSearching = commandBarBufferSignal.value !== '';
+  const itemCount = isSearching ? searchResultsSignal.value.length : cartSignal.value.lines.length;
+  const selectionSignal = isSearching ? searchSelectionIndexSignal : cartSelectionIndexSignal;
+  moveSelectionOver(itemCount, selectionSignal, direction);
 }
 
 /** Tecla Supr con la barra vacía: elimina la línea del carrito seleccionada. */
@@ -204,6 +253,6 @@ async function doSetSelectedCartLineQuantity(qty: number): Promise<void> {
 /** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
 export function setSelectedCartLineQuantity(qty: number): Promise<void> {
   const promise = doSetSelectedCartLineQuantity(qty);
-  trackPendingCartOperation(promise);
+  trackPendingBarOperation(promise);
   return promise;
 }
