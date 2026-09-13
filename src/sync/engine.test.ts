@@ -8,9 +8,9 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
-import type { Connector, ConnectorPullResult } from './connector.ts';
+import type { AccountHoldResult, Connector, ConnectorCustomer, ConnectorPullResult } from './connector.ts';
 import { saveSyncConfig } from './config.ts';
-import { getProductsCursor } from './cursor.ts';
+import { getCustomersCursor, getProductsCursor } from './cursor.ts';
 import { runSyncCycle, syncOnce } from './engine.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
@@ -24,9 +24,15 @@ function fakeConnector(overrides: Partial<Connector> = {}): Connector {
   return {
     pullProducts: () => Promise.resolve(ok<ConnectorPullResult<Product>>({ items: [] })),
     pullStock: () => Promise.resolve(ok<StockItem[]>([])),
+    pullCustomers: () => Promise.resolve(ok<ConnectorPullResult<ConnectorCustomer>>({ items: [] })),
     pushSale: () => Promise.resolve(ok(undefined)),
     pushStockMovement: () => Promise.resolve(ok(undefined)),
     pushSaleVoid: () => Promise.resolve(ok(undefined)),
+    pushCustomer: () => Promise.resolve(ok(undefined)),
+    requestAccountHold: () =>
+      Promise.resolve(ok<AccountHoldResult>({ approved: true, holdId: 'hold-1' })),
+    pushAccountHoldConfirm: () => Promise.resolve(ok(undefined)),
+    releaseAccountHold: () => Promise.resolve(ok(undefined)),
     ...overrides,
   };
 }
@@ -252,6 +258,34 @@ describe('syncOnce — pull', () => {
   });
 });
 
+describe('syncOnce — pull de clientes', () => {
+  const rawCustomer = { id: 'c1', name: 'Juan Pérez', creditLimit: 1000, margin: 0, balance: 100 };
+
+  it('guarda customer y customerAccount, y avanza el cursor', async () => {
+    const pullCustomers = vi
+      .fn<Connector['pullCustomers']>()
+      .mockResolvedValue(ok({ items: [rawCustomer], nextCursor: 'cursor-2' }));
+
+    await syncOnce(fakeConnector({ pullCustomers }), now);
+
+    const storedCustomer = await db.customers.get('c1');
+    expect(storedCustomer?.name).toBe('Juan Pérez');
+    const storedAccount = await db.customerAccounts.get('c1');
+    expect(storedAccount?.balance).toBe(100);
+    expect(getCustomersCursor()).toBe('cursor-2');
+  });
+
+  it('un cliente sin datos de cuenta no crea fila en customerAccounts', async () => {
+    const pullCustomers = vi
+      .fn<Connector['pullCustomers']>()
+      .mockResolvedValue(ok({ items: [{ id: 'c2', name: 'Sin cuenta' }] }));
+
+    await syncOnce(fakeConnector({ pullCustomers }), now);
+
+    expect(await db.customerAccounts.get('c2')).toBeUndefined();
+  });
+});
+
 describe('pushOne por tipo de evento', () => {
   it('llama pushStockMovement para un evento stock-movement', async () => {
     const movement: StockMovement = {
@@ -298,6 +332,61 @@ describe('pushOne por tipo de evento', () => {
       { saleId: 'sale-1', voidedAt: now, voidReason: 'error' },
       'void-1',
     );
+  });
+
+  it('llama pushCustomer para un evento customer', async () => {
+    await db.outbox.add({
+      type: 'customer',
+      customer: { id: 'c1', name: 'Juan Pérez', createdAt: now },
+      id: 'c1',
+      status: 'pending',
+      retries: 0,
+      createdAt: now,
+      nextAttemptAt: now,
+    });
+    const pushCustomer = vi.fn().mockResolvedValue(ok(undefined));
+
+    await syncOnce(fakeConnector({ pushCustomer }), now);
+
+    expect(pushCustomer).toHaveBeenCalledWith({ id: 'c1', name: 'Juan Pérez', createdAt: now }, 'c1');
+  });
+
+  it('llama pushAccountHoldConfirm para un evento account-hold-confirm', async () => {
+    await db.outbox.add({
+      type: 'account-hold-confirm',
+      holdId: 'hold-1',
+      saleId: 'sale-1',
+      id: 'confirm-1',
+      status: 'pending',
+      retries: 0,
+      createdAt: now,
+      nextAttemptAt: now,
+    });
+    const pushAccountHoldConfirm = vi.fn().mockResolvedValue(ok(undefined));
+
+    await syncOnce(fakeConnector({ pushAccountHoldConfirm }), now);
+
+    expect(pushAccountHoldConfirm).toHaveBeenCalledWith(
+      { holdId: 'hold-1', saleId: 'sale-1' },
+      'confirm-1',
+    );
+  });
+
+  it('llama releaseAccountHold para un evento account-hold-release', async () => {
+    await db.outbox.add({
+      type: 'account-hold-release',
+      holdId: 'hold-1',
+      id: 'release-1',
+      status: 'pending',
+      retries: 0,
+      createdAt: now,
+      nextAttemptAt: now,
+    });
+    const releaseAccountHold = vi.fn().mockResolvedValue(ok(undefined));
+
+    await syncOnce(fakeConnector({ releaseAccountHold }), now);
+
+    expect(releaseAccountHold).toHaveBeenCalledWith({ holdId: 'hold-1' }, 'release-1');
   });
 });
 

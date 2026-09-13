@@ -1,14 +1,27 @@
 import { z } from 'zod';
+import type { Customer } from '../domain/customer.ts';
 import { productSchema, type Product } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import type { Sale } from '../domain/sale.ts';
 import { stockItemSchema, type StockItem, type StockMovement } from '../domain/stock.ts';
 import { toZodIssues } from '../domain/zod-issues.ts';
-import type { Connector, ConnectorPullResult } from '../sync/connector.ts';
+import {
+  accountHoldResultSchema,
+  connectorCustomerSchema,
+  type AccountHoldResult,
+  type Connector,
+  type ConnectorCustomer,
+  type ConnectorPullResult,
+} from '../sync/connector.ts';
 import type { SyncConfig } from '../sync/config.ts';
 
 const productsPullResponseSchema = z.object({
   items: z.array(productSchema),
+  nextCursor: z.string().optional(),
+});
+
+const customersPullResponseSchema = z.object({
+  items: z.array(connectorCustomerSchema),
   nextCursor: z.string().optional(),
 });
 
@@ -76,6 +89,50 @@ export function createRestFetchConnector(config: SyncConfig): Connector {
     return ok(undefined);
   }
 
+  /** Como `postEvent`, pero devuelve el body parseado — para POSTs que responden datos (el hold). */
+  async function postJson(path: string, idempotencyKey: string, body: unknown): Promise<Result<unknown>> {
+    let response: Response;
+    try {
+      response = await fetch(`${config.baseUrl}${path}`, {
+        method: 'POST',
+        headers: buildHeaders(config, idempotencyKey),
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      return err('sync/request-failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (!response.ok) {
+      return err('sync/request-failed', { status: response.status, message: response.statusText });
+    }
+    try {
+      return ok(await response.json());
+    } catch {
+      return err('sync/invalid-payload', {
+        issues: [{ path: '', message: 'La respuesta no es JSON válido' }],
+      });
+    }
+  }
+
+  async function deleteResource(path: string, idempotencyKey: string): Promise<Result<void>> {
+    let response: Response;
+    try {
+      response = await fetch(`${config.baseUrl}${path}`, {
+        method: 'DELETE',
+        headers: buildHeaders(config, idempotencyKey),
+      });
+    } catch (error) {
+      return err('sync/request-failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (!response.ok) {
+      return err('sync/request-failed', { status: response.status, message: response.statusText });
+    }
+    return ok(undefined);
+  }
+
   return {
     async pullProducts(params): Promise<Result<ConnectorPullResult<Product>>> {
       const url = new URL('/products', config.baseUrl);
@@ -122,6 +179,54 @@ export function createRestFetchConnector(config: SyncConfig): Connector {
 
     pushSaleVoid(params, idempotencyKey: string): Promise<Result<void>> {
       return postEvent(`/sales/${params.saleId}/void`, idempotencyKey, params);
+    },
+
+    async pullCustomers(params): Promise<Result<ConnectorPullResult<ConnectorCustomer>>> {
+      const url = new URL('/customers', config.baseUrl);
+      if (params.since !== undefined) {
+        url.searchParams.set('since', params.since);
+      }
+
+      const jsonResult = await fetchJson(url.toString(), buildHeaders(config));
+      if (!jsonResult.ok) {
+        return jsonResult;
+      }
+
+      const parsed = customersPullResponseSchema.safeParse(jsonResult.value);
+      if (!parsed.success) {
+        return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
+      }
+      return ok({
+        items: parsed.data.items,
+        ...(parsed.data.nextCursor !== undefined ? { nextCursor: parsed.data.nextCursor } : {}),
+      });
+    },
+
+    pushCustomer(customer: Customer, idempotencyKey: string): Promise<Result<void>> {
+      return postEvent('/customers', idempotencyKey, customer);
+    },
+
+    async requestAccountHold(params, idempotencyKey: string): Promise<Result<AccountHoldResult>> {
+      const jsonResult = await postJson('/account-holds', idempotencyKey, params);
+      if (!jsonResult.ok) {
+        return jsonResult;
+      }
+
+      const parsed = accountHoldResultSchema.safeParse(jsonResult.value);
+      if (!parsed.success) {
+        return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
+      }
+      return ok(parsed.data);
+    },
+
+    pushAccountHoldConfirm(params, idempotencyKey: string): Promise<Result<void>> {
+      return postEvent(`/account-holds/${params.holdId}/confirm`, idempotencyKey, {
+        saleId: params.saleId,
+      });
+    },
+
+    releaseAccountHold(params, idempotencyKey: string): Promise<Result<void>> {
+      return deleteResource(`/account-holds/${params.holdId}`, idempotencyKey);
     },
   };
 }

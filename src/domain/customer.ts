@@ -61,6 +61,55 @@ export function canChargeOffline(account: CustomerAccount, amount: number): bool
   return amount <= availableCredit(account);
 }
 
+/**
+ * Separa la forma cruda de `GET /customers` (un solo recurso, campos de
+ * cuenta opcionales — ver `sync/connector.ts::ConnectorCustomer`) en las dos
+ * entidades del dominio. Recibe la forma inline (no importa `sync/`: el
+ * dominio no depende de vocabulario de red) — `sync/engine.ts` le pasa un
+ * `ConnectorCustomer`, que calza estructuralmente. Sin `creditLimit`,
+ * `margin` y `balance` los tres a la vez, el backend no maneja cuenta
+ * corriente para ese cliente y no hay `CustomerAccount` que crear (§6).
+ */
+export function splitConnectorCustomer(
+  raw: {
+    id: string;
+    name: string;
+    // `| undefined` explícito (no solo `?`) porque esto recibe directamente
+    // un `ConnectorCustomer` inferido de Zod, que con `exactOptionalPropertyTypes`
+    // tipa sus opcionales como `T | undefined`, no como ausencia pura.
+    document?: string | undefined;
+    phone?: string | undefined;
+    creditLimit?: number | undefined;
+    margin?: number | undefined;
+    balance?: number | undefined;
+    updatedAt?: string | undefined;
+  },
+  params: { now: string },
+): { customer: Customer; account?: CustomerAccount } {
+  const customer: Customer = {
+    id: raw.id,
+    name: raw.name,
+    ...(raw.document !== undefined ? { document: raw.document } : {}),
+    ...(raw.phone !== undefined ? { phone: raw.phone } : {}),
+    createdAt: params.now,
+  };
+
+  if (raw.creditLimit === undefined || raw.margin === undefined || raw.balance === undefined) {
+    return { customer };
+  }
+
+  return {
+    customer,
+    account: {
+      customerId: raw.id,
+      creditLimit: raw.creditLimit,
+      margin: raw.margin,
+      balance: raw.balance,
+      updatedAt: raw.updatedAt ?? params.now,
+    },
+  };
+}
+
 /** Movimiento de cuenta generado al cerrar una venta con un pago `'account'`. */
 export function buildAccountMovementForSale(params: {
   id: string;

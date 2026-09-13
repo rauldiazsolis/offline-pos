@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { Customer } from './customer.ts';
 import {
+  buildOutboxEventForCustomer,
+  buildOutboxEventForHoldConfirm,
+  buildOutboxEventForHoldRelease,
   buildOutboxEventForSale,
   buildOutboxEventForVoid,
   buildOutboxEventsForStockMovements,
@@ -101,6 +105,47 @@ describe('buildOutboxEventForVoid', () => {
     });
 
     expect('voidReason' in event).toBe(false);
+  });
+});
+
+const customer: Customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+
+describe('buildOutboxEventForCustomer', () => {
+  it('usa el id del cliente como id del evento (Idempotency-Key)', () => {
+    const event = buildOutboxEventForCustomer(customer, { now: '2026-01-01T00:00:00.000Z' });
+
+    expect(event).toMatchObject({ type: 'customer', customer, id: 'c1', status: 'pending' });
+  });
+});
+
+describe('buildOutboxEventForHoldConfirm', () => {
+  it('usa un id propio, distinto del holdId y del saleId', () => {
+    const event = buildOutboxEventForHoldConfirm({
+      id: 'confirm-1',
+      holdId: 'hold-1',
+      saleId: 'sale-1',
+      now: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(event.id).toBe('confirm-1');
+    expect(event).toMatchObject({
+      type: 'account-hold-confirm',
+      holdId: 'hold-1',
+      saleId: 'sale-1',
+    });
+  });
+});
+
+describe('buildOutboxEventForHoldRelease', () => {
+  it('usa un id propio, distinto del holdId', () => {
+    const event = buildOutboxEventForHoldRelease({
+      id: 'release-1',
+      holdId: 'hold-1',
+      now: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(event.id).toBe('release-1');
+    expect(event).toMatchObject({ type: 'account-hold-release', holdId: 'hold-1' });
   });
 });
 

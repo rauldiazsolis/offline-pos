@@ -4,6 +4,7 @@ import {
   buildAccountMovementForSale,
   buildCustomer,
   canChargeOffline,
+  splitConnectorCustomer,
   type CustomerAccount,
 } from './customer.ts';
 
@@ -75,5 +76,49 @@ describe('buildAccountMovementForSale', () => {
     });
 
     expect('holdId' in movement).toBe(false);
+  });
+});
+
+describe('splitConnectorCustomer', () => {
+  it('sin datos de cuenta, devuelve solo el customer', () => {
+    const { customer, account } = splitConnectorCustomer(
+      { id: 'c1', name: 'Juan Pérez' },
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(customer).toEqual({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
+    expect(account).toBeUndefined();
+  });
+
+  it('con los tres campos de cuenta, separa customer y account', () => {
+    const { customer, account } = splitConnectorCustomer(
+      {
+        id: 'c1',
+        name: 'Juan Pérez',
+        creditLimit: 1000,
+        margin: 100,
+        balance: 200,
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(customer.id).toBe('c1');
+    expect(account).toEqual({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 100,
+      balance: 200,
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+  });
+
+  it('con datos de cuenta parciales, no arma un account (todo o nada)', () => {
+    const { account } = splitConnectorCustomer(
+      { id: 'c1', name: 'Juan Pérez', creditLimit: 1000 },
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(account).toBeUndefined();
   });
 });
