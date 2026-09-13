@@ -1,17 +1,24 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
 
 /**
- * Schema de IndexedDB para Fase 1. Sin tabla `outbox` todavía — eso es
- * Fase 2 (motor de sync), no adelantarlo acá.
+ * Schema de IndexedDB. `outbox` (Fase 2, motor de sync) se agrega en su
+ * propia versión — nunca se toca el `.stores()` de una versión ya publicada,
+ * Dexie migra automáticamente las instalaciones existentes a la última.
  */
 class PosDatabase extends Dexie {
   products!: EntityTable<Product, 'id'>;
   stock!: EntityTable<StockItem, 'productId'>;
   sales!: EntityTable<Sale, 'id'>;
   stockMovements!: EntityTable<StockMovement, 'id'>;
+  // `id` siempre lo generamos nosotros (nunca autogenerado por Dexie), así
+  // que se pasa OutboxEvent como tipo de inserción explícito: el default de
+  // Dexie usa `Omit<T, 'id'>`, que colapsa una unión discriminada (como
+  // OutboxEvent) en un tipo sin los campos específicos de cada variante.
+  outbox!: EntityTable<OutboxEvent, 'id', OutboxEvent>;
 
   constructor() {
     super('offline-pos');
@@ -20,6 +27,9 @@ class PosDatabase extends Dexie {
       stock: 'productId',
       sales: 'id, status, createdAt',
       stockMovements: 'id, productId, saleId, createdAt',
+    });
+    this.version(2).stores({
+      outbox: 'id, status, createdAt',
     });
   }
 }
