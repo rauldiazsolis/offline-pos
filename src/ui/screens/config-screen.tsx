@@ -1,7 +1,7 @@
-import { useSignalEffect } from '@preact/signals';
-import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { cancelConfigScreen, submitConfigStep } from '../keyboard/config-controller.ts';
+import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import {
   configBaseUrlSignal,
   configBufferSignal,
@@ -20,17 +20,8 @@ const STEP_LABELS: Record<string, string> = {
  * `Enter` confirma el paso actual y avanza (o guarda, en el último).
  */
 export function ConfigScreen() {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useLayoutEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useSignalEffect(() => {
-    if (configErrorSignal.value !== null) {
-      inputRef.current?.select();
-    }
-  });
+  const inputRef = useFocusOnMount<HTMLInputElement>();
+  useSelectOnErrorSignal(inputRef, configErrorSignal);
 
   const handleInput = (event: TargetedEvent<HTMLInputElement>) => {
     configBufferSignal.value = event.currentTarget.value;

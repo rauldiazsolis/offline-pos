@@ -1,5 +1,3 @@
-import { useSignalEffect } from '@preact/signals';
-import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { calculateTotals } from '../../domain/totals.ts';
 import {
@@ -9,6 +7,8 @@ import {
   submitCheckout,
 } from '../keyboard/checkout-controller.ts';
 import { formatMoney } from '../format.ts';
+import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { cartSignal } from '../state/cart.ts';
 import {
   checkoutBufferSignal,
@@ -24,17 +24,8 @@ import { attachedCustomerSignal } from '../state/customer.ts';
  * en CLAUDE.md).
  */
 export function CheckoutScreen() {
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useLayoutEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useSignalEffect(() => {
-    if (checkoutErrorSignal.value !== null) {
-      inputRef.current?.select();
-    }
-  });
+  const inputRef = useFocusOnMount<HTMLInputElement>();
+  useSelectOnErrorSignal(inputRef, checkoutErrorSignal);
 
   const handleInput = (event: TargetedEvent<HTMLInputElement>) => {
     checkoutBufferSignal.value = event.currentTarget.value;
