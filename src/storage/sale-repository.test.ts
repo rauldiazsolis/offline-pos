@@ -61,6 +61,21 @@ describe('closeSaleAndPersist', () => {
     await expect(db.sales.count()).resolves.toBe(0);
   });
 
+  it('escribe un evento de outbox por la venta y uno por cada movimiento de stock', async () => {
+    const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!result.ok) throw new Error('setup falló');
+
+    const events = await db.outbox.toArray();
+    expect(events).toHaveLength(2);
+
+    const saleEvent = events.find((event) => event.type === 'sale');
+    expect(saleEvent?.id).toBe(result.value.id); // el id de la venta es la Idempotency-Key
+    expect(saleEvent?.status).toBe('pending');
+
+    const movementEvent = events.find((event) => event.type === 'stock-movement');
+    expect(movementEvent?.status).toBe('pending');
+  });
+
   it('no genera movimientos de stock para productos que no lo trackean', async () => {
     await db.products.add({
       id: 'p2',
@@ -128,6 +143,27 @@ describe('voidSaleAndPersist', () => {
     expect(movements).toHaveLength(2);
     expect(movements.find((m) => m.reason === 'sale')?.delta).toBe(-2);
     expect(movements.find((m) => m.reason === 'sale-void')?.delta).toBe(2);
+  });
+
+  it('escribe un evento sale-void con id propio, distinto del id de la venta, más un evento por movimiento', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!closed.ok) throw new Error('setup falló');
+
+    await voidSaleAndPersist(closed.value.id, { reason: 'error de cobro' });
+
+    const events = await db.outbox.toArray();
+    const voidEvent = events.find((event) => event.type === 'sale-void');
+    expect(voidEvent).toBeDefined();
+    expect(voidEvent?.id).not.toBe(closed.value.id);
+    if (voidEvent?.type === 'sale-void') {
+      expect(voidEvent.saleId).toBe(closed.value.id);
+      expect(voidEvent.voidReason).toBe('error de cobro');
+    }
+
+    const movementEvents = events.filter(
+      (event) => event.type === 'stock-movement' && event.movement.reason === 'sale-void',
+    );
+    expect(movementEvents).toHaveLength(1);
   });
 
   it('rechaza anular una venta inexistente', async () => {

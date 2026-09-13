@@ -1,4 +1,9 @@
 import type { Cart } from '../domain/cart.ts';
+import {
+  buildOutboxEventForSale,
+  buildOutboxEventForVoid,
+  buildOutboxEventsForStockMovements,
+} from '../domain/outbox.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import { buildStockMovementsForSale, closeSale, voidSale } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
@@ -60,11 +65,16 @@ export async function closeSaleAndPersist(params: {
     newMovementId: newId,
     trackedProductIds,
   });
+  const outboxEvents = [
+    buildOutboxEventForSale(sale, { now }),
+    ...buildOutboxEventsForStockMovements(movements, { now }),
+  ];
 
   try {
-    await db.transaction('rw', db.sales, db.stock, db.stockMovements, async () => {
+    await db.transaction('rw', db.sales, db.stock, db.stockMovements, db.outbox, async () => {
       await db.sales.add(sale);
       await applyStockMovements(movements, now);
+      await db.outbox.bulkAdd(outboxEvents);
     });
   } catch (error) {
     return err('sale/persist-failed', {
@@ -108,11 +118,22 @@ export async function voidSaleAndPersist(
     newMovementId: newId,
     trackedProductIds,
   });
+  const outboxEvents = [
+    buildOutboxEventForVoid({
+      id: newId(),
+      saleId: voided.id,
+      voidedAt: now,
+      ...(voided.voidReason !== undefined ? { voidReason: voided.voidReason } : {}),
+      now,
+    }),
+    ...buildOutboxEventsForStockMovements(movements, { now }),
+  ];
 
   try {
-    await db.transaction('rw', db.sales, db.stock, db.stockMovements, async () => {
+    await db.transaction('rw', db.sales, db.stock, db.stockMovements, db.outbox, async () => {
       await db.sales.put(voided);
       await applyStockMovements(movements, now);
+      await db.outbox.bulkAdd(outboxEvents);
     });
   } catch (error) {
     return err('sale/persist-failed', {
