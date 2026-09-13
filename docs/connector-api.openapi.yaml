@@ -1,0 +1,379 @@
+openapi: 3.1.0
+info:
+  title: offline-pos Connector API
+  version: '1.0.0'
+  description: |
+    Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
+    inventario) debe implementar para conectarse al POS — ver §6 del doc de
+    diseño (`pos-web-diseno-arquitectura.md`) y la sección "Connector API" de
+    `CLAUDE.md`. El POS no tiene lógica de ningún backend particular, solo de
+    este contrato.
+
+    Cada recurso está marcado con una extensión `x-pos-status`:
+      - `implemented-phase-2`: el POS ya lo consume (motor de sync, Fase 2).
+      - `documented-not-implemented`: forma parte del contrato completo pero
+        el POS todavía no tiene el modelo de dominio correspondiente
+        (Customer/CustomerAccount es Fase 3, CashSession es Fase 6) — se
+        documenta igual para que un integrador conozca el contrato final
+        desde ya.
+
+    Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
+    la app) — desacoplada del contrato en sí, cada integración define cómo
+    emite ese token.
+servers:
+  - url: https://api.example.com
+    description: Placeholder — cada instalación configura su propia base URL vía /CONFIG.
+security:
+  - bearerAuth: []
+
+paths:
+  /products:
+    get:
+      operationId: getProducts
+      summary: Pull de catálogo (delta por cursor)
+      x-pos-status: implemented-phase-2
+      parameters:
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Cursor devuelto por una respuesta anterior. Sin este parámetro, trae el catálogo completo.
+      responses:
+        '200':
+          description: Página de productos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductsPullResponse'
+
+  /stock:
+    get:
+      operationId: getStock
+      summary: Pull de stock por producto
+      x-pos-status: implemented-phase-2
+      responses:
+        '200':
+          description: Stock actual de todos los productos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockItem'
+
+  /sales:
+    post:
+      operationId: postSale
+      summary: Push de una venta cerrada
+      x-pos-status: implemented-phase-2
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Sale'
+      responses:
+        '200':
+          description: Venta aceptada (o ya existente, si la Idempotency-Key se repite).
+        '4XX':
+          description: Rechazada — el POS la deja pendiente en su outbox y reintenta con backoff.
+
+  /stock-movements:
+    post:
+      operationId: postStockMovement
+      summary: Push de un ajuste de stock
+      x-pos-status: implemented-phase-2
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockMovement'
+      responses:
+        '200':
+          description: Movimiento aceptado.
+
+  /sales/{saleId}/void:
+    post:
+      operationId: postSaleVoid
+      summary: Push de una anulación de venta
+      x-pos-status: implemented-phase-2
+      description: |
+        Recurso nuevo, no contemplado en la versión original de §6: la
+        anulación de venta (RF-06) se agregó en Fase 1 sin que el diseño
+        original la tuviera prevista. Es un evento propio (RNF-07: nunca se
+        edita una venta ya enviada) — la `Idempotency-Key` de este POST es
+        distinta de la que se usó para el `POST /sales` original de la misma
+        venta, porque es una operación diferente sobre el mismo recurso.
+      parameters:
+        - name: saleId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleVoidRequest'
+      responses:
+        '200':
+          description: Anulación aceptada.
+
+  /cash-sessions:
+    post:
+      operationId: postCashSession
+      summary: Push de apertura/cierre de caja
+      x-pos-status: documented-not-implemented
+      description: Fase 6 del roadmap — el POS todavía no tiene el modelo de dominio `CashSession`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashSession'
+      responses:
+        '200':
+          description: Turno de caja aceptado.
+
+  /customers:
+    get:
+      operationId: getCustomers
+      summary: Pull de clientes
+      x-pos-status: documented-not-implemented
+      description: |
+        Fase 3 del roadmap. Recurso simple a propósito: si un backend no
+        maneja cuenta corriente, simplemente no manda `creditLimit`/`margin`/
+        `balance` y no tiene que implementar nada más — la separación interna
+        entre `Customer` y `CustomerAccount` (§4 del doc de diseño) es una
+        decisión de organización del dominio del POS, no algo que el
+        integrador deba replicar.
+      responses:
+        '200':
+          description: Lista de clientes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Customer'
+
+  /account-holds:
+    post:
+      operationId: postAccountHold
+      summary: Bloqueo síncrono de crédito antes de cerrar una venta a cuenta corriente
+      x-pos-status: documented-not-implemented
+      description: Fase 3 del roadmap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountHoldRequest'
+      responses:
+        '200':
+          description: Resultado del bloqueo (aprobado o rechazado).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountHoldResponse'
+
+  /account-holds/{id}:
+    delete:
+      operationId: deleteAccountHold
+      summary: Liberación best-effort de un hold no usado
+      x-pos-status: documented-not-implemented
+      description: |
+        Fase 3 del roadmap. Es solo una optimización para liberar antes si
+        se puede — el vencimiento de un hold no confirmado es responsabilidad
+        del backend (timeout propio); si este DELETE nunca llega a
+        sincronizarse, el hold expira solo del lado del backend.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Hold liberado (o ya no existía).
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token configurado por terminal (ver `/CONFIG`) — opcional si el backend no lo requiere.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+      description: ULID de la entidad que se está enviando — repetir el mismo valor nunca debe duplicar el efecto.
+
+  schemas:
+    # --- Implementados (Fase 2) ---
+    Product:
+      type: object
+      required: [id, sku, barcodes, name, price, taxRate, category, tracksStock]
+      properties:
+        id: { type: string }
+        sku: { type: string }
+        barcodes: { type: array, items: { type: string } }
+        name: { type: string }
+        price: { type: number, minimum: 0 }
+        taxRate: { type: number, minimum: 0, maximum: 1 }
+        category: { type: string }
+        tracksStock: { type: boolean }
+
+    ProductsPullResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        nextCursor:
+          type: string
+          description: Pasar como `since` en el próximo pull. Ausente cuando no hay más páginas.
+
+    StockItem:
+      type: object
+      required: [productId, quantity, updatedAt]
+      properties:
+        productId: { type: string }
+        quantity: { type: number }
+        updatedAt: { type: string, format: date-time }
+
+    Discount:
+      type: object
+      required: [type, value]
+      properties:
+        type: { type: string, enum: [amount, percentage] }
+        value: { type: number }
+
+    SaleLine:
+      oneOf:
+        - $ref: '#/components/schemas/ProductSaleLine'
+        - $ref: '#/components/schemas/FreeformSaleLine'
+
+    ProductSaleLine:
+      type: object
+      required: [kind, productId, qty, unitPrice]
+      properties:
+        kind: { type: string, enum: [product] }
+        productId: { type: string }
+        qty: { type: number }
+        unitPrice: { type: number }
+        discount: { $ref: '#/components/schemas/Discount' }
+
+    FreeformSaleLine:
+      type: object
+      required: [kind, description, qty, unitPrice]
+      properties:
+        kind: { type: string, enum: [freeform] }
+        description: { type: string }
+        qty: { type: number }
+        unitPrice: { type: number }
+        discount: { $ref: '#/components/schemas/Discount' }
+
+    Payment:
+      type: object
+      required: [method, amount]
+      properties:
+        method: { type: string, enum: [cash, card, other] }
+        amount: { type: number }
+        reference: { type: string }
+
+    Sale:
+      type: object
+      required: [id, lines, payments, total, status, createdAt]
+      properties:
+        id: { type: string }
+        lines: { type: array, items: { $ref: '#/components/schemas/SaleLine' } }
+        payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+        total: { type: number }
+        status: { type: string, enum: [open, closed, voided] }
+        createdAt: { type: string, format: date-time }
+        syncedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time }
+        voidReason: { type: string }
+
+    StockMovement:
+      type: object
+      required: [id, productId, delta, reason, createdAt]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        delta: { type: number }
+        reason: { type: string, enum: [sale, sale-void] }
+        saleId: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    SaleVoidRequest:
+      type: object
+      required: [saleId, voidedAt]
+      properties:
+        saleId: { type: string }
+        voidedAt: { type: string, format: date-time }
+        voidReason: { type: string }
+
+    # --- Documentados, no implementados todavía ---
+    CashSession:
+      type: object
+      required: [id, openedAt, openingAmount, sales]
+      properties:
+        id: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        openingAmount: { type: number }
+        closingAmount: { type: number }
+        sales:
+          type: array
+          items: { type: string }
+          description: IDs de Sale incluidas en el turno.
+
+    Customer:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        document: { type: string }
+        phone: { type: string }
+        creditLimit:
+          type: number
+          description: Cuenta corriente, opcional — ver §6 del doc de diseño.
+        margin: { type: number }
+        balance: { type: number }
+
+    AccountHoldRequest:
+      type: object
+      required: [customerId, amount]
+      properties:
+        customerId: { type: string }
+        amount: { type: number }
+
+    AccountHoldResponse:
+      oneOf:
+        - type: object
+          required: [approved, holdId]
+          properties:
+            approved: { type: boolean, enum: [true] }
+            holdId: { type: string }
+        - type: object
+          required: [approved, code]
+          properties:
+            approved: { type: boolean, enum: [false] }
+            code: { type: string }
