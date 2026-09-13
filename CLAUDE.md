@@ -19,7 +19,7 @@ de pago y cobranzas con medios múltiples (eso es v2 — hoy el pago es solo `me
 | Capa | Elección |
 |---|---|
 | UI | Preact + `@preact/signals` |
-| Server-state / cache | TanStack Query + persister a IndexedDB |
+| Pull de catálogo / cache | `fetch` + Dexie directo (ver nota) |
 | Almacenamiento local | Dexie.js (sobre IndexedDB) |
 | PWA / service worker | Vite + `vite-plugin-pwa` (Workbox) |
 | Búsqueda local | FlexSearch o Fuse.js |
@@ -30,12 +30,17 @@ de pago y cobranzas con medios múltiples (eso es v2 — hoy el pago es solo `me
 Navegador de referencia: Chromium (Chrome/Edge). En Firefox/Safari la app sigue andando pero sin
 Web Serial/WebUSB (sin impresión/cajón).
 
+**Nota (Fase 2)**: el doc de diseño original elegía TanStack Query + persister para el pull de
+catálogo. Se decidió no sumarla: el motor de sync ya necesita reintentos/backoff para el push del
+outbox, y esa misma lógica se reusa para el pull (`sync/engine.ts`) — traer una librería aparte para
+algo que el propio motor ya resuelve no se justificaba, dado que se prefiere minimizar dependencias.
+
 ## Estructura de proyecto
 
 ```
 src/
   domain/          # entidades y lógica de negocio pura (Sale, Product, etc.)
-  storage/         # Dexie schema, outbox, persister de TanStack Query
+  storage/         # Dexie schema, outbox, seed de catálogo, repositorios
   sync/            # motor de sincronización, adaptador del Connector API
   connectors/      # implementaciones de referencia (ej. REST genérico)
   ui/
@@ -109,32 +114,52 @@ Dos categorías de dato, porque cambian la estrategia de sync:
   offline es operar sobre una foto que puede estar desactualizada. Se resuelven con margen
   configurable (mismo patrón para stock multi-terminal y para cuenta corriente).
 
-## Patrón outbox (offline-first)
+## Patrón outbox (offline-first) — implementado en Fase 2
 
-Toda mutación relevante se escribe **primero** en una tabla local `outbox`
-(`type`, `payload`, `status`, `retries`, `createdAt`), en la misma transacción que el registro de
-negocio. La venta/cierre/movimiento ya está cerrado y operativo localmente sin importar el
-resultado del sync. El proceso de sync:
+Toda mutación relevante (`closeSaleAndPersist`, `voidSaleAndPersist`) escribe **primero** en la
+tabla local `outbox` (`domain/outbox.ts::OutboxEvent`, unión discriminada por `type` — nunca
+`payload: unknown`), en la misma transacción Dexie que el registro de negocio. La venta/anulación
+ya está cerrada y operativa localmente sin importar el resultado del sync.
 
-- Recorre `outbox` en orden, `POST` al conector con `Idempotency-Key` = ULID de la entidad.
-- Confirmado → `synced`. Falla (sin red / 5xx) → backoff exponencial, sigue `pending`.
-- Nunca bloquea la UI: sincronizar es efecto secundario, no condición para operar.
+`sync/engine.ts::syncOnce` recorre `outbox` pendiente en orden (`createdAt`), filtrado por
+`isDue` (ventana de backoff), y hace `push*` al `Connector` con `Idempotency-Key` = `id` del evento.
+Confirmado → `synced`. Falla → `markFailed` (backoff exponencial con techo, `domain/outbox.ts`),
+sigue `pending`. `runSyncCycle` (arma el `Connector` real desde la config guardada) corre en loop
+mientras la pestaña está abierta (`setInterval` + evento `online`, `sync/engine.ts::startSyncEngine`)
+— **no** es la Background Sync API de Service Worker, eso es explícitamente Fase 7. Nunca bloquea
+la UI: sincronizar es efecto secundario, no condición para operar.
 
-El catálogo es al revés (pull, por delta con `since`/cursor, cacheado vía TanStack Query +
-persister a IndexedDB). Las ventas son append-only (sin conflicto real); el catálogo/precios sí
-cambian del lado externo — ahí el cliente siempre es lector, el sistema externo manda.
+El catálogo es al revés (pull por delta con `since`/cursor, `sync/cursor.ts`): `syncOnce` hace
+`bulkPut` de lo que llega y **reconstruye el `CatalogRepository`** (Fase 1 lo armaba una sola vez
+asumiendo catálogo estático; Fase 2 rompe esa asunción a propósito). Las ventas son append-only (sin
+conflicto real); el catálogo/precios sí cambian del lado externo — ahí el cliente siempre es lector,
+el sistema externo manda.
 
 Cuenta corriente es el único flujo que a propósito puede requerir red síncrona (hold contra saldo
-real); sin red, se evalúa `balance` cacheado + `creditLimit` + `margin` configurado. Detalle en §5.
+real); sin red, se evalúa `balance` cacheado + `creditLimit` + `margin` configurado. Detalle en §5
+del doc de diseño — todavía sin implementar (Fase 3, no hay modelo de `Customer`/`AccountHold` aún).
 
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado como OpenAPI — recursos en §6 del diseño: `/products`, `/stock`, `/sales`,
-`/stock-movements`, `/cash-sessions`, `/customers`, `/account-holds`). Todo `POST` de eventos de
-negocio es idempotente vía `Idempotency-Key`. Autenticación (Bearer/API key) se configura por
-terminal, desacoplada del contrato. Un integrador nuevo implementa el contrato — nunca se toca
-código del POS para sumar un backend (RNF-06).
+documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 8 recursos: los 5 que
+el código ya implementa (`GET /products`, `GET /stock`, `POST /sales`, `POST /stock-movements`,
+`POST /sales/{saleId}/void`) más 3 documentados para integradores pero sin código todavía
+(`POST /cash-sessions`, `GET /customers`, `POST`/`DELETE /account-holds` — Fases 3 y 6). Cada
+operación del spec lleva `x-pos-status` marcando cuál es cuál.
+
+`POST /sales/{saleId}/void` es un recurso que §6 del doc de diseño **no** contemplaba — se agregó en
+Fase 2 al descubrir el gap (RF-06 se había adelantado en Fase 1 sin que el contrato original la
+tuviera prevista). Usa su **propia** `Idempotency-Key` (nunca el `id` de la venta): es una operación
+distinta sobre un recurso ya enviado, no una edición (RNF-07).
+
+`sync/connector.ts` define el puerto `Connector` que consume el motor — vive en `sync/`, no en
+`domain/`, porque habla en términos de red (cursores, Idempotency-Key) que no son vocabulario de
+dominio puro. `connectors/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`.
+Todo `POST` de eventos de negocio es idempotente vía `Idempotency-Key`. Autenticación (Bearer)
+se configura por terminal vía `/CONFIG` (runtime, `localStorage` — `sync/config.ts`), desacoplada
+del contrato. Un integrador nuevo implementa el contrato — nunca se toca código del POS para sumar
+un backend (RNF-06).
 
 ## UX keyboard-first
 
@@ -156,8 +181,18 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
 texto, navegan resultados. Errores de parseo van en un slot de altura fija reservado (nunca corren
 el layout) y seleccionan todo el input (`.select()`) para reemplazar sin retipear.
 
-Barra de estado (extremo opuesto, nunca interactiva): `offline` / `online-idle` / `syncing` /
-`sync-error`, combinando `navigator.onLine`, conteo de `outbox` y estado del motor de sync.
+Comandos disponibles (`ui/keyboard/commands.ts`, se muestran con solo `/`): `/COBRAR`, `/ANULAR`,
+`/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
+variables de entorno ni pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza
+un ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra
+de estado).
+
+Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
+— `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
+(+ conteo), `sync-error` (varios reintentos fallidos seguidos, ver `isSyncStruggling` en
+`domain/outbox.ts`) — más un quinto, "sin configurar", con precedencia sobre todo salvo estar
+offline. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine` directo, eso lo resuelve
+`sync/engine.ts`.
 
 Otros principios no negociables: todo alcanzable en ≤2 pasos sin mouse (RNF-04), foco siempre
 visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`.
@@ -178,7 +213,12 @@ antes). `vite.config.ts` excluye `e2e/**` de Vitest para que sus `*.spec.ts` no 
 (`indexedDB.open('offline-pos')`) en vez de importar módulos de la app, para no acoplar el test al
 código interno.
 
-## Patrones establecidos en Fase 1
+El motor de sync y el conector REST se testean sin backend real ni librería de mocking HTTP nueva:
+`vi.stubGlobal('fetch', vi.fn())` para el conector, y un `Connector` fake hecho a mano (objeto
+literal con los 5 métodos del puerto) para `sync/engine.ts` — así `syncOnce` se testea contra el
+puerto, no contra HTTP.
+
+## Patrones establecidos en Fase 1 y 2
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
   intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
@@ -193,8 +233,9 @@ código interno.
 - **Un signal por responsabilidad, agrupados por concern en `ui/state/`**: `cart.ts`,
   `command-bar.ts`, `checkout.ts`, `receipt.ts`, `screen.ts`, `void-sale.ts` — cada uno expone sus
   signals y, si hace falta, una función de reset. `activeScreenSignal` (`ui/state/screen.ts`) es un
-  switch simple (`'sale' | 'checkout' | 'receipt' | 'void'`) que `ui/app.tsx` usa para elegir qué
-  pantalla montar; agregar una pantalla nueva es sumar un valor al tipo y un `case` al switch.
+  switch simple (`'sale' | 'checkout' | 'receipt' | 'void' | 'config'`) que `ui/app.tsx` usa para
+  elegir qué pantalla montar; agregar una pantalla nueva es sumar un valor al tipo y un `case` al
+  switch.
 - **`useLayoutEffect`, no `useEffect`, para foco imperativo al montar una pantalla**: `useEffect` en
   Preact se difiere a un frame (vía rAF) — una tecla enviada muy rápido después de montar (un test
   e2e, o un cajero rápido con lector de código de barras) puede llegar antes de que el foco se haya
@@ -205,12 +246,28 @@ código interno.
   (`pendingCartOperation`) y `triggerCheckout` la espera antes de cambiar de pantalla — sin esto,
   `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después de agregar un producto podía abrir el
   cobro (o cerrar la venta) antes de que el producto terminara de sumarse al carrito.
+- **Tipo de inserción explícito en Dexie para tablas con unión discriminada**: el `EntityTable<T,
+  PK>` por default de Dexie usa `Omit<T, PK>` para el tipo de inserción, y `Omit` colapsa una unión
+  discriminada (pierde los campos específicos de cada variante). Para tablas así (`outbox`, ver
+  `storage/db.ts`) hay que pasar el tercer type param explícito
+  (`EntityTable<T, PK, T>`) cuando el `id` siempre lo genera la app (nunca autogenerado por Dexie).
+- **Config runtime vs. estado operativo interno, en módulos separados**: `sync/config.ts` (lo que
+  edita el humano vía `/CONFIG`, devuelve `Result` porque una config inválida es algo que el usuario
+  necesita resolver) y `sync/cursor.ts` (cursor de pull, interno del motor, nunca tocado por la
+  pantalla de config, best-effort porque perderlo no rompe nada) — aunque ambos usan `localStorage`,
+  mezclarlos en un solo módulo haría que la pantalla de config pudiera pisar estado que no le
+  corresponde.
+- **`toZodIssues` centralizado**: el mapeo `ZodError.issues` → `{ path, message }[]` que usa
+  `ErrorMeta` vive en `domain/zod-issues.ts` — cualquier validación nueva en el borde (seed de
+  catálogo, config, pull del conector) lo reusa en vez de repetir el `.map()` a mano.
 
 ## Estado del proyecto
 
-Fase 1 (MVP de venta offline) completa: catálogo sembrado desde fixture, carrito, barra de comandos
-completa (búsqueda, código de barras, línea libre, cantidad, lista de comandos con `/`), cobro,
-cierre de venta persistido en IndexedDB, comprobante con impresión (`window.print()`), y anulación
-de venta (RF-06, adelantada desde el roadmap original). Sin sync ni backend todavía — eso es Fase 2.
-Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
-adelantar features de una fase posterior.
+Fase 1 (MVP de venta offline) y Fase 2 (motor de sync) completas. Fase 1: catálogo sembrado desde
+fixture, carrito, barra de comandos completa, cobro, comprobante con impresión, anulación de venta
+(RF-06, adelantada). Fase 2: tabla `outbox` con reintentos y backoff exponencial, puerto `Connector`
++ implementación REST de referencia, pull de catálogo por delta, configuración runtime vía `/CONFIG`,
+sync bajo demanda vía `/SINCRONIZAR`, barra de estado real, contrato documentado en
+`docs/connector-api.openapi.yaml`. Sigue Fase 3 (clientes y cuenta corriente — hold síncrono/async,
+todavía sin modelo de `Customer`/`AccountHold`). Antes de armar estructura o herramental nuevo,
+confirmar en qué fase está el trabajo actual — no adelantar features de una fase posterior.
