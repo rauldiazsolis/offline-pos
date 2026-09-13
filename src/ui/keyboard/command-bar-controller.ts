@@ -12,7 +12,9 @@ import {
 } from '../state/command-bar.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { enterConfigScreen } from './config-controller.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
+import { runSyncCycle } from '../../sync/engine.ts';
 
 /**
  * Capa de glue con IO (resuelve productos/stock contra el catálogo, llama a
@@ -89,6 +91,14 @@ function runCommand(name: string, _args: string[]): void {
       return;
     case 'ANULAR':
       triggerVoid();
+      return;
+    case 'CONFIG':
+      enterConfigScreen();
+      clearBuffer();
+      return;
+    case 'SINCRONIZAR':
+      void runSyncCycle();
+      clearBuffer();
       return;
     default:
       commandBarErrorSignal.value = `Comando desconocido: /${name}`;
