@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = { id: string; status: string; total: number };
+type StoredOutboxEvent = { id: string; type: string; status: string };
 
 test('vender offline: buscar, agregar al carrito, cobrar y persistir', async ({
   page,
@@ -36,4 +37,10 @@ test('vender offline: buscar, agregar al carrito, cobrar y persistir', async ({
   const sales = await getAllFromStore<StoredSale>(page, 'sales');
   expect(sales).toHaveLength(1);
   expect(sales[0]).toMatchObject({ status: 'closed', total: 1200 });
+
+  // Regresión barata contra un error de migración/versión de Dexie: la
+  // venta cerrada tiene que dejar su evento de outbox pendiente de sync.
+  const outboxEvents = await getAllFromStore<StoredOutboxEvent>(page, 'outbox');
+  const saleEvent = outboxEvents.find((event) => event.type === 'sale');
+  expect(saleEvent).toMatchObject({ id: sales[0]?.id, status: 'pending' });
 });

@@ -10,6 +10,7 @@ type StoredSale = {
   createdAt: string;
 };
 type StoredStockMovement = { saleId?: string; reason: string; delta: number };
+type StoredOutboxEvent = { id: string; type: string; status: string; saleId?: string };
 
 async function closeOneSale(page: import('@playwright/test').Page): Promise<void> {
   const commandBar = page.getByLabel('Barra de comandos');
@@ -62,4 +63,11 @@ test('anular una venta cerrada revierte el stock sin tocar sus datos originales'
   expect(forThisSale).toHaveLength(2);
   expect(forThisSale.find((m) => m.reason === 'sale')?.delta).toBe(-1);
   expect(forThisSale.find((m) => m.reason === 'sale-void')?.delta).toBe(1);
+
+  // Regresión barata: la anulación deja su propio evento de outbox, con un
+  // id distinto al de la venta (no reutiliza esa Idempotency-Key).
+  const outboxEvents = await getAllFromStore<StoredOutboxEvent>(page, 'outbox');
+  const voidEvent = outboxEvents.find((event) => event.type === 'sale-void');
+  expect(voidEvent).toMatchObject({ saleId: closed?.id, status: 'pending' });
+  expect(voidEvent?.id).not.toBe(closed?.id);
 });
