@@ -114,7 +114,7 @@ Dos categorías de dato, porque cambian la estrategia de sync:
   offline es operar sobre una foto que puede estar desactualizada. Se resuelven con margen
   configurable (mismo patrón para stock multi-terminal y para cuenta corriente).
 
-## Patrón outbox (offline-first) — implementado en Fase 2
+## Patrón outbox (offline-first) — implementado en Fase 2, cuenta corriente en Fase 3
 
 Toda mutación relevante (`closeSaleAndPersist`, `voidSaleAndPersist`) escribe **primero** en la
 tabla local `outbox` (`domain/outbox.ts::OutboxEvent`, unión discriminada por `type` — nunca
@@ -135,28 +135,46 @@ asumiendo catálogo estático; Fase 2 rompe esa asunción a propósito). Las ven
 conflicto real); el catálogo/precios sí cambian del lado externo — ahí el cliente siempre es lector,
 el sistema externo manda.
 
-Cuenta corriente es el único flujo que a propósito puede requerir red síncrona (hold contra saldo
-real); sin red, se evalúa `balance` cacheado + `creditLimit` + `margin` configurado. Detalle en §5
-del doc de diseño — todavía sin implementar (Fase 3, no hay modelo de `Customer`/`AccountHold` aún).
+Cuenta corriente (Fase 3) es el único flujo que a propósito puede requerir red síncrona: `/CUENTA`
+en el cobro (`ui/keyboard/checkout-controller.ts`) llama `sync/account-hold.ts::requestAccountHoldNow`
+directo — la **única** operación del `Connector` que no pasa por el outbox ni se reintenta con
+backoff, porque necesita una respuesta ya para decidir el flujo (§5). Si se aprueba, el `holdId`
+viaja como `Payment.reference` y se confirma con un evento `'account-hold-confirm'` propio, encolado
+en la **misma transacción** que la venta (`storage/sale-repository.ts`) — así sobrevive a que la red
+se corte justo después de aprobado (RF-19). Sin red, se evalúa `balance` cacheado + `creditLimit` +
+`margin` (dato del backend por cliente, no config local — `domain/customer.ts::canChargeOffline`);
+si no hay `CustomerAccount` cacheada todavía, se rechaza sin inventar una con crédito en cero. Un
+hold aprobado que termina sin usarse (cobro cancelado) se libera con `'account-hold-release'`,
+best-effort, igual que documenta §6 para el vencimiento del lado del backend.
 
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 8 recursos: los 5 que
-el código ya implementa (`GET /products`, `GET /stock`, `POST /sales`, `POST /stock-movements`,
-`POST /sales/{saleId}/void`) más 3 documentados para integradores pero sin código todavía
-(`POST /cash-sessions`, `GET /customers`, `POST`/`DELETE /account-holds` — Fases 3 y 6). Cada
+documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 10 recursos (por path):
+los 9 que el código ya implementa (`GET /products`, `GET /stock`, `POST /sales`,
+`POST /stock-movements`, `POST /sales/{saleId}/void`, `GET`/`POST /customers`,
+`POST /account-holds`, `POST /account-holds/{holdId}/confirm`, `DELETE /account-holds/{id}`) más 1
+documentado para integradores pero sin código todavía (`POST /cash-sessions` — Fase 6). Cada
 operación del spec lleva `x-pos-status` marcando cuál es cuál.
 
 `POST /sales/{saleId}/void` es un recurso que §6 del doc de diseño **no** contemplaba — se agregó en
 Fase 2 al descubrir el gap (RF-06 se había adelantado en Fase 1 sin que el contrato original la
 tuviera prevista). Usa su **propia** `Idempotency-Key` (nunca el `id` de la venta): es una operación
-distinta sobre un recurso ya enviado, no una edición (RNF-07).
+distinta sobre un recurso ya enviado, no una edición (RNF-07). Fase 3 encontró dos gaps del mismo
+tipo: `POST /customers` (§6 solo tenía el pull; RF-16 permite dar de alta un cliente local sin forma
+de avisarle al backend) y `POST /account-holds/{holdId}/confirm` (§5 decía que la confirmación de un
+hold "viaja en el outbox" pero el contrato nunca definió ese endpoint). Mismo criterio en los tres
+casos: se agrega el recurso al contrato con su propia `Idempotency-Key`, documentado igual de
+completo que el resto.
 
-`sync/connector.ts` define el puerto `Connector` que consume el motor — vive en `sync/`, no en
-`domain/`, porque habla en términos de red (cursores, Idempotency-Key) que no son vocabulario de
-dominio puro. `connectors/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`.
-Todo `POST` de eventos de negocio es idempotente vía `Idempotency-Key`. Autenticación (Bearer)
+`sync/connector.ts` define el puerto `Connector` — vive en `sync/`, no en `domain/`, porque habla en
+términos de red (cursores, Idempotency-Key, tipos como `ConnectorCustomer`/`AccountHoldResult`) que
+no son vocabulario de dominio puro (`domain/customer.ts::splitConnectorCustomer` es la función pura
+que sí traduce esa forma cruda a los tipos del dominio). El motor de sync (`sync/engine.ts`) consume
+casi todo el puerto; la única excepción es `requestAccountHold`, invocada directo desde
+`ui/keyboard/checkout-controller.ts` vía `sync/account-hold.ts` (ver "Patrón outbox" más arriba).
+`connectors/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`. Todo `POST`
+de eventos de negocio es idempotente vía `Idempotency-Key`. Autenticación (Bearer)
 se configura por terminal vía `/CONFIG` (runtime, `localStorage` — `sync/config.ts`), desacoplada
 del contrato. Un integrador nuevo implementa el contrato — nunca se toca código del POS para sumar
 un backend (RNF-06).
@@ -185,7 +203,9 @@ Comandos disponibles (`ui/keyboard/commands.ts`, se muestran con solo `/`): `/CO
 `/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
 variables de entorno ni pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza
 un ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra
-de estado).
+de estado). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la
+barra de comandos principal — por eso no está en `commands.ts` ni en la lista que se muestra con
+`/`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
 
 Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
@@ -218,7 +238,7 @@ El motor de sync y el conector REST se testean sin backend real ni librería de 
 literal con los 5 métodos del puerto) para `sync/engine.ts` — así `syncOnce` se testea contra el
 puerto, no contra HTTP.
 
-## Patrones establecidos en Fase 1 y 2
+## Patrones establecidos en Fase 1, 2 y 3
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
   intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
@@ -260,14 +280,38 @@ puerto, no contra HTTP.
 - **`toZodIssues` centralizado**: el mapeo `ZodError.issues` → `{ path, message }[]` que usa
   `ErrorMeta` vive en `domain/zod-issues.ts` — cualquier validación nueva en el borde (seed de
   catálogo, config, pull del conector) lo reusa en vez de repetir el `.map()` a mano.
+- **Operación async del command bar generalizada, no solo "de carrito"**: `pendingBarOperation`
+  (antes `pendingCartOperation`) trackea cualquier efecto async disparado desde la barra de
+  comandos que `triggerCheckout` deba esperar antes de cambiar de pantalla — en Fase 3 se sumó la
+  creación de un cliente nuevo (`@<nombre>` sin match) al mismo mecanismo que ya cubría agregar un
+  producto. Cuando aparezca un tercer caso, se agrega ahí, no se inventa un tracker paralelo.
+- **Una llamada de red síncrona, deliberadamente fuera del outbox**: `requestAccountHold` es la
+  única operación del `Connector` que no se encola ni se reintenta — el cobro necesita su respuesta
+  ya para decidir el flujo (§5). `sync/account-hold.ts::requestAccountHoldNow` es el único lugar de
+  `ui/` que arma un conector real fuera de `sync/engine.ts`, y existe justamente para que la UI
+  nunca tenga que hacerlo directamente.
+- **No inventar datos que no llegaron del backend**: si se aprueba un pago a cuenta corriente para
+  un cliente sin `CustomerAccount` cacheada todavía (pudo pasar con red, sin pull previo de esa
+  cuenta), `storage/sale-repository.ts` no crea una fila con `creditLimit`/`margin` en 0 — se deja
+  que el próximo pull traiga los datos reales. Mismo espíritu que "el cliente siempre es lector" del
+  catálogo: el POS no fabrica de motu propio información que le pertenece al sistema externo.
+- **Puerto duplicado a propósito para una segunda búsqueda difusa**: `CustomerSearch`
+  (`domain/customer-search.ts`) es una interfaz nueva, no una generalización de `CatalogSearch` —
+  aunque ambas implementaciones reusan FlexSearch (`storage/flexsearch-customer-search.ts`), forzar
+  una interfaz genérica de "búsqueda difusa de lo que sea" hubiera acoplado dos dominios (productos,
+  clientes) que no tienen por qué evolucionar juntos.
 
 ## Estado del proyecto
 
-Fase 1 (MVP de venta offline) y Fase 2 (motor de sync) completas. Fase 1: catálogo sembrado desde
-fixture, carrito, barra de comandos completa, cobro, comprobante con impresión, anulación de venta
-(RF-06, adelantada). Fase 2: tabla `outbox` con reintentos y backoff exponencial, puerto `Connector`
-+ implementación REST de referencia, pull de catálogo por delta, configuración runtime vía `/CONFIG`,
-sync bajo demanda vía `/SINCRONIZAR`, barra de estado real, contrato documentado en
-`docs/connector-api.openapi.yaml`. Sigue Fase 3 (clientes y cuenta corriente — hold síncrono/async,
-todavía sin modelo de `Customer`/`AccountHold`). Antes de armar estructura o herramental nuevo,
-confirmar en qué fase está el trabajo actual — no adelantar features de una fase posterior.
+Fase 1 (MVP de venta offline), Fase 2 (motor de sync) y Fase 3 (clientes y cuenta corriente)
+completas. Fase 1: catálogo sembrado desde fixture, carrito, barra de comandos completa, cobro,
+comprobante con impresión, anulación de venta (RF-06, adelantada). Fase 2: tabla `outbox` con
+reintentos y backoff exponencial, puerto `Connector` + implementación REST de referencia, pull de
+catálogo por delta, configuración runtime vía `/CONFIG`, sync bajo demanda vía `/SINCRONIZAR`, barra
+de estado real, contrato documentado en `docs/connector-api.openapi.yaml`. Fase 3: identificación de
+cliente vía `@` (adjuntar uno existente o crear uno local nuevo), `CustomerAccount` con pull por
+delta, `/CUENTA` en el cobro con hold síncrono (con red) o evaluación de margen cacheado (sin red),
+confirmación/liberación de hold vía outbox. Sigue Fase 4 (keyboard-first completo — `/COMANDOS`
+completos, gestor de foco global, integración de scanner, auditoría de accesibilidad por teclado).
+Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
+adelantar features de una fase posterior.
