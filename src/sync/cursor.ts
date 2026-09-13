@@ -1,0 +1,27 @@
+/**
+ * Cursor de pull del catálogo (`since`) — estado operativo interno del
+ * motor, nunca tocado por la pantalla `/CONFIG`. Separado de `config.ts` a
+ * propósito: son dos cosas distintas guardadas en `localStorage`.
+ *
+ * Best-effort a propósito: si `localStorage` falla (modo privado, cuota
+ * llena), el motor simplemente vuelve a pullear el catálogo completo en el
+ * próximo ciclo — no es un error de negocio que valga la pena modelar con
+ * Result, perder el cursor no rompe nada, solo hace el próximo pull más caro.
+ */
+const PRODUCTS_CURSOR_KEY = 'offline-pos:sync-cursor:products';
+
+export function getProductsCursor(): string | undefined {
+  try {
+    return localStorage.getItem(PRODUCTS_CURSOR_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function setProductsCursor(cursor: string): void {
+  try {
+    localStorage.setItem(PRODUCTS_CURSOR_KEY, cursor);
+  } catch {
+    /* best-effort, ver comentario de arriba */
+  }
+}
