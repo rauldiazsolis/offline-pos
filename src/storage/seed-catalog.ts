@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { buildCatalogFromFixture, type CatalogEntry } from '../domain/catalog.ts';
 import { productSchema } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
+import { toZodIssues } from '../domain/zod-issues.ts';
 import catalogFixture from './fixtures/catalog.json';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
@@ -26,12 +27,7 @@ export async function seedCatalogIfEmpty(params: {
 
   const parsed = fixtureSchema.safeParse(catalogFixture);
   if (!parsed.success) {
-    return err('catalog/invalid-fixture', {
-      issues: parsed.error.issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
-      })),
-    });
+    return err('catalog/invalid-fixture', { issues: toZodIssues(parsed.error) });
   }
 
   const entries: CatalogEntry[] = parsed.data.map((entry) => ({ ...entry, id: newId() }));

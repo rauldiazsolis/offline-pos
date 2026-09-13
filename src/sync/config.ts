@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { err, ok, type Result } from '../domain/result.ts';
+import { toZodIssues } from '../domain/zod-issues.ts';
 
 /**
  * Configuración del conector, editada por el humano vía `/CONFIG` (ver
@@ -36,12 +37,7 @@ export function loadSyncConfig(): Result<SyncConfig> {
 
   const parsed = syncConfigSchema.safeParse(parsedJson);
   if (!parsed.success) {
-    return err('sync/config-invalid', {
-      issues: parsed.error.issues.map((issue) => ({
-        path: issue.path.join('.'),
-        message: issue.message,
-      })),
-    });
+    return err('sync/config-invalid', { issues: toZodIssues(parsed.error) });
   }
   return ok(parsed.data);
 }
