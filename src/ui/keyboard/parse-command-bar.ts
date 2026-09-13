@@ -10,7 +10,7 @@ import { parseAmount } from '../parse-amount.ts';
 export type ParsedCommand =
   | { kind: 'typing' } // buffer vacío, o a mitad de escribir algo que todavía no es accionable ni un error
   | { kind: 'command'; name: string; args: string[] } // '/', name === '' cuando el buffer es solo '/'
-  | { kind: 'reserved-customer' } // '@', no-op reservado: no hay Customer todavía en Fase 1
+  | { kind: 'customer'; query: string } // '@', identificación de cliente (RF-16) — sin ambigüedad que resolver con finalizing
   | { kind: 'freeform-line'; description: string; amount: number }
   | { kind: 'pending-numeric' } // solo dígitos, ambiguo cantidad-vs-código: no dispara búsqueda aún
   | { kind: 'barcode'; code: string; qty: number }
@@ -30,7 +30,7 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
   }
 
   if (buffer.startsWith('@')) {
-    return { kind: 'reserved-customer' };
+    return { kind: 'customer', query: buffer.slice(1) };
   }
 
   const dollarIndex = buffer.lastIndexOf('$');

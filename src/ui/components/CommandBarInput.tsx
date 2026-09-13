@@ -13,6 +13,8 @@ import { cartSelectionIndexSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  customerResultsSignal,
+  customerSelectionIndexSignal,
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
@@ -86,8 +88,11 @@ export function CommandBarInput() {
 
   const searchResults = searchResultsSignal.value;
   const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
+  const customerResults = customerResultsSignal.value;
+  const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
   const parsed = parsedSignal.value;
   const showCommandList = parsed.kind === 'command' && parsed.name === '';
+  const showCustomerResults = parsed.kind === 'customer' && parsed.query !== '';
 
   return (
     <div>
@@ -124,6 +129,26 @@ export function CommandBarInput() {
                 {command.description}
               </li>
             ))}
+          </ul>
+        ) : showCustomerResults ? (
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {customerResults.map((result, index) => (
+              <li
+                key={result.customer.id}
+                style={{
+                  padding: 'var(--space-1) var(--space-2)',
+                  background:
+                    index === selectedCustomerIndex ? 'var(--color-surface)' : 'transparent',
+                }}
+              >
+                {result.customer.name}
+              </li>
+            ))}
+            {customerResults.length === 0 && (
+              <li style={{ padding: 'var(--space-1) var(--space-2)', fontStyle: 'italic' }}>
+                + Crear cliente "{parsed.query}"
+              </li>
+            )}
           </ul>
         ) : searchResults.length > 0 ? (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>

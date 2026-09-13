@@ -21,9 +21,13 @@ describe('parseCommandBar', () => {
   });
 
   describe('regla 2: @', () => {
-    it('es reservado y no dispara ningún parseo adicional', () => {
-      expect(live('@juan')).toEqual({ kind: 'reserved-customer' });
-      expect(enter('@')).toEqual({ kind: 'reserved-customer' });
+    it('extrae la query de búsqueda de cliente, sin ambigüedad que resolver con finalizing', () => {
+      expect(live('@juan')).toEqual({ kind: 'customer', query: 'juan' });
+      expect(enter('@juan')).toEqual({ kind: 'customer', query: 'juan' });
+    });
+
+    it('buffer solo "@" es query vacía', () => {
+      expect(live('@')).toEqual({ kind: 'customer', query: '' });
     });
   });
 
