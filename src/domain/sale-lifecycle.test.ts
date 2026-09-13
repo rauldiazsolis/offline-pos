@@ -80,6 +80,35 @@ describe('closeSale', () => {
       expect(result.error).toBe('sale/invalid-payment-amount');
     }
   });
+
+  it('rechaza un pago a cuenta corriente sin cliente adjunto', () => {
+    const result = closeSale({
+      cart,
+      payments: [{ method: 'account', amount: 200 }],
+      id: 'sale-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('account/no-customer-attached');
+    }
+  });
+
+  it('acepta un pago a cuenta corriente con cliente adjunto y guarda el customerId', () => {
+    const result = closeSale({
+      cart,
+      payments: [{ method: 'account', amount: 200, reference: 'hold-1' }],
+      id: 'sale-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      customerId: 'c1',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.customerId).toBe('c1');
+    }
+  });
 });
 
 const closedSale: Sale = {

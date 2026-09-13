@@ -54,6 +54,14 @@ export function describeError(failure: Failure): string {
       return 'No hay conexión configurada todavía. Usá /CONFIG.';
     case 'sync/config-invalid':
       return 'La configuración de conexión guardada es inválida. Usá /CONFIG para corregirla.';
+    case 'account/hold-rejected':
+      return `El sistema externo rechazó el crédito (${failure.meta.reasonCode}).`;
+    case 'account/offline-limit-exceeded':
+      return `Crédito insuficiente sin conexión (faltan ${String(failure.meta.missing)}).`;
+    case 'account/no-customer-attached':
+      return 'Adjuntá un cliente con @ antes de cobrar a cuenta corriente.';
+    case 'customer/persist-failed':
+      return `No se pudo guardar el cliente (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

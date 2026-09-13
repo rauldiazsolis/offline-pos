@@ -8,14 +8,18 @@ import type { StockMovement } from './stock.ts';
  * Cierra una venta a partir de un carrito y los pagos registrados. No
  * re-valida stock: ya se validó al armar cada línea del carrito (Fase 1 es
  * una sola terminal sin escritores concurrentes).
+ *
+ * `customerId` (Fase 3) es obligatorio si algún pago es `'account'` — cuenta
+ * corriente siempre necesita saber a quién se le carga la venta.
  */
 export function closeSale(params: {
   cart: Cart;
   payments: Payment[];
   id: string;
   createdAt: string;
+  customerId?: string;
 }): Result<Sale> {
-  const { cart, payments, id, createdAt } = params;
+  const { cart, payments, id, createdAt, customerId } = params;
 
   if (cart.lines.length === 0) {
     return err('sale/empty-cart', undefined);
@@ -26,6 +30,10 @@ export function closeSale(params: {
   );
   if (invalidPaymentIndex !== -1) {
     return err('sale/invalid-payment-amount', { index: invalidPaymentIndex });
+  }
+
+  if (payments.some((payment) => payment.method === 'account') && customerId === undefined) {
+    return err('account/no-customer-attached', undefined);
   }
 
   const { total } = calculateTotals(cart);
@@ -41,6 +49,7 @@ export function closeSale(params: {
     total,
     status: 'closed',
     createdAt,
+    ...(customerId !== undefined ? { customerId } : {}),
   });
 }
 
