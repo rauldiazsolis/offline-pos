@@ -47,22 +47,35 @@ describe('submitConfigStep', () => {
     expect(configErrorSignal.value).toBeNull();
   });
 
-  it('guarda la config completa (con apiKey) y vuelve a la venta', () => {
+  it('avanza a locale tras confirmar el apiKey', () => {
     configBufferSignal.value = 'https://api.example.com';
     submitConfigStep();
     configBufferSignal.value = 'secret-key';
+    submitConfigStep();
+
+    expect(configStepSignal.value).toBe('locale');
+  });
+
+  it('guarda la config completa (con apiKey y locale) y vuelve a la venta', () => {
+    configBufferSignal.value = 'https://api.example.com';
+    submitConfigStep();
+    configBufferSignal.value = 'secret-key';
+    submitConfigStep();
+    configBufferSignal.value = 'en-US';
     submitConfigStep();
 
     expect(activeScreenSignal.value).toBe('sale');
     expect(syncConfiguredSignal.value).toBe(true);
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { baseUrl: 'https://api.example.com', apiKey: 'secret-key' },
+      value: { baseUrl: 'https://api.example.com', apiKey: 'secret-key', locale: 'en-US' },
     });
   });
 
-  it('apiKey vacío es válido (queda sin guardar)', () => {
+  it('apiKey y locale vacíos son válidos (quedan sin guardar)', () => {
     configBufferSignal.value = 'https://api.example.com';
+    submitConfigStep();
+    configBufferSignal.value = '';
     submitConfigStep();
     configBufferSignal.value = '';
     submitConfigStep();

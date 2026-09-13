@@ -21,7 +21,7 @@ describe('ConfigScreen', () => {
     expect(screen.getByText(/URL del sistema externo/)).not.toBeNull();
   });
 
-  it('avanza a apiKey con una URL válida y completa el flujo', () => {
+  it('avanza a apiKey y luego a locale con una URL válida, y completa el flujo', () => {
     render(<ConfigScreen />);
     const input = screen.getByLabelText(/URL del sistema externo/);
 
@@ -34,10 +34,16 @@ describe('ConfigScreen', () => {
     fireEvent.input(apiKeyInput, { target: { value: 'secret' } });
     fireEvent.keyDown(apiKeyInput, { key: 'Enter' });
 
+    expect(screen.getByText(/Locale/)).not.toBeNull();
+
+    const localeInput = screen.getByLabelText(/Locale/);
+    fireEvent.input(localeInput, { target: { value: 'en-US' } });
+    fireEvent.keyDown(localeInput, { key: 'Enter' });
+
     expect(activeScreenSignal.value).toBe('sale');
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { baseUrl: 'https://api.example.com', apiKey: 'secret' },
+      value: { baseUrl: 'https://api.example.com', apiKey: 'secret', locale: 'en-US' },
     });
   });
 
