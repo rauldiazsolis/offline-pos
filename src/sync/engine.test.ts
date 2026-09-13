@@ -336,4 +336,53 @@ describe('runSyncCycle', () => {
     expect(syncConfiguredSignal.value).toBe(true);
     expect(syncStatusSignal.value).toBe('online-idle');
   });
+
+  it('no arranca un segundo ciclo si el anterior sigue en curso (issue #1)', async () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+
+    // Con latencia real controlada, a diferencia del resto de los tests de
+    // este archivo (que resuelven al instante): es justo la condición bajo
+    // la que aparece el bug de ciclos solapados. Solo el PRIMER fetch queda
+    // colgado — el resto resuelve al toque, para no trabar el resto del
+    // pull (products + stock) una vez que se libera.
+    let callCount = 0;
+    let resolveFirstFetch: (response: Response) => void = () => {
+      throw new Error('resolveFirstFetch no fue asignado todavía');
+    };
+    const okResponse = {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ items: [] }),
+    } as Response;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveFirstFetch = resolve;
+        });
+      }
+      return Promise.resolve(okResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = runSyncCycle();
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Mientras el primer ciclo sigue esperando su fetch (el pull de
+    // products), un segundo disparo (setInterval/online//SINCRONIZAR) no
+    // debería agregar ningún llamado nuevo.
+    await runSyncCycle();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFirstFetch(okResponse);
+    await first;
+
+    // Con el primero terminado, un tercer disparo sí tiene que sincronizar.
+    const callsAfterFirst = fetchMock.mock.calls.length;
+    await runSyncCycle();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  });
 });

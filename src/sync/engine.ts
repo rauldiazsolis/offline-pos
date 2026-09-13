@@ -102,25 +102,45 @@ export async function syncOnce(connector: Connector, now: string): Promise<void>
 }
 
 /**
+ * Es responsabilidad de la app no saturar a la API: si un push tarda más
+ * que el intervalo del loop (una API lenta de verdad), el próximo disparo
+ * (`setInterval`, evento `online`, o `/SINCRONIZAR`) no debe arrancar un
+ * segundo ciclo en paralelo — ver issue #1. La bandera se lee/escribe de
+ * forma síncrona como primera línea de `runSyncCycle`, antes de cualquier
+ * `await`, así una llamada reentrante la ve actualizada sin importar en qué
+ * punto del ciclo anterior ocurra.
+ */
+let syncInProgress = false;
+
+/**
  * Arma el `Connector` real desde la config guardada y corre un ciclo. Acá
  * viven los chequeos de entorno (¿hay red? ¿hay config?) que `syncOnce` no
  * conoce a propósito — así queda testeable de forma aislada.
  */
 export async function runSyncCycle(): Promise<void> {
-  if (!navigator.onLine) {
-    setSyncStatus('offline');
+  if (syncInProgress) {
     return;
   }
+  syncInProgress = true;
 
-  const configResult = loadSyncConfig();
-  if (!configResult.ok) {
-    setSyncConfigured(false);
-    return;
+  try {
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+      return;
+    }
+
+    const configResult = loadSyncConfig();
+    if (!configResult.ok) {
+      setSyncConfigured(false);
+      return;
+    }
+    setSyncConfigured(true);
+
+    const connector = createRestFetchConnector(configResult.value);
+    await syncOnce(connector, new Date().toISOString());
+  } finally {
+    syncInProgress = false;
   }
-  setSyncConfigured(true);
-
-  const connector = createRestFetchConnector(configResult.value);
-  await syncOnce(connector, new Date().toISOString());
 }
 
 const SYNC_INTERVAL_MS = 15_000;
