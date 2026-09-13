@@ -1,5 +1,7 @@
 import type { Cart } from '../domain/cart.ts';
+import { buildAccountMovementForSale } from '../domain/customer.ts';
 import {
+  buildOutboxEventForHoldConfirm,
   buildOutboxEventForSale,
   buildOutboxEventForVoid,
   buildOutboxEventsForStockMovements,
@@ -37,14 +39,60 @@ async function applyStockMovements(movements: StockMovement[], now: string): Pro
 }
 
 /**
+ * Escribe el rastro de `AccountMovement` de una venta a cuenta corriente y
+ * descuenta el `balance` cacheado — se asume ya dentro de una transacción,
+ * mismo criterio que `applyStockMovements` para `stock`.
+ *
+ * Si no hay `CustomerAccount` cacheada todavía para ese cliente (pudo
+ * aprobarse el hold con red sin que este dispositivo haya pulleado nunca su
+ * cuenta), no se inventa una fila con `creditLimit`/`margin` en 0 — se deja
+ * que el próximo pull traiga los datos reales del backend.
+ */
+async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
+  const accountPayments = sale.payments.filter((payment) => payment.method === 'account');
+  if (accountPayments.length === 0) {
+    return;
+  }
+  // closeSale ya garantiza customerId presente si hay algún pago 'account'.
+  const customerId = sale.customerId;
+  if (customerId === undefined) {
+    return;
+  }
+
+  for (const payment of accountPayments) {
+    const movement = buildAccountMovementForSale({
+      id: newId(),
+      customerId,
+      amount: payment.amount,
+      saleId: sale.id,
+      ...(payment.reference !== undefined ? { holdId: payment.reference } : {}),
+      now,
+    });
+    await db.accountMovements.add(movement);
+
+    const current = await db.customerAccounts.get(customerId);
+    if (current !== undefined) {
+      await db.customerAccounts.put({ ...current, balance: current.balance + movement.amount, updatedAt: now });
+    }
+  }
+}
+
+/**
  * Cierra una venta y la persiste junto con sus movimientos de stock en una
  * única transacción — RNF-02: la venta se persiste **antes** de considerarse
  * cerrada, así que este `Result` solo resuelve `ok` después de que la
  * escritura a IndexedDB ya haya terminado.
+ *
+ * `pendingHold` (Fase 3) se pasa cuando algún pago `'account'` viene de un
+ * hold aprobado con red — su evento `'account-hold-confirm'` se encola en la
+ * MISMA transacción que la venta, así RF-19 (tolerante a que la red se corte
+ * justo después de aprobado) queda cubierto por los reintentos del outbox.
  */
 export async function closeSaleAndPersist(params: {
   cart: Cart;
   payments: Payment[];
+  customerId?: string;
+  pendingHold?: { holdId: string };
 }): Promise<Result<Sale>> {
   const now = new Date().toISOString();
   const saleResult = closeSale({
@@ -52,6 +100,7 @@ export async function closeSaleAndPersist(params: {
     payments: params.payments,
     id: newId(),
     createdAt: now,
+    ...(params.customerId !== undefined ? { customerId: params.customerId } : {}),
   });
   if (!saleResult.ok) {
     return saleResult;
@@ -68,14 +117,29 @@ export async function closeSaleAndPersist(params: {
   const outboxEvents = [
     buildOutboxEventForSale(sale, { now }),
     ...buildOutboxEventsForStockMovements(movements, { now }),
+    ...(params.pendingHold !== undefined
+      ? [
+          buildOutboxEventForHoldConfirm({
+            id: newId(),
+            holdId: params.pendingHold.holdId,
+            saleId: sale.id,
+            now,
+          }),
+        ]
+      : []),
   ];
 
   try {
-    await db.transaction('rw', db.sales, db.stock, db.stockMovements, db.outbox, async () => {
-      await db.sales.add(sale);
-      await applyStockMovements(movements, now);
-      await db.outbox.bulkAdd(outboxEvents);
-    });
+    await db.transaction(
+      'rw',
+      [db.sales, db.stock, db.stockMovements, db.outbox, db.accountMovements, db.customerAccounts],
+      async () => {
+        await db.sales.add(sale);
+        await applyStockMovements(movements, now);
+        await applyAccountMovements(sale, now);
+        await db.outbox.bulkAdd(outboxEvents);
+      },
+    );
   } catch (error) {
     return err('sale/persist-failed', {
       message: error instanceof Error ? error.message : String(error),

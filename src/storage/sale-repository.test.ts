@@ -76,6 +76,62 @@ describe('closeSaleAndPersist', () => {
     expect(movementEvent?.status).toBe('pending');
   });
 
+  it('con un pago account, registra el movimiento y descuenta el balance cacheado', async () => {
+    await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
+    await db.customerAccounts.add({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      balance: 100,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const result = await closeSaleAndPersist({
+      cart,
+      payments: [{ method: 'account', amount: 200, reference: 'hold-1' }],
+      customerId: 'c1',
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const movements = await db.accountMovements.where('saleId').equals(result.value.id).toArray();
+      expect(movements).toHaveLength(1);
+      expect(movements[0]).toMatchObject({ customerId: 'c1', amount: 200, holdId: 'hold-1' });
+
+      const account = await db.customerAccounts.get('c1');
+      expect(account?.balance).toBe(300);
+    }
+  });
+
+  it('con un pago account sin CustomerAccount cacheada, no la inventa', async () => {
+    await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
+
+    await closeSaleAndPersist({
+      cart,
+      payments: [{ method: 'account', amount: 200 }],
+      customerId: 'c1',
+    });
+
+    expect(await db.customerAccounts.get('c1')).toBeUndefined();
+  });
+
+  it('con pendingHold, encola también un evento account-hold-confirm', async () => {
+    await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
+
+    const result = await closeSaleAndPersist({
+      cart,
+      payments: [{ method: 'account', amount: 200, reference: 'hold-1' }],
+      customerId: 'c1',
+      pendingHold: { holdId: 'hold-1' },
+    });
+    if (!result.ok) throw new Error('setup falló');
+
+    const confirmEvent = (await db.outbox.toArray()).find(
+      (event) => event.type === 'account-hold-confirm',
+    );
+    expect(confirmEvent).toMatchObject({ holdId: 'hold-1', saleId: result.value.id });
+  });
+
   it('no genera movimientos de stock para productos que no lo trackean', async () => {
     await db.products.add({
       id: 'p2',
