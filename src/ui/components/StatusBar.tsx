@@ -1,10 +1,39 @@
+import {
+  lastSyncedAtSignal,
+  pendingOutboxCountSignal,
+  syncConfiguredSignal,
+  syncStatusSignal,
+} from '../state/sync.ts';
+
 /**
  * Barra de estado (extremo opuesto a la barra de comandos, nunca interactiva
- * — ver "UX keyboard-first" en CLAUDE.md). Fase 1 no tiene sync todavía, así
- * que siempre muestra "Offline"; Fase 2 reemplaza el contenido de este mismo
- * componente por `navigator.onLine` + conteo de `outbox`, sin tocar el
- * layout de la pantalla de venta.
+ * — ver "UX keyboard-first" en CLAUDE.md). Lee solo los signals de
+ * `state/sync.ts` — no toca `navigator.onLine` directo, eso ya lo resuelve
+ * `sync/engine.ts`. Los 4 textos son los de §7 del doc de diseño.
  */
+function statusText(): string {
+  const status = syncStatusSignal.value;
+  const pending = pendingOutboxCountSignal.value;
+
+  if (status === 'offline') {
+    return `Sin conexión (${String(pending)})`;
+  }
+  if (!syncConfiguredSignal.value) {
+    return 'Sin configurar — /CONFIG';
+  }
+  if (status === 'syncing') {
+    return `Sincronizando (${String(pending)})`;
+  }
+  if (status === 'sync-error') {
+    return 'Problema de sincronización';
+  }
+
+  const lastSyncedAt = lastSyncedAtSignal.value;
+  return lastSyncedAt !== null
+    ? `Sincronizado (${new Date(lastSyncedAt).toLocaleTimeString()})`
+    : 'Sincronizado';
+}
+
 export function StatusBar() {
   return (
     <div
@@ -15,7 +44,7 @@ export function StatusBar() {
         borderTop: '1px solid var(--color-border)',
       }}
     >
-      Offline
+      {statusText()}
     </div>
   );
 }
