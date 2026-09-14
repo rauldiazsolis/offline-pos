@@ -358,6 +358,25 @@ cambiaba de alto según el estado. `domain/totals.ts::Totals` ya tenía todos lo
 `CartView.tsx::TotalsCard`. Sin ajuste aplicado, la fila de Descuento se ve en gris con `$0,00` en
 vez de ocultarse.
 
+Ciclo 6:
+- **La tarjeta de Cliente siempre se muestra, con "Consumidor Final" como default** — antes solo
+  aparecía con un cliente adjunto. Documento/teléfono (mismos campos que ya muestra el overlay de
+  `@`) y tamaño fijo (`min-height` en `.cart-view__customer`, alcanza para las 3 líneas posibles)
+  para que no cambie de alto según cuántos de esos datos tenga el cliente.
+- **En pantallas anchas, Total queda pegado debajo de Cliente, no pegado abajo de todo**:
+  `.cart-view__totals` pasa de `align-self: end` a `start` — el espacio vacío que sobra en la
+  columna lateral queda al final, no en el medio (issue reportada tras #19: el usuario prefería
+  `[cliente][totales][blanco]` en vez de `[cliente][blanco][totales]`).
+- **`scroll-margin` para que `scrollIntoView` no quede tapado por un sticky ni pierda el padding
+  del contenedor**: diagnosticado en vivo con el navegador real (inyectando CSS de prueba sobre el
+  build antes de tocar el código) — `scrollIntoView({ block: 'nearest' })` calcula "visible" en
+  términos puramente geométricos del contenedor con scroll, sin saber que el `<thead>` sticky del
+  carrito (o el padding de los overlays de `CommandBarInput`) tapan visualmente parte de ese
+  espacio. Al volver a la primera fila/ítem navegando con flechas, quedaba pegado contra el borde,
+  parcialmente oculto. `scroll-margin-top`/`scroll-margin` en las filas/ítems, igual al espacio que
+  hay que reservar (`--cart-table-head-h` para el carrito, `var(--space-2)` para los overlays —
+  mismo valor que ya usa cada uno para su propio padding/alto), resuelve los dos casos.
+
 ## Testing
 
 Vitest + Testing Library para unit/componentes (sin `@testing-library/jest-dom`: su tipado no tiene
@@ -550,6 +569,13 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   buffer (#14), formato `<unitario>`/`<unitario> x <cantidad> = <total>` en la búsqueda de producto
   (#29), y Subtotal/Descuento/Total siempre visibles en la caja de totales (#31) — ver
   "UX keyboard-first", "Diseño visual" y "Patrones establecidos" más arriba para el detalle.
+- Ciclo 6, sobre observaciones del usuario tras usar el Ciclo 5: `scroll-margin` para que
+  `scrollIntoView` no quede tapado por el header sticky del carrito ni pierda el padding de los
+  overlays al volver al principio de una lista navegando con flechas, tarjeta de Cliente siempre
+  visible con "Consumidor Final" como default y tamaño fijo, y Total pegado debajo de Cliente en
+  pantallas anchas en vez de pegado abajo de todo — ver "Diseño visual" más arriba para el detalle.
+  Ocultar la scrollbar del carrito + drag táctil + indicador de fade se discutió y quedó separado
+  (#34): es una feature de interacción nueva, no una corrección de este tamaño.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
@@ -563,7 +589,8 @@ velocidad de tecleo — spike aparte, necesita calibrar un umbral con un lector 
 test que simule esa velocidad vía paste+Enter), #24 (usar el espacio de la barra de comandos
 también para instrucciones mínimas de uso — sin specs todavía), #28 (Esc con un desplegable
 abierto lo cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estado propio de
-"abierto/cerrado", se deriva del buffer parseado).
+"abierto/cerrado", se deriva del buffer parseado), #34 (ocultar la scrollbar del carrito, drag
+táctil, indicador de fade — separado del Ciclo 6 a propósito por su tamaño).
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
