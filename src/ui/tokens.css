@@ -18,6 +18,23 @@
   --color-success: #16a34a;
   --color-focus-ring: #2563eb;
 
+  /* "chrome" oscuro — barra de comandos y barra de estado (pase de diseño,
+     ver CLAUDE.md). El resto de la app (carrito, pantallas de tarea) sigue
+     sobre los tokens claros de arriba — es un contraste deliberado tipo
+     "consola arriba/abajo, documento en el medio", no un modo oscuro
+     conmutable. */
+  --color-chrome-bg: #12141c;
+  --color-chrome-surface: #1c2030;
+  --color-chrome-text: #e4e4e7;
+  --color-chrome-text-muted: #8b8fa3;
+  --color-chrome-border: #2563eb;
+
+  /* radio y sombra — tarjetas (resumen de venta, cliente adjunto, recibo) */
+  --radius-md: 8px;
+  --shadow-card:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.06);
+
   /* espaciado */
   --space-1: 4px;
   --space-2: 8px;
@@ -29,6 +46,7 @@
   /* tipografía — mono para códigos de barra/SKU en la barra de comandos */
   --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  --font-size-sm: 13px;
   --font-size-base: 16px;
   --font-size-lg: 20px;
   --font-size-xl: 28px;
