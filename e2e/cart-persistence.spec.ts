@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openCashSession } from './helpers.ts';
 
 /**
  * Issue #17: la venta en curso vivía solo en memoria — un refresh la
@@ -28,6 +29,7 @@ test('cerrar la venta limpia el draft — el siguiente refresh arranca con el ca
 }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
+  await openCashSession(page);
 
   await commandBar.fill('arroz');
   await commandBar.press('Enter');

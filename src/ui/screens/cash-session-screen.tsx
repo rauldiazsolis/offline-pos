@@ -10,7 +10,7 @@ import {
   submitCashStep,
   updateCashBuffer,
 } from '../keyboard/cash-session-controller.ts';
-import { parseAmount } from '../parse-amount.ts';
+import { parseNonNegativeAmount } from '../parse-amount.ts';
 import {
   cashBufferSignal,
   cashErrorSignal,
@@ -89,7 +89,7 @@ export function CashSessionScreen() {
   // `summary.countedCash`/`difference` no están seteados aún — se
   // previsualiza con el monto tipeado. En 'closed' ya son los reales.
   const countedPreview =
-    step === 'closed' ? summary?.countedCash : parseAmount(cashBufferSignal.value);
+    step === 'closed' ? summary?.countedCash : parseNonNegativeAmount(cashBufferSignal.value);
   const differencePreview =
     step === 'closed'
       ? summary?.difference
