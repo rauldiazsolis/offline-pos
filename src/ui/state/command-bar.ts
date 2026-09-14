@@ -73,20 +73,40 @@ export const searchResultsSignal = computed<UnifiedSearchResult[]>(() => {
 export const searchSelectionIndexSignal = signal<number | null>(null);
 
 /**
- * Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`.
- * Con la query vacía (apenas se abre `@`) muestra los clientes más recientes
- * en vez de nada: a diferencia de la búsqueda de artículos, no tiene sentido
- * esperar a que se tipee algo para mostrar una lista (issue #21).
+ * Un resultado de `@` puede ser un cliente real o "Consumidor Final" — la
+ * forma de desadjuntar el cliente actual. Antes era un caso especial ("@"
+ * vacío + Enter sin nada seleccionado, ver `submitCommandBar`), pero desde
+ * que la query vacía muestra clientes recientes (#21) esa lista ya no está
+ * vacía, así que ese caso especial dejó de dispararse — un bug real
+ * reportado por el usuario: no había forma de desadjuntar un cliente.
+ * Ponerlo como una fila más de la lista es más discoverable y no depende
+ * de ningún caso especial.
  */
-export const customerResultsSignal = computed<CustomerSearchResult[]>(() => {
+export type CustomerOrClear =
+  | { kind: 'clear' }
+  | { kind: 'customer'; result: CustomerSearchResult };
+
+/**
+ * Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`.
+ * Con la query vacía (apenas se abre `@`) muestra "Consumidor Final" primero
+ * y después los clientes más recientes, en vez de nada: a diferencia de la
+ * búsqueda de artículos, no tiene sentido esperar a que se tipee algo para
+ * mostrar una lista (issue #21). Con una query puntual (buscando o creando
+ * un cliente específico), no se incluye "Consumidor Final" — no tiene
+ * sentido mezclarlo con el flujo de crear un cliente nuevo.
+ */
+export const customerResultsSignal = computed<CustomerOrClear[]>(() => {
   const parsed = parsedSignal.value;
   if (parsed.kind !== 'customer') {
     return [];
   }
   if (parsed.query === '') {
-    return getCustomerRepository().listRecent();
+    const recent = getCustomerRepository().listRecent();
+    return [{ kind: 'clear' }, ...recent.map((result) => ({ kind: 'customer' as const, result }))];
   }
-  return getCustomerRepository().search(parsed.query);
+  return getCustomerRepository()
+    .search(parsed.query)
+    .map((result) => ({ kind: 'customer' as const, result }));
 });
 
 /** Selección visual (↑/↓) sobre `customerResultsSignal`. */

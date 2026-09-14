@@ -217,12 +217,24 @@ export function CommandBarInput() {
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
               {customerResults.map((result, index) => {
                 const selected = index === selectedCustomerIndex;
-                const identifier = [result.customer.document, result.customer.phone]
+                if (result.kind === 'clear') {
+                  return (
+                    <li
+                      key="clear"
+                      ref={customerRowRef(index)}
+                      style={{ ...rowStyle(selected), fontStyle: 'italic' }}
+                    >
+                      Consumidor Final
+                    </li>
+                  );
+                }
+                const { customer } = result.result;
+                const identifier = [customer.document, customer.phone]
                   .filter((value): value is string => value !== undefined)
                   .join(' · ');
                 return (
-                  <li key={result.customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
-                    <div>{result.customer.name}</div>
+                  <li key={customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
+                    <div>{customer.name}</div>
                     {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
                   </li>
                 );

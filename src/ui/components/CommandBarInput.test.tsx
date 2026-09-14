@@ -172,7 +172,10 @@ describe('CommandBarInput', () => {
     expect(screen.getByText('Ana García')).not.toBeNull();
   });
 
-  it('"@" sin texto y sin clientes recientes no muestra ningún overlay', () => {
+  // Ciclo 7: "Consumidor Final" siempre está, aunque no haya clientes
+  // recientes — es la forma de desadjuntar, tiene que ser alcanzable
+  // siempre, no solo cuando hay otros clientes en la lista.
+  it('"@" sin texto y sin clientes recientes muestra "Consumidor Final" igual', () => {
     setCustomerRepository({
       search: () => [],
       listRecent: () => [],
@@ -184,7 +187,7 @@ describe('CommandBarInput', () => {
 
     fireEvent.input(input, { target: { value: '@' } });
 
-    expect(screen.queryByRole('listitem')).toBeNull();
+    expect(screen.getByText('Consumidor Final')).not.toBeNull();
   });
 
   it('la fila de cliente muestra documento/teléfono cuando están presentes', () => {
@@ -235,7 +238,7 @@ describe('CommandBarInput', () => {
     });
   });
 
-  it('"@" vacío + Enter desadjunta el cliente actual', () => {
+  it('"@" vacío + Enter desadjunta el cliente actual (selecciona "Consumidor Final" por default)', () => {
     attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '' };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -244,6 +247,54 @@ describe('CommandBarInput', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(attachedCustomerSignal.value).toBeUndefined();
+  });
+
+  // Ciclo 7: este era el caso que realmente rompía en producción — con
+  // clientes recientes, "@" vacío + Enter volvía a adjuntar el primero de
+  // la lista en vez de desadjuntar (la lista ya no estaba vacía desde el
+  // Ciclo 4). El test anterior no lo agarraba porque su mock de
+  // listRecent() devuelve [] — acá se fuerza una lista no vacía.
+  it('"@" vacío + Enter desadjunta incluso con clientes recientes en la lista', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [anaResult],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '' };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(attachedCustomerSignal.value).toBeUndefined();
+  });
+
+  it('"Consumidor Final" no aparece mezclada con una búsqueda puntual', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+
+    expect(screen.queryByText('Consumidor Final')).toBeNull();
+  });
+
+  it('navegar a un cliente reciente y confirmar lo sigue adjuntando bien (no rompe con "Consumidor Final" adelante)', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [anaResult],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' }); // de "Consumidor Final" a Ana García
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(attachedCustomerSignal.value?.id).toBe('c1');
   });
 
   it('recupera el foco al remontarse (volver de un popup con Esc)', () => {
