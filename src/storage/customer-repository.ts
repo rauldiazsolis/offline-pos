@@ -15,6 +15,11 @@ import { newId } from './ids.ts';
  */
 export type CustomerRepository = {
   search(query: string, limit?: number): CustomerSearchResult[];
+  /**
+   * Los más recientes, sin necesidad de tipear nada — para que `@` muestre
+   * algo apenas se abre, en vez de esperar una query (issue #21).
+   */
+  listRecent(limit?: number): CustomerSearchResult[];
   getCustomer(customerId: string): Customer | undefined;
   /** Async y siempre fresco: el balance cacheado puede cambiar en la sesión (ver sale-repository.ts). */
   getCustomerAccount(customerId: string): Promise<CustomerAccount | undefined>;
@@ -24,9 +29,12 @@ export async function loadCustomerRepository(): Promise<CustomerRepository> {
   const customers = await db.customers.toArray();
   const search = new FlexSearchCustomerSearch(customers);
   const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+  const byRecency = [...customers].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return {
     search: (query, limit) => search.search(query, limit),
+    listRecent: (limit = 10) =>
+      byRecency.slice(0, limit).map((customer) => ({ customer, score: 1 })),
     getCustomer: (customerId) => customersById.get(customerId),
     getCustomerAccount: (customerId) => db.customerAccounts.get(customerId),
   };

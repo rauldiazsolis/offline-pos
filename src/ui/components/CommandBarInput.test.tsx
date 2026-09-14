@@ -37,6 +37,16 @@ const anaResult: CustomerSearchResult = {
   score: 1,
 };
 
+const anaConDatos: CustomerSearchResult = {
+  customer: {
+    id: 'c1',
+    name: 'Ana García',
+    document: '12345678',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
+  score: 1,
+};
+
 const fideosResult: CatalogSearchResult = {
   product: {
     id: 'p2',
@@ -80,6 +90,7 @@ beforeEach(async () => {
       if (query === 'multi') return [anaResult, brunoResult];
       return query.toLowerCase().includes('ana') ? [anaResult] : [];
     },
+    listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
   });
@@ -141,6 +152,53 @@ describe('CommandBarInput', () => {
 
     fireEvent.input(input, { target: { value: '$1000' } });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // Issue #21: "@" solo (sin texto) muestra los clientes recientes, no una
+  // lista vacía esperando que se tipee algo.
+  it('"@" sin texto muestra los clientes recientes', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [anaResult],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+
+    expect(screen.getByText('Ana García')).not.toBeNull();
+  });
+
+  it('"@" sin texto y sin clientes recientes no muestra ningún overlay', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('la fila de cliente muestra documento/teléfono cuando están presentes', () => {
+    setCustomerRepository({
+      search: (query) => (query.toLowerCase().includes('ana') ? [anaConDatos] : []),
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+
+    expect(screen.getByText('12345678', { exact: false })).not.toBeNull();
   });
 
   it('"@" con match muestra resultados de cliente en vivo', () => {

@@ -72,11 +72,19 @@ export const searchResultsSignal = computed<UnifiedSearchResult[]>(() => {
  */
 export const searchSelectionIndexSignal = signal<number | null>(null);
 
-/** Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`. */
+/**
+ * Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`.
+ * Con la query vacía (apenas se abre `@`) muestra los clientes más recientes
+ * en vez de nada: a diferencia de la búsqueda de artículos, no tiene sentido
+ * esperar a que se tipee algo para mostrar una lista (issue #21).
+ */
 export const customerResultsSignal = computed<CustomerSearchResult[]>(() => {
   const parsed = parsedSignal.value;
-  if (parsed.kind !== 'customer' || parsed.query === '') {
+  if (parsed.kind !== 'customer') {
     return [];
+  }
+  if (parsed.query === '') {
+    return getCustomerRepository().listRecent();
   }
   return getCustomerRepository().search(parsed.query);
 });

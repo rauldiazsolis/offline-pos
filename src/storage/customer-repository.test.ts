@@ -40,6 +40,27 @@ describe('loadCustomerRepository', () => {
     expect(repo.search('Ana').map((result) => result.customer.id)).toContain(created.value.id);
   });
 
+  it('listRecent devuelve los clientes más nuevos primero, sin necesidad de query', async () => {
+    await db.customers.bulkAdd([
+      { id: 'c1', name: 'Primero', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'c2', name: 'Segundo', createdAt: '2026-01-03T00:00:00.000Z' },
+      { id: 'c3', name: 'Tercero', createdAt: '2026-01-02T00:00:00.000Z' },
+    ]);
+
+    const repo = await loadCustomerRepository();
+    expect(repo.listRecent().map((result) => result.customer.id)).toEqual(['c2', 'c3', 'c1']);
+  });
+
+  it('listRecent respeta el límite', async () => {
+    await db.customers.bulkAdd([
+      { id: 'c1', name: 'Primero', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'c2', name: 'Segundo', createdAt: '2026-01-02T00:00:00.000Z' },
+    ]);
+
+    const repo = await loadCustomerRepository();
+    expect(repo.listRecent(1)).toHaveLength(1);
+  });
+
   it('getCustomerAccount devuelve undefined si no hay cuenta cacheada', async () => {
     const repo = await loadCustomerRepository();
     expect(await repo.getCustomerAccount('nadie')).toBeUndefined();

@@ -98,7 +98,9 @@ export function CommandBarInput() {
   const commandResults = commandResultsSignal.value;
   const selectedCommandIndex = commandSelectionIndexSignal.value;
   const showCommandList = parsed.kind === 'command';
-  const showCustomerResults = parsed.kind === 'customer' && parsed.query !== '';
+  // Issue #21: la lista se muestra apenas se abre "@", sin esperar texto —
+  // con query vacía son los clientes más recientes (customerResultsSignal).
+  const showCustomerResults = parsed.kind === 'customer';
 
   const rowStyle = (selected: boolean): { [key: string]: string } => ({
     padding: 'var(--space-2)',
@@ -118,8 +120,13 @@ export function CommandBarInput() {
 
   const hasError = commandBarErrorSignal.value !== null;
   const hasCommandResults = showCommandList && commandResults.length > 0;
+  // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
+  // con query vacía, solo si hay clientes recientes — si no, no hay nada que
+  // este overlay deba ocupar en pantalla.
+  const hasCustomerResults =
+    showCustomerResults && (parsed.query !== '' || customerResults.length > 0);
   const hasSearchResults = !showCommandList && !showCustomerResults && searchResults.length > 0;
-  const showOverlay = hasError || hasCommandResults || showCustomerResults || hasSearchResults;
+  const showOverlay = hasError || hasCommandResults || hasCustomerResults || hasSearchResults;
 
   return (
     // position: relative — ancla del overlay de abajo, que se abre hacia
@@ -178,12 +185,19 @@ export function CommandBarInput() {
             </ul>
           ) : showCustomerResults ? (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {customerResults.map((result, index) => (
-                <li key={result.customer.id} style={rowStyle(index === selectedCustomerIndex)}>
-                  {result.customer.name}
-                </li>
-              ))}
-              {customerResults.length === 0 && (
+              {customerResults.map((result, index) => {
+                const selected = index === selectedCustomerIndex;
+                const identifier = [result.customer.document, result.customer.phone]
+                  .filter((value): value is string => value !== undefined)
+                  .join(' · ');
+                return (
+                  <li key={result.customer.id} style={rowStyle(selected)}>
+                    <div>{result.customer.name}</div>
+                    {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
+                  </li>
+                );
+              })}
+              {parsed.query !== '' && customerResults.length === 0 && (
                 <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
                   + Crear cliente "{parsed.query}"
                 </li>
