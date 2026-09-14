@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import { db } from '../../storage/db.ts';
@@ -615,6 +615,55 @@ describe('CommandBarInput', () => {
 
       expect(cartSignal.value.lines).toEqual([]);
       expect(cartSelectionIndexSignal.value).toBeNull();
+    });
+  });
+
+  // Issue #27: los tres overlays (comandos, clientes, artículos) también
+  // necesitan scrollear hacia la fila seleccionada al navegar con flechas.
+  describe('scroll hacia la fila seleccionada en los overlays', () => {
+    it('menú de comandos', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+      fireEvent.input(input, { target: { value: '/' } });
+
+      const row = screen.getAllByRole('listitem')[0];
+      if (row === undefined) throw new Error('setup falló');
+      const scrollSpy = vi.fn();
+      row.scrollIntoView = scrollSpy;
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+    });
+
+    it('resultados de búsqueda de artículos', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+      fireEvent.input(input, { target: { value: 'multi' } });
+
+      const secondRow = screen.getAllByRole('listitem')[1];
+      if (secondRow === undefined) throw new Error('setup falló');
+      const scrollSpy = vi.fn();
+      secondRow.scrollIntoView = scrollSpy;
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+    });
+
+    it('resultados de búsqueda de clientes', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+      fireEvent.input(input, { target: { value: '@multi' } });
+
+      const secondRow = screen.getAllByRole('listitem')[1];
+      if (secondRow === undefined) throw new Error('setup falló');
+      const scrollSpy = vi.fn();
+      secondRow.scrollIntoView = scrollSpy;
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+      expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
     });
   });
 });

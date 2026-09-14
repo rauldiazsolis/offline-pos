@@ -7,6 +7,7 @@ import {
   triggerCheckout,
 } from '../keyboard/command-bar-controller.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
@@ -42,6 +43,13 @@ export function CommandBarInput() {
   // — vale tanto para errores síncronos como para los que llegan después de
   // resolver una búsqueda async de producto/stock.
   useSelectOnErrorSignal(inputRef, commandBarErrorSignal);
+
+  // Issue #27: cada overlay (comandos, clientes, artículos) es una lista
+  // independiente — mismo hook que ya usa el carrito (#26), tres instancias
+  // porque cada una necesita su propio Map de refs.
+  const commandRowRef = useScrollSelectedIntoView(commandSelectionIndexSignal);
+  const customerRowRef = useScrollSelectedIntoView(customerSelectionIndexSignal);
+  const searchRowRef = useScrollSelectedIntoView(searchSelectionIndexSignal);
 
   const handleInput = (event: TargetedEvent<HTMLInputElement>) => {
     commandBarBufferSignal.value = event.currentTarget.value;
@@ -176,7 +184,11 @@ export function CommandBarInput() {
           ) : hasCommandResults ? (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
               {commandResults.map((command, index) => (
-                <li key={command.name} style={rowStyle(index === selectedCommandIndex)}>
+                <li
+                  key={command.name}
+                  ref={commandRowRef(index)}
+                  style={rowStyle(index === selectedCommandIndex)}
+                >
                   <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
                   {' — '}
                   {command.description}
@@ -191,7 +203,7 @@ export function CommandBarInput() {
                   .filter((value): value is string => value !== undefined)
                   .join(' · ');
                 return (
-                  <li key={result.customer.id} style={rowStyle(selected)}>
+                  <li key={result.customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
                     <div>{result.customer.name}</div>
                     {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
                   </li>
@@ -209,7 +221,11 @@ export function CommandBarInput() {
                 const selected = index === selectedSearchIndex;
                 if (result.kind === 'freeform-line') {
                   return (
-                    <li key={`freeform:${result.description}`} style={rowStyle(selected)}>
+                    <li
+                      key={`freeform:${result.description}`}
+                      ref={searchRowRef(index)}
+                      style={rowStyle(selected)}
+                    >
                       <div>{result.description}</div>
                       <div style={subtextStyle(selected)}>
                         en el carrito: {result.qtyInCart} × {formatMoney(result.unitPrice)}
@@ -220,7 +236,7 @@ export function CommandBarInput() {
                 const { product } = result.result;
                 const qty = parsed.kind === 'search' ? parsed.qty : 1;
                 return (
-                  <li key={product.id} style={rowStyle(selected)}>
+                  <li key={product.id} ref={searchRowRef(index)} style={rowStyle(selected)}>
                     <div>{product.name}</div>
                     <div style={subtextStyle(selected)}>
                       {product.sku} · {formatMoney(product.price)}
