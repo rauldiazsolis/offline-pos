@@ -8,6 +8,8 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandResultsSignal,
+  commandSelectionIndexSignal,
   customerResultsSignal,
   customerSelectionIndexSignal,
   parsedSignal,
@@ -56,6 +58,7 @@ function clearBuffer(): void {
   commandBarBufferSignal.value = '';
   searchSelectionIndexSignal.value = null;
   customerSelectionIndexSignal.value = null;
+  commandSelectionIndexSignal.value = null;
 }
 
 /** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
@@ -102,10 +105,6 @@ function triggerVoid(): void {
 
 function runCommand(name: string, _args: string[]): void {
   switch (name) {
-    case '':
-      // Solo "/": la lista de comandos disponibles la muestra el componente
-      // leyendo parsedSignal directamente — acá no hay nada que ejecutar.
-      return;
     case 'COBRAR':
       void triggerCheckout();
       return;
@@ -153,9 +152,29 @@ export function submitCommandBar(): void {
       trackPendingBarOperation(createAndAttachCustomer(parsed.query.trim()));
       return;
     }
-    case 'command':
-      runCommand(parsed.name, parsed.args);
+    case 'command': {
+      // Issue #3: filtrado por prefijo (commandResultsSignal) + navegación
+      // explícita — a diferencia de search/customer, acá Enter sin haber
+      // tocado ↑/↓ solo ejecuta si el filtro deja un único comando posible
+      // (sin ambigüedad); con 2+ y sin selección explícita, no hace nada.
+      const results = commandResultsSignal.value;
+      const index = commandSelectionIndexSignal.value;
+      if (index !== null) {
+        const selected = results[index];
+        if (selected !== undefined) {
+          runCommand(selected.name, parsed.args);
+        }
+        return;
+      }
+      if (results.length === 1) {
+        runCommand(results[0]?.name ?? '', parsed.args);
+        return;
+      }
+      if (results.length === 0) {
+        commandBarErrorSignal.value = `Comando desconocido: /${parsed.name}`;
+      }
       return;
+    }
     case 'freeform-line':
       if (
         applyCartResult(
@@ -184,33 +203,56 @@ export function submitCommandBar(): void {
   }
 }
 
+/**
+ * `assumeFirstSelected`: cuando la UI ya resalta la fila 0 por default antes
+ * de cualquier navegación (productos, clientes — issue #4), el punto de
+ * partida real tiene que ser `0`, no `-1`/`itemCount`, o el primer ↓ "no se
+ * nota" (mueve el signal de `null` a `0`, que ya se veía seleccionado). El
+ * carrito y el menú de comandos NO lo usan — ahí nada se resalta hasta que
+ * se navega explícitamente, así que el criterio actual (entrar por arriba o
+ * por abajo según la dirección) sigue siendo el correcto.
+ */
 function moveSelectionOver(
   itemCount: number,
   selectionSignal: { value: number | null },
   direction: 1 | -1,
+  options: { assumeFirstSelected?: boolean } = {},
 ): void {
   if (itemCount === 0) {
     selectionSignal.value = null;
     return;
   }
-  const current = selectionSignal.value ?? (direction === 1 ? -1 : itemCount);
+  const current =
+    selectionSignal.value ?? (options.assumeFirstSelected ? 0 : direction === 1 ? -1 : itemCount);
   selectionSignal.value = Math.min(Math.max(current + direction, 0), itemCount - 1);
 }
 
 /**
- * ↑/↓: sobre el carrito (barra vacía), sobre resultados de producto (hay
- * texto de búsqueda) o sobre resultados de cliente (`@<query>`).
+ * ↑/↓: sobre el carrito (barra vacía), sobre resultados de producto o de
+ * cliente (`@<query>`), o sobre el menú de comandos filtrado (`/<prefijo>`).
  */
 export function moveSelection(direction: 1 | -1): void {
-  if (parsedSignal.value.kind === 'customer') {
-    moveSelectionOver(customerResultsSignal.value.length, customerSelectionIndexSignal, direction);
+  const parsed = parsedSignal.value;
+
+  if (parsed.kind === 'customer') {
+    moveSelectionOver(customerResultsSignal.value.length, customerSelectionIndexSignal, direction, {
+      assumeFirstSelected: true,
+    });
+    return;
+  }
+  if (parsed.kind === 'command') {
+    moveSelectionOver(commandResultsSignal.value.length, commandSelectionIndexSignal, direction);
     return;
   }
 
   const isSearching = commandBarBufferSignal.value !== '';
-  const itemCount = isSearching ? searchResultsSignal.value.length : cartSignal.value.lines.length;
-  const selectionSignal = isSearching ? searchSelectionIndexSignal : cartSelectionIndexSignal;
-  moveSelectionOver(itemCount, selectionSignal, direction);
+  if (isSearching) {
+    moveSelectionOver(searchResultsSignal.value.length, searchSelectionIndexSignal, direction, {
+      assumeFirstSelected: true,
+    });
+    return;
+  }
+  moveSelectionOver(cartSignal.value.lines.length, cartSelectionIndexSignal, direction);
 }
 
 /** Tecla Supr con la barra vacía: elimina la línea del carrito seleccionada. */

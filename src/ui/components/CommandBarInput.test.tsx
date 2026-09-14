@@ -15,6 +15,7 @@ import {
 import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { activeScreenSignal } from '../state/screen.ts';
 
 const arrozResult: CatalogSearchResult = {
   product: {
@@ -35,6 +36,25 @@ const anaResult: CustomerSearchResult = {
   score: 1,
 };
 
+const fideosResult: CatalogSearchResult = {
+  product: {
+    id: 'p2',
+    sku: 'SKU-2',
+    barcodes: ['222'],
+    name: 'Fideos 500g',
+    price: 200,
+    taxRate: 0.21,
+    category: 'almacen',
+    tracksStock: true,
+  },
+  score: 0.5,
+};
+
+const brunoResult: CustomerSearchResult = {
+  customer: { id: 'c2', name: 'Bruno Díaz', createdAt: '2026-01-01T00:00:00.000Z' },
+  score: 0.5,
+};
+
 beforeEach(async () => {
   await db.open();
   commandBarBufferSignal.value = '';
@@ -44,14 +64,21 @@ beforeEach(async () => {
   cartSelectionIndexSignal.value = null;
   cartSignal.value = { lines: [] };
   attachedCustomerSignal.value = undefined;
+  activeScreenSignal.value = 'sale';
   setCatalogRepository({
-    search: (query) => (query.toLowerCase().includes('arroz') ? [arrozResult] : []),
+    search: (query) => {
+      if (query === 'multi') return [arrozResult, fideosResult];
+      return query.toLowerCase().includes('arroz') ? [arrozResult] : [];
+    },
     findByBarcodeOrSku: () => undefined,
     getProduct: () => undefined,
     getStock: () => Promise.resolve({ productId: 'p1', quantity: 10, updatedAt: '' }),
   });
   setCustomerRepository({
-    search: (query) => (query.toLowerCase().includes('ana') ? [anaResult] : []),
+    search: (query) => {
+      if (query === 'multi') return [anaResult, brunoResult];
+      return query.toLowerCase().includes('ana') ? [anaResult] : [];
+    },
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
   });
@@ -181,5 +208,87 @@ describe('CommandBarInput', () => {
 
     expect(screen.getByText('/COBRAR', { exact: false })).not.toBeNull();
     expect(screen.getByText('/ANULAR', { exact: false })).not.toBeNull();
+  });
+
+  // Issue #4: la fila 0 ya se muestra resaltada por default — el primer ↓
+  // tiene que moverse a la fila 1 de una, no "reconfirmar" la 0.
+  it('con dos resultados de producto, la primera flecha abajo mueve a la fila 1', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: 'multi' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    expect(searchSelectionIndexSignal.value).toBe(1);
+  });
+
+  it('con dos resultados de cliente, la primera flecha abajo mueve a la fila 1', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@multi' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    expect(customerSelectionIndexSignal.value).toBe(1);
+  });
+
+  // Issue #3: filtrar el menú de "/" por prefijo, ejecutar sin ambigüedad,
+  // navegar con flechas cuando sí la hay.
+  it('"/CO" filtra a COBRAR y CONFIG, sin mostrar ANULAR ni SINCRONIZAR', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/CO' } });
+
+    expect(screen.getByText('/COBRAR', { exact: false })).not.toBeNull();
+    expect(screen.getByText('/CONFIG', { exact: false })).not.toBeNull();
+    expect(screen.queryByText('/ANULAR', { exact: false })).toBeNull();
+    expect(screen.queryByText('/SINCRONIZAR', { exact: false })).toBeNull();
+  });
+
+  it('"/COB" (sin ambigüedad) + Enter ejecuta el comando directo, sin tocar flechas', async () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/COB' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    // triggerCheckout es async (espera pendingBarOperation) — mismo motivo
+    // por el que el resto de los tests de /COBRAR de este archivo usan waitFor.
+    await waitFor(() => {
+      expect(activeScreenSignal.value).toBe('checkout');
+    });
+  });
+
+  it('"/CO" (ambiguo) + Enter sin navegar no hace nada', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/CO' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('"/CO" (ambiguo) + navegar con flechas + Enter ejecuta el elegido', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/CO' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' }); // COBRAR
+    fireEvent.keyDown(input, { key: 'ArrowDown' }); // CONFIG
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(activeScreenSignal.value).toBe('config');
+  });
+
+  it('un comando que no matchea nada muestra "Comando desconocido" al confirmar', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '/XYZ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByRole('alert')).not.toBeNull();
   });
 });
