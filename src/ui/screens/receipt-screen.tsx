@@ -66,7 +66,8 @@ export function ReceiptScreen() {
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       style={{
-        minHeight: '100svh',
+        height: '100svh',
+        overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
