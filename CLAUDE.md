@@ -253,6 +253,33 @@ muestra los clientes más recientes (`CustomerRepository.listRecent()`) en vez d
 esperando que se tipee algo — no tiene sentido hacer esperar texto para algo tan frecuente como
 adjuntar el último cliente atendido.
 
+**Formato de precio × cantidad en la fila de producto**: `<unitario>` resaltado (contraste
+completo + negrita) con cantidad 1; `<unitario> x <cantidad> = <total>` con la parte
+`x <cantidad> = <total>` resaltada (el precio unitario pasa a texto secundario) con cualquier otra
+cantidad — el prefijo `<n>*` ya calcula esta cantidad, ver `parsedSignal`.
+
+**Selección siempre visible, cualquiera sea la causa del cambio**: `ui/hooks/use-scroll-selected
+-into-view.ts` (`useScrollSelectedIntoView`, mismo patrón que `useSelectOnErrorSignal`) hace
+`scrollIntoView({ block: 'nearest' })` sobre la fila correspondiente cada vez que un signal de
+índice cambia — se usa cuatro veces (carrito, y los tres overlays de `CommandBarInput`), cada lista
+con su propio `Map` de refs. Antes, la selección se movía igual (arrows, agregar una línea) pero
+podía quedar invisible fuera del área que scrollea, dando la sensación de que "no pasaba nada".
+
+Además de scrollear, `command-bar-controller.ts` ahora fija explícitamente qué queda seleccionado
+después de cada mutación del carrito — `selectResultingLine(cart, find)` busca la línea resultante
+por identidad (`null` si `find` no encuentra nada, que es lo que pasa cuando la operación restó
+hasta borrarla — a propósito, sin selección). El borrado explícito con Supr
+(`removeSelectedCartLine`) usa un criterio distinto: selecciona la línea que se corrió a ese mismo
+índice, o la anterior si se borró la última, o nada si el carrito quedó vacío
+(`Math.min(index, newLength - 1)`).
+
+**Reset/reindexado de selección al cambiar el buffer**: `updateCommandBarBuffer` (en
+`command-bar-controller.ts`, llamado desde `handleInput` en vez de tocar los signals directo)
+resetea el menú de comandos a `null` en cada tecla (ejecutar el comando equivocado por accidente
+tiene consecuencias reales) y reindexa por identidad la búsqueda de producto/línea libre y de
+cliente — si el ítem que estaba seleccionado sigue presente en la lista filtrada nueva, se lo sigue
+apuntando aunque haya cambiado de posición; si no, `null`.
+
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/ANULAR`, `/CONFIG` (configura la
 conexión con el sistema externo, runtime vía `localStorage` — no hay variables de entorno ni
 pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza un ciclo de sync ahora
@@ -323,6 +350,13 @@ Una ronda más de mejoras (ciclo post-Fase 4, ver "Estado del proyecto"):
   cada uno de la otra, algo que flex no expresa sin un contenedor extra — por eso el layout angosto
   sigue siendo flex (`cart-view.css` lo explica: con grid, un hijo condicional ausente como Cliente
   sin cliente adjunto deja un "gap" fantasma entre tracks de la plantilla; con flex, no).
+
+Ciclo 5: **la caja de totales siempre muestra Subtotal, Descuento y Total** — antes, una sola fila
+condicional ("Recargo/Descuento global") aparecía solo si había un ajuste aplicado, así que la caja
+cambiaba de alto según el estado. `domain/totals.ts::Totals` ya tenía todos los números necesarios
+(`subtotal`, `discountTotal`, `globalAdjustmentAmount`) — no hizo falta tocar el dominio, solo
+`CartView.tsx::TotalsCard`. Sin ajuste aplicado, la fila de Descuento se ve en gris con `$0,00` en
+vez de ocultarse.
 
 ## Testing
 
@@ -453,6 +487,18 @@ rastro.
   (`storage/db.ts`, tabla propia) guarda la venta en curso para sobrevivir a un refresh/crash de
   esta terminal — nunca viaja a ningún backend, así que no tiene `Idempotency-Key` ni pasa por
   `sync/engine.ts`. Ver "Patrón outbox" más arriba para la distinción completa.
+- **Un hook de scroll, reusado en cuatro listas independientes**: `useScrollSelectedIntoView`
+  (`ui/hooks/`) no sabe nada de carrito ni de overlays — recibe cualquier `Signal<number | null>` y
+  un `Map` propio de refs por índice. Carrito y los tres overlays de `CommandBarInput` (comandos,
+  clientes, artículos) llaman al hook una vez cada uno, en vez de repetir la lógica de
+  `scrollIntoView` cuatro veces. jsdom no implementa `scrollIntoView` — el stub global vive en
+  `src/test/setup.ts`, no en el test de un componente en particular, porque cualquier test que
+  toque una de estas cuatro listas lo necesita.
+- **`applyCartResult` como type predicate, no `boolean`**: varios callers de
+  `command-bar-controller.ts` necesitan `result.value` después de confirmar éxito (para saber en
+  qué índice quedó la línea resultante, issue #15) — la firma `result is { ok: true; value: Cart }`
+  deja que TypeScript lo sepa después de un `if (applyCartResult(result))`, sin repetir `result.ok`
+  a mano en cada caller.
 
 ## Estado del proyecto
 
@@ -494,6 +540,16 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   de dos columnas en pantallas anchas que reabre a propósito la decisión de "una sola columna" del
   pase de diseño anterior (#19), y `README.md` (#22) — ver "UX keyboard-first" y "Diseño visual"
   más arriba para el detalle.
+- Entre el Ciclo 4 y el 5, un fix aislado (#30, no un ciclo completo — bug de corrección de datos,
+  chico): el recargo/descuento global se perdía al modificar cualquier línea del carrito porque
+  `addProductLine`/`addFreeformLine`/`adjustFreeformLineQuantity`/`removeLine`/`setLineQuantity`/
+  `applyLineDiscount` devolvían `{ lines }` en vez de `{ ...cart, lines }`.
+- Ciclo 5, sobre observaciones del usuario tras usar el Ciclo 4: selección siempre visible al
+  agregar/ajustar/borrar una línea del carrito o navegar cualquiera de las listas con flechas
+  (#15, #26, #27 — `useScrollSelectedIntoView`), reset/reindexado de la selección al cambiar el
+  buffer (#14), formato `<unitario>`/`<unitario> x <cantidad> = <total>` en la búsqueda de producto
+  (#29), y Subtotal/Descuento/Total siempre visibles en la caja de totales (#31) — ver
+  "UX keyboard-first", "Diseño visual" y "Patrones establecidos" más arriba para el detalle.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
@@ -502,12 +558,12 @@ una venta en un POS de mostrador, y que el Connector API no debería poder "rech
 cerrada de forma síncrona (debería ser una notificación asíncrona aparte). Antes de tomar un issue
 para trabajar, revisar si tiene esta etiqueta.
 
-**Issues abiertas sin agendar todavía** (no `backlog`, candidatas a un próximo ciclo corto): #14
-(el puntero de selección de listas no se resetea al cambiar el buffer), #15 (al agregar una línea
-debería quedar seleccionada y visible en pantalla), #23 (detectar entrada de scanner por velocidad
-de tecleo — spike aparte, necesita calibrar un umbral con un lector real o, al menos, un test que
-simule esa velocidad vía paste+Enter), #24 (usar el espacio de la barra de comandos también para
-instrucciones mínimas de uso — sin specs todavía).
+**Issues abiertas sin agendar todavía** (no `backlog`): #23 (detectar entrada de scanner por
+velocidad de tecleo — spike aparte, necesita calibrar un umbral con un lector real o, al menos, un
+test que simule esa velocidad vía paste+Enter), #24 (usar el espacio de la barra de comandos
+también para instrucciones mínimas de uso — sin specs todavía), #28 (Esc con un desplegable
+abierto lo cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estado propio de
+"abierto/cerrado", se deriva del buffer parseado).
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
