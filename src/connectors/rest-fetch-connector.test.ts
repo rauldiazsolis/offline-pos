@@ -254,6 +254,28 @@ describe('releaseAccountHold', () => {
   });
 });
 
+describe('pushCashSession', () => {
+  it('hace POST a /cash-sessions con el turno cerrado', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+    const session = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      closedAt: '2026-01-01T20:00:00.000Z',
+      openingAmount: 500,
+      closingAmount: 600,
+      sales: ['s1'],
+    };
+
+    await connector.pushCashSession(session, 'cs1');
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/cash-sessions');
+    expect(init.body).toBe(JSON.stringify(session));
+  });
+});
+
 describe('pullStock', () => {
   it('parsea un array de StockItem', async () => {
     const stockItem = { productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' };

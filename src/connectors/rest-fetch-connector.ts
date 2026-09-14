@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CashSession } from '../domain/cash-session.ts';
 import type { Customer } from '../domain/customer.ts';
 import { productSchema, type Product } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
@@ -227,6 +228,10 @@ export function createRestFetchConnector(config: SyncConfig): Connector {
 
     releaseAccountHold(params, idempotencyKey: string): Promise<Result<void>> {
       return deleteResource(`/account-holds/${params.holdId}`, idempotencyKey);
+    },
+
+    pushCashSession(session: CashSession, idempotencyKey: string): Promise<Result<void>> {
+      return postEvent('/cash-sessions', idempotencyKey, session);
     },
   };
 }

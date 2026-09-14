@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Cart } from '../domain/cart.ts';
+import type { CashSession } from '../domain/cash-session.ts';
 import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
@@ -32,6 +33,7 @@ class PosDatabase extends Dexie {
   customerAccounts!: EntityTable<CustomerAccount, 'customerId'>;
   accountMovements!: EntityTable<AccountMovement, 'id'>;
   draftCart!: EntityTable<DraftCart, 'id'>;
+  cashSessions!: EntityTable<CashSession, 'id'>;
 
   constructor() {
     super('offline-pos');
@@ -51,6 +53,13 @@ class PosDatabase extends Dexie {
     });
     this.version(4).stores({
       draftCart: 'id',
+    });
+    // Fase 6: nunca va a haber más que un puñado de turnos guardados (uno
+    // por turno de caja, no por venta) — sin índice de "abierto/cerrado",
+    // getCurrentOpenCashSession() hace toArray() + find() sobre esta tabla
+    // sin que eso sea un problema de performance real.
+    this.version(5).stores({
+      cashSessions: 'id, openedAt',
     });
   }
 }

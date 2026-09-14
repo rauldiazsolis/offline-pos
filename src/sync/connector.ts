@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CashSession } from '../domain/cash-session.ts';
 import type { Product } from '../domain/product.ts';
 import type { Result } from '../domain/result.ts';
 import type { Sale } from '../domain/sale.ts';
@@ -68,4 +69,6 @@ export type Connector = {
     idempotencyKey: string,
   ): Promise<Result<void>>;
   releaseAccountHold(params: { holdId: string }, idempotencyKey: string): Promise<Result<void>>;
+  /** Push de un turno de caja cerrado (Fase 6, `POST /cash-sessions`) — nunca uno abierto. */
+  pushCashSession(session: CashSession, idempotencyKey: string): Promise<Result<void>>;
 };

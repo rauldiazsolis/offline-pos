@@ -52,6 +52,8 @@ function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>
       );
     case 'account-hold-release':
       return connector.releaseAccountHold({ holdId: event.holdId }, event.id);
+    case 'cash-session':
+      return connector.pushCashSession(event.session, event.id);
     default: {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
