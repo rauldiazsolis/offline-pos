@@ -1,7 +1,6 @@
 import { CartView } from '../components/CartView.tsx';
 import { CommandBarInput } from '../components/CommandBarInput.tsx';
 import { StatusBar } from '../components/StatusBar.tsx';
-import { attachedCustomerSignal } from '../state/customer.ts';
 
 /**
  * Pantalla de venta: barra de comandos arriba (siempre enfocada, "chrome"
@@ -30,11 +29,6 @@ export function SaleScreen() {
         <CommandBarInput />
       </header>
       <main style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3)' }}>
-        {attachedCustomerSignal.value !== undefined && (
-          <p style={{ margin: '0 0 var(--space-2)', color: 'var(--color-text-muted)' }}>
-            Cliente: {attachedCustomerSignal.value.name}
-          </p>
-        )}
         <CartView />
       </main>
       <StatusBar />
