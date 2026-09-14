@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
+import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { CommandBarInput } from './CommandBarInput.tsx';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -77,6 +78,8 @@ beforeEach(async () => {
   cartSignal.value = { lines: [] };
   attachedCustomerSignal.value = undefined;
   activeScreenSignal.value = 'sale';
+  // Fase 6: /COBRAR exige un turno de caja abierto.
+  await openCashSessionAndPersist({ openingAmount: 0 });
   setCatalogRepository({
     search: (query) => {
       if (query === 'multi') return [arrozResult, fideosResult];

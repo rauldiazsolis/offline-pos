@@ -33,6 +33,7 @@ function fakeConnector(overrides: Partial<Connector> = {}): Connector {
       Promise.resolve(ok<AccountHoldResult>({ approved: true, holdId: 'hold-1' })),
     pushAccountHoldConfirm: () => Promise.resolve(ok(undefined)),
     releaseAccountHold: () => Promise.resolve(ok(undefined)),
+    pushCashSession: () => Promise.resolve(ok(undefined)),
     ...overrides,
   };
 }
@@ -387,6 +388,24 @@ describe('pushOne por tipo de evento', () => {
     await syncOnce(fakeConnector({ releaseAccountHold }), now);
 
     expect(releaseAccountHold).toHaveBeenCalledWith({ holdId: 'hold-1' }, 'release-1');
+  });
+
+  it('llama pushCashSession para un evento cash-session', async () => {
+    const session = { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] };
+    await db.outbox.add({
+      type: 'cash-session',
+      session,
+      id: 'cs1',
+      status: 'pending',
+      retries: 0,
+      createdAt: now,
+      nextAttemptAt: now,
+    });
+    const pushCashSession = vi.fn().mockResolvedValue(ok(undefined));
+
+    await syncOnce(fakeConnector({ pushCashSession }), now);
+
+    expect(pushCashSession).toHaveBeenCalledWith(session, 'cs1');
   });
 });
 

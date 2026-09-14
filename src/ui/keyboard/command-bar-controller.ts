@@ -33,6 +33,8 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
+import { enterCashScreen } from './cash-session-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 import { runSyncCycle } from '../../sync/engine.ts';
@@ -198,9 +200,25 @@ async function addByCode(code: string, qty: number): Promise<void> {
   await addByProduct(product, qty);
 }
 
-/** `/COBRAR`, también disparado por `Ctrl+Enter` desde cualquier estado de la barra. */
+/**
+ * `/COBRAR`, también disparado por `Ctrl+Enter` desde cualquier estado de la
+ * barra — único punto de entrada al cobro, así que es el único lugar que
+ * necesita este chequeo temprano. Fase 6: sin turno de caja abierto, no se
+ * puede cobrar — `closeSaleAndPersist` repite el mismo chequeo como
+ * verificación de fondo (ver `storage/sale-repository.ts`), esto es solo
+ * para fallar rápido sin llegar a abrir la pantalla de cobro.
+ */
 export async function triggerCheckout(): Promise<void> {
   await pendingBarOperation;
+  const openSession = await getCurrentOpenCashSession();
+  if (openSession === undefined) {
+    commandBarErrorSignal.value = describeError({
+      ok: false,
+      error: 'cash-session/none-open',
+      meta: undefined,
+    });
+    return;
+  }
   activeScreenSignal.value = 'checkout';
   clearBuffer();
 }
@@ -214,6 +232,10 @@ function runCommand(name: string, _args: string[]): void {
   switch (name) {
     case 'COBRAR':
       void triggerCheckout();
+      return;
+    case 'CAJA':
+      enterCashScreen();
+      clearBuffer();
       return;
     case 'ANULAR':
       triggerVoid();

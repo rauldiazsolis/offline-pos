@@ -1,3 +1,4 @@
+import type { CashSession } from './cash-session.ts';
 import type { Customer } from './customer.ts';
 import type { Sale } from './sale.ts';
 import type { StockMovement } from './stock.ts';
@@ -8,7 +9,8 @@ export type OutboxEventPayload =
   | { type: 'sale-void'; saleId: string; voidedAt: string; voidReason?: string }
   | { type: 'customer'; customer: Customer }
   | { type: 'account-hold-confirm'; holdId: string; saleId: string }
-  | { type: 'account-hold-release'; holdId: string };
+  | { type: 'account-hold-release'; holdId: string }
+  | { type: 'cash-session'; session: CashSession };
 
 /**
  * Evento inmutable de sincronización (ver "Patrón outbox" en CLAUDE.md).
@@ -135,6 +137,28 @@ export function buildOutboxEventForHoldRelease(params: {
     type: 'account-hold-release',
     holdId: params.holdId,
     id: params.id,
+    status: 'pending',
+    retries: 0,
+    createdAt: params.now,
+    nextAttemptAt: params.now,
+  };
+}
+
+/**
+ * Un turno de caja cerrado se encola una sola vez, ya completo (`sales[]`
+ * final, `closingAmount` presente) — mismo criterio que `'sale'`: la
+ * entidad ES el evento (`id` = Idempotency-Key), no una operación aparte
+ * como `'sale-void'`. Un turno abierto nunca genera un evento (ver
+ * `domain/cash-session.ts`).
+ */
+export function buildOutboxEventForCashSession(
+  session: CashSession,
+  params: { now: string },
+): OutboxEvent {
+  return {
+    type: 'cash-session',
+    session,
+    id: session.id,
     status: 'pending',
     retries: 0,
     createdAt: params.now,

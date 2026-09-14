@@ -156,12 +156,12 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 10 recursos (por path):
-los 9 que el código ya implementa (`GET /products`, `GET /stock`, `POST /sales`,
+documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 10 recursos (por
+path), y desde Fase 6 el código ya implementa los 10: `GET /products`, `GET /stock`, `POST /sales`,
 `POST /stock-movements`, `POST /sales/{saleId}/void`, `GET`/`POST /customers`,
-`POST /account-holds`, `POST /account-holds/{holdId}/confirm`, `DELETE /account-holds/{id}`) más 1
-documentado para integradores pero sin código todavía (`POST /cash-sessions` — Fase 6). Cada
-operación del spec lleva `x-pos-status` marcando cuál es cuál.
+`POST /account-holds`, `POST /account-holds/{holdId}/confirm`, `DELETE /account-holds/{id}` y
+`POST /cash-sessions` (Fase 6 — turnos de caja, ver más abajo). Cada operación del spec lleva
+`x-pos-status` marcando en qué fase se implementó.
 
 `POST /sales/{saleId}/void` es un recurso que §6 del doc de diseño **no** contemplaba — se agregó en
 Fase 2 al descubrir el gap (RF-06 se había adelantado en Fase 1 sin que el contrato original la
@@ -172,6 +172,13 @@ de avisarle al backend) y `POST /account-holds/{holdId}/confirm` (§5 decía que
 hold "viaja en el outbox" pero el contrato nunca definió ese endpoint). Mismo criterio en los tres
 casos: se agrega el recurso al contrato con su propia `Idempotency-Key`, documentado igual de
 completo que el resto.
+
+`POST /cash-sessions` (Fase 6) es distinto de los tres anteriores: **no** es un gap encontrado
+sobre la marcha — ya estaba documentado desde que se armó el contrato completo (§6 del diseño), con
+`x-pos-status: documented-not-implemented` hasta que el POS tuvo el modelo de dominio
+correspondiente. Se envía una sola vez, cuando el turno ya cerró (nunca mientras está abierto,
+mismo criterio que `Sale`) — `id` del turno como Idempotency-Key, la entidad ES el evento, igual
+que `POST /sales`.
 
 `sync/connector.ts` define el puerto `Connector` — vive en `sync/`, no en `domain/`, porque habla en
 términos de red (cursores, Idempotency-Key, tipos como `ConnectorCustomer`/`AccountHoldResult`) que
@@ -299,13 +306,27 @@ al ver la complejidad real de lo otro (manejar mousedown/mousemove sin romper el
 selección, ocultar la scrollbar entre navegadores con propiedades distintas, mantener wheel/
 middle-click-drag, diseñar el fade).
 
-Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/ANULAR`, `/CONFIG` (configura la
-conexión con el sistema externo, runtime vía `localStorage` — no hay variables de entorno ni
-pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza un ciclo de sync ahora
-mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de estado). `/CUENTA`
-(Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de comandos
-principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente contra el
-cliente adjunto con `@`.
+Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (Fase 6 — abre o cierra el
+turno de caja, ver más abajo), `/ANULAR`, `/CONFIG` (configura la conexión con el sistema externo,
+runtime vía `localStorage` — no hay variables de entorno ni pantalla de config de terminal más
+amplia todavía) y `/SINCRONIZAR` (fuerza un ciclo de sync ahora mismo, RF-12 "bajo demanda" — no
+cambia de pantalla, el feedback es la barra de estado). `/CUENTA` (Fase 3) es distinto: solo existe
+dentro de la pantalla de cobro, no en la barra de comandos principal — por eso no está en
+`commands.ts`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
+
+**Turno de caja obligatorio para cobrar (Fase 6)**: `/CAJA` abre (pide el monto de apertura) o
+cierra (pide el efectivo contado) el turno — con uno ya abierto, entra directo al resumen en vez de
+volver a pedir la apertura. `command-bar-controller.ts::triggerCheckout` (único punto de entrada al
+cobro, `/COBRAR` y `Ctrl+Enter`) rechaza cobrar sin un turno abierto — decisión explícita del
+usuario, es el comportamiento típico de un POS de mostrador y le da sentido real al arqueo (todas
+las ventas del turno quedan agrupadas). `storage/sale-repository.ts::closeSaleAndPersist` repite el
+mismo chequeo de fondo (la verificación real; `triggerCheckout` es solo para fallar rápido) y, si
+hay un turno abierto, agrega el id de la venta a su `sales[]` en la misma transacción que la cierra.
+El arqueo al cerrar es **solo de efectivo** (apertura + ventas en efectivo del turno vs. lo
+contado) — tarjeta/cuenta corriente no tienen equivalente físico para "contar", aunque el reporte
+básico sí desglosa el total por cada medio de pago. Un turno **abierto** nunca se sincroniza (mismo
+criterio que una `Sale` con `status: 'open'`, Fase 1: nace ya cerrada) — solo se encola en el
+outbox al cerrarse, ya completo (ver "Connector API" más abajo).
 
 La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
@@ -440,6 +461,12 @@ hecha verificable en CI: un test por pantalla popup, navegando solo con teclado,
 explícitamente que la barra de comandos recupera el foco al volver — no una revisión manual sin
 rastro.
 
+`e2e/helpers.ts` (Fase 6) reúne acciones de setup que varios specs repiten y que tienen que pasar
+por la UI real, no por IndexedDB directo (`openCashSession`: sin turno abierto no se puede cobrar,
+así que todo spec que llegue a `/COBRAR` lo necesita) — distinto de `indexed-db.ts`, que es
+lectura/escritura cruda para datos que en producción vendrían de un pull (`CustomerAccount`) y que
+no tiene sentido ejercitar por UI en cada test.
+
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
@@ -569,10 +596,25 @@ rastro.
   `pointer-events: none` — puramente informativo, para no repetir el error de construir algo que
   "parece" un control pero no lo es. jsdom tampoco implementa `ResizeObserver` — mismo criterio que
   `scrollIntoView`, stub global en `src/test/setup.ts`.
+- **Resetear un signal "de arranque" siempre antes del primer `await`, nunca después**: un bug real
+  de Fase 6, agarrado corriendo el e2e repetidas veces (`--repeat-each`), no solo por revisión de
+  código. `cash-session-controller.ts::loadCashScreen` limpiaba `cashBufferSignal` **después** de
+  `await getOpenCashSessionSummary()` (una lectura a IndexedDB) — si el cajero ya empezó a tipear
+  mientras esa lectura todavía estaba en vuelo, el reset la pisaba al resolver, sin ningún error
+  visible más que "Monto inválido" más adelante. La función se reordenó para resetear
+  síncronamente, como primera línea, antes de cualquier `await` — cualquier función de
+  "cargar/resetear pantalla al montar" en este código sigue el mismo orden. Relacionado:
+  `enterCashScreen` (el controller) y el `useLayoutEffect` de `CashSessionScreen` llamaban las dos
+  a `loadCashScreen()` — doble carga, no solo redundante sino la causa original de la carrera. Se
+  sacó la llamada del controller: cargar datos al entrar a una pantalla es responsabilidad
+  exclusiva del `useLayoutEffect` de esa pantalla (mismo criterio que ya usaba
+  `VoidSaleScreen`/`loadVoidableSales` — la lección real es que ese criterio no se estaba aplicando
+  consistentemente, no que faltara inventarlo).
 
 ## Estado del proyecto
 
-Fases 1 a 4 completas. Fase 1 (MVP de venta offline): catálogo sembrado desde fixture, carrito,
+Fases 1 a 4 y 6 completas (Fase 5, hardware, pospuesta a v2 — ver más abajo). Fase 1 (MVP de venta
+offline): catálogo sembrado desde fixture, carrito,
 barra de comandos completa, cobro, comprobante con impresión, anulación de venta (RF-06,
 adelantada). Fase 2 (motor de sync): tabla `outbox` con reintentos y backoff exponencial, puerto
 `Connector` + implementación REST de referencia, pull de catálogo por delta, configuración runtime
@@ -651,6 +693,29 @@ cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estad
 fábrica", con las confirmaciones necesarias — sin definir cuántos pasos de confirmación), #37
 (falta UI para crear/editar documento/teléfono de un cliente — sin definir cómo).
 
-Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
-navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
-el trabajo actual — no adelantar features de una fase posterior.
+**Fase 5 (hardware) pospuesta a v2** — decisión tomada al terminar Fase 4: depende de dispositivos
+físicos reales (impresora, cajón) para poder validarse en serio, y ninguna fase posterior depende
+de que esté hecha. Se avanza directo a Fase 6. Detalle completo de la decisión y el nuevo orden en
+§11 del documento de diseño.
+
+**Fase 6 completa (multi-terminal y caja)**: la reconciliación de catálogo/saldo entre terminales
+ya estaba resuelta desde Fase 2/3 (cada pull sobrescribe con el dato del backend, que siempre
+manda) — confirmado con el usuario antes de arrancar, no se agregó nada nuevo ahí. El trabajo real
+fue turnos de caja: `domain/cash-session.ts` (`CashSession`, `openCashSession`/`closeCashSession`/
+`calculateCashSessionSummary`), `storage/cash-session-repository.ts` (persistencia + outbox al
+cerrar), comando `/CAJA` y pantalla nueva (`ui/screens/cash-session-screen.tsx`) para abrir/cerrar
+con arqueo de efectivo, y el gate de `/COBRAR` sin turno abierto — ver "UX keyboard-first" y
+"Patrones establecidos" más arriba para el detalle completo, incluida la carrera real de un reset
+de buffer después de un `await` que agarró el e2e corrido repetidas veces. La reconciliación
+multi-terminal solo se pudo validar contra un `Connector` fake/mockeado (no hay backend real
+todavía) — mismo criterio que ya usa `sync/engine.test.ts`, no fue un bloqueante. Sigue una tanda
+de ciclos de mejora de UI (mismo formato que los ciclos post-Fase 4) antes de pasar a Fase 7.
+
+Fase 7 (publicación) tiene su alcance ampliado a propósito: además de lo que ya documentaba el
+diseño (manifest PWA, flujo de actualización de service worker, documentación del Connector API,
+hardening y lanzamiento), va a incluir un minibackend de demostración que implemente el contrato —
+la mejor documentación posible del Connector API y la única forma de probar de punta a punta lo que
+Fase 6 deja validado solo con fakes.
+
+Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
+adelantar features de una fase posterior.

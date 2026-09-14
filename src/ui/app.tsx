@@ -1,4 +1,5 @@
 import './tokens.css';
+import { CashSessionScreen } from './screens/cash-session-screen.tsx';
 import { CheckoutScreen } from './screens/checkout-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
 import { ReceiptScreen } from './screens/receipt-screen.tsx';
@@ -16,6 +17,8 @@ export function App() {
       return <VoidSaleScreen />;
     case 'config':
       return <ConfigScreen />;
+    case 'cash':
+      return <CashSessionScreen />;
     default:
       return <SaleScreen />;
   }

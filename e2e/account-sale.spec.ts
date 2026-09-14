@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openCashSession } from './helpers.ts';
 import { getAllFromStore, putIntoStore } from './indexed-db.ts';
 
 type StoredCustomer = { id: string; name: string };
@@ -10,6 +11,7 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await expect(commandBar).toBeVisible();
 
   await context.setOffline(true);
+  await openCashSession(page);
 
   // Alta de cliente local (RF-16) — sin match existente, "@<nombre>" + Enter lo crea.
   await commandBar.fill('@Cliente Prueba');
@@ -17,9 +19,13 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await commandBar.press('Enter');
   await expect(page.getByText('Cliente Prueba')).toBeVisible();
 
+  // No usa toHaveLength(1): desde el Ciclo 7 el catálogo de clientes de
+  // ejemplo (`storage/seed-customers.ts`) siembra unos cuantos de arranque
+  // — el que importa acá es el recién creado, encontrado por nombre.
   const customers = await getAllFromStore<StoredCustomer>(page, 'customers');
-  expect(customers).toHaveLength(1);
-  const customerId = customers[0]?.id;
+  const customer = customers.find((c) => c.name === 'Cliente Prueba');
+  expect(customer).toBeDefined();
+  const customerId = customer?.id;
 
   // La cuenta cacheada en producción vendría de un pull real — acá se
   // siembra directo (no hay backend en los e2e, ver CLAUDE.md).
@@ -61,6 +67,7 @@ test('cuenta corriente offline sin cuenta cacheada: rechaza el cobro', async ({
   await expect(commandBar).toBeVisible();
 
   await context.setOffline(true);
+  await openCashSession(page);
 
   await commandBar.fill('@Sin Credito');
   await commandBar.press('Enter');

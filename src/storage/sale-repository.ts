@@ -1,4 +1,5 @@
 import type { Cart } from '../domain/cart.ts';
+import { recordSaleInCashSession } from '../domain/cash-session.ts';
 import { buildAccountMovementForSale } from '../domain/customer.ts';
 import {
   buildOutboxEventForHoldConfirm,
@@ -10,6 +11,7 @@ import { err, ok, type Result } from '../domain/result.ts';
 import { buildStockMovementsForSale, closeSale, voidSale } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
 import type { StockMovement } from '../domain/stock.ts';
+import { getCurrentOpenCashSession } from './cash-session-repository.ts';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
 
@@ -95,6 +97,16 @@ export async function closeSaleAndPersist(params: {
   pendingHold?: { holdId: string };
 }): Promise<Result<Sale>> {
   const now = new Date().toISOString();
+
+  // Fase 6: no se puede cerrar una venta sin un turno de caja abierto — el
+  // gate real vive acá (`command-bar-controller.ts::triggerCheckout` ya
+  // chequea lo mismo antes, para fallar rápido sin llegar a abrir la
+  // pantalla de cobro, pero esta es la verificación de fondo).
+  const openSession = await getCurrentOpenCashSession();
+  if (openSession === undefined) {
+    return err('cash-session/none-open', undefined);
+  }
+
   const saleResult = closeSale({
     cart: params.cart,
     payments: params.payments,
@@ -132,12 +144,21 @@ export async function closeSaleAndPersist(params: {
   try {
     await db.transaction(
       'rw',
-      [db.sales, db.stock, db.stockMovements, db.outbox, db.accountMovements, db.customerAccounts],
+      [
+        db.sales,
+        db.stock,
+        db.stockMovements,
+        db.outbox,
+        db.accountMovements,
+        db.customerAccounts,
+        db.cashSessions,
+      ],
       async () => {
         await db.sales.add(sale);
         await applyStockMovements(movements, now);
         await applyAccountMovements(sale, now);
         await db.outbox.bulkAdd(outboxEvents);
+        await db.cashSessions.put(recordSaleInCashSession(openSession, sale.id));
       },
     );
   } catch (error) {
