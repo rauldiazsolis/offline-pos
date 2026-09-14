@@ -1,7 +1,13 @@
 import type { Cart } from './cart.ts';
 import type { Discount, SaleLine } from './sale.ts';
 
-export type Totals = { subtotal: number; discountTotal: number; total: number };
+export type Totals = {
+  subtotal: number;
+  discountTotal: number;
+  /** Monto ya con signo (recargo positivo, descuento negativo) — RF-03, ver `Cart.globalAdjustmentPercentage`. */
+  globalAdjustmentAmount: number;
+  total: number;
+};
 
 function discountAmount(discount: Discount | undefined, lineSubtotal: number): number {
   if (discount === undefined) {
@@ -34,5 +40,16 @@ export function calculateTotals(cart: Cart): Totals {
     discountTotal += discountAmount(line.discount, lineSubtotal);
   }
 
-  return { subtotal, discountTotal, total: subtotal - discountTotal };
+  const netAfterLineDiscounts = subtotal - discountTotal;
+  const globalAdjustmentAmount =
+    cart.globalAdjustmentPercentage !== undefined
+      ? netAfterLineDiscounts * (cart.globalAdjustmentPercentage / 100)
+      : 0;
+
+  return {
+    subtotal,
+    discountTotal,
+    globalAdjustmentAmount,
+    total: netAfterLineDiscounts + globalAdjustmentAmount,
+  };
 }

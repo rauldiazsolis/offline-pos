@@ -1,12 +1,11 @@
 import { CartView } from '../components/CartView.tsx';
 import { CommandBarInput } from '../components/CommandBarInput.tsx';
 import { StatusBar } from '../components/StatusBar.tsx';
-import { attachedCustomerSignal } from '../state/customer.ts';
 
 /**
- * Pantalla de venta: barra de comandos arriba (siempre enfocada), carrito en
- * el medio, barra de estado abajo (extremo opuesto, ver "UX keyboard-first"
- * en CLAUDE.md).
+ * Pantalla de venta: barra de comandos arriba (siempre enfocada, "chrome"
+ * oscuro), carrito en el medio (contenido claro), barra de estado abajo
+ * (extremo opuesto, "chrome" oscuro) — ver "UX keyboard-first" en CLAUDE.md.
  */
 export function SaleScreen() {
   return (
@@ -20,15 +19,16 @@ export function SaleScreen() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <header style={{ padding: 'var(--space-3)' }}>
+      <header
+        style={{
+          padding: 'var(--space-3)',
+          background: 'var(--color-chrome-bg)',
+          borderBottom: '2px solid var(--color-chrome-border)',
+        }}
+      >
         <CommandBarInput />
       </header>
-      <main style={{ flex: 1, overflowY: 'auto', padding: '0 var(--space-3)' }}>
-        {attachedCustomerSignal.value !== undefined && (
-          <p style={{ margin: '0 0 var(--space-2)', color: 'var(--color-text-muted)' }}>
-            Cliente: {attachedCustomerSignal.value.name}
-          </p>
-        )}
+      <main style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3)' }}>
         <CartView />
       </main>
       <StatusBar />

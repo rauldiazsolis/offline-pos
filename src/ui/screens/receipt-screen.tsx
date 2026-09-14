@@ -1,5 +1,5 @@
 import type { TargetedKeyboardEvent } from 'preact';
-import { calculateLineTotal } from '../../domain/totals.ts';
+import { calculateLineTotal, calculateTotals } from '../../domain/totals.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
@@ -39,6 +39,14 @@ export function ReceiptScreen() {
 
   const paid = sale.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const change = paid - sale.total;
+  // Reusa calculateTotals sobre un Cart armado con los datos ya cerrados de
+  // la venta — mismo cálculo que en el carrito, sin duplicar la fórmula.
+  const totals = calculateTotals({
+    lines: sale.lines,
+    ...(sale.globalAdjustmentPercentage !== undefined
+      ? { globalAdjustmentPercentage: sale.globalAdjustmentPercentage }
+      : {}),
+  });
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter') {
@@ -71,7 +79,19 @@ export function ReceiptScreen() {
     >
       <div
         class="receipt"
-        style={{ width: '100%', maxWidth: '360px', fontFamily: 'var(--font-mono)' }}
+        style={{
+          width: '100%',
+          maxWidth: '360px',
+          fontFamily: 'var(--font-mono)',
+          fontVariantNumeric: 'tabular-nums',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-card)',
+          padding: 'var(--space-4)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-2)',
+        }}
       >
         <h1 style={{ fontSize: 'var(--font-size-lg)', margin: 0 }}>Comprobante</h1>
         <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Venta {sale.id}</p>
@@ -90,6 +110,16 @@ export function ReceiptScreen() {
           ))}
         </ul>
         <hr style={{ border: 'none', borderTop: '1px dashed var(--color-border)' }} />
+        {sale.globalAdjustmentPercentage !== undefined && sale.globalAdjustmentPercentage !== 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>
+              {sale.globalAdjustmentPercentage > 0 ? 'Recargo' : 'Descuento'} global (
+              {sale.globalAdjustmentPercentage > 0 ? '+' : ''}
+              {sale.globalAdjustmentPercentage}%)
+            </span>
+            <span>{formatMoney(totals.globalAdjustmentAmount)}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
           <span>Total</span>
           <span>{formatMoney(sale.total)}</span>
@@ -114,10 +144,15 @@ export function ReceiptScreen() {
           onClick={() => {
             window.print();
           }}
+          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
         >
           Imprimir (Enter)
         </button>
-        <button type="button" onClick={continueToSale}>
+        <button
+          type="button"
+          onClick={continueToSale}
+          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
+        >
           Continuar (Esc)
         </button>
       </div>

@@ -1,6 +1,7 @@
 import { computed, signal } from '@preact/signals';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
+import { AVAILABLE_COMMANDS } from '../keyboard/commands.ts';
 import { parseCommandBar, type ParsedCommand } from '../keyboard/parse-command-bar.ts';
 import { getCatalogRepository } from './catalog.ts';
 import { getCustomerRepository } from './customer-repository.ts';
@@ -50,3 +51,25 @@ export const customerResultsSignal = computed<CustomerSearchResult[]>(() => {
 
 /** Selección visual (↑/↓) sobre `customerResultsSignal`. */
 export const customerSelectionIndexSignal = signal<number | null>(null);
+
+/**
+ * Comandos que matchean el prefijo tipeado después de `/` (issue #3). Con
+ * `parsed.name === ''` (buffer es solo `/`) matchea todo — mismo caso que
+ * antes de filtrar.
+ */
+export const commandResultsSignal = computed<typeof AVAILABLE_COMMANDS>(() => {
+  const parsed = parsedSignal.value;
+  if (parsed.kind !== 'command') {
+    return [];
+  }
+  return AVAILABLE_COMMANDS.filter((command) => command.name.startsWith(parsed.name));
+});
+
+/**
+ * Selección visual (↑/↓) sobre `commandResultsSignal` — a propósito, sin
+ * default a la fila 0 (a diferencia de `searchSelectionIndexSignal`/
+ * `customerSelectionIndexSignal`): ejecutar el comando equivocado sin querer
+ * tiene consecuencias reales, así que acá nada queda preseleccionado hasta
+ * que el usuario navegue explícitamente (ver `command-bar-controller.ts`).
+ */
+export const commandSelectionIndexSignal = signal<number | null>(null);

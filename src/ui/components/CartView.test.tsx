@@ -52,4 +52,29 @@ describe('CartView', () => {
     render(<CartView />);
     expect(screen.getByText('Total')).not.toBeNull();
   });
+
+  it('sin recargo/descuento global, no muestra esa línea', () => {
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+    render(<CartView />);
+    expect(screen.queryByText(/Recargo global/)).toBeNull();
+    expect(screen.queryByText(/Descuento global/)).toBeNull();
+  });
+
+  it('con recargo global, muestra la línea y el total ajustado', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+      globalAdjustmentPercentage: 10,
+    };
+    render(<CartView />);
+    expect(screen.getByText(/Recargo global \(\+10%\)/)).not.toBeNull();
+  });
+
+  it('con descuento global, muestra la línea', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+      globalAdjustmentPercentage: -10,
+    };
+    render(<CartView />);
+    expect(screen.getByText(/Descuento global \(-10%\)/)).not.toBeNull();
+  });
 });

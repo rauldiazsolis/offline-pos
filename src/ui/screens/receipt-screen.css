@@ -10,6 +10,11 @@
   .receipt {
     position: absolute;
     inset: 0;
+    /* La tarjeta (borde/sombra/radio) es solo para la pantalla — un
+       comprobante impreso no la necesita. */
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
   }
   .receipt-no-print {
     display: none;

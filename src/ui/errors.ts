@@ -20,6 +20,8 @@ export function describeError(failure: Failure): string {
       return failure.meta.field === 'description'
         ? 'Falta la descripción de la línea libre.'
         : 'El monto de la línea libre es inválido.';
+    case 'cart/invalid-global-adjustment':
+      return `Recargo/descuento inválido (${String(failure.meta.percentage)}%). No se puede descontar más del 100%.`;
     case 'sale/insufficient-stock':
       return `Stock insuficiente (pedido ${String(failure.meta.requested)}, disponible ${String(failure.meta.available)}).`;
     case 'sale/empty-cart':

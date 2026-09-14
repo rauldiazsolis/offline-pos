@@ -188,27 +188,45 @@ foco durante la operación normal.
 Prioridad de interpretación de la barra de comandos (orden fijo, ver §7 del diseño para el detalle
 completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras):
 
-1. `/` → modo comando (lista completa de comandos con solo `/`).
+1. `/` → modo comando, filtrado por prefijo (ver detalle abajo).
 2. `@` → búsqueda/alta de cliente.
-3. `cualquier cosa$monto` → línea libre de venta.
-4. `<n>*` o `-<n>*` de prefijo → cantidad antes de cualquier búsqueda.
-5. Todo dígitos → código de barras o SKU.
-6. Cualquier otro texto → búsqueda difusa por nombre.
+3. `<signo><número>%` → recargo/descuento global sobre el total (RF-03, ver detalle abajo).
+4. `cualquier cosa$monto` → línea libre de venta.
+5. `<n>*` o `-<n>*` de prefijo → cantidad antes de cualquier búsqueda.
+6. Todo dígitos → código de barras o SKU.
+7. Cualquier otro texto → búsqueda difusa por nombre.
 
 `Ctrl+Enter` = `/COBRAR` desde cualquier estado. Con la barra vacía, `↑/↓` navegan el carrito; con
-texto, navegan resultados. Errores de parseo van en un slot de altura fija reservado (nunca corren
-el layout) y seleccionan todo el input (`.select()`) para reemplazar sin retipear. El foco al montar
-y el `.select()` en error se resuelven con los hooks compartidos de `ui/hooks/` (ver "Patrones
-establecidos") — nunca con el atributo HTML `autoFocus`, que no dispara de forma confiable cuando
-Preact desmonta y vuelve a montar una pantalla (el caso real: volver de un popup con Esc).
+texto, navegan resultados (producto, cliente o el menú de comandos filtrado). Errores de parseo van
+en un slot de altura fija reservado (nunca corren el layout) y seleccionan todo el input (`.select()`)
+para reemplazar sin retipear. El foco al montar y el `.select()` en error se resuelven con los hooks
+compartidos de `ui/hooks/` (ver "Patrones establecidos") — nunca con el atributo HTML `autoFocus`,
+que no dispara de forma confiable cuando Preact desmonta y vuelve a montar una pantalla (el caso
+real: volver de un popup con Esc).
 
-Comandos disponibles (`ui/keyboard/commands.ts`, se muestran con solo `/`): `/COBRAR`, `/ANULAR`,
-`/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
-variables de entorno ni pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza
-un ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra
-de estado). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la
-barra de comandos principal — por eso no está en `commands.ts` ni en la lista que se muestra con
-`/`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
+**Menú de "/" — filtra, navega, ejecuta sin ambigüedad**: escribir después de `/` filtra
+`AVAILABLE_COMMANDS` por prefijo (`commandResultsSignal`) en vez de mostrar siempre la lista
+completa. A diferencia de la búsqueda de productos/clientes (donde la fila 0 se preselecciona por
+default y Enter sin tocar flechas ejecuta esa fila — bajo riesgo, flujo rápido), el menú de comandos
+**no preselecciona nada**: ejecutar el comando equivocado por accidente tiene consecuencias reales.
+Enter ejecuta directo solo si el filtro deja un único comando posible; con 2+ y sin haber navegado
+con ↑/↓ explícitamente, no hace nada.
+
+**Recargo/descuento global (`<signo><número>%`)**: completa RF-03 (la parte "por línea" —
+`domain/cart.ts::applyLineDiscount` — existe desde Fase 1 pero nunca se conectó a ningún comando).
+El signo es obligatorio (`+10%` recarga, `-10%` descuenta) salvo para cancelar: `0%` sin signo quita
+cualquier ajuste ya aplicado — no hay ambigüedad de dirección posible en cero. Un número sin signo
+que no sea cero **no** es un comando (cae a búsqueda difusa, mandatory sign preservado). El ajuste
+vive en `Cart.globalAdjustmentPercentage` y se recalcula en vivo en cada `calculateTotals` — agregar
+una línea después de aplicarlo actualiza el monto solo, nunca es un monto congelado.
+
+Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/ANULAR`, `/CONFIG` (configura la
+conexión con el sistema externo, runtime vía `localStorage` — no hay variables de entorno ni
+pantalla de config de terminal más amplia todavía) y `/SINCRONIZAR` (fuerza un ciclo de sync ahora
+mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de estado). `/CUENTA`
+(Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de comandos
+principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente contra el
+cliente adjunto con `@`.
 
 Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
@@ -224,6 +242,20 @@ visible (nunca depender de `:hover`), locale configurable por terminal para `Int
 diseño que **todavía no está implementado ni asignado a ninguna fase** — no hay modelo de
 usuario/terminal en el dominio (§4). Se decidió dejarlo fuera del alcance de Fase 4 a propósito
 (ver Fase 4 en "Estado del proyecto"); no asumir que existe ningún tipo de autenticación.
+
+## Diseño visual
+
+Pase de diseño hecho sobre una referencia visual del usuario (una POS propia): **"chrome" oscuro
+arriba/abajo, contenido claro en el medio** — la barra de comandos y la barra de estado usan los
+tokens `--color-chrome-*` (`tokens.css`); el resto de la app (carrito, pantallas de cobro/anulación/
+comprobante/config) sigue sobre los tokens claros de siempre. No es un modo oscuro conmutable, es un
+contraste fijo tipo "consola arriba/abajo, documento en el medio". Cliente adjunto y resumen de venta
+se muestran como tarjetas (`--radius-md`, `--shadow-card`) pero en una sola columna — no hay sidebar
+ni layout en dos columnas, eso quedó descartado a propósito (pulido visual, no rediseño de layout).
+Montos en `--font-mono` con `font-variant-numeric: tabular-nums` para que alineen en columna,
+consistente en carrito, cobro y comprobante. Sin numeritos de atajo (`/1`, `/2`...) en el menú de
+comandos — se consideraron por la referencia y el usuario los descartó explícitamente (ensucian,
+aportan poco).
 
 ## Testing
 
@@ -251,7 +283,7 @@ hecha verificable en CI: un test por pantalla popup, navegando solo con teclado,
 explícitamente que la barra de comandos recupera el foco al volver — no una revisión manual sin
 rastro.
 
-## Patrones establecidos en Fase 1 a 4
+## Patrones establecidos en Fase 1 a 4 y el ciclo de mejoras posterior
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
   intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
@@ -278,11 +310,12 @@ rastro.
   vuelve a montar un elemento (a diferencia de la carga inicial de la página) — esa inconsistencia
   era un bug real, reportado por el usuario: el foco se perdía al volver de cualquier popup con Esc.
   Lección: cualquier foco imperativo en esta app pasa por el hook compartido, nunca por `autoFocus`.
-- **Operaciones de carrito async trackeadas contra navegación**: agregar un producto implica un
-  lookup de stock (async, Dexie). `command-bar-controller.ts` guarda la promesa en curso
-  (`pendingCartOperation`) y `triggerCheckout` la espera antes de cambiar de pantalla — sin esto,
-  `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después de agregar un producto podía abrir el
-  cobro (o cerrar la venta) antes de que el producto terminara de sumarse al carrito.
+- **Operaciones async trackeadas contra navegación**: agregar un producto implica un lookup de
+  stock (async, Dexie). `command-bar-controller.ts` guarda la promesa en curso
+  (`pendingBarOperation`, ver más abajo por qué no se llama "cart") y `triggerCheckout` la espera
+  antes de cambiar de pantalla — sin esto, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después
+  de agregar un producto podía abrir el cobro (o cerrar la venta) antes de que el producto terminara
+  de sumarse al carrito.
 - **Tipo de inserción explícito en Dexie para tablas con unión discriminada**: el `EntityTable<T,
   PK>` por default de Dexie usa `Omit<T, PK>` para el tipo de inserción, y `Omit` colapsa una unión
   discriminada (pierde los campos específicos de cada variante). Para tablas así (`outbox`, ver
@@ -317,6 +350,20 @@ rastro.
   aunque ambas implementaciones reusan FlexSearch (`storage/flexsearch-customer-search.ts`), forzar
   una interfaz genérica de "búsqueda difusa de lo que sea" hubiera acoplado dos dominios (productos,
   clientes) que no tienen por qué evolucionar juntos.
+- **Preselección visual real, no solo simulada en el render**: `moveSelectionOver`
+  (`command-bar-controller.ts`) tiene un parámetro `assumeFirstSelected` — cuando el render ya
+  resalta la fila 0 por default (`selectedIndex ?? 0`, productos y clientes) sin que el signal de
+  selección tenga un valor real todavía, el primer ↑/↓ tiene que partir asumiendo que esa fila 0 ya
+  está "elegida", o el primer toque de flecha no se nota (mueve el signal de `null` a `0`, que ya se
+  veía resaltado — un bug real, reportado por el usuario). El menú de comandos **no** usa esto a
+  propósito: ahí nada se preselecciona (ver "UX keyboard-first" — ejecutar el comando equivocado por
+  accidente tiene consecuencias reales), así que su `null` inicial sí significa "nada elegido".
+- **Un ajuste global vive en el carrito con signo, no como dos campos o un tipo aparte**:
+  `Cart.globalAdjustmentPercentage` (RF-03) es un solo número con signo (positivo recarga, negativo
+  descuenta) en vez de, por ejemplo, `discount`/`surcharge` separados o reusar el `Discount` de línea
+  — evita una invariante de "nunca los dos a la vez" y el cálculo (`calculateTotals`) es una sola
+  multiplicación con el signo ya resuelto. `percentage === 0` quita el campo en vez de dejarlo
+  explícito, mismo criterio `exactOptionalPropertyTypes` que el resto del dominio.
 
 ## Estado del proyecto
 
@@ -337,6 +384,13 @@ paso de `/CONFIG`); auditoría de accesibilidad por teclado como tests e2e
 satisfechos con lo existente, sin cambios de código. **Fuera de alcance, a propósito**: "login de
 terminal" (§7) sigue sin implementar — no se le asignó ninguna fase y no hay modelo de dominio para
 usuarios/terminales; no asumir que existe.
+
+Entre Fase 4 y Fase 5, un ciclo de mejoras (no una fase del roadmap, tres iteraciones cortas en la
+misma rama/PR): menú de "/" filtrado por prefijo con ejecución directa sin ambigüedad y navegación
+por flechas, fix de un bug de selección (la fila 0 de resultados de producto/cliente se veía
+preseleccionada pero el primer ↓ no se notaba), el comando `<signo><número>%` de recargo/descuento
+global (completa RF-03), y un pase de diseño visual (dark chrome en barra de comandos/estado,
+carrito como tabla con SKU, tarjetas para resumen de venta — ver "Diseño visual" más arriba).
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está

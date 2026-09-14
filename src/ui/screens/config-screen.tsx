@@ -78,6 +78,7 @@ export function ConfigScreen() {
             fontFamily: 'var(--font-mono)',
             fontSize: 'var(--font-size-lg)',
             padding: 'var(--space-3)',
+            borderRadius: 'var(--radius-md)',
             border: '1px solid var(--color-border)',
             background: 'var(--color-bg)',
             color: 'var(--color-text)',

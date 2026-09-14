@@ -65,27 +65,39 @@ export function CheckoutScreen() {
 
       <div
         style={{
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-card)',
+          padding: 'var(--space-3)',
           display: 'flex',
-          justifyContent: 'space-between',
-          fontSize: 'var(--font-size-lg)',
+          flexDirection: 'column',
+          gap: 'var(--space-1)',
         }}
       >
-        <span>Total</span>
-        <span>{formatMoney(totals.total)}</span>
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          color: 'var(--color-text-muted)',
-        }}
-      >
-        <span>Pagado</span>
-        <span>{formatMoney(paid)}</span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-        <span>{remaining > 0 ? 'Falta' : 'Vuelto'}</span>
-        <span>{formatMoney(Math.abs(remaining))}</span>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: 'var(--font-size-lg)',
+          }}
+        >
+          <span>Total</span>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(totals.total)}</span>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          <span>Pagado</span>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(paid)}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>{remaining > 0 ? 'Falta' : 'Vuelto'}</span>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(Math.abs(remaining))}</span>
+        </div>
       </div>
 
       {checkoutPaymentsSignal.value.length > 0 && (
@@ -110,6 +122,7 @@ export function CheckoutScreen() {
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--font-size-lg)',
           padding: 'var(--space-3)',
+          borderRadius: 'var(--radius-md)',
           border: '1px solid var(--color-border)',
           background: 'var(--color-bg)',
           color: 'var(--color-text)',

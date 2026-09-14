@@ -31,6 +31,34 @@ describe('parseCommandBar', () => {
     });
   });
 
+  describe('recargo/descuento global (<signo><número>%, RF-03)', () => {
+    it('signo + confirma recargo o descuento', () => {
+      expect(live('+10%')).toEqual({ kind: 'global-adjustment', percentage: 10 });
+      expect(live('-10%')).toEqual({ kind: 'global-adjustment', percentage: -10 });
+    });
+
+    it('acepta coma como separador decimal', () => {
+      expect(live('+12,5%')).toEqual({ kind: 'global-adjustment', percentage: 12.5 });
+    });
+
+    it('"0%" sin signo cancela cualquier ajuste', () => {
+      expect(live('0%')).toEqual({ kind: 'global-adjustment', percentage: 0 });
+    });
+
+    it('una magnitud distinta de cero sin signo no es un comando (sigue a búsqueda)', () => {
+      expect(live('50%')).toEqual({ kind: 'search', query: '50%', qty: 1 });
+    });
+
+    it('mientras se tipea el signo y los dígitos, sin "%" todavía, es "typing"', () => {
+      expect(live('+10')).toEqual({ kind: 'typing' });
+      expect(live('-10')).toEqual({ kind: 'typing' });
+    });
+
+    it('al confirmar (Enter) sin el "%", es un error de parseo', () => {
+      expect(enter('+10').kind).toBe('parse-error');
+    });
+  });
+
   describe('regla 3: línea libre ($)', () => {
     it('todo antes del último $ es la descripción, lo que sigue el monto', () => {
       expect(live('reparación varios$3000')).toEqual({
