@@ -44,6 +44,14 @@ const amountCellStyle = {
   paddingLeft: 'var(--space-6)',
 };
 
+/** Label chico en mayúsculas — mismo estilo arriba de Cliente y de Totales. */
+const sectionLabelStyle = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-muted)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '.04em',
+};
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -61,22 +69,37 @@ function lineCode(line: SaleLine): string | undefined {
 
 /**
  * Siempre visible, con o sin cliente adjunto — "Consumidor Final" es el
- * default (antes no se mostraba nada). Documento/teléfono, mismos campos
- * que ya se muestran en la fila del overlay de búsqueda de `@` (issue
- * #21) — nada nuevo que agregar al dominio. Tamaño fijo (`cart-view.css`)
- * para que la tarjeta no cambie de alto según cuántos de esos campos
- * tenga el cliente adjunto.
+ * default (antes no se mostraba nada), en cursiva para distinguirlo de un
+ * cliente real (mismo criterio que la fila del overlay de "@", issue de
+ * Ciclo 7 que arregla poder desadjuntar). Documento/teléfono, mismos
+ * campos que ya se muestran en el overlay de búsqueda (#21) — nada nuevo
+ * en el dominio.
+ *
+ * Siempre 4 filas (label, nombre, documento, teléfono) — documento/
+ * teléfono muestran su etiqueta+valor si están, o quedan en blanco (mismo
+ * alto reservado, nunca se ocultan) si no: la posición de cada dato no se
+ * mueve según qué tenga el cliente adjunto. Tamaño fijo (`cart-view.css`)
+ * además, por las mismas razón.
  */
 function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Element {
   return (
     <div class="cart-view__customer" style={cardStyle}>
-      <div style={{ fontWeight: 'bold' }}>{customer?.name ?? 'Consumidor Final'}</div>
-      {customer?.document !== undefined && (
-        <div style={{ color: 'var(--color-text-muted)' }}>Doc: {customer.document}</div>
-      )}
-      {customer?.phone !== undefined && (
-        <div style={{ color: 'var(--color-text-muted)' }}>Tel: {customer.phone}</div>
-      )}
+      <div style={sectionLabelStyle}>Cliente</div>
+      <div
+        style={{
+          fontWeight: 'bold',
+          fontSize: 'var(--font-size-lg)',
+          fontStyle: customer === undefined ? 'italic' : 'normal',
+        }}
+      >
+        {customer?.name ?? 'Consumidor Final'}
+      </div>
+      <div style={{ color: 'var(--color-text-muted)' }}>
+        {customer?.document !== undefined ? `Doc: ${customer.document}` : ' '}
+      </div>
+      <div style={{ color: 'var(--color-text-muted)' }}>
+        {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
+      </div>
     </div>
   );
 }
@@ -186,6 +209,7 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
       class="cart-view__totals"
       style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
     >
+      <div style={sectionLabelStyle}>Resumen de venta</div>
       <div
         style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}
       >
@@ -196,7 +220,15 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
         <span>{adjustmentLabel}</span>
         <span style={moneyStyle}>{formatMoney(totals.globalAdjustmentAmount)}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontWeight: 'bold',
+          fontSize: 'var(--font-size-xl)',
+          marginTop: 'var(--space-2)',
+        }}
+      >
         <span>Total</span>
         <span style={moneyStyle}>{formatMoney(totals.total)}</span>
       </div>

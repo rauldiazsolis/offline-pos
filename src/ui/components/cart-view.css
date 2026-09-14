@@ -36,13 +36,13 @@
 
 /*
  * Tamaño fijo: la tarjeta de Cliente siempre se muestra (Consumidor Final
- * por default) con hasta 3 líneas (nombre, documento, teléfono) — este
- * alto mínimo alcanza para las 3 sin que la tarjeta cambie de tamaño según
- * cuántas tenga el cliente adjunto. Centrado vertical para que se vea bien
- * tanto con 1 línea como con 3.
+ * por default) con siempre 4 líneas (label, nombre, documento, teléfono —
+ * documento/teléfono quedan en blanco en vez de ocultarse cuando no están,
+ * issue de Ciclo 7 "la ubicación de cada dato no se debe mover"). El alto
+ * mínimo alcanza para las 4 sin que la tarjeta cambie de tamaño.
  */
 .cart-view__customer {
-  min-height: 5.5rem;
+  min-height: 6.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
