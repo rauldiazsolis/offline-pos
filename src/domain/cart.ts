@@ -63,7 +63,7 @@ export function addProductLine(
     lines.push({ kind: 'product', productId: product.id, qty: nextQty, unitPrice: product.price });
   }
 
-  return ok({ lines });
+  return ok({ ...cart, lines });
 }
 
 /**
@@ -92,6 +92,7 @@ export function addFreeformLine(
   }
 
   return ok({
+    ...cart,
     lines: [...cart.lines, { kind: 'freeform', description, qty, unitPrice }],
   });
 }
@@ -138,7 +139,7 @@ export function adjustFreeformLineQuantity(
   } else if (existing !== undefined) {
     lines[existingIndex] = { ...existing, qty: nextQty };
   }
-  return ok({ lines });
+  return ok({ ...cart, lines });
 }
 
 /** Quita una línea del carrito por índice (ej. tecla Supr sobre la línea seleccionada). */
@@ -148,7 +149,7 @@ export function removeLine(cart: Cart, lineIndex: number): Result<Cart> {
   }
   const lines = [...cart.lines];
   lines.splice(lineIndex, 1);
-  return ok({ lines });
+  return ok({ ...cart, lines });
 }
 
 /**
@@ -184,7 +185,7 @@ export function setLineQuantity(
 
   const lines = [...cart.lines];
   lines[lineIndex] = { ...line, qty };
-  return ok({ lines });
+  return ok({ ...cart, lines });
 }
 
 /** Aplica (o reemplaza) el descuento de una línea. */
@@ -205,7 +206,7 @@ export function applyLineDiscount(cart: Cart, lineIndex: number, discount: Disco
 
   const lines = [...cart.lines];
   lines[lineIndex] = { ...line, discount };
-  return ok({ lines });
+  return ok({ ...cart, lines });
 }
 
 /**
