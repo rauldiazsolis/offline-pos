@@ -5,6 +5,6 @@ import { signal } from '@preact/signals';
  * Ctrl+Enter), `/ANULAR` y `/CONFIG` cambian este signal; las pantallas
  * correspondientes (ver ui/screens/) lo leen para decidir qué mostrar.
  */
-export type ActiveScreen = 'sale' | 'checkout' | 'receipt' | 'void' | 'config';
+export type ActiveScreen = 'sale' | 'checkout' | 'receipt' | 'void' | 'config' | 'cash';
 
 export const activeScreenSignal = signal<ActiveScreen>('sale');

@@ -20,6 +20,30 @@ export async function getCurrentOpenCashSession(): Promise<CashSession | undefin
   return sessions.find((session) => session.closedAt === undefined);
 }
 
+/** Resuelve las `Sale[]` reales de `session.sales` y calcula el resumen (pura, `domain/cash-session.ts`). */
+async function summarize(session: CashSession): Promise<CashSessionSummary> {
+  const sales = await db.sales.bulkGet(session.sales);
+  return calculateCashSessionSummary(
+    session,
+    sales.filter((sale) => sale !== undefined),
+  );
+}
+
+/**
+ * El resumen "en vivo" del turno abierto — reusado por la pantalla de
+ * `/CAJA` mientras el turno sigue abierto (antes de decidir cerrarlo) y por
+ * `closeCashSessionAndPersist` (mismo cálculo, distinto momento).
+ */
+export async function getOpenCashSessionSummary(): Promise<
+  { session: CashSession; summary: CashSessionSummary } | undefined
+> {
+  const session = await getCurrentOpenCashSession();
+  if (session === undefined) {
+    return undefined;
+  }
+  return { session, summary: await summarize(session) };
+}
+
 /**
  * Abre un turno nuevo. Sin evento de outbox — un turno abierto no se
  * sincroniza, mismo criterio que una `Sale` con `status: 'open'` (ver
@@ -68,12 +92,7 @@ export async function closeCashSessionAndPersist(params: {
     return closeResult;
   }
   const closed = closeResult.value;
-
-  const sales = await db.sales.bulkGet(closed.sales);
-  const summary = calculateCashSessionSummary(
-    closed,
-    sales.filter((sale) => sale !== undefined),
-  );
+  const summary = await summarize(closed);
 
   try {
     await db.transaction('rw', db.cashSessions, db.outbox, async () => {
