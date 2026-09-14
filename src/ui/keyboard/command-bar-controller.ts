@@ -10,8 +10,10 @@ import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
 import type { SaleLine } from '../../domain/sale.ts';
-import type { CustomerSearchResult } from '../../domain/customer-search.ts';
-import { createCustomerLocally, loadCustomerRepository } from '../../storage/customer-repository.ts';
+import {
+  createCustomerLocally,
+  loadCustomerRepository,
+} from '../../storage/customer-repository.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
@@ -24,6 +26,7 @@ import {
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
+  type CustomerOrClear,
   type UnifiedSearchResult,
 } from '../state/command-bar.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
@@ -118,8 +121,8 @@ function identityOfSearchResult(result: UnifiedSearchResult): string {
     : `freeform:${result.description}`;
 }
 
-function identityOfCustomerResult(result: CustomerSearchResult): string {
-  return result.customer.id;
+function identityOfCustomerResult(result: CustomerOrClear): string {
+  return result.kind === 'clear' ? '__clear__' : result.result.customer.id;
 }
 
 /**
@@ -177,7 +180,10 @@ async function addByProduct(product: Product, qty: number): Promise<void> {
   const stock = await repo.getStock(product.id);
   const result = addProductLine(cartSignal.value, { product, stock, qty });
   if (applyCartResult(result)) {
-    selectResultingLine(result.value, (line) => line.kind === 'product' && line.productId === product.id);
+    selectResultingLine(
+      result.value,
+      (line) => line.kind === 'product' && line.productId === product.id,
+    );
     clearBuffer();
   }
 }
@@ -240,16 +246,20 @@ export function submitCommandBar(): void {
       const results = customerResultsSignal.value;
       const index = customerSelectionIndexSignal.value ?? 0;
       const selected = results[index];
-      if (selected !== undefined) {
-        attachedCustomerSignal.value = selected.customer;
-        clearBuffer();
-        return;
-      }
-      if (parsed.query.trim() === '') {
+      if (selected?.kind === 'clear') {
         resetAttachedCustomer();
         clearBuffer();
         return;
       }
+      if (selected?.kind === 'customer') {
+        attachedCustomerSignal.value = selected.result.customer;
+        clearBuffer();
+        return;
+      }
+      // selected === undefined: sin match. Con query vacía siempre hay al
+      // menos la fila "Consumidor Final" (ver customerResultsSignal), así
+      // que esto solo pasa con una query puntual sin resultados — crear un
+      // cliente nuevo (RF-16).
       trackPendingBarOperation(createAndAttachCustomer(parsed.query.trim()));
       return;
     }

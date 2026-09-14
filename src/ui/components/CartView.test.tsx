@@ -57,11 +57,42 @@ describe('CartView', () => {
   });
 
   it('con cliente adjunto sin documento/teléfono, no muestra esas líneas', () => {
-    attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' };
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana García',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
     render(<CartView />);
     expect(screen.getByText('Ana García')).not.toBeNull();
     expect(screen.queryByText(/^Doc:/)).toBeNull();
     expect(screen.queryByText(/^Tel:/)).toBeNull();
+  });
+
+  // Ciclo 7: la posición de cada dato no se mueve — siempre 4 filas
+  // (label, nombre, documento, teléfono), con o sin cliente, con o sin
+  // esos datos. Documento/teléfono quedan en blanco, no se ocultan.
+  it('la tarjeta de cliente siempre tiene la misma cantidad de filas', () => {
+    const { container: withoutCustomer } = render(<CartView />);
+    const cardWithout = withoutCustomer.querySelector('.cart-view__customer');
+
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana García',
+      document: '12345678',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { container: withCustomer } = render(<CartView />);
+    const cardWith = withCustomer.querySelector('.cart-view__customer');
+
+    expect(cardWithout?.children.length).toBe(4);
+    expect(cardWith?.children.length).toBe(cardWithout?.children.length);
+  });
+
+  it('muestra los labels "Cliente" y "Resumen de venta"', () => {
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+    render(<CartView />);
+    expect(screen.getByText('Cliente')).not.toBeNull();
+    expect(screen.getByText('Resumen de venta')).not.toBeNull();
   });
 
   it('resuelve el nombre del producto para una línea de tipo product', () => {

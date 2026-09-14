@@ -42,9 +42,23 @@ export type AccountMovement = {
   createdAt: string; // ISO 8601
 };
 
-/** Construye un `Customer` nuevo, creado localmente desde `@<nombre>`. */
-export function buildCustomer(name: string, params: { id: string; now: string }): Customer {
-  return { id: params.id, name, createdAt: params.now };
+/**
+ * Construye un `Customer` nuevo. `document`/`phone` opcionales — hoy solo
+ * los usa el sembrado de clientes de ejemplo (`storage/seed-customers.ts`,
+ * Ciclo 7); crear desde `@<nombre>` (RF-16) sigue sin pasarlos, no hay
+ * todavía ninguna UI para tipearlos ahí.
+ */
+export function buildCustomer(
+  name: string,
+  params: { id: string; now: string; document?: string; phone?: string },
+): Customer {
+  return {
+    id: params.id,
+    name,
+    ...(params.document !== undefined ? { document: params.document } : {}),
+    ...(params.phone !== undefined ? { phone: params.phone } : {}),
+    createdAt: params.now,
+  };
 }
 
 /**

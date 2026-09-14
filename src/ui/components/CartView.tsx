@@ -1,14 +1,17 @@
 import type { JSX } from 'preact';
+import { useRef } from 'preact/hooks';
 import { calculateLineTotal } from '../../domain/totals.ts';
 import type { Customer } from '../../domain/customer.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { formatMoney } from '../format.ts';
+import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import './cart-view.css';
 
 const cardStyle = {
@@ -44,6 +47,14 @@ const amountCellStyle = {
   paddingLeft: 'var(--space-6)',
 };
 
+/** Label chico en mayúsculas — mismo estilo arriba de Cliente y de Totales. */
+const sectionLabelStyle = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-muted)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '.04em',
+};
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -61,22 +72,37 @@ function lineCode(line: SaleLine): string | undefined {
 
 /**
  * Siempre visible, con o sin cliente adjunto — "Consumidor Final" es el
- * default (antes no se mostraba nada). Documento/teléfono, mismos campos
- * que ya se muestran en la fila del overlay de búsqueda de `@` (issue
- * #21) — nada nuevo que agregar al dominio. Tamaño fijo (`cart-view.css`)
- * para que la tarjeta no cambie de alto según cuántos de esos campos
- * tenga el cliente adjunto.
+ * default (antes no se mostraba nada), en cursiva para distinguirlo de un
+ * cliente real (mismo criterio que la fila del overlay de "@", issue de
+ * Ciclo 7 que arregla poder desadjuntar). Documento/teléfono, mismos
+ * campos que ya se muestran en el overlay de búsqueda (#21) — nada nuevo
+ * en el dominio.
+ *
+ * Siempre 4 filas (label, nombre, documento, teléfono) — documento/
+ * teléfono muestran su etiqueta+valor si están, o quedan en blanco (mismo
+ * alto reservado, nunca se ocultan) si no: la posición de cada dato no se
+ * mueve según qué tenga el cliente adjunto. Tamaño fijo (`cart-view.css`)
+ * además, por las mismas razón.
  */
 function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Element {
   return (
     <div class="cart-view__customer" style={cardStyle}>
-      <div style={{ fontWeight: 'bold' }}>{customer?.name ?? 'Consumidor Final'}</div>
-      {customer?.document !== undefined && (
-        <div style={{ color: 'var(--color-text-muted)' }}>Doc: {customer.document}</div>
-      )}
-      {customer?.phone !== undefined && (
-        <div style={{ color: 'var(--color-text-muted)' }}>Tel: {customer.phone}</div>
-      )}
+      <div style={sectionLabelStyle}>Cliente</div>
+      <div
+        style={{
+          fontWeight: 'bold',
+          fontSize: 'var(--font-size-lg)',
+          fontStyle: customer === undefined ? 'italic' : 'normal',
+        }}
+      >
+        {customer?.name ?? 'Consumidor Final'}
+      </div>
+      <div style={{ color: 'var(--color-text-muted)' }}>
+        {customer?.document !== undefined ? `Doc: ${customer.document}` : ' '}
+      </div>
+      <div style={{ color: 'var(--color-text-muted)' }}>
+        {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
+      </div>
     </div>
   );
 }
@@ -88,7 +114,13 @@ function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Ele
  * El `<thead>` sticky (`cart-view.css`) necesita que este sea el contenedor
  * de scroll real, no un ancestro más arriba.
  */
-function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex: number | null }): JSX.Element {
+function CartTable({
+  lines,
+  selectedIndex,
+}: {
+  lines: SaleLine[];
+  selectedIndex: number | null;
+}): JSX.Element {
   // Issue #26: mantiene visible la fila seleccionada al navegar con
   // flechas (o al quedar seleccionada tras agregar/ajustar/borrar, issue
   // #15) — sin esto la selección se movía igual, pero podía quedar
@@ -128,7 +160,9 @@ function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex:
             <tr
               key={index}
               ref={rowRef(index)}
-              style={{ background: index === selectedIndex ? 'var(--color-surface)' : 'transparent' }}
+              style={{
+                background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+              }}
             >
               <td style={bodyCellStyle}>{line.qty}</td>
               <td style={bodyCellStyle}>
@@ -186,8 +220,13 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
       class="cart-view__totals"
       style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
     >
+      <div style={sectionLabelStyle}>Resumen de venta</div>
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: 'var(--color-text-muted)',
+        }}
       >
         <span>Subtotal</span>
         <span style={moneyStyle}>{formatMoney(netSubtotal)}</span>
@@ -196,7 +235,16 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
         <span>{adjustmentLabel}</span>
         <span style={moneyStyle}>{formatMoney(totals.globalAdjustmentAmount)}</span>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          fontWeight: 'bold',
+          fontSize: 'var(--font-size-xl)',
+          marginTop: 'var(--space-2)',
+        }}
+      >
         <span>Total</span>
         <span style={moneyStyle}>{formatMoney(totals.total)}</span>
       </div>
@@ -218,11 +266,20 @@ export function CartView(): JSX.Element {
   const totals = calculateTotals(cart);
   const customer = attachedCustomerSignal.value;
 
+  // El indicador de scroll pasivo va en el wrapper (".cart-view__scroll"),
+  // no en el elemento que scrollea (".cart-view__scroll-inner") — si no,
+  // scrollearía con el contenido en vez de quedar fijo en el borde.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollThumb = useScrollIndicator(scrollRef);
+
   return (
     <div class="cart-view">
       <CustomerCard customer={customer} />
       <div class="cart-view__scroll">
-        <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
+        <div class="cart-view__scroll-inner" ref={scrollRef}>
+          <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
+        </div>
+        <ScrollIndicatorBar thumb={scrollThumb} variant="light" />
       </div>
       {cart.lines.length > 0 && <TotalsCard cart={cart} totals={totals} />}
     </div>

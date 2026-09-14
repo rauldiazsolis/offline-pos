@@ -2,6 +2,7 @@ import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { loadDraftCart } from '../storage/draft-cart-repository.ts';
 import { seedCatalogIfEmpty } from '../storage/seed-catalog.ts';
+import { seedCustomersIfEmpty } from '../storage/seed-customers.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCatalogRepository } from './state/catalog.ts';
@@ -24,6 +25,14 @@ export async function bootstrap(): Promise<void> {
 
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
+
+  // A diferencia del catálogo, no es fatal: son clientes de ejemplo (con
+  // documento/teléfono, para poder mostrarlos — hoy no hay ninguna UI para
+  // tipearlos), no algo de lo que dependa poder vender.
+  const customerSeedResult = await seedCustomersIfEmpty({ now: new Date().toISOString() });
+  if (!customerSeedResult.ok) {
+    console.error('No se pudieron sembrar los clientes de ejemplo:', customerSeedResult.error);
+  }
 
   setCustomerRepository(await loadCustomerRepository());
 

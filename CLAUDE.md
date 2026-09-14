@@ -251,7 +251,14 @@ devuelve esta unión (`UnifiedSearchResult`, línea libre | producto), no solo `
 **Cliente sin tipear nada (`@` solo)**: a diferencia de la búsqueda de artículos, `@` sin texto
 muestra los clientes más recientes (`CustomerRepository.listRecent()`) en vez de una lista vacía
 esperando que se tipee algo — no tiene sentido hacer esperar texto para algo tan frecuente como
-adjuntar el último cliente atendido.
+adjuntar el último cliente atendido. La primera fila de esa lista siempre es "Consumidor Final"
+(`ui/state/command-bar.ts::CustomerOrClear`, tipo `{ kind: 'clear' }`) — es la forma de desadjuntar
+el cliente actual. Antes era un caso especial ("@" vacío + Enter sin nada seleccionado), pero desde
+que la query vacía muestra clientes recientes ese caso especial dejó de dispararse (la lista ya no
+está vacía) — un bug real reportado por el usuario: no había forma de sacar un cliente adjunto.
+Ponerlo como fila de la lista (idea del propio usuario) lo resuelve de raíz y es más discoverable.
+Con una query puntual (buscando/creando un cliente específico) no aparece — no tiene sentido
+mezclarlo con el flujo de crear un cliente nuevo.
 
 **Formato de precio × cantidad en la fila de producto**: `<unitario>` resaltado (contraste
 completo + negrita) con cantidad 1; `<unitario> x <cantidad> = <total>` con la parte
@@ -279,6 +286,18 @@ resetea el menú de comandos a `null` en cada tecla (ejecutar el comando equivoc
 tiene consecuencias reales) y reindexa por identidad la búsqueda de producto/línea libre y de
 cliente — si el ítem que estaba seleccionado sigue presente en la lista filtrada nueva, se lo sigue
 apuntando aunque haya cambiado de posición; si no, `null`.
+
+**Scrollbar nativa oculta, indicador propio puramente informativo**: el carrito y los tres
+overlays de `CommandBarInput` ocultan la scrollbar nativa (`scrollbar-width: none` +
+`::-webkit-scrollbar { display: none }`) y en su lugar muestran `ScrollIndicatorBar`
+(`ui/components/`, alimentado por `useScrollIndicator`, `ui/hooks/`) — una barra angosta,
+`pointer-events: none` (nunca accionable, en ningún caso, ni click ni drag), que refleja la
+proporción visible/oculta como una scrollbar normal. El wheel y el autoscroll nativo por click en
+la ruedita del mouse no dependen de que la scrollbar sea visible, siguen andando igual. Reemplaza
+el alcance original de la issue #34 (drag táctil + indicador de fade) — se decidió acotarlo a esto
+al ver la complejidad real de lo otro (manejar mousedown/mousemove sin romper el click de
+selección, ocultar la scrollbar entre navegadores con propiedades distintas, mantener wheel/
+middle-click-drag, diseñar el fade).
 
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/ANULAR`, `/CONFIG` (configura la
 conexión con el sistema externo, runtime vía `localStorage` — no hay variables de entorno ni
@@ -345,11 +364,9 @@ Una ronda más de mejoras (ciclo post-Fase 4, ver "Estado del proyecto"):
   de diseño visual había descartado explícitamente el sidebar ("pulido visual, no rediseño de
   layout"); el usuario decidió revisitarla tras usar la app más a fondo. `@media (min-width: 900px)`
   en `cart-view.css` pasa Cliente/Total a una columna fija de 320px a la derecha (Cliente arriba,
-  Total abajo, ambos fijos — mismo criterio de scroll que el layout angosto). Grid (no flex) para
-  esto: la tabla necesita ocupar dos filas de una columna mientras Cliente/Total ocupan una fila
-  cada uno de la otra, algo que flex no expresa sin un contenedor extra — por eso el layout angosto
-  sigue siendo flex (`cart-view.css` lo explica: con grid, un hijo condicional ausente como Cliente
-  sin cliente adjunto deja un "gap" fantasma entre tracks de la plantilla; con flex, no).
+  Total abajo, ambos fijos — mismo criterio de scroll que el layout angosto), en un momento donde
+  todavía convivía con un layout angosto en flex aparte. **Superado en el Ciclo 7**: ver más abajo
+  — el layout angosto se abandonó por completo, y el ancho fijo de 320px pasó a ser proporcional.
 
 Ciclo 5: **la caja de totales siempre muestra Subtotal, Descuento y Total** — antes, una sola fila
 condicional ("Recargo/Descuento global") aparecía solo si había un ajuste aplicado, así que la caja
@@ -376,6 +393,26 @@ Ciclo 6:
   parcialmente oculto. `scroll-margin-top`/`scroll-margin` en las filas/ítems, igual al espacio que
   hay que reservar (`--cart-table-head-h` para el carrito, `var(--space-2)` para los overlays —
   mismo valor que ya usa cada uno para su propio padding/alto), resuelve los dos casos.
+
+Ciclo 7:
+- **Layout único, se abandona el diseño angosto**: decisión explícita del usuario — el enfoque de
+  comandos ya asume teclado, no vale la pena mantener una versión mobile-friendly. La grilla de dos
+  columnas (antes solo ≥900px) pasa a ser la única, siempre; `grid-template-columns` pasa de
+  `1fr 320px` a `2fr 1fr` (productos siempre el doble de ancho que Cliente/Total, proporcional en
+  vez de fijo en píxeles). La fila de Total (`--font-size-xl`) tiene `flexWrap` para no
+  superponerse en un ancho muy chico — no es un intento de que se vea bien angosto, solo evita que
+  se vea roto.
+- **Tarjetas de Cliente y Totales rediseñadas** sobre una referencia que compartió el usuario:
+  label chico en mayúsculas arriba de cada una ("CLIENTE" / "RESUMEN DE VENTA",
+  `sectionLabelStyle` compartido), nombre del cliente en cursiva cuando es "Consumidor Final",
+  Total bastante más grande que el resto. `CustomerCard` tiene siempre 4 filas fijas (label,
+  nombre, documento, teléfono) — documento/teléfono en blanco en vez de ocultarse cuando no están:
+  la posición de cada dato no se mueve según qué tenga el cliente adjunto.
+- **Clientes de ejemplo con documento/teléfono**: no hay ninguna UI para tipearlos al crear un
+  cliente (solo `@<nombre>`), así que ningún cliente local los tenía para mostrar en las tarjetas
+  rediseñadas. `storage/seed-customers.ts::seedCustomersIfEmpty` (mismo patrón que
+  `seedCatalogIfEmpty`, pero no fatal si falla — son datos de ejemplo, no algo de lo que dependa
+  poder vender).
 
 ## Testing
 
@@ -518,6 +555,20 @@ rastro.
   qué índice quedó la línea resultante, issue #15) — la firma `result is { ok: true; value: Cart }`
   deja que TypeScript lo sepa después de un `if (applyCartResult(result))`, sin repetir `result.ok`
   a mano en cada caller.
+- **Una unión para "esto o la opción especial de vaciar", no un caso aparte**: `CustomerOrClear`
+  (`ui/state/command-bar.ts`, Ciclo 7) es el mismo patrón que `UnifiedSearchResult` (Ciclo 4) —
+  "Consumidor Final" es una fila más de la lista (`{ kind: 'clear' }`), no un `if` especial fuera de
+  ella. Evitar un caso especial fue justo lo que resolvió el bug real de no poder desadjuntar un
+  cliente: un caso especial que dejó de dispararse en silencio cuando cambió una condición en otro
+  lado (la lista dejó de estar vacía) es más fácil de romper sin darse cuenta que una fila que
+  siempre está ahí.
+- **Otro hook reusado en las mismas listas, siguiendo el patrón ya establecido**:
+  `useScrollIndicator` (`ui/hooks/`, Ciclo 7) es análogo a `useScrollSelectedIntoView` — no sabe
+  nada de carrito ni de overlays, solo escucha `scroll`/`ResizeObserver` sobre un elemento. El
+  componente presentacional que lo consume (`ScrollIndicatorBar`) es deliberadamente
+  `pointer-events: none` — puramente informativo, para no repetir el error de construir algo que
+  "parece" un control pero no lo es. jsdom tampoco implementa `ResizeObserver` — mismo criterio que
+  `scrollIntoView`, stub global en `src/test/setup.ts`.
 
 ## Estado del proyecto
 
@@ -576,6 +627,13 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   pantallas anchas en vez de pegado abajo de todo — ver "Diseño visual" más arriba para el detalle.
   Ocultar la scrollbar del carrito + drag táctil + indicador de fade se discutió y quedó separado
   (#34): es una feature de interacción nueva, no una corrección de este tamaño.
+- Ciclo 7, sobre feedback del usuario tras usar el Ciclo 6: "Consumidor Final" como fila
+  seleccionable de la lista de `@` — arregla el bug real de no poder desadjuntar un cliente (ver
+  "UX keyboard-first"); tarjetas de Cliente/Totales rediseñadas con labels y posiciones fijas;
+  clientes de ejemplo sembrados con documento/teléfono; layout único (se abandona el diseño
+  angosto por completo) con división 2/3–1/3; indicador de scroll pasivo en el carrito y los tres
+  overlays, reemplazando el alcance de #34 (que se acotó al ver la complejidad real del drag
+  táctil) — ver "Diseño visual" y "Patrones establecidos" más arriba para el detalle.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
@@ -585,12 +643,13 @@ cerrada de forma síncrona (debería ser una notificación asíncrona aparte). A
 para trabajar, revisar si tiene esta etiqueta.
 
 **Issues abiertas sin agendar todavía** (no `backlog`): #23 (detectar entrada de scanner por
-velocidad de tecleo — spike aparte, necesita calibrar un umbral con un lector real o, al menos, un
-test que simule esa velocidad vía paste+Enter), #24 (usar el espacio de la barra de comandos
-también para instrucciones mínimas de uso — sin specs todavía), #28 (Esc con un desplegable
-abierto lo cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estado propio de
-"abierto/cerrado", se deriva del buffer parseado), #34 (ocultar la scrollbar del carrito, drag
-táctil, indicador de fade — separado del Ciclo 6 a propósito por su tamaño).
+velocidad de tecleo — spike aparte, ahora se puede probar sin lector real vía paste+Enter <300ms,
+pero sigue necesitando calibrar el umbral), #24 (usar el espacio de la barra de comandos también
+para instrucciones mínimas de uso — sin specs todavía), #28 (Esc con un desplegable abierto lo
+cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estado propio de
+"abierto/cerrado", se deriva del buffer parseado), #36 (comando para resetear los datos "de
+fábrica", con las confirmaciones necesarias — sin definir cuántos pasos de confirmación), #37
+(falta UI para crear/editar documento/teléfono de un cliente — sin definir cómo).
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
