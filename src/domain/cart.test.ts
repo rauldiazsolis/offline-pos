@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addFreeformLine,
   addProductLine,
+  adjustFreeformLineQuantity,
   applyLineDiscount,
   removeLine,
   setGlobalAdjustment,
@@ -123,6 +124,7 @@ describe('addFreeformLine', () => {
     const result = addFreeformLine(emptyCart, {
       description: 'Reparación varios',
       unitPrice: 3000,
+      qty: 1,
     });
 
     expect(result.ok).toBe(true);
@@ -133,12 +135,23 @@ describe('addFreeformLine', () => {
     }
   });
 
+  it('el prefijo de cantidad multiplica el precio unitario', () => {
+    const result = addFreeformLine(emptyCart, { description: 'Regalo', unitPrice: 100, qty: 3 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.lines).toEqual([
+        { kind: 'freeform', description: 'Regalo', qty: 3, unitPrice: 100 },
+      ]);
+    }
+  });
+
   it('no fusiona dos líneas libres con la misma descripción', () => {
-    const first = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 500 });
+    const first = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 500, qty: 1 });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
 
-    const second = addFreeformLine(first.value, { description: 'Envío', unitPrice: 500 });
+    const second = addFreeformLine(first.value, { description: 'Envío', unitPrice: 500, qty: 1 });
     expect(second.ok).toBe(true);
     if (second.ok) {
       expect(second.value.lines).toHaveLength(2);
@@ -146,7 +159,7 @@ describe('addFreeformLine', () => {
   });
 
   it('rechaza descripción vacía', () => {
-    const result = addFreeformLine(emptyCart, { description: '  ', unitPrice: 100 });
+    const result = addFreeformLine(emptyCart, { description: '  ', unitPrice: 100, qty: 1 });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -156,11 +169,86 @@ describe('addFreeformLine', () => {
   });
 
   it('rechaza un monto no positivo', () => {
-    const result = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 0 });
+    const result = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 0, qty: 1 });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.meta).toEqual({ field: 'unitPrice' });
+    }
+  });
+
+  it('rechaza qty no positivo — crear no fusiona, así que no hay nada previo de qué restar', () => {
+    const result = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 500, qty: -2 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('cart/invalid-freeform-line');
+      expect(result.meta).toEqual({ field: 'qty' });
+    }
+  });
+});
+
+describe('adjustFreeformLineQuantity', () => {
+  const cartWithFreeform: Cart = {
+    lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+  };
+
+  it('suma a la línea existente identificada por descripción exacta', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Regalo', qty: 3 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.lines).toEqual([
+        { kind: 'freeform', description: 'Regalo', qty: 5, unitPrice: 100 },
+      ]);
+    }
+  });
+
+  it('resta de la línea existente', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Regalo', qty: -1 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.lines).toEqual([
+        { kind: 'freeform', description: 'Regalo', qty: 1, unitPrice: 100 },
+      ]);
+    }
+  });
+
+  it('borra la línea si la resta llega a 0', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Regalo', qty: -2 });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.lines).toEqual([]);
+    }
+  });
+
+  it('rechaza si no hay ninguna línea con esa descripción exacta', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Otra cosa', qty: 1 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('cart/freeform-line-not-found');
+      expect(result.meta).toEqual({ description: 'Otra cosa' });
+    }
+  });
+
+  it('rechaza si el resultado sería negativo', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Regalo', qty: -5 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('cart/invalid-quantity');
+    }
+  });
+
+  it('un match parcial (no exacto) no cuenta como identidad', () => {
+    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Rega', qty: 1 });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('cart/freeform-line-not-found');
     }
   });
 });

@@ -192,6 +192,7 @@ export function submitCommandBar(): void {
           addFreeformLine(cartSignal.value, {
             description: parsed.description,
             unitPrice: parsed.amount,
+            qty: parsed.qty,
           }),
         )
       ) {

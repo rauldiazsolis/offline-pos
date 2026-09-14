@@ -12,7 +12,7 @@ export type ParsedCommand =
   | { kind: 'command'; name: string; args: string[] } // '/', name === '' cuando el buffer es solo '/'
   | { kind: 'customer'; query: string } // '@', identificación de cliente (RF-16) — sin ambigüedad que resolver con finalizing
   | { kind: 'global-adjustment'; percentage: number } // '<signo><número>%', recargo/descuento sobre el total (RF-03)
-  | { kind: 'freeform-line'; description: string; amount: number }
+  | { kind: 'freeform-line'; description: string; amount: number; qty: number }
   | { kind: 'pending-numeric' } // solo dígitos, ambiguo cantidad-vs-código: no dispara búsqueda aún
   | { kind: 'barcode'; code: string; qty: number }
   | { kind: 'search'; query: string; qty: number }
@@ -61,20 +61,10 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
     return { kind: 'typing' };
   }
 
-  const dollarIndex = buffer.lastIndexOf('$');
-  if (dollarIndex !== -1) {
-    const description = buffer.slice(0, dollarIndex).trim();
-    const amount = parseAmount(buffer.slice(dollarIndex + 1));
-
-    if (amount !== undefined && description !== '') {
-      return { kind: 'freeform-line', description, amount };
-    }
-    if (finalizing) {
-      return { kind: 'parse-error', message: 'Línea libre inválida: usá "descripción$monto"' };
-    }
-    return { kind: 'typing' };
-  }
-
+  // El prefijo de cantidad se resuelve antes que la línea libre y que
+  // código/búsqueda — regla 4 aplica "antes de cualquier búsqueda", y una
+  // línea libre también cuenta: "3*regalo$100" es 3 unidades a $100 c/u
+  // ($300), no la descripción literal "3*regalo".
   const quantityMatch = /^(-?\d+)\*(.*)$/.exec(buffer);
   const qty = quantityMatch ? Number.parseInt(quantityMatch[1] ?? '1', 10) : 1;
   const rest = quantityMatch ? (quantityMatch[2] ?? '') : buffer;
@@ -85,6 +75,20 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
         kind: 'parse-error',
         message: 'Falta el código o la búsqueda después de la cantidad',
       };
+    }
+    return { kind: 'typing' };
+  }
+
+  const dollarIndex = rest.lastIndexOf('$');
+  if (dollarIndex !== -1) {
+    const description = rest.slice(0, dollarIndex).trim();
+    const amount = parseAmount(rest.slice(dollarIndex + 1));
+
+    if (amount !== undefined && description !== '') {
+      return { kind: 'freeform-line', description, amount, qty };
+    }
+    if (finalizing) {
+      return { kind: 'parse-error', message: 'Línea libre inválida: usá "descripción$monto"' };
     }
     return { kind: 'typing' };
   }

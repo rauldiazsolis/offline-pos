@@ -65,6 +65,7 @@ describe('parseCommandBar', () => {
         kind: 'freeform-line',
         description: 'reparación varios',
         amount: 3000,
+        qty: 1,
       });
     });
 
@@ -73,6 +74,7 @@ describe('parseCommandBar', () => {
         kind: 'freeform-line',
         description: 'combo $5 +',
         amount: 200,
+        qty: 1,
       });
     });
 
@@ -81,6 +83,7 @@ describe('parseCommandBar', () => {
         kind: 'freeform-line',
         description: 'envío',
         amount: 1500.5,
+        qty: 1,
       });
     });
 
@@ -95,6 +98,24 @@ describe('parseCommandBar', () => {
 
     it('descripción vacía es inválida al confirmar', () => {
       expect(enter('$100').kind).toBe('parse-error');
+    });
+
+    it('el prefijo de cantidad multiplica el precio unitario de una línea libre', () => {
+      expect(live('3*regalo$100')).toEqual({
+        kind: 'freeform-line',
+        description: 'regalo',
+        amount: 100,
+        qty: 3,
+      });
+    });
+
+    it('también acepta cantidad negativa a nivel de sintaxis (la identidad se resuelve en el dominio)', () => {
+      expect(live('-2*regalo$100')).toEqual({
+        kind: 'freeform-line',
+        description: 'regalo',
+        amount: 100,
+        qty: -2,
+      });
     });
   });
 
