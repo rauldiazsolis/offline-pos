@@ -83,9 +83,13 @@
  * punto de partida (tablet apaisada/notebook chica) — un solo valor, fácil
  * de ajustar si no da bien.
  *
- * `align-self: end` en Total: la fila de Total comparte el track `1fr` con
- * la tabla (para que esta ocupe todo el alto), así que sin esto la tarjeta
- * se estiraría para llenar ese espacio en vez de quedar pegada abajo.
+ * `align-self: start` en Total: la fila de Total comparte el track `1fr`
+ * con la tabla (para que esta ocupe todo el alto) — sin ningún
+ * `align-self`, la tarjeta se estiraría para llenar ese espacio entero.
+ * `start` la deja pegada justo debajo de Cliente, con el espacio que sobra
+ * abajo de todo (antes era `end`, que dejaba el espacio vacío *entre*
+ * Cliente y Total — reportado por el usuario: quería
+ * "[cliente][totales][blanco]", no "[cliente][blanco][totales]").
  */
 @media (min-width: 900px) {
   .cart-view {
@@ -107,6 +111,6 @@
 
   .cart-view__totals {
     grid-area: totals;
-    align-self: end;
+    align-self: start;
   }
 }
