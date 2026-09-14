@@ -1,5 +1,5 @@
 import type { TargetedKeyboardEvent } from 'preact';
-import { calculateLineTotal } from '../../domain/totals.ts';
+import { calculateLineTotal, calculateTotals } from '../../domain/totals.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
@@ -39,6 +39,14 @@ export function ReceiptScreen() {
 
   const paid = sale.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const change = paid - sale.total;
+  // Reusa calculateTotals sobre un Cart armado con los datos ya cerrados de
+  // la venta — mismo cálculo que en el carrito, sin duplicar la fórmula.
+  const totals = calculateTotals({
+    lines: sale.lines,
+    ...(sale.globalAdjustmentPercentage !== undefined
+      ? { globalAdjustmentPercentage: sale.globalAdjustmentPercentage }
+      : {}),
+  });
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter') {
@@ -90,6 +98,16 @@ export function ReceiptScreen() {
           ))}
         </ul>
         <hr style={{ border: 'none', borderTop: '1px dashed var(--color-border)' }} />
+        {sale.globalAdjustmentPercentage !== undefined && sale.globalAdjustmentPercentage !== 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>
+              {sale.globalAdjustmentPercentage > 0 ? 'Recargo' : 'Descuento'} global (
+              {sale.globalAdjustmentPercentage > 0 ? '+' : ''}
+              {sale.globalAdjustmentPercentage}%)
+            </span>
+            <span>{formatMoney(totals.globalAdjustmentAmount)}</span>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
           <span>Total</span>
           <span>{formatMoney(sale.total)}</span>

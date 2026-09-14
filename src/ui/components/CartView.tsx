@@ -47,6 +47,23 @@ export function CartView() {
           </li>
         ))}
       </ul>
+      {cart.globalAdjustmentPercentage !== undefined && cart.globalAdjustmentPercentage !== 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: 'var(--space-1) var(--space-2)',
+            color: cart.globalAdjustmentPercentage > 0 ? 'var(--color-danger)' : 'var(--color-success)',
+          }}
+        >
+          <span>
+            {cart.globalAdjustmentPercentage > 0 ? 'Recargo' : 'Descuento'} global (
+            {cart.globalAdjustmentPercentage > 0 ? '+' : ''}
+            {cart.globalAdjustmentPercentage}%)
+          </span>
+          <span>{formatMoney(totals.globalAdjustmentAmount)}</span>
+        </div>
+      )}
       <div
         style={{
           display: 'flex',

@@ -1,4 +1,10 @@
-import { addFreeformLine, addProductLine, removeLine, setLineQuantity } from '../../domain/cart.ts';
+import {
+  addFreeformLine,
+  addProductLine,
+  removeLine,
+  setGlobalAdjustment,
+  setLineQuantity,
+} from '../../domain/cart.ts';
 import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
@@ -175,6 +181,11 @@ export function submitCommandBar(): void {
       }
       return;
     }
+    case 'global-adjustment':
+      if (applyCartResult(setGlobalAdjustment(cartSignal.value, parsed.percentage))) {
+        clearBuffer();
+      }
+      return;
     case 'freeform-line':
       if (
         applyCartResult(

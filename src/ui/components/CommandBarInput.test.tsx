@@ -291,4 +291,42 @@ describe('CommandBarInput', () => {
 
     expect(screen.getByRole('alert')).not.toBeNull();
   });
+
+  // Issue #6: recargo/descuento global sobre el total (RF-03).
+  it('"+10%" + Enter aplica un recargo del 10% sobre el total', () => {
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '+10%' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.globalAdjustmentPercentage).toBe(10);
+  });
+
+  it('"-150%" + Enter muestra error y no cambia el carrito', () => {
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '-150%' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(cartSignal.value.globalAdjustmentPercentage).toBeUndefined();
+  });
+
+  it('"0%" quita un recargo/descuento ya aplicado', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+      globalAdjustmentPercentage: 10,
+    };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '0%' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.globalAdjustmentPercentage).toBeUndefined();
+  });
 });
