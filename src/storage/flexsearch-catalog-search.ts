@@ -4,10 +4,15 @@ import type { Product } from '../domain/product.ts';
 
 /**
  * Implementación default del puerto `CatalogSearch` — búsqueda difusa por
- * nombre (regla 6 de la barra de comandos; código de barras/SKU son match
- * exacto y se resuelven aparte, ver `catalog-repository.ts`). Se indexa una
- * sola vez al construirse: el catálogo es estático en Fase 1, reindexar en
- * vivo queda para cuando el pull de Fase 2 lo justifique.
+ * nombre **y por SKU** (regla 6 de la barra de comandos; código de barras es
+ * match exacto y se resuelve aparte, ver `catalog-repository.ts`). Se indexa
+ * una sola vez al construirse: el catálogo es estático en Fase 1, reindexar
+ * en vivo queda para cuando el pull de Fase 2 lo justifique.
+ *
+ * El SKU se suma al texto indexado (issue #11): un SKU alfanumérico como
+ * "ALM-001" nunca llega a `findByBarcodeOrSku` (esa regla solo dispara con
+ * buffers 100% numéricos, ver `parse-command-bar.ts`) — sin esto, quedaba
+ * completamente sin forma de buscarlo.
  *
  * FlexSearch no expone un score de relevancia real en su API de `Index` —
  * el orden de los resultados ya viene rankeado, así que `score` se deriva
@@ -20,7 +25,7 @@ export class FlexSearchCatalogSearch implements CatalogSearch {
 
   constructor(products: Product[]) {
     for (const product of products) {
-      this.#index.add(product.id, product.name);
+      this.#index.add(product.id, `${product.name} ${product.sku}`);
       this.#productsById.set(product.id, product);
     }
   }
