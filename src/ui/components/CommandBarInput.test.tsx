@@ -16,6 +16,7 @@ import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { formatMoney } from '../format.ts';
 
 const arrozResult: CatalogSearchResult = {
   product: {
@@ -33,6 +34,16 @@ const arrozResult: CatalogSearchResult = {
 
 const anaResult: CustomerSearchResult = {
   customer: { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' },
+  score: 1,
+};
+
+const anaConDatos: CustomerSearchResult = {
+  customer: {
+    id: 'c1',
+    name: 'Ana García',
+    document: '12345678',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  },
   score: 1,
 };
 
@@ -79,6 +90,7 @@ beforeEach(async () => {
       if (query === 'multi') return [anaResult, brunoResult];
       return query.toLowerCase().includes('ana') ? [anaResult] : [];
     },
+    listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
   });
@@ -140,6 +152,53 @@ describe('CommandBarInput', () => {
 
     fireEvent.input(input, { target: { value: '$1000' } });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // Issue #21: "@" solo (sin texto) muestra los clientes recientes, no una
+  // lista vacía esperando que se tipee algo.
+  it('"@" sin texto muestra los clientes recientes', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [anaResult],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+
+    expect(screen.getByText('Ana García')).not.toBeNull();
+  });
+
+  it('"@" sin texto y sin clientes recientes no muestra ningún overlay', () => {
+    setCustomerRepository({
+      search: () => [],
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@' } });
+
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('la fila de cliente muestra documento/teléfono cuando están presentes', () => {
+    setCustomerRepository({
+      search: (query) => (query.toLowerCase().includes('ana') ? [anaConDatos] : []),
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+
+    expect(screen.getByText('12345678', { exact: false })).not.toBeNull();
   });
 
   it('"@" con match muestra resultados de cliente en vivo', () => {
@@ -314,6 +373,69 @@ describe('CommandBarInput', () => {
 
     expect(screen.getByRole('alert')).not.toBeNull();
     expect(cartSignal.value.globalAdjustmentPercentage).toBeUndefined();
+  });
+
+  // Issue #21: la fila de producto muestra SKU/precio, y el total para la
+  // cantidad tipeada con el prefijo <n>*.
+  it('la fila de producto muestra SKU y precio unitario', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: 'arroz' } });
+
+    expect(screen.getByText('SKU-1', { exact: false })).not.toBeNull();
+    expect(screen.getByText(formatMoney(100), { exact: false })).not.toBeNull();
+  });
+
+  it('con prefijo de cantidad, la fila de producto también muestra el total para esa cantidad', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '3*arroz' } });
+
+    expect(screen.getByText(formatMoney(300), { exact: false })).not.toBeNull();
+  });
+
+  // Issues #20/#21: una línea libre ya en el carrito aparece en la búsqueda
+  // de artículos (antes que el catálogo) para poder ajustarla, no crear una
+  // línea nueva.
+  it('una línea libre ya en el carrito aparece en la búsqueda con su cantidad y precio actuales', () => {
+    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: 'regalo' } });
+
+    expect(screen.getByText('Regalo', { exact: false })).not.toBeNull();
+    expect(screen.getByText(formatMoney(100), { exact: false })).not.toBeNull();
+  });
+
+  it('"<n>*descripción" (sin $) sobre una línea libre existente aumenta su cantidad, no crea una nueva', async () => {
+    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '3*regalo' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(cartSignal.value.lines).toEqual([
+        { kind: 'freeform', description: 'Regalo', qty: 5, unitPrice: 100 },
+      ]);
+    });
+  });
+
+  it('"-<n>*descripción" (sin $) sobre una línea libre existente la reduce, y la borra si llega a 0', async () => {
+    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '-2*regalo' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(cartSignal.value.lines).toEqual([]);
+    });
   });
 
   it('"0%" quita un recargo/descuento ya aplicado', () => {

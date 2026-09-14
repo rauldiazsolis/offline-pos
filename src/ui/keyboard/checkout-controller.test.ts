@@ -28,6 +28,7 @@ function setOnline(online: boolean): void {
 function fakeCustomerRepository(account: CustomerAccount | undefined): void {
   setCustomerRepository({
     search: () => [],
+    listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(account),
   });

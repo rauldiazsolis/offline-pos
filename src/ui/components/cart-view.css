@@ -1,0 +1,77 @@
+/*
+ * Issue #18: antes, Cliente/tabla/Total eran una columna flex dentro de un
+ * único contenedor con scroll — todo se movía junto, y el bloque de Total
+ * empujaba lo que hubiera debajo al cambiar de alto (aparece/desaparece el
+ * recargo/descuento global).
+ *
+ * Cliente y Total son bloques fijos (fuera del área que scrollea); solo
+ * ".cart-view__scroll" (donde vive la tabla) tiene overflow propio. Cada
+ * nivel de este árbol necesita "min-height: 0" explícito además de su
+ * tamaño flexible — sin eso, el contenido empuja el alto del contenedor en
+ * vez de activar el scroll interno (el gotcha de siempre con flex/grid
+ * anidado + scroll).
+ *
+ * Flexbox, no grid: con flex, un hijo condicional ausente (sin cliente
+ * adjunto, o carrito vacío sin bloque de Total) no deja ningún "gap"
+ * fantasma — a diferencia de grid con áreas nombradas, donde el `gap` se
+ * inserta entre los tracks de la plantilla sin importar si algo los ocupa.
+ */
+.cart-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: var(--space-3);
+}
+
+.cart-view__scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cart-view__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg);
+}
+
+/*
+ * Issue #19: Cliente/Total a la derecha en pantallas anchas — reabre a
+ * propósito la decisión de "una sola columna, sin sidebar" del primer pase
+ * de diseño visual (ver CLAUDE.md). Grid (no flex) porque necesita que la
+ * tabla ocupe dos filas de una columna mientras Cliente/Total ocupan una
+ * fila cada uno de la otra — algo que flex no puede expresar sin envolver
+ * Cliente+Total en un contenedor propio, que a su vez rompería el "sin gap
+ * fantasma" del layout angosto (ver el comentario de arriba). 900px es un
+ * punto de partida (tablet apaisada/notebook chica) — un solo valor, fácil
+ * de ajustar si no da bien.
+ *
+ * `align-self: end` en Total: la fila de Total comparte el track `1fr` con
+ * la tabla (para que esta ocupe todo el alto), así que sin esto la tarjeta
+ * se estiraría para llenar ese espacio en vez de quedar pegada abajo.
+ */
+@media (min-width: 900px) {
+  .cart-view {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'table customer'
+      'table totals';
+  }
+
+  .cart-view__customer {
+    grid-area: customer;
+  }
+
+  .cart-view__scroll {
+    grid-area: table;
+  }
+
+  .cart-view__totals {
+    grid-area: totals;
+    align-self: end;
+  }
+}

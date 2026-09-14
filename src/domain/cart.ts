@@ -67,15 +67,19 @@ export function addProductLine(
 }
 
 /**
- * Agrega una línea libre (`descripción$monto` en la barra de comandos).
- * Siempre qty 1 y siempre una línea nueva: no hay identidad de producto
- * contra la que fusionar dos líneas libres con la misma descripción.
+ * Agrega una línea libre (`descripción$monto` en la barra de comandos, con
+ * `qty` desde un prefijo de cantidad delante — `3*regalo$100` = 3 × $100).
+ * Siempre una línea nueva, nunca fusiona con una línea libre existente que
+ * tenga la misma descripción: no hay identidad de producto contra la que
+ * fusionar dos líneas libres, a diferencia de un producto por su `id`. Por
+ * eso `qty` tiene que ser positivo acá — ajustar la cantidad de una línea
+ * libre ya existente es una operación distinta, ver `adjustFreeformLineQuantity`.
  */
 export function addFreeformLine(
   cart: Cart,
-  params: { description: string; unitPrice: number },
+  params: { description: string; unitPrice: number; qty: number },
 ): Result<Cart> {
-  const { description, unitPrice } = params;
+  const { description, unitPrice, qty } = params;
 
   if (description.trim() === '') {
     return err('cart/invalid-freeform-line', { field: 'description' });
@@ -83,10 +87,58 @@ export function addFreeformLine(
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     return err('cart/invalid-freeform-line', { field: 'unitPrice' });
   }
+  if (!Number.isInteger(qty) || qty <= 0) {
+    return err('cart/invalid-freeform-line', { field: 'qty' });
+  }
 
   return ok({
-    lines: [...cart.lines, { kind: 'freeform', description, qty: 1, unitPrice }],
+    lines: [...cart.lines, { kind: 'freeform', description, qty, unitPrice }],
   });
+}
+
+function findFreeformLineIndex(cart: Cart, description: string): number {
+  return cart.lines.findIndex((line) => line.kind === 'freeform' && line.description === description);
+}
+
+/**
+ * Ajusta la cantidad de una línea libre ya existente en el carrito,
+ * identificada por coincidencia exacta de descripción — misma mecánica que
+ * `addProductLine` usa `productId` como identidad, pero sin generalizar las
+ * dos funciones: producto y línea libre son identidades distintas (mismo
+ * criterio que `CustomerSearch`/`CatalogSearch`: dos búsquedas separadas a
+ * propósito, aunque ambas usen FlexSearch por debajo). Se llega acá desde la
+ * barra de comandos cuando `<n>*descripción`/`-<n>*descripción` (sin `$`)
+ * matchea una línea libre ya tipeada en este ticket, en vez de crear una
+ * línea nueva (eso solo pasa con `descripción$monto`, ver `addFreeformLine`).
+ */
+export function adjustFreeformLineQuantity(
+  cart: Cart,
+  params: { description: string; qty: number },
+): Result<Cart> {
+  const { description, qty } = params;
+
+  if (!Number.isInteger(qty) || qty === 0) {
+    return err('cart/invalid-quantity', { quantity: qty });
+  }
+
+  const existingIndex = findFreeformLineIndex(cart, description);
+  if (existingIndex === -1) {
+    return err('cart/freeform-line-not-found', { description });
+  }
+
+  const existing = cart.lines[existingIndex];
+  const nextQty = (existing?.qty ?? 0) + qty;
+  if (nextQty < 0) {
+    return err('cart/invalid-quantity', { quantity: nextQty });
+  }
+
+  const lines = [...cart.lines];
+  if (nextQty === 0) {
+    lines.splice(existingIndex, 1);
+  } else if (existing !== undefined) {
+    lines[existingIndex] = { ...existing, qty: nextQty };
+  }
+  return ok({ lines });
 }
 
 /** Quita una línea del carrito por índice (ej. tecla Supr sobre la línea seleccionada). */

@@ -25,6 +25,7 @@ export type ErrorMeta = {
   'cart/nothing-to-subtract': { productId: string };
   'cart/invalid-discount': { discount: Discount };
   'cart/invalid-freeform-line': { field: 'description' | 'unitPrice' | 'qty' };
+  'cart/freeform-line-not-found': { description: string };
   'cart/invalid-global-adjustment': { percentage: number };
 
   // sale.ts

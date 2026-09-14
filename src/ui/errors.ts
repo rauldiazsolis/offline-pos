@@ -17,9 +17,14 @@ export function describeError(failure: Failure): string {
     case 'cart/invalid-discount':
       return 'Descuento inválido.';
     case 'cart/invalid-freeform-line':
-      return failure.meta.field === 'description'
-        ? 'Falta la descripción de la línea libre.'
-        : 'El monto de la línea libre es inválido.';
+      if (failure.meta.field === 'description') {
+        return 'Falta la descripción de la línea libre.';
+      }
+      return failure.meta.field === 'unitPrice'
+        ? 'El monto de la línea libre es inválido.'
+        : 'La cantidad de la línea libre es inválida.';
+    case 'cart/freeform-line-not-found':
+      return `No hay ninguna línea libre "${failure.meta.description}" en el carrito.`;
     case 'cart/invalid-global-adjustment':
       return `Recargo/descuento inválido (${String(failure.meta.percentage)}%). No se puede descontar más del 100%.`;
     case 'sale/insufficient-stock':

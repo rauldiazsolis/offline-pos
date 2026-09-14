@@ -1,6 +1,7 @@
 import {
   addFreeformLine,
   addProductLine,
+  adjustFreeformLineQuantity,
   removeLine,
   setGlobalAdjustment,
   setLineQuantity,
@@ -192,6 +193,7 @@ export function submitCommandBar(): void {
           addFreeformLine(cartSignal.value, {
             description: parsed.description,
             unitPrice: parsed.amount,
+            qty: parsed.qty,
           }),
         )
       ) {
@@ -209,7 +211,20 @@ export function submitCommandBar(): void {
         commandBarErrorSignal.value = 'No hay resultados para agregar.';
         return;
       }
-      trackPendingBarOperation(addByProduct(selected.product, parsed.qty));
+      if (selected.kind === 'freeform-line') {
+        if (
+          applyCartResult(
+            adjustFreeformLineQuantity(cartSignal.value, {
+              description: selected.description,
+              qty: parsed.qty,
+            }),
+          )
+        ) {
+          clearBuffer();
+        }
+        return;
+      }
+      trackPendingBarOperation(addByProduct(selected.result.product, parsed.qty));
     }
   }
 }

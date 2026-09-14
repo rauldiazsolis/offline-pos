@@ -1,9 +1,17 @@
 import Dexie, { type EntityTable } from 'dexie';
+import type { Cart } from '../domain/cart.ts';
 import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
+
+/**
+ * Fila única con la venta en curso (Fase de mejoras post-Fase 4, issue #17)
+ * — `id` siempre `'current'`, Dexie no tiene noción nativa de "tabla
+ * singleton". Ver `draft-cart-repository.ts`.
+ */
+export type DraftCart = { id: 'current'; cart: Cart; customer?: Customer };
 
 /**
  * Schema de IndexedDB. `outbox` (Fase 2, motor de sync) se agrega en su
@@ -23,6 +31,7 @@ class PosDatabase extends Dexie {
   customers!: EntityTable<Customer, 'id'>;
   customerAccounts!: EntityTable<CustomerAccount, 'customerId'>;
   accountMovements!: EntityTable<AccountMovement, 'id'>;
+  draftCart!: EntityTable<DraftCart, 'id'>;
 
   constructor() {
     super('offline-pos');
@@ -39,6 +48,9 @@ class PosDatabase extends Dexie {
       customers: 'id, name',
       customerAccounts: 'customerId',
       accountMovements: 'id, customerId, saleId, createdAt',
+    });
+    this.version(4).stores({
+      draftCart: 'id',
     });
   }
 }

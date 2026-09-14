@@ -147,6 +147,12 @@ si no hay `CustomerAccount` cacheada todavía, se rechaza sin inventar una con c
 hold aprobado que termina sin usarse (cobro cancelado) se libera con `'account-hold-release'`,
 best-effort, igual que documenta §6 para el vencimiento del lado del backend.
 
+**Distinto de la venta en curso (ciclo de mejoras post-Fase 4)**: `outbox` es para eventos ya
+cerrados que necesitan viajar a un backend — la venta en curso, mientras se está armando, no es
+ninguna de las dos cosas (no está cerrada, no tiene por qué sincronizarse). Su persistencia vive en
+una tabla propia (`draftCart`, ver "Patrones establecidos") con un criterio totalmente distinto:
+sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
+
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
@@ -191,10 +197,12 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
 1. `/` → modo comando, filtrado por prefijo (ver detalle abajo).
 2. `@` → búsqueda/alta de cliente.
 3. `<signo><número>%` → recargo/descuento global sobre el total (RF-03, ver detalle abajo).
-4. `cualquier cosa$monto` → línea libre de venta.
+4. `cualquier cosa$monto` → línea libre de venta (con `<n>*` de prefijo, `n` es el precio unitario
+   — ver detalle abajo).
 5. `<n>*` o `-<n>*` de prefijo → cantidad antes de cualquier búsqueda.
 6. Todo dígitos → código de barras o SKU.
-7. Cualquier otro texto → búsqueda difusa por nombre.
+7. Cualquier otro texto → búsqueda difusa por nombre **o por una línea libre ya en este ticket**
+   (ver detalle abajo).
 
 `Ctrl+Enter` = `/COBRAR` desde cualquier estado. Con la barra vacía, `↑/↓` navegan el carrito; con
 texto, navegan resultados (producto, cliente o el menú de comandos filtrado). Errores de parseo van
@@ -223,6 +231,27 @@ cualquier ajuste ya aplicado — no hay ambigüedad de dirección posible en cer
 que no sea cero **no** es un comando (cae a búsqueda difusa, mandatory sign preservado). El ajuste
 vive en `Cart.globalAdjustmentPercentage` y se recalcula en vivo en cada `calculateTotals` — agregar
 una línea después de aplicarlo actualiza el monto solo, nunca es un monto congelado.
+
+**Línea libre y su cantidad (`descripción$monto`, `<n>*descripción$monto`)**: el monto tipeado es
+siempre precio unitario, la cantidad lo multiplica — `3*regalo$100` = 3 × $100 = $300, simétrico
+con producto/código. Crear (con `$`) nunca fusiona con una línea libre existente que tenga la misma
+descripción — no hay identidad de producto contra la que fusionar dos líneas libres, a diferencia
+de un producto por su `id` (`domain/cart.ts::addFreeformLine`).
+
+**Ajustar una línea libre ya existente (`<n>*descripción`/`-<n>*descripción`, sin `$`)**: esto es
+otra cosa — sin `$` cae en la búsqueda de artículos (regla 7), que busca en **dos fuentes**
+mezcladas en una sola lista (líneas del carrito primero): las líneas libres ya tipeadas en este
+ticket que matcheen por descripción (filtro simple en memoria, no hay índice — son pocas líneas por
+carrito) y el catálogo de siempre. Elegir una línea libre de esa lista y confirmar llama
+`domain/cart.ts::adjustFreeformLineQuantity` (identidad por descripción exacta, qty positivo suma,
+negativo resta, llegar a 0 borra la línea) en vez de `addProductLine` — mismo mecanismo de
+selección/flechas de siempre, sin nada nuevo ahí. `ui/state/command-bar.ts::searchResultsSignal`
+devuelve esta unión (`UnifiedSearchResult`, línea libre | producto), no solo `CatalogSearchResult`.
+
+**Cliente sin tipear nada (`@` solo)**: a diferencia de la búsqueda de artículos, `@` sin texto
+muestra los clientes más recientes (`CustomerRepository.listRecent()`) en vez de una lista vacía
+esperando que se tipee algo — no tiene sentido hacer esperar texto para algo tan frecuente como
+adjuntar el último cliente atendido.
 
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/ANULAR`, `/CONFIG` (configura la
 conexión con el sistema externo, runtime vía `localStorage` — no hay variables de entorno ni
@@ -260,9 +289,8 @@ arriba/abajo, contenido claro en el medio** — la barra de comandos y la barra 
 tokens `--color-chrome-*` (`tokens.css`); el resto de la app (carrito, pantallas de cobro/anulación/
 comprobante/config) sigue sobre los tokens claros de siempre. No es un modo oscuro conmutable, es un
 contraste fijo tipo "consola arriba/abajo, documento en el medio". Cliente adjunto y resumen de venta
-se muestran como tarjetas (`--radius-md`, `--shadow-card`) pero en una sola columna — no hay sidebar
-ni layout en dos columnas, eso quedó descartado a propósito (pulido visual, no rediseño de layout).
-Montos en `--font-mono` con `font-variant-numeric: tabular-nums` para que alineen en columna,
+se muestran como tarjetas (`--radius-md`, `--shadow-card`). Montos en `--font-mono` con
+`font-variant-numeric: tabular-nums` para que alineen en columna,
 consistente en carrito, cobro y comprobante. Sin numeritos de atajo (`/1`, `/2`...) en el menú de
 comandos — se consideraron por la referencia y el usuario los descartó explícitamente (ensucian,
 aportan poco).
@@ -278,6 +306,23 @@ usuario:
   `min-height` no le pone un techo real al contenedor — un carrito largo hacía crecer el documento
   entero (scrollbar nativo del navegador, header/footer desplazándose con el contenido) en vez de
   quedar acotado a la pantalla con un scroll interno.
+
+Una ronda más de mejoras (ciclo post-Fase 4, ver "Estado del proyecto"):
+- **Cliente/Total son bloques fijos, solo la lista de artículos scrollea**: antes vivían en el
+  mismo flujo que la tabla dentro de un único contenedor con scroll — un carrito largo escondía el
+  encabezado de columnas, y el bloque de Total se movía cada vez que cambiaba de alto
+  (aparece/desaparece el recargo/descuento global). `CartView.tsx` restructurado en piezas
+  (`CustomerCard`/`CartTable`/`TotalsCard`) donde solo el contenedor de la tabla tiene scroll
+  propio, con `<thead>` en `position: sticky` (`cart-view.css`).
+- **Layout en dos columnas en pantallas anchas — decisión reabierta a propósito**: el primer pase
+  de diseño visual había descartado explícitamente el sidebar ("pulido visual, no rediseño de
+  layout"); el usuario decidió revisitarla tras usar la app más a fondo. `@media (min-width: 900px)`
+  en `cart-view.css` pasa Cliente/Total a una columna fija de 320px a la derecha (Cliente arriba,
+  Total abajo, ambos fijos — mismo criterio de scroll que el layout angosto). Grid (no flex) para
+  esto: la tabla necesita ocupar dos filas de una columna mientras Cliente/Total ocupan una fila
+  cada uno de la otra, algo que flex no expresa sin un contenedor extra — por eso el layout angosto
+  sigue siendo flex (`cart-view.css` lo explica: con grid, un hijo condicional ausente como Cliente
+  sin cliente adjunto deja un "gap" fantasma entre tracks de la plantilla; con flex, no).
 
 ## Testing
 
@@ -305,7 +350,7 @@ hecha verificable en CI: un test por pantalla popup, navegando solo con teclado,
 explícitamente que la barra de comandos recupera el foco al volver — no una revisión manual sin
 rastro.
 
-## Patrones establecidos en Fase 1 a 4 y el ciclo de mejoras posterior
+## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
 
 - **Puerto + adaptador para dependencias reemplazables**: cuando una librería concreta es
   intercambiable (ej. búsqueda difusa), el dominio define la interfaz (`domain/catalog-search.ts`)
@@ -392,6 +437,22 @@ rastro.
   `minHeight` fijo, siempre en el documento), esto no tiene forma de empujar el resto de la pantalla
   ni de necesitar un `maxHeight` calculado a mano: si no cabe, el propio `overflow-y: auto` del
   overlay se hace cargo.
+- **Identidad por descripción exacta, sin generalizar con `addProductLine`**:
+  `adjustFreeformLineQuantity` (`domain/cart.ts`) ajusta la cantidad de una línea libre ya existente
+  igual que `addProductLine` ajusta una de producto — pero identificada por `description` exacta en
+  vez de `productId`. No se generalizaron en una función compartida: mismo criterio que
+  `CustomerSearch`/`CatalogSearch` (dos búsquedas separadas a propósito aunque ambas usen FlexSearch
+  por debajo) — producto y línea libre son identidades distintas, forzar una abstracción común
+  encima de las dos no se justifica todavía.
+- **`effect()` de `@preact/signals` fuera de un componente, para persistir estado en cada cambio**:
+  primer uso en este código (`ui/state/persist-cart.ts`) — antes todos los signals se leían dentro
+  de componentes o `computed()`. Se usa para guardar la venta en curso en Dexie cada vez que cambia
+  (issue #17), sin debounce: a diferencia de un input de texto, `cartSignal` solo cambia una vez por
+  acción confirmada, nunca en cada tecla, así que no hay riesgo de escribir de más.
+- **Persistir "estado en curso" es distinto de encolar un evento en el outbox**: `draftCart`
+  (`storage/db.ts`, tabla propia) guarda la venta en curso para sobrevivir a un refresh/crash de
+  esta terminal — nunca viaja a ningún backend, así que no tiene `Idempotency-Key` ni pasa por
+  `sync/engine.ts`. Ver "Patrón outbox" más arriba para la distinción completa.
 
 ## Estado del proyecto
 
@@ -424,6 +485,15 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   pantalla en vez de al documento entero, el carrito pasado a `<table>` real para que las columnas de
   precio alineen entre filas, y la búsqueda difusa indexando también el SKU (antes solo encontraba
   productos por nombre) — ver "UX keyboard-first" y "Diseño visual" más arriba para el detalle.
+- Ciclo 4, tras seguir usando la app: persistencia de la venta en curso (issue #17, sobrevive
+  refresh/crash — ver "Patrón outbox" y "Patrones establecidos"), la cantidad (`<n>*`/`-<n>*`)
+  aplicada también a la línea libre y la posibilidad de ajustar una línea libre ya existente por
+  búsqueda (#20), resultados de búsqueda enriquecidos — SKU/precio/total de producto, líneas libres
+  del carrito mezcladas en la lista, clientes recientes sin tipear nada (#21), Cliente/Total fijos
+  con la lista de artículos como único sector con scroll y su header sticky (#18), layout responsive
+  de dos columnas en pantallas anchas que reabre a propósito la decisión de "una sola columna" del
+  pase de diseño anterior (#19), y `README.md` (#22) — ver "UX keyboard-first" y "Diseño visual"
+  más arriba para el detalle.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
@@ -431,6 +501,13 @@ para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock
 una venta en un POS de mostrador, y que el Connector API no debería poder "rechazar" una venta ya
 cerrada de forma síncrona (debería ser una notificación asíncrona aparte). Antes de tomar un issue
 para trabajar, revisar si tiene esta etiqueta.
+
+**Issues abiertas sin agendar todavía** (no `backlog`, candidatas a un próximo ciclo corto): #14
+(el puntero de selección de listas no se resetea al cambiar el buffer), #15 (al agregar una línea
+debería quedar seleccionada y visible en pantalla), #23 (detectar entrada de scanner por velocidad
+de tecleo — spike aparte, necesita calibrar un umbral con un lector real o, al menos, un test que
+simule esa velocidad vía paste+Enter), #24 (usar el espacio de la barra de comandos también para
+instrucciones mínimas de uso — sin specs todavía).
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
