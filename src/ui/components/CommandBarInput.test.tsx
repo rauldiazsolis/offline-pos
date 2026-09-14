@@ -397,6 +397,26 @@ describe('CommandBarInput', () => {
     expect(screen.getByText(formatMoney(300), { exact: false })).not.toBeNull();
   });
 
+  // Issue #29: <unitario> solo con cantidad 1; <unitario> x <cantidad> =
+  // <total> con cualquier otra cantidad.
+  it('con cantidad 1, no muestra el formato "x <cantidad> ="', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: 'arroz' } });
+
+    expect(screen.queryByText(/x 1 =/)).toBeNull();
+  });
+
+  it('con cantidad distinta de 1, usa el formato exacto "x <cantidad> = <total>"', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '3*arroz' } });
+
+    expect(screen.getByText(`x 3 = ${formatMoney(300)}`, { exact: false })).not.toBeNull();
+  });
+
   // Issues #20/#21: una línea libre ya en el carrito aparece en la búsqueda
   // de artículos (antes que el catálogo) para poder ajustarla, no crear una
   // línea nueva.

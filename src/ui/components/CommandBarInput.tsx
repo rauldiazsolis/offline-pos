@@ -129,6 +129,14 @@ export function CommandBarInput() {
     color: selected ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-chrome-text-muted)',
   });
 
+  // Issue #29: dentro del subtexto de precio, la parte relevante según haya
+  // o no un prefijo de cantidad se resalta con contraste completo — el
+  // resto del subtexto ya viene atenuado por `subtextStyle`.
+  const emphasisStyle = (selected: boolean): { [key: string]: string } => ({
+    color: selected ? '#ffffff' : 'var(--color-chrome-text)',
+    fontWeight: 'bold',
+  });
+
   const hasError = commandBarErrorSignal.value !== null;
   const hasCommandResults = showCommandList && commandResults.length > 0;
   // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
@@ -242,8 +250,17 @@ export function CommandBarInput() {
                   <li key={product.id} ref={searchRowRef(index)} style={rowStyle(selected)}>
                     <div>{product.name}</div>
                     <div style={subtextStyle(selected)}>
-                      {product.sku} · {formatMoney(product.price)}
-                      {qty !== 1 && ` · ${String(qty)} × = ${formatMoney(product.price * qty)}`}
+                      {product.sku} ·{' '}
+                      {qty === 1 ? (
+                        <strong style={emphasisStyle(selected)}>{formatMoney(product.price)}</strong>
+                      ) : (
+                        <>
+                          {formatMoney(product.price)}{' '}
+                          <strong style={emphasisStyle(selected)}>
+                            x {String(qty)} = {formatMoney(product.price * qty)}
+                          </strong>
+                        </>
+                      )}
                     </div>
                   </li>
                 );
