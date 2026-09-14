@@ -96,11 +96,22 @@ export function VoidSaleScreen() {
       <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Anular venta</h1>
 
       {voidConfirmingSignal.value && selectedSale ? (
-        <div>
-          <p>
-            Venta {selectedSale.id} — {formatMoney(selectedSale.total)}
+        <div
+          style={{
+            border: '1px solid var(--color-danger)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3)',
+          }}
+        >
+          <p style={{ margin: '0 0 var(--space-2)' }}>
+            Venta {selectedSale.id} —{' '}
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
+              {formatMoney(selectedSale.total)}
+            </span>
           </p>
-          <p style={{ fontWeight: 'bold' }}>¿Anular esta venta? Enter confirma, Esc cancela.</p>
+          <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>
+            ¿Anular esta venta? Enter confirma, Esc cancela.
+          </p>
         </div>
       ) : sales.length === 0 ? (
         <p style={{ color: 'var(--color-text-muted)' }}>No hay ventas cerradas para anular.</p>
@@ -112,12 +123,13 @@ export function VoidSaleScreen() {
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                padding: 'var(--space-1) var(--space-2)',
+                padding: 'var(--space-2)',
+                borderRadius: 'var(--radius-md)',
                 background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
               }}
             >
               <span>{new Date(sale.createdAt).toLocaleString()}</span>
-              <span>{formatMoney(sale.total)}</span>
+              <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(sale.total)}</span>
             </li>
           ))}
         </ul>

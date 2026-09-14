@@ -79,7 +79,19 @@ export function ReceiptScreen() {
     >
       <div
         class="receipt"
-        style={{ width: '100%', maxWidth: '360px', fontFamily: 'var(--font-mono)' }}
+        style={{
+          width: '100%',
+          maxWidth: '360px',
+          fontFamily: 'var(--font-mono)',
+          fontVariantNumeric: 'tabular-nums',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-card)',
+          padding: 'var(--space-4)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-2)',
+        }}
       >
         <h1 style={{ fontSize: 'var(--font-size-lg)', margin: 0 }}>Comprobante</h1>
         <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Venta {sale.id}</p>
@@ -132,10 +144,15 @@ export function ReceiptScreen() {
           onClick={() => {
             window.print();
           }}
+          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
         >
           Imprimir (Enter)
         </button>
-        <button type="button" onClick={continueToSale}>
+        <button
+          type="button"
+          onClick={continueToSale}
+          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
+        >
           Continuar (Esc)
         </button>
       </div>
