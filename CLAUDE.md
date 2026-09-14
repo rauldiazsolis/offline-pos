@@ -210,7 +210,11 @@ completa. A diferencia de la búsqueda de productos/clientes (donde la fila 0 se
 default y Enter sin tocar flechas ejecuta esa fila — bajo riesgo, flujo rápido), el menú de comandos
 **no preselecciona nada**: ejecutar el comando equivocado por accidente tiene consecuencias reales.
 Enter ejecuta directo solo si el filtro deja un único comando posible; con 2+ y sin haber navegado
-con ↑/↓ explícitamente, no hace nada.
+con ↑/↓ explícitamente, no hace nada. Este menú (y las listas de resultados de producto/cliente)
+se renderiza como un **overlay que se abre hacia arriba** desde el input (`position: absolute`,
+`bottom: 100%`, con `maxHeight` + `overflow-y: auto`, y solo se monta cuando hay algo que mostrar) —
+no participa del flujo normal del documento, así que nunca empuja el carrito ni cambia el scroll de
+la página al aparecer o crecer.
 
 **Recargo/descuento global (`<signo><número>%`)**: completa RF-03 (la parte "por línea" —
 `domain/cart.ts::applyLineDiscount` — existe desde Fase 1 pero nunca se conectó a ningún comando).
@@ -227,6 +231,12 @@ mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra d
 (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de comandos
 principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente contra el
 cliente adjunto con `@`.
+
+La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
+usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
+carrito, así que con el input abajo la línea recién agregada aparece pegada a donde se está
+tipeando, en vez del salto largo de atención que había con el input arriba y el carrito creciendo
+hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 
 Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
@@ -256,6 +266,18 @@ Montos en `--font-mono` con `font-variant-numeric: tabular-nums` para que alinee
 consistente en carrito, cobro y comprobante. Sin numeritos de atajo (`/1`, `/2`...) en el menú de
 comandos — se consideraron por la referencia y el usuario los descartó explícitamente (ensucian,
 aportan poco).
+
+Dos correcciones sobre la primera versión del pase de diseño, tras una revisión más a fondo del
+usuario:
+- **El carrito es un `<table>` real**, no un CSS grid por fila — con grids independientes, el ancho
+  de columna de "Precio"/"Subtotal" se calculaba por fila y no quedaba alineado entre renglones de
+  distinto largo (`CartView.tsx`). Más `padding-left` entre esas dos columnas también, para que no
+  queden pegadas (la razón de alinear montos a la derecha es justamente facilitar la lectura
+  horizontal del renglón — se pierde si no hay aire entre columnas).
+- **`height: '100svh'` + `overflow` explícito en la raíz de cada pantalla, nunca `minHeight` solo**:
+  `min-height` no le pone un techo real al contenedor — un carrito largo hacía crecer el documento
+  entero (scrollbar nativo del navegador, header/footer desplazándose con el contenido) en vez de
+  quedar acotado a la pantalla con un scroll interno.
 
 ## Testing
 
@@ -364,6 +386,12 @@ rastro.
   — evita una invariante de "nunca los dos a la vez" y el cálculo (`calculateTotals`) es una sola
   multiplicación con el signo ya resuelto. `percentage === 0` quita el campo en vez de dejarlo
   explícito, mismo criterio `exactOptionalPropertyTypes` que el resto del dominio.
+- **Un overlay que no participa del flujo, en vez de reservar espacio**: el menú de comandos y las
+  listas de resultados (`CommandBarInput.tsx`) se posicionan con `position: absolute` sobre el input
+  y solo se montan cuando hay algo que mostrar — a diferencia del enfoque anterior (un slot con
+  `minHeight` fijo, siempre en el documento), esto no tiene forma de empujar el resto de la pantalla
+  ni de necesitar un `maxHeight` calculado a mano: si no cabe, el propio `overflow-y: auto` del
+  overlay se hace cargo.
 
 ## Estado del proyecto
 
@@ -385,12 +413,24 @@ satisfechos con lo existente, sin cambios de código. **Fuera de alcance, a prop
 terminal" (§7) sigue sin implementar — no se le asignó ninguna fase y no hay modelo de dominio para
 usuarios/terminales; no asumir que existe.
 
-Entre Fase 4 y Fase 5, un ciclo de mejoras (no una fase del roadmap, tres iteraciones cortas en la
-misma rama/PR): menú de "/" filtrado por prefijo con ejecución directa sin ambigüedad y navegación
-por flechas, fix de un bug de selección (la fila 0 de resultados de producto/cliente se veía
-preseleccionada pero el primer ↓ no se notaba), el comando `<signo><número>%` de recargo/descuento
-global (completa RF-03), y un pase de diseño visual (dark chrome en barra de comandos/estado,
-carrito como tabla con SKU, tarjetas para resumen de venta — ver "Diseño visual" más arriba).
+Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones cortas por PR):
+- Menú de "/" filtrado por prefijo con ejecución directa sin ambigüedad y navegación por flechas,
+  fix de un bug de selección (la fila 0 de resultados de producto/cliente se veía preseleccionada
+  pero el primer ↓ no se notaba), el comando `<signo><número>%` de recargo/descuento global (completa
+  RF-03), y la primera versión del pase de diseño visual (dark chrome en barra de comandos/estado,
+  carrito como tabla con SKU, tarjetas para resumen de venta).
+- Una segunda ronda tras usar la app un poco más a fondo: barra de comandos movida abajo (antes
+  arriba) con el menú/resultados como overlay que se abre hacia arriba, scroll acotado a cada
+  pantalla en vez de al documento entero, el carrito pasado a `<table>` real para que las columnas de
+  precio alineen entre filas, y la búsqueda difusa indexando también el SKU (antes solo encontraba
+  productos por nombre) — ver "UX keyboard-first" y "Diseño visual" más arriba para el detalle.
+
+**Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
+grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
+para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear
+una venta en un POS de mostrador, y que el Connector API no debería poder "rechazar" una venta ya
+cerrada de forma síncrona (debería ser una notificación asíncrona aparte). Antes de tomar un issue
+para trabajar, revisar si tiene esta etiqueta.
 
 Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
 navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está

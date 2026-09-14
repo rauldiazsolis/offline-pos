@@ -18,6 +18,27 @@ const moneyStyle = {
   fontVariantNumeric: 'tabular-nums' as const,
 };
 
+const headCellStyle = {
+  textAlign: 'left' as const,
+  fontWeight: 'normal' as const,
+  padding: 'var(--space-1) var(--space-2)',
+};
+
+const bodyCellStyle = {
+  padding: 'var(--space-2)',
+  verticalAlign: 'baseline' as const,
+};
+
+// Más padding a la izquierda que a la derecha en Precio/Subtotal — separa
+// esas dos columnas entre sí y de "Producto" (issue #10: quedaban muy
+// pegadas, la razón original de alinear los montos a la derecha — que la
+// lectura horizontal del renglón sea más fácil — se perdía si no hay aire
+// entre ellas).
+const amountCellStyle = {
+  textAlign: 'right' as const,
+  paddingLeft: 'var(--space-6)',
+};
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -32,8 +53,6 @@ function lineCode(line: SaleLine): string | undefined {
   }
   return getCatalogRepository().getProduct(line.productId)?.sku;
 }
-
-const COLUMNS = '2.5rem 1fr auto auto';
 
 /**
  * Carrito en curso. La selección visual (↑/↓ con la barra de comandos
@@ -61,42 +80,37 @@ export function CartView() {
       {cart.lines.length === 0 ? (
         <p style={{ color: 'var(--color-text-muted)' }}>El carrito está vacío.</p>
       ) : (
-        <div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: COLUMNS,
-              gap: 'var(--space-3)',
-              padding: 'var(--space-1) var(--space-2)',
-              color: 'var(--color-text-muted)',
-              fontSize: 'var(--font-size-sm)',
-              textTransform: 'uppercase',
-              letterSpacing: '.04em',
-              borderBottom: '1px solid var(--color-border)',
-            }}
-          >
-            <span>Cant.</span>
-            <span>Producto</span>
-            <span style={{ textAlign: 'right' }}>Precio</span>
-            <span style={{ textAlign: 'right' }}>Subtotal</span>
-          </div>
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        // <table> real, no un grid por fila — así el navegador calcula un
+        // único ancho de columna compartido entre todas las filas (issue
+        // #10: con grids independientes por fila, "Precio"/"Subtotal" no
+        // quedaban alineados entre renglones de distinto largo).
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr
+              style={{
+                color: 'var(--color-text-muted)',
+                fontSize: 'var(--font-size-sm)',
+                textTransform: 'uppercase',
+                letterSpacing: '.04em',
+                borderBottom: '1px solid var(--color-border)',
+              }}
+            >
+              <th style={headCellStyle}>Cant.</th>
+              <th style={headCellStyle}>Producto</th>
+              <th style={{ ...headCellStyle, ...amountCellStyle }}>Precio</th>
+              <th style={{ ...headCellStyle, ...amountCellStyle }}>Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
             {cart.lines.map((line, index) => {
               const code = lineCode(line);
               return (
-                <li
+                <tr
                   key={index}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: COLUMNS,
-                    gap: 'var(--space-3)',
-                    alignItems: 'baseline',
-                    padding: 'var(--space-2)',
-                    background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
-                  }}
+                  style={{ background: index === selectedIndex ? 'var(--color-surface)' : 'transparent' }}
                 >
-                  <span>{line.qty}</span>
-                  <span>
+                  <td style={bodyCellStyle}>{line.qty}</td>
+                  <td style={bodyCellStyle}>
                     <div>{lineLabel(line)}</div>
                     {code !== undefined && (
                       <div
@@ -109,18 +123,18 @@ export function CartView() {
                         {code}
                       </div>
                     )}
-                  </span>
-                  <span style={{ ...moneyStyle, textAlign: 'right' }}>
+                  </td>
+                  <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
                     {formatMoney(line.unitPrice)}
-                  </span>
-                  <span style={{ ...moneyStyle, textAlign: 'right' }}>
+                  </td>
+                  <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
                     {formatMoney(calculateLineTotal(line))}
-                  </span>
-                </li>
+                  </td>
+                </tr>
               );
             })}
-          </ul>
-        </div>
+          </tbody>
+        </table>
       )}
 
       {cart.lines.length > 0 && (

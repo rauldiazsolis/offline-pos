@@ -45,4 +45,16 @@ describe('FlexSearchCatalogSearch', () => {
   it('respeta el límite de resultados', () => {
     expect(search.search('a', 1)).toHaveLength(1);
   });
+
+  it('encuentra productos por SKU alfanumérico (issue #11)', () => {
+    const withSkus = [
+      makeProduct({ id: 'p1', name: 'Arroz 1kg', sku: 'ALM-001' }),
+      makeProduct({ id: 'p2', name: 'Fideos 500g', sku: 'ALM-002' }),
+    ];
+    const searchWithSkus = new FlexSearchCatalogSearch(withSkus);
+
+    const results = searchWithSkus.search('ALM-001');
+
+    expect(results.map((r) => r.product.id)).toEqual(['p1']);
+  });
 });
