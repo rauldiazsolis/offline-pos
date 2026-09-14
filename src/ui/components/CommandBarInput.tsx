@@ -106,8 +106,16 @@ export function CommandBarInput() {
     color: selected ? '#ffffff' : 'var(--color-chrome-text)',
   });
 
+  const hasError = commandBarErrorSignal.value !== null;
+  const hasCommandResults = showCommandList && commandResults.length > 0;
+  const hasSearchResults = !showCommandList && !showCustomerResults && searchResults.length > 0;
+  const showOverlay = hasError || hasCommandResults || showCustomerResults || hasSearchResults;
+
   return (
-    <div>
+    // position: relative — ancla del overlay de abajo, que se abre hacia
+    // arriba desde acá (issue #9: antes empujaba el carrito al crecer, sin
+    // techo de altura; ahora flota, no participa del flujo del documento).
+    <div style={{ position: 'relative' }}>
       <input
         ref={inputRef}
         type="text"
@@ -127,45 +135,61 @@ export function CommandBarInput() {
           color: 'var(--color-chrome-text)',
         }}
       />
-      {/* Slot de altura fija: nunca corre el layout, tenga o no contenido. */}
-      <div style={{ minHeight: 'var(--space-8)', padding: 'var(--space-2) 0' }}>
-        {commandBarErrorSignal.value !== null ? (
-          <p role="alert" style={{ margin: 0, color: '#f87171' }}>
-            {commandBarErrorSignal.value}
-          </p>
-        ) : showCommandList && commandResults.length > 0 ? (
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-            {commandResults.map((command, index) => (
-              <li key={command.name} style={rowStyle(index === selectedCommandIndex)}>
-                <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
-                {' — '}
-                {command.description}
-              </li>
-            ))}
-          </ul>
-        ) : showCustomerResults ? (
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-            {customerResults.map((result, index) => (
-              <li key={result.customer.id} style={rowStyle(index === selectedCustomerIndex)}>
-                {result.customer.name}
-              </li>
-            ))}
-            {customerResults.length === 0 && (
-              <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
-                + Crear cliente "{parsed.query}"
-              </li>
-            )}
-          </ul>
-        ) : searchResults.length > 0 ? (
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-            {searchResults.map((result, index) => (
-              <li key={result.product.id} style={rowStyle(index === selectedSearchIndex)}>
-                {result.product.name}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      {showOverlay && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 0,
+            right: 0,
+            marginBottom: 'var(--space-2)',
+            maxHeight: '40vh',
+            overflowY: 'auto',
+            background: 'var(--color-chrome-bg)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-card)',
+            padding: 'var(--space-2)',
+            zIndex: 10,
+          }}
+        >
+          {hasError ? (
+            <p role="alert" style={{ margin: 0, padding: 'var(--space-2)', color: '#f87171' }}>
+              {commandBarErrorSignal.value}
+            </p>
+          ) : hasCommandResults ? (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {commandResults.map((command, index) => (
+                <li key={command.name} style={rowStyle(index === selectedCommandIndex)}>
+                  <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
+                  {' — '}
+                  {command.description}
+                </li>
+              ))}
+            </ul>
+          ) : showCustomerResults ? (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {customerResults.map((result, index) => (
+                <li key={result.customer.id} style={rowStyle(index === selectedCustomerIndex)}>
+                  {result.customer.name}
+                </li>
+              ))}
+              {customerResults.length === 0 && (
+                <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
+                  + Crear cliente "{parsed.query}"
+                </li>
+              )}
+            </ul>
+          ) : (
+            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+              {searchResults.map((result, index) => (
+                <li key={result.product.id} style={rowStyle(index === selectedSearchIndex)}>
+                  {result.product.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

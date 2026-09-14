@@ -60,6 +60,7 @@ export function StatusBar() {
         color: 'var(--color-chrome-text-muted)',
         fontSize: 'var(--font-size-sm)',
         background: 'var(--color-chrome-bg)',
+        borderBottom: '2px solid var(--color-chrome-border)',
       }}
     >
       <span
