@@ -25,7 +25,9 @@ const customerFixtureSchema = z.array(customerFixtureEntrySchema);
  * crear un cliente desde `@<nombre>` — sin este seed, ningún cliente
  * local tendría esos campos para mostrar.
  */
-export async function seedCustomersIfEmpty(params: { now: string }): Promise<Result<{ seeded: boolean }>> {
+export async function seedCustomersIfEmpty(params: {
+  now: string;
+}): Promise<Result<{ seeded: boolean }>> {
   const count = await db.customers.count();
   if (count > 0) {
     return ok({ seeded: false });

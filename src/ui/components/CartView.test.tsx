@@ -57,7 +57,11 @@ describe('CartView', () => {
   });
 
   it('con cliente adjunto sin documento/teléfono, no muestra esas líneas', () => {
-    attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' };
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana García',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
     render(<CartView />);
     expect(screen.getByText('Ana García')).not.toBeNull();
     expect(screen.queryByText(/^Doc:/)).toBeNull();

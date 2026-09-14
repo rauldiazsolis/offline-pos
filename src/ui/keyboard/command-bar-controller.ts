@@ -10,7 +10,10 @@ import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
 import type { SaleLine } from '../../domain/sale.ts';
-import { createCustomerLocally, loadCustomerRepository } from '../../storage/customer-repository.ts';
+import {
+  createCustomerLocally,
+  loadCustomerRepository,
+} from '../../storage/customer-repository.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
@@ -177,7 +180,10 @@ async function addByProduct(product: Product, qty: number): Promise<void> {
   const stock = await repo.getStock(product.id);
   const result = addProductLine(cartSignal.value, { product, stock, qty });
   if (applyCartResult(result)) {
-    selectResultingLine(result.value, (line) => line.kind === 'product' && line.productId === product.id);
+    selectResultingLine(
+      result.value,
+      (line) => line.kind === 'product' && line.productId === product.id,
+    );
     clearBuffer();
   }
 }

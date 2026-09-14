@@ -472,7 +472,9 @@ describe('CommandBarInput', () => {
   // de artículos (antes que el catálogo) para poder ajustarla, no crear una
   // línea nueva.
   it('una línea libre ya en el carrito aparece en la búsqueda con su cantidad y precio actuales', () => {
-    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+    };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 
@@ -483,7 +485,9 @@ describe('CommandBarInput', () => {
   });
 
   it('"<n>*descripción" (sin $) sobre una línea libre existente aumenta su cantidad, no crea una nueva', async () => {
-    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+    };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 
@@ -498,7 +502,9 @@ describe('CommandBarInput', () => {
   });
 
   it('"-<n>*descripción" (sin $) sobre una línea libre existente la reduce, y la borra si llega a 0', async () => {
-    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+    };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 
@@ -598,7 +604,9 @@ describe('CommandBarInput', () => {
     });
 
     it('ajustar una línea libre existente hasta 0 no deja ninguna selección', async () => {
-      cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+      cartSignal.value = {
+        lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+      };
       cartSelectionIndexSignal.value = 0;
       render(<CommandBarInput />);
       const input = screen.getByLabelText('Barra de comandos');

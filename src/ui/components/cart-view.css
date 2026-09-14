@@ -59,12 +59,20 @@
 
 /*
  * ".cart-view__scroll" (donde vive la tabla) es el único sector con scroll
- * propio (issue #18) — "min-height: 0" explícito además del área que le da
- * la grilla, o el contenido empuja el alto en vez de activar el scroll
- * interno (el gotcha de siempre con flex/grid anidado + scroll).
+ * propio (issue #18). Se separa en dos: el wrapper (esta clase — posiciona
+ * el indicador de scroll de abajo, no scrollea él mismo) y
+ * ".cart-view__scroll-inner" (el que sí scrollea) — el indicador tiene que
+ * quedar fuera del elemento que scrollea, si no scrollearía con el
+ * contenido en vez de quedar fijo en el borde.
  */
 .cart-view__scroll {
   grid-area: table;
+  position: relative;
+  min-height: 0;
+}
+
+.cart-view__scroll-inner {
+  height: 100%;
   overflow-y: auto;
   min-height: 0;
   /* Una sola fuente de verdad: el alto real del header y el margen de
@@ -73,7 +81,22 @@
   --cart-table-head-h: 1.75rem;
 }
 
-.cart-view__scroll thead th {
+/*
+ * Scrollbar nativa oculta — el indicador de `ScrollIndicatorBar` la
+ * reemplaza (issue: el usuario prefiere ocultarla, siempre informativo,
+ * nunca accionable). El wheel y el autoscroll nativo por click en la
+ * ruedita del mouse no dependen de que la scrollbar sea visible, siguen
+ * andando igual.
+ */
+.cart-view__scroll-inner {
+  scrollbar-width: none;
+}
+
+.cart-view__scroll-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.cart-view__scroll-inner thead th {
   height: var(--cart-table-head-h);
   position: sticky;
   top: 0;
@@ -92,6 +115,6 @@
  * cuánto espacio reservar — confirmado en el navegador real antes de este
  * fix, con captura de pantalla, que resuelve el problema exactamente.
  */
-.cart-view__scroll tbody tr {
+.cart-view__scroll-inner tbody tr {
   scroll-margin-top: var(--cart-table-head-h);
 }

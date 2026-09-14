@@ -83,8 +83,7 @@ export const searchSelectionIndexSignal = signal<number | null>(null);
  * de ningún caso especial.
  */
 export type CustomerOrClear =
-  | { kind: 'clear' }
-  | { kind: 'customer'; result: CustomerSearchResult };
+  { kind: 'clear' } | { kind: 'customer'; result: CustomerSearchResult };
 
 /**
  * Resultados en vivo de `@<query>` — mismo criterio que `searchResultsSignal`.

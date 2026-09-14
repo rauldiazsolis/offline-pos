@@ -1,14 +1,17 @@
 import type { JSX } from 'preact';
+import { useRef } from 'preact/hooks';
 import { calculateLineTotal } from '../../domain/totals.ts';
 import type { Customer } from '../../domain/customer.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { formatMoney } from '../format.ts';
+import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import './cart-view.css';
 
 const cardStyle = {
@@ -111,7 +114,13 @@ function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Ele
  * El `<thead>` sticky (`cart-view.css`) necesita que este sea el contenedor
  * de scroll real, no un ancestro más arriba.
  */
-function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex: number | null }): JSX.Element {
+function CartTable({
+  lines,
+  selectedIndex,
+}: {
+  lines: SaleLine[];
+  selectedIndex: number | null;
+}): JSX.Element {
   // Issue #26: mantiene visible la fila seleccionada al navegar con
   // flechas (o al quedar seleccionada tras agregar/ajustar/borrar, issue
   // #15) — sin esto la selección se movía igual, pero podía quedar
@@ -151,7 +160,9 @@ function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex:
             <tr
               key={index}
               ref={rowRef(index)}
-              style={{ background: index === selectedIndex ? 'var(--color-surface)' : 'transparent' }}
+              style={{
+                background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+              }}
             >
               <td style={bodyCellStyle}>{line.qty}</td>
               <td style={bodyCellStyle}>
@@ -211,7 +222,11 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
     >
       <div style={sectionLabelStyle}>Resumen de venta</div>
       <div
-        style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          color: 'var(--color-text-muted)',
+        }}
       >
         <span>Subtotal</span>
         <span style={moneyStyle}>{formatMoney(netSubtotal)}</span>
@@ -251,11 +266,20 @@ export function CartView(): JSX.Element {
   const totals = calculateTotals(cart);
   const customer = attachedCustomerSignal.value;
 
+  // El indicador de scroll pasivo va en el wrapper (".cart-view__scroll"),
+  // no en el elemento que scrollea (".cart-view__scroll-inner") — si no,
+  // scrollearía con el contenido en vez de quedar fijo en el borde.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollThumb = useScrollIndicator(scrollRef);
+
   return (
     <div class="cart-view">
       <CustomerCard customer={customer} />
       <div class="cart-view__scroll">
-        <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
+        <div class="cart-view__scroll-inner" ref={scrollRef}>
+          <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
+        </div>
+        <ScrollIndicatorBar thumb={scrollThumb} variant="light" />
       </div>
       {cart.lines.length > 0 && <TotalsCard cart={cart} totals={totals} />}
     </div>

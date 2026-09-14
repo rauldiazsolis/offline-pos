@@ -1,4 +1,5 @@
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import { useRef } from 'preact/hooks';
 import {
   moveSelection,
   removeSelectedCartLine,
@@ -8,10 +9,12 @@ import {
   updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
+import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
@@ -51,6 +54,11 @@ export function CommandBarInput() {
   const commandRowRef = useScrollSelectedIntoView(commandSelectionIndexSignal);
   const customerRowRef = useScrollSelectedIntoView(customerSelectionIndexSignal);
   const searchRowRef = useScrollSelectedIntoView(searchSelectionIndexSignal);
+
+  // Indicador de scroll pasivo del overlay — el mismo, cualquiera sea la
+  // lista que esté mostrando (nunca hay más de una a la vez).
+  const overlayScrollRef = useRef<HTMLDivElement>(null);
+  const overlayScrollThumb = useScrollIndicator(overlayScrollRef);
 
   // updateCommandBarBuffer (no tocar los signals directo): además de
   // actualizar el buffer, resetea/reindexa la selección de las tres listas
@@ -179,6 +187,12 @@ export function CommandBarInput() {
         }}
       />
       {showOverlay && (
+        // El indicador de scroll pasivo tiene que quedar fuera del
+        // elemento que scrollea (el div de abajo, con la clase
+        // "command-bar-overlay-scroll") — si no, scrollearía con el
+        // contenido en vez de quedar fijo en el borde. display: flex +
+        // flex: 1 en el que scrollea, para que "maxHeight" siga
+        // clampeando el conjunto igual que antes.
         <div
           style={{
             position: 'absolute',
@@ -187,105 +201,114 @@ export function CommandBarInput() {
             right: 0,
             marginBottom: 'var(--space-2)',
             maxHeight: '40vh',
-            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
             background: 'var(--color-chrome-bg)',
             borderRadius: 'var(--radius-md)',
             boxShadow: 'var(--shadow-card)',
-            padding: 'var(--space-2)',
             zIndex: 10,
           }}
         >
-          {hasError ? (
-            <p role="alert" style={{ margin: 0, padding: 'var(--space-2)', color: '#f87171' }}>
-              {commandBarErrorSignal.value}
-            </p>
-          ) : hasCommandResults ? (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {commandResults.map((command, index) => (
-                <li
-                  key={command.name}
-                  ref={commandRowRef(index)}
-                  style={rowStyle(index === selectedCommandIndex)}
-                >
-                  <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
-                  {' — '}
-                  {command.description}
-                </li>
-              ))}
-            </ul>
-          ) : showCustomerResults ? (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {customerResults.map((result, index) => {
-                const selected = index === selectedCustomerIndex;
-                if (result.kind === 'clear') {
+          <div
+            ref={overlayScrollRef}
+            class="command-bar-overlay-scroll"
+            style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 'var(--space-2)' }}
+          >
+            {hasError ? (
+              <p role="alert" style={{ margin: 0, padding: 'var(--space-2)', color: '#f87171' }}>
+                {commandBarErrorSignal.value}
+              </p>
+            ) : hasCommandResults ? (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {commandResults.map((command, index) => (
+                  <li
+                    key={command.name}
+                    ref={commandRowRef(index)}
+                    style={rowStyle(index === selectedCommandIndex)}
+                  >
+                    <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
+                    {' — '}
+                    {command.description}
+                  </li>
+                ))}
+              </ul>
+            ) : showCustomerResults ? (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {customerResults.map((result, index) => {
+                  const selected = index === selectedCustomerIndex;
+                  if (result.kind === 'clear') {
+                    return (
+                      <li
+                        key="clear"
+                        ref={customerRowRef(index)}
+                        style={{ ...rowStyle(selected), fontStyle: 'italic' }}
+                      >
+                        Consumidor Final
+                      </li>
+                    );
+                  }
+                  const { customer } = result.result;
+                  const identifier = [customer.document, customer.phone]
+                    .filter((value): value is string => value !== undefined)
+                    .join(' · ');
                   return (
-                    <li
-                      key="clear"
-                      ref={customerRowRef(index)}
-                      style={{ ...rowStyle(selected), fontStyle: 'italic' }}
-                    >
-                      Consumidor Final
+                    <li key={customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
+                      <div>{customer.name}</div>
+                      {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
                     </li>
                   );
-                }
-                const { customer } = result.result;
-                const identifier = [customer.document, customer.phone]
-                  .filter((value): value is string => value !== undefined)
-                  .join(' · ');
-                return (
-                  <li key={customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
-                    <div>{customer.name}</div>
-                    {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
+                })}
+                {parsed.query !== '' && customerResults.length === 0 && (
+                  <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
+                    + Crear cliente "{parsed.query}"
                   </li>
-                );
-              })}
-              {parsed.query !== '' && customerResults.length === 0 && (
-                <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
-                  + Crear cliente "{parsed.query}"
-                </li>
-              )}
-            </ul>
-          ) : (
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {searchResults.map((result, index) => {
-                const selected = index === selectedSearchIndex;
-                if (result.kind === 'freeform-line') {
+                )}
+              </ul>
+            ) : (
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {searchResults.map((result, index) => {
+                  const selected = index === selectedSearchIndex;
+                  if (result.kind === 'freeform-line') {
+                    return (
+                      <li
+                        key={`freeform:${result.description}`}
+                        ref={searchRowRef(index)}
+                        style={rowStyle(selected)}
+                      >
+                        <div>{result.description}</div>
+                        <div style={subtextStyle(selected)}>
+                          en el carrito: {result.qtyInCart} × {formatMoney(result.unitPrice)}
+                        </div>
+                      </li>
+                    );
+                  }
+                  const { product } = result.result;
+                  const qty = parsed.kind === 'search' ? parsed.qty : 1;
                   return (
-                    <li
-                      key={`freeform:${result.description}`}
-                      ref={searchRowRef(index)}
-                      style={rowStyle(selected)}
-                    >
-                      <div>{result.description}</div>
+                    <li key={product.id} ref={searchRowRef(index)} style={rowStyle(selected)}>
+                      <div>{product.name}</div>
                       <div style={subtextStyle(selected)}>
-                        en el carrito: {result.qtyInCart} × {formatMoney(result.unitPrice)}
+                        {product.sku} ·{' '}
+                        {qty === 1 ? (
+                          <strong style={emphasisStyle(selected)}>
+                            {formatMoney(product.price)}
+                          </strong>
+                        ) : (
+                          <>
+                            {formatMoney(product.price)}{' '}
+                            <strong style={emphasisStyle(selected)}>
+                              x {String(qty)} = {formatMoney(product.price * qty)}
+                            </strong>
+                          </>
+                        )}
                       </div>
                     </li>
                   );
-                }
-                const { product } = result.result;
-                const qty = parsed.kind === 'search' ? parsed.qty : 1;
-                return (
-                  <li key={product.id} ref={searchRowRef(index)} style={rowStyle(selected)}>
-                    <div>{product.name}</div>
-                    <div style={subtextStyle(selected)}>
-                      {product.sku} ·{' '}
-                      {qty === 1 ? (
-                        <strong style={emphasisStyle(selected)}>{formatMoney(product.price)}</strong>
-                      ) : (
-                        <>
-                          {formatMoney(product.price)}{' '}
-                          <strong style={emphasisStyle(selected)}>
-                            x {String(qty)} = {formatMoney(product.price * qty)}
-                          </strong>
-                        </>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                })}
+              </ul>
+            )}
+          </div>
+          <ScrollIndicatorBar thumb={overlayScrollThumb} variant="dark" />
         </div>
       )}
     </div>
