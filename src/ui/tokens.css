@@ -59,3 +59,14 @@
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: 2px;
 }
+
+/*
+ * La barra de comandos vive sobre "chrome" oscuro (ver --color-chrome-*) —
+ * un outline claro ahí no se lee bien, así que el foco se marca con un
+ * borde inferior en el mismo azul de acento en vez del outline por default.
+ * Sigue siendo "foco siempre visible" (CLAUDE.md), solo con otra técnica.
+ */
+.command-bar-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--color-accent);
+}

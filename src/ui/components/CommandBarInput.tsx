@@ -99,6 +99,13 @@ export function CommandBarInput() {
   const showCommandList = parsed.kind === 'command';
   const showCustomerResults = parsed.kind === 'customer' && parsed.query !== '';
 
+  const rowStyle = (selected: boolean): { [key: string]: string } => ({
+    padding: 'var(--space-2)',
+    borderRadius: 'var(--radius-md)',
+    background: selected ? 'var(--color-accent)' : 'transparent',
+    color: selected ? '#ffffff' : 'var(--color-chrome-text)',
+  });
+
   return (
     <div>
       <input
@@ -108,32 +115,28 @@ export function CommandBarInput() {
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         aria-label="Barra de comandos"
+        class="command-bar-input"
         style={{
           width: '100%',
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--font-size-lg)',
-          padding: 'var(--space-3)',
-          border: '1px solid var(--color-border)',
-          background: 'var(--color-bg)',
-          color: 'var(--color-text)',
+          padding: 'var(--space-2) 0',
+          border: 'none',
+          borderBottom: '2px solid transparent',
+          background: 'transparent',
+          color: 'var(--color-chrome-text)',
         }}
       />
       {/* Slot de altura fija: nunca corre el layout, tenga o no contenido. */}
       <div style={{ minHeight: 'var(--space-8)', padding: 'var(--space-2) 0' }}>
         {commandBarErrorSignal.value !== null ? (
-          <p role="alert" style={{ margin: 0, color: 'var(--color-danger)' }}>
+          <p role="alert" style={{ margin: 0, color: '#f87171' }}>
             {commandBarErrorSignal.value}
           </p>
         ) : showCommandList && commandResults.length > 0 ? (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {commandResults.map((command, index) => (
-              <li
-                key={command.name}
-                style={{
-                  padding: 'var(--space-1) var(--space-2)',
-                  background: index === selectedCommandIndex ? 'var(--color-surface)' : 'transparent',
-                }}
-              >
+              <li key={command.name} style={rowStyle(index === selectedCommandIndex)}>
                 <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
                 {' — '}
                 {command.description}
@@ -143,19 +146,12 @@ export function CommandBarInput() {
         ) : showCustomerResults ? (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {customerResults.map((result, index) => (
-              <li
-                key={result.customer.id}
-                style={{
-                  padding: 'var(--space-1) var(--space-2)',
-                  background:
-                    index === selectedCustomerIndex ? 'var(--color-surface)' : 'transparent',
-                }}
-              >
+              <li key={result.customer.id} style={rowStyle(index === selectedCustomerIndex)}>
                 {result.customer.name}
               </li>
             ))}
             {customerResults.length === 0 && (
-              <li style={{ padding: 'var(--space-1) var(--space-2)', fontStyle: 'italic' }}>
+              <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
                 + Crear cliente "{parsed.query}"
               </li>
             )}
@@ -163,14 +159,7 @@ export function CommandBarInput() {
         ) : searchResults.length > 0 ? (
           <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
             {searchResults.map((result, index) => (
-              <li
-                key={result.product.id}
-                style={{
-                  padding: 'var(--space-1) var(--space-2)',
-                  background:
-                    index === selectedSearchIndex ? 'var(--color-surface)' : 'transparent',
-                }}
-              >
+              <li key={result.product.id} style={rowStyle(index === selectedSearchIndex)}>
                 {result.product.name}
               </li>
             ))}
