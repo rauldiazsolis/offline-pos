@@ -36,3 +36,42 @@
   z-index: 1;
   background: var(--color-bg);
 }
+
+/*
+ * Issue #19: Cliente/Total a la derecha en pantallas anchas — reabre a
+ * propósito la decisión de "una sola columna, sin sidebar" del primer pase
+ * de diseño visual (ver CLAUDE.md). Grid (no flex) porque necesita que la
+ * tabla ocupe dos filas de una columna mientras Cliente/Total ocupan una
+ * fila cada uno de la otra — algo que flex no puede expresar sin envolver
+ * Cliente+Total en un contenedor propio, que a su vez rompería el "sin gap
+ * fantasma" del layout angosto (ver el comentario de arriba). 900px es un
+ * punto de partida (tablet apaisada/notebook chica) — un solo valor, fácil
+ * de ajustar si no da bien.
+ *
+ * `align-self: end` en Total: la fila de Total comparte el track `1fr` con
+ * la tabla (para que esta ocupe todo el alto), así que sin esto la tarjeta
+ * se estiraría para llenar ese espacio en vez de quedar pegada abajo.
+ */
+@media (min-width: 900px) {
+  .cart-view {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'table customer'
+      'table totals';
+  }
+
+  .cart-view__customer {
+    grid-area: customer;
+  }
+
+  .cart-view__scroll {
+    grid-area: table;
+  }
+
+  .cart-view__totals {
+    grid-area: totals;
+    align-self: end;
+  }
+}
