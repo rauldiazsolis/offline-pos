@@ -5,6 +5,7 @@ import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { formatMoney } from '../format.ts';
+import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
@@ -74,6 +75,12 @@ function CustomerCard({ customer }: { customer: Customer }): JSX.Element {
  * de scroll real, no un ancestro más arriba.
  */
 function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex: number | null }): JSX.Element {
+  // Issue #26: mantiene visible la fila seleccionada al navegar con
+  // flechas (o al quedar seleccionada tras agregar/ajustar/borrar, issue
+  // #15) — sin esto la selección se movía igual, pero podía quedar
+  // invisible fuera del área que scrollea.
+  const rowRef = useScrollSelectedIntoView(cartSelectionIndexSignal);
+
   if (lines.length === 0) {
     return <p style={{ color: 'var(--color-text-muted)' }}>El carrito está vacío.</p>;
   }
@@ -106,6 +113,7 @@ function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex:
           return (
             <tr
               key={index}
+              ref={rowRef(index)}
               style={{ background: index === selectedIndex ? 'var(--color-surface)' : 'transparent' }}
             >
               <td style={bodyCellStyle}>{line.qty}</td>
@@ -137,32 +145,43 @@ function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex:
   );
 }
 
+/**
+ * Issue #31: Subtotal/Descuento/Total siempre visibles, no solo el Total
+ * con una fila de ajuste condicional — así la caja no cambia de alto según
+ * haya o no un recargo/descuento aplicado (antes de esto, aplicar/quitar
+ * un ajuste corría el resto del layout — ver el commit que fija Cliente/
+ * Total en su lugar, #18/#19, que ya evitaba que otras cosas se movieran).
+ */
 function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Element {
-  const hasAdjustment =
-    cart.globalAdjustmentPercentage !== undefined && cart.globalAdjustmentPercentage !== 0;
+  const netSubtotal = totals.subtotal - totals.discountTotal;
+  const adjustmentPercentage = cart.globalAdjustmentPercentage;
+  const isSurcharge = (adjustmentPercentage ?? 0) > 0;
+  const adjustmentLabel =
+    adjustmentPercentage === undefined
+      ? 'Descuento'
+      : `${isSurcharge ? 'Recargo' : 'Descuento'} (${isSurcharge ? '+' : ''}${String(adjustmentPercentage)}%)`;
+  const adjustmentColor =
+    adjustmentPercentage === undefined
+      ? 'var(--color-text-muted)'
+      : isSurcharge
+        ? 'var(--color-danger)'
+        : 'var(--color-success)';
 
   return (
     <div
       class="cart-view__totals"
       style={{ ...cardStyle, display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}
     >
-      {hasAdjustment && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            color:
-              (cart.globalAdjustmentPercentage ?? 0) > 0 ? 'var(--color-danger)' : 'var(--color-success)',
-          }}
-        >
-          <span>
-            {(cart.globalAdjustmentPercentage ?? 0) > 0 ? 'Recargo' : 'Descuento'} global (
-            {(cart.globalAdjustmentPercentage ?? 0) > 0 ? '+' : ''}
-            {cart.globalAdjustmentPercentage}%)
-          </span>
-          <span style={moneyStyle}>{formatMoney(totals.globalAdjustmentAmount)}</span>
-        </div>
-      )}
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}
+      >
+        <span>Subtotal</span>
+        <span style={moneyStyle}>{formatMoney(netSubtotal)}</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: adjustmentColor }}>
+        <span>{adjustmentLabel}</span>
+        <span style={moneyStyle}>{formatMoney(totals.globalAdjustmentAmount)}</span>
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
         <span>Total</span>
         <span style={moneyStyle}>{formatMoney(totals.total)}</span>

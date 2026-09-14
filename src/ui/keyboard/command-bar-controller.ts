@@ -9,6 +9,8 @@ import {
 import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
+import type { SaleLine } from '../../domain/sale.ts';
+import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import { createCustomerLocally, loadCustomerRepository } from '../../storage/customer-repository.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -22,6 +24,7 @@ import {
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
+  type UnifiedSearchResult,
 } from '../state/command-bar.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
@@ -51,7 +54,11 @@ function trackPendingBarOperation(promise: Promise<void>): void {
   pendingBarOperation = promise;
 }
 
-function applyCartResult(result: Result<Cart>): boolean {
+// Type predicate (no solo `boolean`): varios callers necesitan `result.value`
+// después de confirmar éxito (ej. para saber en qué índice quedó la línea
+// recién agregada/ajustada, issue #15) — sin esto, TS no puede enterarse de
+// que `result.ok` ya se confirmó adentro de esta función.
+function applyCartResult(result: Result<Cart>): result is { ok: true; value: Cart } {
   if (result.ok) {
     cartSignal.value = result.value;
     commandBarErrorSignal.value = null;
@@ -61,11 +68,96 @@ function applyCartResult(result: Result<Cart>): boolean {
   return false;
 }
 
+/**
+ * Deja seleccionada (y, gracias a `useScrollSelectedIntoView`, visible) la
+ * línea resultante de una mutación — issue #15. Si `find` no encuentra
+ * ninguna, no deja nada seleccionado: pasa cuando la operación restó hasta
+ * borrar la línea, a propósito distinto del borrado explícito con Supr
+ * (`removeSelectedCartLine`), que sí selecciona la siguiente o la anterior.
+ */
+function selectResultingLine(cart: Cart, find: (line: SaleLine) => boolean): void {
+  const index = cart.lines.findIndex(find);
+  cartSelectionIndexSignal.value = index === -1 ? null : index;
+}
+
 function clearBuffer(): void {
   commandBarBufferSignal.value = '';
   searchSelectionIndexSignal.value = null;
   customerSelectionIndexSignal.value = null;
   commandSelectionIndexSignal.value = null;
+}
+
+/**
+ * Si el ítem que estaba en `previousIndex` sigue presente en `newItems`
+ * (comparado por `identity`, no por índice — la posición puede cambiar
+ * entre una lista filtrada y la siguiente), devuelve su índice nuevo; si
+ * no, `null`. `previousIndex === null` (nada seleccionado todavía) es
+ * siempre `null` sin buscar nada.
+ */
+function reindexByIdentity<T>(
+  previousItems: T[],
+  previousIndex: number | null,
+  newItems: T[],
+  identity: (item: T) => string,
+): number | null {
+  if (previousIndex === null) {
+    return null;
+  }
+  const previous = previousItems[previousIndex];
+  if (previous === undefined) {
+    return null;
+  }
+  const target = identity(previous);
+  const newIndex = newItems.findIndex((item) => identity(item) === target);
+  return newIndex === -1 ? null : newIndex;
+}
+
+function identityOfSearchResult(result: UnifiedSearchResult): string {
+  return result.kind === 'product'
+    ? `product:${result.result.product.id}`
+    : `freeform:${result.description}`;
+}
+
+function identityOfCustomerResult(result: CustomerSearchResult): string {
+  return result.customer.id;
+}
+
+/**
+ * Se llama en cada tecla de la barra de comandos (issue #14) — antes, el
+ * puntero de selección de ninguna de las tres listas se resetaba al
+ * cambiar el buffer, así que podía quedar apuntando a una fila que ya no
+ * tiene sentido para la lista filtrada nueva (una fila distinta, o
+ * directamente fuera de rango).
+ *
+ * Menú de comandos: reset simple a `null`, siempre — confirmado con el
+ * usuario, ejecutar el comando equivocado por accidente tiene consecuencias
+ * reales, así que no vale la pena ser "más inteligente" acá. Búsqueda de
+ * producto/línea libre y de cliente: "más inteligente" — si el ítem que
+ * estaba seleccionado sigue presente en la lista nueva (por identidad), se
+ * lo sigue apuntando aunque haya cambiado de posición.
+ */
+export function updateCommandBarBuffer(value: string): void {
+  const previousSearchResults = searchResultsSignal.value;
+  const previousSearchIndex = searchSelectionIndexSignal.value;
+  const previousCustomerResults = customerResultsSignal.value;
+  const previousCustomerIndex = customerSelectionIndexSignal.value;
+
+  commandBarBufferSignal.value = value;
+  commandBarErrorSignal.value = null;
+
+  commandSelectionIndexSignal.value = null;
+  searchSelectionIndexSignal.value = reindexByIdentity(
+    previousSearchResults,
+    previousSearchIndex,
+    searchResultsSignal.value,
+    identityOfSearchResult,
+  );
+  customerSelectionIndexSignal.value = reindexByIdentity(
+    previousCustomerResults,
+    previousCustomerIndex,
+    customerResultsSignal.value,
+    identityOfCustomerResult,
+  );
 }
 
 /** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
@@ -83,7 +175,9 @@ async function createAndAttachCustomer(name: string): Promise<void> {
 async function addByProduct(product: Product, qty: number): Promise<void> {
   const repo = getCatalogRepository();
   const stock = await repo.getStock(product.id);
-  if (applyCartResult(addProductLine(cartSignal.value, { product, stock, qty }))) {
+  const result = addProductLine(cartSignal.value, { product, stock, qty });
+  if (applyCartResult(result)) {
+    selectResultingLine(result.value, (line) => line.kind === 'product' && line.productId === product.id);
     clearBuffer();
   }
 }
@@ -187,19 +281,22 @@ export function submitCommandBar(): void {
         clearBuffer();
       }
       return;
-    case 'freeform-line':
-      if (
-        applyCartResult(
-          addFreeformLine(cartSignal.value, {
-            description: parsed.description,
-            unitPrice: parsed.amount,
-            qty: parsed.qty,
-          }),
-        )
-      ) {
+    case 'freeform-line': {
+      const result = addFreeformLine(cartSignal.value, {
+        description: parsed.description,
+        unitPrice: parsed.amount,
+        qty: parsed.qty,
+      });
+      if (applyCartResult(result)) {
+        // Siempre al final (addFreeformLine nunca fusiona) — no se usa
+        // selectResultingLine por `find`: dos líneas libres pueden compartir
+        // la misma descripción, y encontraría la primera, no la recién
+        // creada.
+        cartSelectionIndexSignal.value = result.value.lines.length - 1;
         clearBuffer();
       }
       return;
+    }
     case 'barcode':
       trackPendingBarOperation(addByCode(parsed.code, parsed.qty));
       return;
@@ -212,14 +309,15 @@ export function submitCommandBar(): void {
         return;
       }
       if (selected.kind === 'freeform-line') {
-        if (
-          applyCartResult(
-            adjustFreeformLineQuantity(cartSignal.value, {
-              description: selected.description,
-              qty: parsed.qty,
-            }),
-          )
-        ) {
+        const result = adjustFreeformLineQuantity(cartSignal.value, {
+          description: selected.description,
+          qty: parsed.qty,
+        });
+        if (applyCartResult(result)) {
+          selectResultingLine(
+            result.value,
+            (line) => line.kind === 'freeform' && line.description === selected.description,
+          );
           clearBuffer();
         }
         return;
@@ -282,13 +380,22 @@ export function moveSelection(direction: 1 | -1): void {
 }
 
 /** Tecla Supr con la barra vacía: elimina la línea del carrito seleccionada. */
+/**
+ * Tecla Supr con la barra vacía: elimina la línea seleccionada. A propósito
+ * distinto de cuando una línea se borra como efecto de restar hasta 0 (ver
+ * `selectResultingLine`) — un borrado explícito selecciona la línea que
+ * quedó en ese mismo índice (la que se corrió al borrar), o la anterior si
+ * se borró la última, o nada si el carrito quedó vacío (issue #15).
+ */
 export function removeSelectedCartLine(): void {
   const index = cartSelectionIndexSignal.value;
   if (index === null) {
     return;
   }
-  if (applyCartResult(removeLine(cartSignal.value, index))) {
-    cartSelectionIndexSignal.value = null;
+  const result = removeLine(cartSignal.value, index);
+  if (applyCartResult(result)) {
+    const newLength = result.value.lines.length;
+    cartSelectionIndexSignal.value = newLength === 0 ? null : Math.min(index, newLength - 1);
   }
 }
 
