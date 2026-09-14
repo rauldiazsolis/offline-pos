@@ -392,3 +392,77 @@ describe('setGlobalAdjustment', () => {
     }
   });
 });
+
+// Bug real reportado por el usuario: cada función que muta el carrito
+// devolvía `{ lines }` en vez de `{ ...cart, lines }`, perdiendo cualquier
+// otro campo a nivel carrito — hoy solo `globalAdjustmentPercentage`, pero
+// aplica a cualquier campo que se agregue en el futuro.
+describe('el ajuste global sobrevive a cualquier otra mutación del carrito', () => {
+  const cartWithAdjustment: Cart = {
+    lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+    globalAdjustmentPercentage: 10,
+  };
+
+  it('addProductLine lo preserva', () => {
+    const result = addProductLine(cartWithAdjustment, {
+      product: makeProduct({ id: 'p2' }),
+      stock: makeStock({ productId: 'p2' }),
+      qty: 1,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('addFreeformLine lo preserva', () => {
+    const result = addFreeformLine(cartWithAdjustment, {
+      description: 'Envío',
+      unitPrice: 50,
+      qty: 1,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('adjustFreeformLineQuantity lo preserva', () => {
+    const cart: Cart = {
+      lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }],
+      globalAdjustmentPercentage: 10,
+    };
+    const result = adjustFreeformLineQuantity(cart, { description: 'Regalo', qty: 1 });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('removeLine lo preserva', () => {
+    const result = removeLine(cartWithAdjustment, 0);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('setLineQuantity lo preserva', () => {
+    const result = setLineQuantity(cartWithAdjustment, 0, 5, {
+      product: makeProduct(),
+      stock: makeStock({ quantity: 100 }),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('applyLineDiscount lo preserva', () => {
+    const result = applyLineDiscount(cartWithAdjustment, 0, { type: 'percentage', value: 5 });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+});
