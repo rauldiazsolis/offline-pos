@@ -61,6 +61,10 @@ export type ErrorMeta = {
 
   // storage/customer-repository.ts
   'customer/persist-failed': { message: string };
+
+  // storage/seed-customers.ts
+  'customer/invalid-fixture': { issues: { path: string; message: string }[] };
+  'customer/seed-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

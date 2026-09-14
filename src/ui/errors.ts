@@ -69,6 +69,10 @@ export function describeError(failure: Failure): string {
       return 'Adjuntá un cliente con @ antes de cobrar a cuenta corriente.';
     case 'customer/persist-failed':
       return `No se pudo guardar el cliente (${failure.meta.message}).`;
+    case 'customer/invalid-fixture':
+      return 'El fixture de clientes de ejemplo tiene datos inválidos.';
+    case 'customer/seed-failed':
+      return `No se pudieron sembrar los clientes de ejemplo (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

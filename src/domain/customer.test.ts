@@ -18,6 +18,23 @@ describe('buildCustomer', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
     });
   });
+
+  it('incluye documento/teléfono cuando se pasan (Ciclo 7, sembrado de clientes de ejemplo)', () => {
+    const customer = buildCustomer('Juan Pérez', {
+      id: 'c1',
+      now: '2026-01-01T00:00:00.000Z',
+      document: '12345678',
+      phone: '555-1234',
+    });
+
+    expect(customer).toEqual({
+      id: 'c1',
+      name: 'Juan Pérez',
+      document: '12345678',
+      phone: '555-1234',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
 });
 
 const account: CustomerAccount = {
