@@ -13,10 +13,7 @@ info:
       - `implemented-phase-2`: el POS ya lo consume (motor de sync, Fase 2).
       - `implemented-phase-3`: el POS ya lo consume (clientes y cuenta
         corriente, Fase 3).
-      - `documented-not-implemented`: forma parte del contrato completo pero
-        el POS todavía no tiene el modelo de dominio correspondiente
-        (CashSession es Fase 6) — se documenta igual para que un integrador
-        conozca el contrato final desde ya.
+      - `implemented-phase-6`: el POS ya lo consume (turnos de caja, Fase 6).
 
     Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
     la app) — desacoplada del contrato en sí, cada integración define cómo
@@ -131,9 +128,13 @@ paths:
   /cash-sessions:
     post:
       operationId: postCashSession
-      summary: Push de apertura/cierre de caja
-      x-pos-status: documented-not-implemented
-      description: Fase 6 del roadmap — el POS todavía no tiene el modelo de dominio `CashSession`.
+      summary: Push de un turno de caja cerrado
+      x-pos-status: implemented-phase-6
+      description: |
+        Fase 6 del roadmap — se envía una sola vez, cuando el turno ya cerró
+        (`closedAt`/`closingAmount`/`sales[]` finales), nunca mientras está
+        abierto. Mismo criterio que `/sales`: la entidad ES el evento, `id`
+        es la Idempotency-Key.
       requestBody:
         required: true
         content:
@@ -449,7 +450,6 @@ components:
             approved: { type: boolean, enum: [false] }
             reasonCode: { type: string }
 
-    # --- Documentados, no implementados todavía ---
     CashSession:
       type: object
       required: [id, openedAt, openingAmount, sales]
