@@ -5,6 +5,7 @@ import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { formatMoney } from '../format.ts';
+import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
@@ -74,6 +75,12 @@ function CustomerCard({ customer }: { customer: Customer }): JSX.Element {
  * de scroll real, no un ancestro más arriba.
  */
 function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex: number | null }): JSX.Element {
+  // Issue #26: mantiene visible la fila seleccionada al navegar con
+  // flechas (o al quedar seleccionada tras agregar/ajustar/borrar, issue
+  // #15) — sin esto la selección se movía igual, pero podía quedar
+  // invisible fuera del área que scrollea.
+  const rowRef = useScrollSelectedIntoView(cartSelectionIndexSignal);
+
   if (lines.length === 0) {
     return <p style={{ color: 'var(--color-text-muted)' }}>El carrito está vacío.</p>;
   }
@@ -106,6 +113,7 @@ function CartTable({ lines, selectedIndex }: { lines: SaleLine[]; selectedIndex:
           return (
             <tr
               key={index}
+              ref={rowRef(index)}
               style={{ background: index === selectedIndex ? 'var(--color-surface)' : 'transparent' }}
             >
               <td style={bodyCellStyle}>{line.qty}</td>
