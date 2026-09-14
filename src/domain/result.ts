@@ -65,6 +65,13 @@ export type ErrorMeta = {
   // storage/seed-customers.ts
   'customer/invalid-fixture': { issues: { path: string; message: string }[] };
   'customer/seed-failed': { message: string };
+
+  // cash-session.ts, storage/cash-session-repository.ts
+  'cash-session/invalid-amount': { amount: number };
+  'cash-session/already-open': undefined;
+  'cash-session/none-open': undefined;
+  'cash-session/already-closed': undefined;
+  'cash-session/persist-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

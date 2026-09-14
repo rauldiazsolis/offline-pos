@@ -73,6 +73,16 @@ export function describeError(failure: Failure): string {
       return 'El fixture de clientes de ejemplo tiene datos inválidos.';
     case 'customer/seed-failed':
       return `No se pudieron sembrar los clientes de ejemplo (${failure.meta.message}).`;
+    case 'cash-session/invalid-amount':
+      return `Monto inválido (${String(failure.meta.amount)}).`;
+    case 'cash-session/already-open':
+      return 'Ya hay un turno de caja abierto.';
+    case 'cash-session/none-open':
+      return 'No hay un turno de caja abierto. Abrí uno con /CAJA antes de cobrar.';
+    case 'cash-session/already-closed':
+      return 'Ese turno ya estaba cerrado.';
+    case 'cash-session/persist-failed':
+      return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;
