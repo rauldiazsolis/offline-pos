@@ -50,6 +50,9 @@ export function closeSale(params: {
     status: 'closed',
     createdAt,
     ...(customerId !== undefined ? { customerId } : {}),
+    ...(cart.globalAdjustmentPercentage !== undefined
+      ? { globalAdjustmentPercentage: cart.globalAdjustmentPercentage }
+      : {}),
   });
 }
 

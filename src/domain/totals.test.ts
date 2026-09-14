@@ -11,7 +11,12 @@ describe('calculateTotals', () => {
       ],
     };
 
-    expect(calculateTotals(cart)).toEqual({ subtotal: 250, discountTotal: 0, total: 250 });
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 250,
+      discountTotal: 0,
+      globalAdjustmentAmount: 0,
+      total: 250,
+    });
   });
 
   it('aplica un descuento por monto a una línea', () => {
@@ -27,7 +32,12 @@ describe('calculateTotals', () => {
       ],
     };
 
-    expect(calculateTotals(cart)).toEqual({ subtotal: 100, discountTotal: 20, total: 80 });
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 100,
+      discountTotal: 20,
+      globalAdjustmentAmount: 0,
+      total: 80,
+    });
   });
 
   it('aplica un descuento por porcentaje a una línea', () => {
@@ -43,11 +53,71 @@ describe('calculateTotals', () => {
       ],
     };
 
-    expect(calculateTotals(cart)).toEqual({ subtotal: 200, discountTotal: 20, total: 180 });
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 200,
+      discountTotal: 20,
+      globalAdjustmentAmount: 0,
+      total: 180,
+    });
   });
 
   it('devuelve todo en 0 para un carrito vacío', () => {
-    expect(calculateTotals({ lines: [] })).toEqual({ subtotal: 0, discountTotal: 0, total: 0 });
+    expect(calculateTotals({ lines: [] })).toEqual({
+      subtotal: 0,
+      discountTotal: 0,
+      globalAdjustmentAmount: 0,
+      total: 0,
+    });
+  });
+
+  it('aplica un recargo global sobre el neto de descuentos por línea', () => {
+    const cart: Cart = {
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+      globalAdjustmentPercentage: 10,
+    };
+
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 100,
+      discountTotal: 0,
+      globalAdjustmentAmount: 10,
+      total: 110,
+    });
+  });
+
+  it('aplica un descuento global (porcentaje negativo)', () => {
+    const cart: Cart = {
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
+      globalAdjustmentPercentage: -10,
+    };
+
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 100,
+      discountTotal: 0,
+      globalAdjustmentAmount: -10,
+      total: 90,
+    });
+  });
+
+  it('el recargo/descuento global se aplica después del descuento por línea', () => {
+    const cart: Cart = {
+      lines: [
+        {
+          kind: 'product',
+          productId: 'p1',
+          qty: 1,
+          unitPrice: 100,
+          discount: { type: 'amount', value: 20 },
+        },
+      ],
+      globalAdjustmentPercentage: 10, // 10% de (100 - 20) = 8, no de 100
+    };
+
+    expect(calculateTotals(cart)).toEqual({
+      subtotal: 100,
+      discountTotal: 20,
+      globalAdjustmentAmount: 8,
+      total: 88,
+    });
   });
 });
 

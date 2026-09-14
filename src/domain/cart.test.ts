@@ -4,6 +4,7 @@ import {
   addProductLine,
   applyLineDiscount,
   removeLine,
+  setGlobalAdjustment,
   setLineQuantity,
 } from './cart.ts';
 import type { Product } from './product.ts';
@@ -246,5 +247,60 @@ describe('applyLineDiscount', () => {
     const result = applyLineDiscount(cart, 0, { type: 'percentage', value: 150 });
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('setGlobalAdjustment', () => {
+  const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+
+  it('aplica un recargo (porcentaje positivo)', () => {
+    const result = setGlobalAdjustment(cart, 10);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(10);
+    }
+  });
+
+  it('aplica un descuento (porcentaje negativo)', () => {
+    const result = setGlobalAdjustment(cart, -10);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(-10);
+    }
+  });
+
+  it('reemplaza un ajuste anterior', () => {
+    const withFirst = setGlobalAdjustment(cart, 10);
+    if (!withFirst.ok) throw new Error('setup falló');
+
+    const result = setGlobalAdjustment(withFirst.value, -20);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.globalAdjustmentPercentage).toBe(-20);
+    }
+  });
+
+  it('0 quita el campo en vez de dejarlo en 0 explícito', () => {
+    const withAdjustment = setGlobalAdjustment(cart, 15);
+    if (!withAdjustment.ok) throw new Error('setup falló');
+
+    const result = setGlobalAdjustment(withAdjustment.value, 0);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect('globalAdjustmentPercentage' in result.value).toBe(false);
+    }
+  });
+
+  it('rechaza un descuento mayor al 100%', () => {
+    const result = setGlobalAdjustment(cart, -150);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('cart/invalid-global-adjustment');
+    }
   });
 });

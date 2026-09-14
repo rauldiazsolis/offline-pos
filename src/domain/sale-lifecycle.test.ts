@@ -95,6 +95,30 @@ describe('closeSale', () => {
     }
   });
 
+  it('copia el recargo/descuento global al Sale y exige pago contra el total ajustado', () => {
+    const cartWithAdjustment: Cart = { ...cart, globalAdjustmentPercentage: 10 }; // total: 220
+
+    const rejected = closeSale({
+      cart: cartWithAdjustment,
+      payments: [{ method: 'cash', amount: 200 }], // cubre el subtotal, no el total ajustado
+      id: 'sale-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(rejected.ok).toBe(false);
+
+    const accepted = closeSale({
+      cart: cartWithAdjustment,
+      payments: [{ method: 'cash', amount: 220 }],
+      id: 'sale-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok) {
+      expect(accepted.value.globalAdjustmentPercentage).toBe(10);
+      expect(accepted.value.total).toBe(220);
+    }
+  });
+
   it('acepta un pago a cuenta corriente con cliente adjunto y guarda el customerId', () => {
     const result = closeSale({
       cart,

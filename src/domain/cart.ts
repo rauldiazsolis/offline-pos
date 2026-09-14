@@ -3,8 +3,14 @@ import { err, ok, type Result } from './result.ts';
 import type { Discount, SaleLine } from './sale.ts';
 import type { StockItem } from './stock.ts';
 
-/** Carrito en curso. Vive solo en signals de UI mientras se arma — nunca se persiste como tal. */
-export type Cart = { lines: SaleLine[] };
+/**
+ * Carrito en curso. Vive solo en signals de UI mientras se arma — nunca se
+ * persiste como tal. `globalAdjustmentPercentage` (recargo si es positivo,
+ * descuento si es negativo, `<signo><número>%` en la barra de comandos)
+ * completa RF-03 — se recalcula en vivo sobre el total actual en cada
+ * `calculateTotals`, nunca es un monto congelado al momento de aplicarlo.
+ */
+export type Cart = { lines: SaleLine[]; globalAdjustmentPercentage?: number };
 
 function findProductLineIndex(cart: Cart, productId: string): number {
   return cart.lines.findIndex((line) => line.kind === 'product' && line.productId === productId);
@@ -148,4 +154,21 @@ export function applyLineDiscount(cart: Cart, lineIndex: number, discount: Disco
   const lines = [...cart.lines];
   lines[lineIndex] = { ...line, discount };
   return ok({ lines });
+}
+
+/**
+ * Aplica (o reemplaza) el recargo/descuento global de la venta (RF-03,
+ * `<signo><número>%` en la barra de comandos). `percentage === 0` quita el
+ * campo (nunca lo deja en `0` explícito) — es la forma de cancelar un
+ * ajuste ya aplicado.
+ */
+export function setGlobalAdjustment(cart: Cart, percentage: number): Result<Cart> {
+  if (!Number.isFinite(percentage) || percentage < -100) {
+    return err('cart/invalid-global-adjustment', { percentage });
+  }
+  if (percentage === 0) {
+    const { globalAdjustmentPercentage: _ignored, ...rest } = cart;
+    return ok(rest);
+  }
+  return ok({ ...cart, globalAdjustmentPercentage: percentage });
 }

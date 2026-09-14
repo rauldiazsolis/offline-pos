@@ -52,4 +52,6 @@ export type Sale = {
   voidedAt?: string;
   voidReason?: string;
   customerId?: string;
+  /** Recargo (positivo) o descuento (negativo) global aplicado, RF-03 — copiado del Cart al cerrar. */
+  globalAdjustmentPercentage?: number;
 };
