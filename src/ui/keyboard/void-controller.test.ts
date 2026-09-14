@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
 import type { Cart } from '../../domain/cart.ts';
@@ -32,6 +33,8 @@ beforeEach(async () => {
     tracksStock: true,
   });
   await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
+  // Fase 6: closeSaleAndPersist exige un turno de caja abierto.
+  await openCashSessionAndPersist({ openingAmount: 0 });
 
   voidableSalesSignal.value = [];
   voidSelectionIndexSignal.value = null;

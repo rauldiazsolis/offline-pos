@@ -1,6 +1,11 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Cart } from '../domain/cart.ts';
+import {
+  closeCashSessionAndPersist,
+  getCurrentOpenCashSession,
+  openCashSessionAndPersist,
+} from './cash-session-repository.ts';
 import { db } from './db.ts';
 import { closeSaleAndPersist, voidSaleAndPersist } from './sale-repository.ts';
 
@@ -17,6 +22,10 @@ beforeEach(async () => {
     tracksStock: true,
   });
   await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
+  // Fase 6: closeSaleAndPersist exige un turno de caja abierto — se abre uno
+  // acá para no repetirlo en cada test; el test de "sin turno abierto" lo
+  // cierra explícitamente antes de ejercitar el caso que le interesa.
+  await openCashSessionAndPersist({ openingAmount: 0 });
 });
 
 afterEach(async () => {
@@ -130,6 +139,22 @@ describe('closeSaleAndPersist', () => {
       (event) => event.type === 'account-hold-confirm',
     );
     expect(confirmEvent).toMatchObject({ holdId: 'hold-1', saleId: result.value.id });
+  });
+
+  it('rechaza cerrar la venta sin un turno de caja abierto', async () => {
+    await closeCashSessionAndPersist({ closingAmount: 0 }); // cierra el turno que abrió el beforeEach
+
+    const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+
+    expect(result).toEqual({ ok: false, error: 'cash-session/none-open', meta: undefined });
+  });
+
+  it('agrega el id de la venta al turno de caja abierto', async () => {
+    const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+    if (!result.ok) throw new Error('setup falló');
+
+    const session = await getCurrentOpenCashSession();
+    expect(session?.sales).toContain(result.value.id);
   });
 
   it('no genera movimientos de stock para productos que no lo trackean', async () => {
