@@ -257,16 +257,29 @@ Identificación de cliente (`@`), `CustomerAccount`, flujo de hold síncrono + c
 **Fase 4 — Keyboard-first completo**
 `/COMANDOS` completos, gestor de foco global (navegación de carrito vs. resultados), integración de scanner, auditoría de accesibilidad por teclado (probar todo el flujo sin tocar el mouse ni una vez).
 
-**Fase 5 — Hardware**
+**Fase 5 — Hardware (pospuesta a v2)**
 Impresión de tickets (Web Serial/USB), apertura de cajón, fallback para navegadores sin soporte.
+Decisión tomada al terminar Fase 4: depende de dispositivos físicos reales para poder validarse en
+serio, y ninguna fase posterior depende de que esté hecha — se pospone a v2 y se avanza directo a
+Fase 6. Se retoma el orden numérico original (5, 6, 7) solo como referencia histórica de lo ya
+documentado; el orden de ejecución real de esta primera etapa es Fase 6 → ciclos de mejora de UI →
+Fase 7.
 
 **Fase 6 — Multi-terminal y caja**
-Turnos de caja, arqueo, reportes básicos, reconciliación de catálogo y saldo entre terminales.
+Turnos de caja, arqueo, reportes básicos, reconciliación de catálogo y saldo entre terminales. La
+reconciliación multi-terminal solo se puede validar contra un `Connector` fake/mockeado hasta que
+exista el minibackend de Fase 7 — mismo criterio ya usado para el motor de sync.
 
 **Fase 7 — Publicación**
-Manifest PWA, flujo de actualización de service worker, documentación del Connector API para integradores externos, hardening y lanzamiento.
+Manifest PWA, flujo de actualización de service worker, documentación del Connector API para
+integradores externos, hardening y lanzamiento. Alcance ampliado a propósito (decisión al terminar
+Fase 6): además de documentar el contrato, se construye un minibackend de demostración que lo
+implementa — es la mejor documentación posible ("funcionando" en vez de solo especificado) y la
+única forma de probar de punta a punta lo que Fase 6 dejó validado solo con fakes (reconciliación
+multi-terminal, holds de cuenta corriente, sync real en vez de mockeado).
 
-**v2 (fuera de este documento)**: cobranzas con medios de pago múltiples e integración con pasarelas de pago.
+**v2 (fuera de este documento)**: Fase 5 (hardware, ver nota arriba), cobranzas con medios de pago
+múltiples e integración con pasarelas de pago.
 
 ## 12. Publicación y distribución
 

@@ -651,6 +651,22 @@ cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estad
 fábrica", con las confirmaciones necesarias — sin definir cuántos pasos de confirmación), #37
 (falta UI para crear/editar documento/teléfono de un cliente — sin definir cómo).
 
-Sigue Fase 5 (hardware — impresión de tickets vía Web Serial/USB, apertura de cajón, fallback para
-navegadores sin soporte). Antes de armar estructura o herramental nuevo, confirmar en qué fase está
-el trabajo actual — no adelantar features de una fase posterior.
+**Fase 5 (hardware) pospuesta a v2** — decisión tomada al terminar Fase 4: depende de dispositivos
+físicos reales (impresora, cajón) para poder validarse en serio, y ninguna fase posterior depende
+de que esté hecha. Se avanza directo a Fase 6. Detalle completo de la decisión y el nuevo orden en
+§11 del documento de diseño.
+
+Arranca Fase 6 (multi-terminal y caja — turnos de caja, arqueo, reportes básicos, reconciliación de
+catálogo y saldo entre terminales). La reconciliación multi-terminal solo se puede validar contra
+un `Connector` fake/mockeado hasta que exista el minibackend de Fase 7 (ver más abajo) — mismo
+criterio que ya usa `sync/engine.test.ts`, no es un bloqueante. Después de Fase 6, una tanda de
+ciclos de mejora de UI (mismo formato que los ciclos post-Fase 4) antes de pasar a Fase 7.
+
+Fase 7 (publicación) tiene su alcance ampliado a propósito: además de lo que ya documentaba el
+diseño (manifest PWA, flujo de actualización de service worker, documentación del Connector API,
+hardening y lanzamiento), va a incluir un minibackend de demostración que implemente el contrato —
+la mejor documentación posible del Connector API y la única forma de probar de punta a punta lo que
+Fase 6 deja validado solo con fakes.
+
+Antes de armar estructura o herramental nuevo, confirmar en qué fase está el trabajo actual — no
+adelantar features de una fase posterior.
