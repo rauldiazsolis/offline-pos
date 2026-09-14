@@ -1,0 +1,38 @@
+/*
+ * Issue #18: antes, Cliente/tabla/Total eran una columna flex dentro de un
+ * único contenedor con scroll — todo se movía junto, y el bloque de Total
+ * empujaba lo que hubiera debajo al cambiar de alto (aparece/desaparece el
+ * recargo/descuento global).
+ *
+ * Cliente y Total son bloques fijos (fuera del área que scrollea); solo
+ * ".cart-view__scroll" (donde vive la tabla) tiene overflow propio. Cada
+ * nivel de este árbol necesita "min-height: 0" explícito además de su
+ * tamaño flexible — sin eso, el contenido empuja el alto del contenedor en
+ * vez de activar el scroll interno (el gotcha de siempre con flex/grid
+ * anidado + scroll).
+ *
+ * Flexbox, no grid: con flex, un hijo condicional ausente (sin cliente
+ * adjunto, o carrito vacío sin bloque de Total) no deja ningún "gap"
+ * fantasma — a diferencia de grid con áreas nombradas, donde el `gap` se
+ * inserta entre los tracks de la plantilla sin importar si algo los ocupa.
+ */
+.cart-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: var(--space-3);
+}
+
+.cart-view__scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.cart-view__scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-bg);
+}

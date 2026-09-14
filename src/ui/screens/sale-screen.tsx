@@ -19,8 +19,14 @@ import { StatusBar } from '../components/StatusBar.tsx';
  * `height: '100svh'` + `overflow: 'hidden'` en la raíz (no `minHeight`): con
  * `min-height` nada le pone un techo real a este contenedor, así que un
  * carrito largo hacía crecer el documento entero y el header/footer se
- * desplazaban con el scroll de la página en vez de quedar fijos — el único
- * que debe scrollear es `<main>`.
+ * desplazaban con el scroll de la página en vez de quedar fijos.
+ *
+ * `<main>` ya no scrollea directo (issue #18): el único sector con scroll
+ * de la pantalla principal es la lista de artículos, dentro de `CartView`
+ * — Cliente/Total quedan fijos. Por eso `overflow: 'hidden'` +
+ * `minHeight: 0` acá también (mismo motivo que en la raíz): sin el
+ * `minHeight: 0`, este contenedor flex crecería con el contenido en vez de
+ * dejar que el scroll real, un nivel más adentro, se haga cargo.
  */
 export function SaleScreen() {
   return (
@@ -36,7 +42,7 @@ export function SaleScreen() {
       }}
     >
       <StatusBar />
-      <main style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-3)' }}>
+      <main style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: 'var(--space-3)' }}>
         <CartView />
       </main>
       <footer
