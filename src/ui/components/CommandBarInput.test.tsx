@@ -9,6 +9,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandSelectionIndexSignal,
   customerSelectionIndexSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
@@ -664,6 +665,93 @@ describe('CommandBarInput', () => {
       fireEvent.keyDown(input, { key: 'ArrowDown' });
 
       expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+    });
+  });
+
+  // Issue #14: cada tecla resetea/reindexa la selección de las tres listas
+  // — comandos siempre a null, productos/clientes por identidad.
+  describe('reset/reindexado de selección al cambiar el buffer', () => {
+    it('el menú de comandos resetea la selección en cada tecla', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '/' } });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(commandSelectionIndexSignal.value).toBe(0);
+
+      fireEvent.input(input, { target: { value: '/C' } });
+      expect(commandSelectionIndexSignal.value).toBeNull();
+    });
+
+    it('la búsqueda de productos mantiene la selección si el producto sigue en la lista nueva', () => {
+      setCatalogRepository({
+        search: (query) => {
+          const q = query.toLowerCase();
+          if (q === 'multi') return [arrozResult, fideosResult];
+          if (q.includes('fideos')) return [fideosResult];
+          if (q.includes('arroz')) return [arrozResult];
+          return [];
+        },
+        findByBarcodeOrSku: () => undefined,
+        getProduct: () => undefined,
+        getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
+      });
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'multi' } });
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // fideos, índice 1
+      expect(searchSelectionIndexSignal.value).toBe(1);
+
+      fireEvent.input(input, { target: { value: 'fideos' } }); // ahora es el único, índice 0
+      expect(searchSelectionIndexSignal.value).toBe(0);
+    });
+
+    it('la búsqueda de productos pierde la selección si el producto ya no está en la lista nueva', () => {
+      setCatalogRepository({
+        search: (query) => {
+          const q = query.toLowerCase();
+          if (q === 'multi') return [arrozResult, fideosResult];
+          if (q.includes('fideos')) return [fideosResult];
+          if (q.includes('arroz')) return [arrozResult];
+          return [];
+        },
+        findByBarcodeOrSku: () => undefined,
+        getProduct: () => undefined,
+        getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
+      });
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'multi' } });
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // fideos, índice 1
+
+      fireEvent.input(input, { target: { value: 'arroz' } }); // ya no hay fideos en la lista
+      expect(searchSelectionIndexSignal.value).toBeNull();
+    });
+
+    it('la búsqueda de clientes mantiene la selección si el cliente sigue en la lista nueva', () => {
+      setCustomerRepository({
+        search: (query) => {
+          const q = query.toLowerCase();
+          if (q === 'multi') return [anaResult, brunoResult];
+          if (q.includes('bruno')) return [brunoResult];
+          if (q.includes('ana')) return [anaResult];
+          return [];
+        },
+        listRecent: () => [],
+        getCustomer: () => undefined,
+        getCustomerAccount: () => Promise.resolve(undefined),
+      });
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '@multi' } });
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // bruno, índice 1
+      expect(customerSelectionIndexSignal.value).toBe(1);
+
+      fireEvent.input(input, { target: { value: '@bruno' } }); // ahora es el único, índice 0
+      expect(customerSelectionIndexSignal.value).toBe(0);
     });
   });
 });

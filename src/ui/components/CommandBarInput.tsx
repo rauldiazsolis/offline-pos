@@ -5,6 +5,7 @@ import {
   setSelectedCartLineQuantity,
   submitCommandBar,
   triggerCheckout,
+  updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
@@ -51,9 +52,11 @@ export function CommandBarInput() {
   const customerRowRef = useScrollSelectedIntoView(customerSelectionIndexSignal);
   const searchRowRef = useScrollSelectedIntoView(searchSelectionIndexSignal);
 
+  // updateCommandBarBuffer (no tocar los signals directo): además de
+  // actualizar el buffer, resetea/reindexa la selección de las tres listas
+  // — issue #14.
   const handleInput = (event: TargetedEvent<HTMLInputElement>) => {
-    commandBarBufferSignal.value = event.currentTarget.value;
-    commandBarErrorSignal.value = null;
+    updateCommandBarBuffer(event.currentTarget.value);
   };
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {

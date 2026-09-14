@@ -10,6 +10,7 @@ import type { Product } from '../../domain/product.ts';
 import type { Cart } from '../../domain/cart.ts';
 import type { Result } from '../../domain/result.ts';
 import type { SaleLine } from '../../domain/sale.ts';
+import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import { createCustomerLocally, loadCustomerRepository } from '../../storage/customer-repository.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -23,6 +24,7 @@ import {
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
+  type UnifiedSearchResult,
 } from '../state/command-bar.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
@@ -83,6 +85,79 @@ function clearBuffer(): void {
   searchSelectionIndexSignal.value = null;
   customerSelectionIndexSignal.value = null;
   commandSelectionIndexSignal.value = null;
+}
+
+/**
+ * Si el ítem que estaba en `previousIndex` sigue presente en `newItems`
+ * (comparado por `identity`, no por índice — la posición puede cambiar
+ * entre una lista filtrada y la siguiente), devuelve su índice nuevo; si
+ * no, `null`. `previousIndex === null` (nada seleccionado todavía) es
+ * siempre `null` sin buscar nada.
+ */
+function reindexByIdentity<T>(
+  previousItems: T[],
+  previousIndex: number | null,
+  newItems: T[],
+  identity: (item: T) => string,
+): number | null {
+  if (previousIndex === null) {
+    return null;
+  }
+  const previous = previousItems[previousIndex];
+  if (previous === undefined) {
+    return null;
+  }
+  const target = identity(previous);
+  const newIndex = newItems.findIndex((item) => identity(item) === target);
+  return newIndex === -1 ? null : newIndex;
+}
+
+function identityOfSearchResult(result: UnifiedSearchResult): string {
+  return result.kind === 'product'
+    ? `product:${result.result.product.id}`
+    : `freeform:${result.description}`;
+}
+
+function identityOfCustomerResult(result: CustomerSearchResult): string {
+  return result.customer.id;
+}
+
+/**
+ * Se llama en cada tecla de la barra de comandos (issue #14) — antes, el
+ * puntero de selección de ninguna de las tres listas se resetaba al
+ * cambiar el buffer, así que podía quedar apuntando a una fila que ya no
+ * tiene sentido para la lista filtrada nueva (una fila distinta, o
+ * directamente fuera de rango).
+ *
+ * Menú de comandos: reset simple a `null`, siempre — confirmado con el
+ * usuario, ejecutar el comando equivocado por accidente tiene consecuencias
+ * reales, así que no vale la pena ser "más inteligente" acá. Búsqueda de
+ * producto/línea libre y de cliente: "más inteligente" — si el ítem que
+ * estaba seleccionado sigue presente en la lista nueva (por identidad), se
+ * lo sigue apuntando aunque haya cambiado de posición.
+ */
+export function updateCommandBarBuffer(value: string): void {
+  const previousSearchResults = searchResultsSignal.value;
+  const previousSearchIndex = searchSelectionIndexSignal.value;
+  const previousCustomerResults = customerResultsSignal.value;
+  const previousCustomerIndex = customerSelectionIndexSignal.value;
+
+  commandBarBufferSignal.value = value;
+  commandBarErrorSignal.value = null;
+
+  commandSelectionIndexSignal.value = null;
+  searchSelectionIndexSignal.value = reindexByIdentity(
+    previousSearchResults,
+    previousSearchIndex,
+    searchResultsSignal.value,
+    identityOfSearchResult,
+  );
+  customerSelectionIndexSignal.value = reindexByIdentity(
+    previousCustomerResults,
+    previousCustomerIndex,
+    customerResultsSignal.value,
+    identityOfCustomerResult,
+  );
 }
 
 /** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
