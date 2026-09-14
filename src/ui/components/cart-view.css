@@ -1,37 +1,39 @@
 /*
- * Issue #18: antes, Cliente/tabla/Total eran una columna flex dentro de un
- * único contenedor con scroll — todo se movía junto, y el bloque de Total
- * empujaba lo que hubiera debajo al cambiar de alto (aparece/desaparece el
- * recargo/descuento global).
+ * Layout único (Ciclo 7) — se decidió abandonar por completo el diseño
+ * angosto: el enfoque de comandos ya asume teclado, no vale la pena
+ * mantener una versión mobile-friendly (una interfaz táctil sería un
+ * rediseño completo, no una variante de esta). Antes esta grilla solo
+ * aplicaba en pantallas ≥900px (issue #19) con una versión flex aparte
+ * para angosto; ahora es la única.
  *
- * Cliente y Total son bloques fijos (fuera del área que scrollea); solo
- * ".cart-view__scroll" (donde vive la tabla) tiene overflow propio. Cada
- * nivel de este árbol necesita "min-height: 0" explícito además de su
- * tamaño flexible — sin eso, el contenido empuja el alto del contenedor en
- * vez de activar el scroll interno (el gotcha de siempre con flex/grid
- * anidado + scroll).
+ * División 2/3–1/3: `2fr 1fr` en vez del ancho fijo anterior (`320px`) —
+ * la tabla de productos siempre el doble de ancho que la columna de
+ * Cliente/Total, sea cual sea el ancho de la ventana.
  *
- * Flexbox, no grid: con flex, un hijo condicional ausente (sin cliente
- * adjunto, o carrito vacío sin bloque de Total) no deja ningún "gap"
- * fantasma — a diferencia de grid con áreas nombradas, donde el `gap` se
- * inserta entre los tracks de la plantilla sin importar si algo los ocupa.
+ * Grid (no flex) porque la tabla necesita ocupar dos filas de una columna
+ * mientras Cliente/Total ocupan una fila cada uno de la otra — algo que
+ * flex no puede expresar sin envolver Cliente+Total en un contenedor
+ * propio. La preocupación original de "gap fantasma sin cliente adjunto"
+ * que justificaba mantener flex para angosto ya no aplica: Cliente
+ * siempre está (Consumidor Final es el default, Ciclo 7), nunca ausente.
+ *
+ * `align-self: start` en Total: la fila de Total comparte el track `1fr`
+ * con la tabla (para que esta ocupe todo el alto) — sin ningún
+ * `align-self`, la tarjeta se estiraría para llenar ese espacio entero.
+ * `start` la deja pegada justo debajo de Cliente, con el espacio que sobra
+ * abajo de todo (reportado por el usuario: quería
+ * "[cliente][totales][blanco]", no "[cliente][blanco][totales]").
  */
 .cart-view {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    'table customer'
+    'table totals';
   height: 100%;
   min-height: 0;
   gap: var(--space-3);
-}
-
-.cart-view__scroll {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-  /* Una sola fuente de verdad: el alto real del header y el margen de
-   * scroll de las filas (más abajo) siempre tienen que coincidir, o el
-   * bug que esto arregla vuelve a aparecer si uno cambia sin el otro. */
-  --cart-table-head-h: 1.75rem;
 }
 
 /*
@@ -42,11 +44,33 @@
  * mínimo alcanza para las 4 sin que la tarjeta cambie de tamaño.
  */
 .cart-view__customer {
+  grid-area: customer;
   min-height: 6.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: var(--space-1);
+}
+
+.cart-view__totals {
+  grid-area: totals;
+  align-self: start;
+}
+
+/*
+ * ".cart-view__scroll" (donde vive la tabla) es el único sector con scroll
+ * propio (issue #18) — "min-height: 0" explícito además del área que le da
+ * la grilla, o el contenido empuja el alto en vez de activar el scroll
+ * interno (el gotcha de siempre con flex/grid anidado + scroll).
+ */
+.cart-view__scroll {
+  grid-area: table;
+  overflow-y: auto;
+  min-height: 0;
+  /* Una sola fuente de verdad: el alto real del header y el margen de
+   * scroll de las filas (más abajo) siempre tienen que coincidir, o el
+   * bug que esto arregla vuelve a aparecer si uno cambia sin el otro. */
+  --cart-table-head-h: 1.75rem;
 }
 
 .cart-view__scroll thead th {
@@ -70,47 +94,4 @@
  */
 .cart-view__scroll tbody tr {
   scroll-margin-top: var(--cart-table-head-h);
-}
-
-/*
- * Issue #19: Cliente/Total a la derecha en pantallas anchas — reabre a
- * propósito la decisión de "una sola columna, sin sidebar" del primer pase
- * de diseño visual (ver CLAUDE.md). Grid (no flex) porque necesita que la
- * tabla ocupe dos filas de una columna mientras Cliente/Total ocupan una
- * fila cada uno de la otra — algo que flex no puede expresar sin envolver
- * Cliente+Total en un contenedor propio, que a su vez rompería el "sin gap
- * fantasma" del layout angosto (ver el comentario de arriba). 900px es un
- * punto de partida (tablet apaisada/notebook chica) — un solo valor, fácil
- * de ajustar si no da bien.
- *
- * `align-self: start` en Total: la fila de Total comparte el track `1fr`
- * con la tabla (para que esta ocupe todo el alto) — sin ningún
- * `align-self`, la tarjeta se estiraría para llenar ese espacio entero.
- * `start` la deja pegada justo debajo de Cliente, con el espacio que sobra
- * abajo de todo (antes era `end`, que dejaba el espacio vacío *entre*
- * Cliente y Total — reportado por el usuario: quería
- * "[cliente][totales][blanco]", no "[cliente][blanco][totales]").
- */
-@media (min-width: 900px) {
-  .cart-view {
-    display: grid;
-    grid-template-columns: 1fr 320px;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      'table customer'
-      'table totals';
-  }
-
-  .cart-view__customer {
-    grid-area: customer;
-  }
-
-  .cart-view__scroll {
-    grid-area: table;
-  }
-
-  .cart-view__totals {
-    grid-area: totals;
-    align-self: start;
-  }
 }

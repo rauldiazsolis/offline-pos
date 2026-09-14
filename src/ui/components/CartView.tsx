@@ -224,6 +224,7 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
         style={{
           display: 'flex',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
           fontWeight: 'bold',
           fontSize: 'var(--font-size-xl)',
           marginTop: 'var(--space-2)',
