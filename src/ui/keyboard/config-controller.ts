@@ -2,6 +2,7 @@ import { saveSyncConfig, syncConfigSchema } from '../../sync/config.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { setSyncConfigured } from '../state/sync.ts';
 import {
+  configApiKeySignal,
   configBaseUrlSignal,
   configBufferSignal,
   configErrorSignal,
@@ -9,7 +10,7 @@ import {
   resetConfigFlow,
 } from '../state/sync-config.ts';
 
-/** `/CONFIG`: entra al flujo de dos pasos (baseUrl → apiKey opcional). */
+/** `/CONFIG`: entra al flujo de tres pasos (baseUrl → apiKey opcional → locale opcional). */
 export function enterConfigScreen(): void {
   resetConfigFlow();
   activeScreenSignal.value = 'config';
@@ -41,10 +42,18 @@ function submitBaseUrl(): void {
 }
 
 function submitApiKey(): void {
-  const buffer = configBufferSignal.value.trim();
+  configApiKeySignal.value = configBufferSignal.value.trim();
+  configBufferSignal.value = '';
+  configErrorSignal.value = null;
+  configStepSignal.value = 'locale';
+}
+
+function submitLocale(): void {
+  const locale = configBufferSignal.value.trim();
   const config = {
     baseUrl: configBaseUrlSignal.value,
-    ...(buffer !== '' ? { apiKey: buffer } : {}),
+    ...(configApiKeySignal.value !== '' ? { apiKey: configApiKeySignal.value } : {}),
+    ...(locale !== '' ? { locale } : {}),
   };
 
   const saveResult = saveSyncConfig(config);
@@ -64,5 +73,9 @@ export function submitConfigStep(): void {
     submitBaseUrl();
     return;
   }
-  submitApiKey();
+  if (configStepSignal.value === 'apiKey') {
+    submitApiKey();
+    return;
+  }
+  submitLocale();
 }

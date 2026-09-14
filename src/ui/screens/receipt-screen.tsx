@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import { calculateLineTotal } from '../../domain/totals.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
+import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
@@ -27,12 +27,8 @@ function continueToSale(): void {
  * la app, acá sobre el contenedor de la pantalla en vez de un input de texto.
  */
 export function ReceiptScreen() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useFocusOnMount<HTMLDivElement>();
   const sale = receiptSaleSignal.value;
-
-  useLayoutEffect(() => {
-    containerRef.current?.focus();
-  }, []);
 
   if (sale === null) {
     // Invariante de infraestructura: no debería poder llegarse acá sin una

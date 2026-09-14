@@ -1,7 +1,8 @@
 import { useSignalEffect } from '@preact/signals';
-import { useLayoutEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import { formatMoney } from '../format.ts';
+import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import {
   cancelVoidConfirmation,
   confirmVoid,
@@ -23,11 +24,12 @@ import {
  * (Enter otra vez) — anular no se puede deshacer.
  */
 export function VoidSaleScreen() {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useFocusOnMount<HTMLDivElement>();
 
+  // Cargar las ventas anulables es una carga de datos al montar, no algo
+  // ligado al foco — useFocusOnMount solo se ocupa del foco, esto va aparte.
   useLayoutEffect(() => {
     void loadVoidableSales();
-    containerRef.current?.focus();
   }, []);
 
   useSignalEffect(() => {

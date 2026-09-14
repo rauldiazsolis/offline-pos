@@ -10,6 +10,10 @@ import { toZodIssues } from '../domain/zod-issues.ts';
 export const syncConfigSchema = z.object({
   baseUrl: z.url(),
   apiKey: z.string().optional(),
+  // §7 del doc de diseño: locale configurable por terminal, usado por
+  // `ui/format.ts` para `Intl.NumberFormat`. Default `navigator.language`
+  // si no se configura.
+  locale: z.string().optional(),
 });
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;

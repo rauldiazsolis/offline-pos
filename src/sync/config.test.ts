@@ -17,6 +17,16 @@ describe('saveSyncConfig / loadSyncConfig', () => {
     });
   });
 
+  it('guarda y relee locale', () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'en-US' });
+
+    const result = loadSyncConfig();
+    expect(result).toEqual({
+      ok: true,
+      value: { baseUrl: 'https://api.example.com', locale: 'en-US' },
+    });
+  });
+
   it('apiKey es opcional', () => {
     saveSyncConfig({ baseUrl: 'https://api.example.com' });
 

@@ -1,5 +1,3 @@
-import { useSignalEffect } from '@preact/signals';
-import { useRef } from 'preact/hooks';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import {
   moveSelection,
@@ -9,6 +7,8 @@ import {
   triggerCheckout,
 } from '../keyboard/command-bar-controller.ts';
 import { AVAILABLE_COMMANDS } from '../keyboard/commands.ts';
+import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
@@ -28,16 +28,18 @@ const ONLY_DIGITS = /^\d+$/;
  * lógica de qué hacer con cada tecla vive en `command-bar-controller.ts`.
  */
 export function CommandBarInput() {
-  const inputRef = useRef<HTMLInputElement>(null);
+  // useFocusOnMount, no el atributo HTML `autoFocus` — al volver de un popup
+  // (Esc desde cobro/anulación/config/comprobante), `App` desmonta y vuelve a
+  // montar esta pantalla, y `autoFocus` no dispara el foco de forma
+  // confiable en una inserción dinámica (a diferencia de la carga inicial de
+  // la página). Este era justo el bug real: el foco se perdía al volver de
+  // cualquier popup con Esc.
+  const inputRef = useFocusOnMount<HTMLInputElement>();
 
   // Al fallar el parseo/comando, se selecciona todo el input (.select() nativo)
   // — vale tanto para errores síncronos como para los que llegan después de
   // resolver una búsqueda async de producto/stock.
-  useSignalEffect(() => {
-    if (commandBarErrorSignal.value !== null) {
-      inputRef.current?.select();
-    }
-  });
+  useSelectOnErrorSignal(inputRef, commandBarErrorSignal);
 
   const handleInput = (event: TargetedEvent<HTMLInputElement>) => {
     commandBarBufferSignal.value = event.currentTarget.value;
@@ -99,7 +101,6 @@ export function CommandBarInput() {
       <input
         ref={inputRef}
         type="text"
-        autoFocus
         value={commandBarBufferSignal.value}
         onInput={handleInput}
         onKeyDown={handleKeyDown}

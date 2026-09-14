@@ -159,6 +159,20 @@ describe('CommandBarInput', () => {
     expect(attachedCustomerSignal.value).toBeUndefined();
   });
 
+  it('recupera el foco al remontarse (volver de un popup con Esc)', () => {
+    // Regresión del bug reportado: la barra de comandos usaba `autoFocus`
+    // nativo en vez del mismo patrón imperativo que el resto de las
+    // pantallas — al desmontarse y volver a montarse (exactamente lo que
+    // pasa al volver de /COBRAR, /ANULAR, /CONFIG o el comprobante con Esc),
+    // el foco no se recuperaba de forma confiable.
+    const first = render(<CommandBarInput />);
+    first.unmount();
+
+    render(<CommandBarInput />);
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Barra de comandos'));
+  });
+
   it('con solo "/" muestra la lista completa de comandos disponibles', () => {
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
