@@ -451,4 +451,170 @@ describe('CommandBarInput', () => {
 
     expect(cartSignal.value.globalAdjustmentPercentage).toBeUndefined();
   });
+
+  // Issue #15: la línea resultante de agregar/ajustar queda seleccionada
+  // (y, gracias al hook de scroll, visible); el borrado explícito con Supr
+  // tiene un criterio distinto a propósito (selecciona la que se corrió a
+  // ese índice, o la anterior, o nada si el carrito quedó vacío).
+  describe('selección tras mutaciones del carrito', () => {
+    it('agregar un producto por búsqueda selecciona su línea', async () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'arroz' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSelectionIndexSignal.value).toBe(0);
+      });
+    });
+
+    it('agregar un segundo producto distinto selecciona su línea, no la primera', async () => {
+      setCatalogRepository({
+        search: (query) => {
+          const q = query.toLowerCase();
+          if (q.includes('fideos')) return [fideosResult];
+          if (q.includes('arroz')) return [arrozResult];
+          return [];
+        },
+        findByBarcodeOrSku: () => undefined,
+        getProduct: () => undefined,
+        getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
+      });
+      cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'fideos' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSelectionIndexSignal.value).toBe(1);
+      });
+    });
+
+    it('agregar un producto ya presente (suma cantidad) selecciona esa misma línea', async () => {
+      cartSignal.value = {
+        lines: [
+          { kind: 'product', productId: 'p2', qty: 1, unitPrice: 200 },
+          { kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 },
+        ],
+      };
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'arroz' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSelectionIndexSignal.value).toBe(1);
+        expect(cartSignal.value.lines[1]?.qty).toBe(2);
+      });
+    });
+
+    it('crear una línea libre selecciona la última línea', async () => {
+      cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'regalo$50' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSelectionIndexSignal.value).toBe(1);
+      });
+    });
+
+    it('ajustar una línea libre existente hasta 0 no deja ninguna selección', async () => {
+      cartSignal.value = { lines: [{ kind: 'freeform', description: 'Regalo', qty: 2, unitPrice: 100 }] };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '-2*regalo' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSignal.value.lines).toEqual([]);
+        expect(cartSelectionIndexSignal.value).toBeNull();
+      });
+    });
+
+    it('ajustar una línea libre existente sin llegar a 0 la selecciona', async () => {
+      cartSignal.value = {
+        lines: [
+          { kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 },
+          { kind: 'freeform', description: 'Regalo', qty: 3, unitPrice: 100 },
+        ],
+      };
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '-1*regalo' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cartSelectionIndexSignal.value).toBe(1);
+        expect(cartSignal.value.lines[1]).toEqual({
+          kind: 'freeform',
+          description: 'Regalo',
+          qty: 2,
+          unitPrice: 100,
+        });
+      });
+    });
+
+    it('Supr sobre una línea del medio selecciona la que se corrió a ese índice', () => {
+      cartSignal.value = {
+        lines: [
+          { kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 },
+          { kind: 'product', productId: 'p2', qty: 1, unitPrice: 200 },
+          { kind: 'freeform', description: 'Envío', qty: 1, unitPrice: 50 },
+        ],
+      };
+      cartSelectionIndexSignal.value = 1;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.keyDown(input, { key: 'Delete' });
+
+      expect(cartSignal.value.lines).toHaveLength(2);
+      expect(cartSelectionIndexSignal.value).toBe(1);
+      expect(cartSignal.value.lines[1]).toEqual({
+        kind: 'freeform',
+        description: 'Envío',
+        qty: 1,
+        unitPrice: 50,
+      });
+    });
+
+    it('Supr sobre la última línea selecciona la anterior', () => {
+      cartSignal.value = {
+        lines: [
+          { kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 },
+          { kind: 'product', productId: 'p2', qty: 1, unitPrice: 200 },
+        ],
+      };
+      cartSelectionIndexSignal.value = 1;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.keyDown(input, { key: 'Delete' });
+
+      expect(cartSignal.value.lines).toHaveLength(1);
+      expect(cartSelectionIndexSignal.value).toBe(0);
+    });
+
+    it('Supr sobre la única línea no deja selección', () => {
+      cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.keyDown(input, { key: 'Delete' });
+
+      expect(cartSignal.value.lines).toEqual([]);
+      expect(cartSelectionIndexSignal.value).toBeNull();
+    });
+  });
 });
