@@ -1,9 +1,11 @@
 import { computed, signal } from '@preact/signals';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
+import type { SaleLine } from '../../domain/sale.ts';
 import { AVAILABLE_COMMANDS } from '../keyboard/commands.ts';
 import { parseCommandBar, type ParsedCommand } from '../keyboard/parse-command-bar.ts';
 import { getCatalogRepository } from './catalog.ts';
+import { cartSignal } from './cart.ts';
 import { getCustomerRepository } from './customer-repository.ts';
 
 /** Contenido actual del input de la barra de comandos. */
@@ -22,16 +24,46 @@ export const parsedSignal = computed<ParsedCommand>(() =>
 );
 
 /**
+ * Un resultado de "buscar artículo" puede ser un producto del catálogo o una
+ * línea libre que ya está en este ticket — la segunda no vive en ningún
+ * índice, es la forma de identificar cuál ajustar con `<n>*descripción`/
+ * `-<n>*descripción` (sin `$`, ver `domain/cart.ts::adjustFreeformLineQuantity`).
+ */
+export type UnifiedSearchResult =
+  | { kind: 'freeform-line'; description: string; unitPrice: number; qtyInCart: number }
+  | { kind: 'product'; result: CatalogSearchResult };
+
+function matchingFreeformLines(query: string): UnifiedSearchResult[] {
+  const needle = query.toLowerCase();
+  return cartSignal.value.lines
+    .filter(
+      (line): line is Extract<SaleLine, { kind: 'freeform' }> =>
+        line.kind === 'freeform' && line.description.toLowerCase().includes(needle),
+    )
+    .map((line) => ({
+      kind: 'freeform-line',
+      description: line.description,
+      unitPrice: line.unitPrice,
+      qtyInCart: line.qty,
+    }));
+}
+
+/**
  * Resultados de búsqueda en vivo cuando el buffer resuelve a `search`. Llamada
  * síncrona a FlexSearch, sin debounce — a esta escala la propia consulta ya
- * cumple RNF-03.
+ * cumple RNF-03. Líneas libres ya en el carrito que matcheen van primero
+ * (decisión del usuario: es lo más probable que se quiera ajustar), después
+ * el catálogo — mezclados en una sola lista, no en secciones separadas.
  */
-export const searchResultsSignal = computed<CatalogSearchResult[]>(() => {
+export const searchResultsSignal = computed<UnifiedSearchResult[]>(() => {
   const parsed = parsedSignal.value;
   if (parsed.kind !== 'search') {
     return [];
   }
-  return getCatalogRepository().search(parsed.query);
+  const productMatches: UnifiedSearchResult[] = getCatalogRepository()
+    .search(parsed.query)
+    .map((result) => ({ kind: 'product', result }));
+  return [...matchingFreeformLines(parsed.query), ...productMatches];
 });
 
 /**

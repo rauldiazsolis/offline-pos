@@ -8,6 +8,7 @@ import {
 } from '../keyboard/command-bar-controller.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
+import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
@@ -106,6 +107,15 @@ export function CommandBarInput() {
     color: selected ? '#ffffff' : 'var(--color-chrome-text)',
   });
 
+  // Subtexto (SKU/precio de producto, cantidad×monto de una línea libre ya
+  // en el carrito, documento/teléfono de cliente) — mismo patrón que
+  // `lineCode` en CartView, adaptado a legible sobre el fondo sólido cuando
+  // la fila está seleccionada.
+  const subtextStyle = (selected: boolean): { [key: string]: string } => ({
+    fontSize: 'var(--font-size-sm)',
+    color: selected ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-chrome-text-muted)',
+  });
+
   const hasError = commandBarErrorSignal.value !== null;
   const hasCommandResults = showCommandList && commandResults.length > 0;
   const hasSearchResults = !showCommandList && !showCustomerResults && searchResults.length > 0;
@@ -181,11 +191,30 @@ export function CommandBarInput() {
             </ul>
           ) : (
             <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-              {searchResults.map((result, index) => (
-                <li key={result.product.id} style={rowStyle(index === selectedSearchIndex)}>
-                  {result.product.name}
-                </li>
-              ))}
+              {searchResults.map((result, index) => {
+                const selected = index === selectedSearchIndex;
+                if (result.kind === 'freeform-line') {
+                  return (
+                    <li key={`freeform:${result.description}`} style={rowStyle(selected)}>
+                      <div>{result.description}</div>
+                      <div style={subtextStyle(selected)}>
+                        en el carrito: {result.qtyInCart} × {formatMoney(result.unitPrice)}
+                      </div>
+                    </li>
+                  );
+                }
+                const { product } = result.result;
+                const qty = parsed.kind === 'search' ? parsed.qty : 1;
+                return (
+                  <li key={product.id} style={rowStyle(selected)}>
+                    <div>{product.name}</div>
+                    <div style={subtextStyle(selected)}>
+                      {product.sku} · {formatMoney(product.price)}
+                      {qty !== 1 && ` · ${String(qty)} × = ${formatMoney(product.price * qty)}`}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
