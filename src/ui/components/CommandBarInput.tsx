@@ -118,6 +118,13 @@ export function CommandBarInput() {
     borderRadius: 'var(--radius-md)',
     background: selected ? 'var(--color-accent)' : 'transparent',
     color: selected ? '#ffffff' : 'var(--color-chrome-text)',
+    // Mismo diagnóstico que el header sticky del carrito: scrollIntoView
+    // no sabe que el padding del overlay reserva espacio arriba/abajo del
+    // primer/último ítem — sin esto, volver al principio de la lista con
+    // flechas lo deja pegado contra el borde redondeado, sin el margen que
+    // se ve al abrir el overlay por primera vez. Un solo scroll-margin
+    // (los 4 lados) en las tres listas, vía este mismo helper compartido.
+    scrollMargin: 'var(--space-2)',
   });
 
   // Subtexto (SKU/precio de producto, cantidad×monto de una línea libre ya

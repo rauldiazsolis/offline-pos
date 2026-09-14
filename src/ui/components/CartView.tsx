@@ -59,10 +59,24 @@ function lineCode(line: SaleLine): string | undefined {
   return getCatalogRepository().getProduct(line.productId)?.sku;
 }
 
-function CustomerCard({ customer }: { customer: Customer }): JSX.Element {
+/**
+ * Siempre visible, con o sin cliente adjunto — "Consumidor Final" es el
+ * default (antes no se mostraba nada). Documento/teléfono, mismos campos
+ * que ya se muestran en la fila del overlay de búsqueda de `@` (issue
+ * #21) — nada nuevo que agregar al dominio. Tamaño fijo (`cart-view.css`)
+ * para que la tarjeta no cambie de alto según cuántos de esos campos
+ * tenga el cliente adjunto.
+ */
+function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Element {
   return (
     <div class="cart-view__customer" style={cardStyle}>
-      Cliente: {customer.name}
+      <div style={{ fontWeight: 'bold' }}>{customer?.name ?? 'Consumidor Final'}</div>
+      {customer?.document !== undefined && (
+        <div style={{ color: 'var(--color-text-muted)' }}>Doc: {customer.document}</div>
+      )}
+      {customer?.phone !== undefined && (
+        <div style={{ color: 'var(--color-text-muted)' }}>Tel: {customer.phone}</div>
+      )}
     </div>
   );
 }
@@ -206,7 +220,7 @@ export function CartView(): JSX.Element {
 
   return (
     <div class="cart-view">
-      {customer !== undefined && <CustomerCard customer={customer} />}
+      <CustomerCard customer={customer} />
       <div class="cart-view__scroll">
         <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
       </div>

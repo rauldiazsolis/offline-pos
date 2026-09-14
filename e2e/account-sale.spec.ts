@@ -15,7 +15,7 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await commandBar.fill('@Cliente Prueba');
   await expect(page.getByText('Crear cliente', { exact: false })).toBeVisible();
   await commandBar.press('Enter');
-  await expect(page.getByText('Cliente: Cliente Prueba')).toBeVisible();
+  await expect(page.getByText('Cliente Prueba')).toBeVisible();
 
   const customers = await getAllFromStore<StoredCustomer>(page, 'customers');
   expect(customers).toHaveLength(1);
@@ -64,7 +64,7 @@ test('cuenta corriente offline sin cuenta cacheada: rechaza el cobro', async ({
 
   await commandBar.fill('@Sin Credito');
   await commandBar.press('Enter');
-  await expect(page.getByText('Cliente: Sin Credito')).toBeVisible();
+  await expect(page.getByText('Sin Credito')).toBeVisible();
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();

@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CartView } from './CartView.tsx';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
+import { attachedCustomerSignal } from '../state/customer.ts';
 
 beforeEach(() => {
   cartSignal.value = { lines: [] };
   cartSelectionIndexSignal.value = null;
+  attachedCustomerSignal.value = undefined;
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
@@ -31,6 +33,35 @@ describe('CartView', () => {
   it('muestra "carrito vacío" cuando no hay líneas', () => {
     render(<CartView />);
     expect(screen.getByText('El carrito está vacío.')).not.toBeNull();
+  });
+
+  // La tarjeta de cliente siempre se muestra, con o sin cliente adjunto —
+  // "Consumidor Final" es el default (antes no se mostraba nada).
+  it('sin cliente adjunto, muestra "Consumidor Final"', () => {
+    render(<CartView />);
+    expect(screen.getByText('Consumidor Final')).not.toBeNull();
+  });
+
+  it('con cliente adjunto, muestra su nombre y, si están presentes, documento y teléfono', () => {
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana García',
+      document: '12345678',
+      phone: '555-1234',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    render(<CartView />);
+    expect(screen.getByText('Ana García')).not.toBeNull();
+    expect(screen.getByText('Doc: 12345678')).not.toBeNull();
+    expect(screen.getByText('Tel: 555-1234')).not.toBeNull();
+  });
+
+  it('con cliente adjunto sin documento/teléfono, no muestra esas líneas', () => {
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' };
+    render(<CartView />);
+    expect(screen.getByText('Ana García')).not.toBeNull();
+    expect(screen.queryByText(/^Doc:/)).toBeNull();
+    expect(screen.queryByText(/^Tel:/)).toBeNull();
   });
 
   it('resuelve el nombre del producto para una línea de tipo product', () => {

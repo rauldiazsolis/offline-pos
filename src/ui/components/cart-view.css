@@ -28,13 +28,48 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  /* Una sola fuente de verdad: el alto real del header y el margen de
+   * scroll de las filas (más abajo) siempre tienen que coincidir, o el
+   * bug que esto arregla vuelve a aparecer si uno cambia sin el otro. */
+  --cart-table-head-h: 1.75rem;
+}
+
+/*
+ * Tamaño fijo: la tarjeta de Cliente siempre se muestra (Consumidor Final
+ * por default) con hasta 3 líneas (nombre, documento, teléfono) — este
+ * alto mínimo alcanza para las 3 sin que la tarjeta cambie de tamaño según
+ * cuántas tenga el cliente adjunto. Centrado vertical para que se vea bien
+ * tanto con 1 línea como con 3.
+ */
+.cart-view__customer {
+  min-height: 5.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
 }
 
 .cart-view__scroll thead th {
+  height: var(--cart-table-head-h);
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--color-bg);
+}
+
+/*
+ * `scrollIntoView({ block: 'nearest' })` (ver useScrollSelectedIntoView)
+ * calcula "visible" en términos puramente geométricos del contenedor con
+ * scroll — no sabe que el `<thead>` sticky de arriba tapa visualmente
+ * parte de ese espacio. Al volver a la primera fila navegando con
+ * flechas, el navegador scrollea lo mínimo necesario y la deja pegada
+ * contra el borde, debajo del header (issue reportada por el usuario:
+ * "tapado por el encabezado"). `scroll-margin-top` le dice explícitamente
+ * cuánto espacio reservar — confirmado en el navegador real antes de este
+ * fix, con captura de pantalla, que resuelve el problema exactamente.
+ */
+.cart-view__scroll tbody tr {
+  scroll-margin-top: var(--cart-table-head-h);
 }
 
 /*
@@ -48,9 +83,13 @@
  * punto de partida (tablet apaisada/notebook chica) — un solo valor, fácil
  * de ajustar si no da bien.
  *
- * `align-self: end` en Total: la fila de Total comparte el track `1fr` con
- * la tabla (para que esta ocupe todo el alto), así que sin esto la tarjeta
- * se estiraría para llenar ese espacio en vez de quedar pegada abajo.
+ * `align-self: start` en Total: la fila de Total comparte el track `1fr`
+ * con la tabla (para que esta ocupe todo el alto) — sin ningún
+ * `align-self`, la tarjeta se estiraría para llenar ese espacio entero.
+ * `start` la deja pegada justo debajo de Cliente, con el espacio que sobra
+ * abajo de todo (antes era `end`, que dejaba el espacio vacío *entre*
+ * Cliente y Total — reportado por el usuario: quería
+ * "[cliente][totales][blanco]", no "[cliente][blanco][totales]").
  */
 @media (min-width: 900px) {
   .cart-view {
@@ -72,6 +111,6 @@
 
   .cart-view__totals {
     grid-area: totals;
-    align-self: end;
+    align-self: start;
   }
 }
