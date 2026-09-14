@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/preact';
+import { render, screen, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CartView } from './CartView.tsx';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -53,28 +53,33 @@ describe('CartView', () => {
     expect(screen.getByText('Total')).not.toBeNull();
   });
 
-  it('sin recargo/descuento global, no muestra esa línea', () => {
+  // Issue #31: Subtotal/Descuento/Total siempre, no solo el Total con una
+  // fila condicional.
+  it('sin ajuste global, muestra Subtotal/Descuento ($0)/Total', () => {
     cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
-    render(<CartView />);
-    expect(screen.queryByText(/Recargo global/)).toBeNull();
-    expect(screen.queryByText(/Descuento global/)).toBeNull();
+    const { container } = render(<CartView />);
+    const totalsCard = container.querySelector<HTMLElement>('.cart-view__totals');
+    if (totalsCard === null) throw new Error('setup falló');
+    expect(within(totalsCard).getByText('Subtotal')).not.toBeNull();
+    expect(within(totalsCard).getByText('Descuento')).not.toBeNull();
+    expect(within(totalsCard).getByText('Total')).not.toBeNull();
   });
 
-  it('con recargo global, muestra la línea y el total ajustado', () => {
+  it('con recargo, la fila muestra "Recargo (+10%)"', () => {
     cartSignal.value = {
       lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
       globalAdjustmentPercentage: 10,
     };
     render(<CartView />);
-    expect(screen.getByText(/Recargo global \(\+10%\)/)).not.toBeNull();
+    expect(screen.getByText(/Recargo \(\+10%\)/)).not.toBeNull();
   });
 
-  it('con descuento global, muestra la línea', () => {
+  it('con descuento, la fila muestra "Descuento (-10%)"', () => {
     cartSignal.value = {
       lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
       globalAdjustmentPercentage: -10,
     };
     render(<CartView />);
-    expect(screen.getByText(/Descuento global \(-10%\)/)).not.toBeNull();
+    expect(screen.getByText(/Descuento \(-10%\)/)).not.toBeNull();
   });
 });
