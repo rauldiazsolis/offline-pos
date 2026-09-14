@@ -28,13 +28,33 @@
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  /* Una sola fuente de verdad: el alto real del header y el margen de
+   * scroll de las filas (más abajo) siempre tienen que coincidir, o el
+   * bug que esto arregla vuelve a aparecer si uno cambia sin el otro. */
+  --cart-table-head-h: 1.75rem;
 }
 
 .cart-view__scroll thead th {
+  height: var(--cart-table-head-h);
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--color-bg);
+}
+
+/*
+ * `scrollIntoView({ block: 'nearest' })` (ver useScrollSelectedIntoView)
+ * calcula "visible" en términos puramente geométricos del contenedor con
+ * scroll — no sabe que el `<thead>` sticky de arriba tapa visualmente
+ * parte de ese espacio. Al volver a la primera fila navegando con
+ * flechas, el navegador scrollea lo mínimo necesario y la deja pegada
+ * contra el borde, debajo del header (issue reportada por el usuario:
+ * "tapado por el encabezado"). `scroll-margin-top` le dice explícitamente
+ * cuánto espacio reservar — confirmado en el navegador real antes de este
+ * fix, con captura de pantalla, que resuelve el problema exactamente.
+ */
+.cart-view__scroll tbody tr {
+  scroll-margin-top: var(--cart-table-head-h);
 }
 
 /*
