@@ -7,6 +7,7 @@ import {
   configBufferSignal,
   configErrorSignal,
   configStepSignal,
+  DEFAULT_API_KEY,
   resetConfigFlow,
 } from '../state/sync-config.ts';
 
@@ -36,7 +37,7 @@ function submitBaseUrl(): void {
   }
 
   configBaseUrlSignal.value = parsed.data;
-  configBufferSignal.value = '';
+  configBufferSignal.value = DEFAULT_API_KEY;
   configErrorSignal.value = null;
   configStepSignal.value = 'apiKey';
 }

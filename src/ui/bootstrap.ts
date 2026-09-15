@@ -1,8 +1,6 @@
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { loadDraftCart } from '../storage/draft-cart-repository.ts';
-import { seedCatalogIfEmpty } from '../storage/seed-catalog.ts';
-import { seedCustomersIfEmpty } from '../storage/seed-customers.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCatalogRepository } from './state/catalog.ts';
@@ -11,29 +9,25 @@ import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 
 /**
- * Siembra el catálogo si hace falta y arma el repositorio antes del primer
- * render. Se llama una sola vez desde `main.tsx`.
+ * Arma los repositorios antes del primer render y arranca el motor de sync.
+ * Se llama una sola vez desde `main.tsx`. Ya no siembra catálogo/clientes
+ * localmente (Fase 7): esos datos ahora vienen del minibackend de demo (o de
+ * cualquier backend real) vía pull — una terminal recién instalada, sin
+ * `/CONFIG` configurado todavía, arranca vacía hasta el primer sync. Los
+ * fixtures y `seedCatalogIfEmpty`/`seedCustomersIfEmpty`
+ * (`storage/seed-catalog.ts`, `storage/seed-customers.ts`) se mantienen — los
+ * siguen usando los tests unitarios. Los specs e2e que a propósito prueban el
+ * flujo 100% offline sin ningún backend (`e2e/offline-sale.spec.ts`,
+ * `e2e/account-sale.spec.ts`, `e2e/void-sale.spec.ts`, y los de
+ * `e2e/cart-persistence.spec.ts`/`e2e/cash-session.spec.ts`/
+ * `e2e/keyboard-only.spec.ts` que venden algo) no pueden importar esos
+ * módulos TS (corren contra el build real en el navegador, no en Node) — en
+ * su lugar siembran el mismo fixture directo en IndexedDB vía
+ * `e2e/helpers.ts::seedCatalog`.
  */
 export async function bootstrap(): Promise<void> {
-  const seedResult = await seedCatalogIfEmpty({ now: new Date().toISOString() });
-  if (!seedResult.ok) {
-    // El fixture local roto (o un fallo de Dexie al sembrar) es un bug real
-    // en Fase 1, no un caso de negocio que el cajero pueda resolver — se
-    // deja explotar hasta el manejador global (ver CLAUDE.md).
-    throw new Error(`No se pudo sembrar el catálogo (${seedResult.error})`);
-  }
-
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
-
-  // A diferencia del catálogo, no es fatal: son clientes de ejemplo (con
-  // documento/teléfono, para poder mostrarlos — hoy no hay ninguna UI para
-  // tipearlos), no algo de lo que dependa poder vender.
-  const customerSeedResult = await seedCustomersIfEmpty({ now: new Date().toISOString() });
-  if (!customerSeedResult.ok) {
-    console.error('No se pudieron sembrar los clientes de ejemplo:', customerSeedResult.error);
-  }
-
   setCustomerRepository(await loadCustomerRepository());
 
   // Restaurar antes de empezar a persistir (issue #17): así el primer

@@ -85,6 +85,8 @@ export function describeError(failure: Failure): string {
       return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
+    case 'demo/backend-reset-failed':
+      return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

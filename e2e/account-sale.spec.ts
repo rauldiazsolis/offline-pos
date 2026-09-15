@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore, putIntoStore } from './indexed-db.ts';
 
 type StoredCustomer = { id: string; name: string };
@@ -9,6 +9,10 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   await context.setOffline(true);
   await openCashSession(page);
@@ -65,6 +69,10 @@ test('cuenta corriente offline sin cuenta cacheada: rechaza el cobro', async ({
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   await context.setOffline(true);
   await openCashSession(page);

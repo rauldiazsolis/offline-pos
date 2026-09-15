@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = {
@@ -31,6 +31,11 @@ test('anular una venta cerrada revierte el stock sin tocar sus datos originales'
 }) => {
   await page.goto('/');
   await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
+
   await context.setOffline(true);
 
   await closeOneSale(page);

@@ -6,7 +6,15 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 
 export default defineConfig([
   {
-    ignores: ['dist', 'coverage', 'playwright-report', 'test-results', '.vite', 'eslint.config.js'],
+    ignores: [
+      'dist',
+      'coverage',
+      'playwright-report',
+      'test-results',
+      '.vite',
+      'eslint.config.js',
+      'dev-orchestrator.mjs',
+    ],
   },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,

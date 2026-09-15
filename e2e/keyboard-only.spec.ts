@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 
 /**
  * Auditoría de accesibilidad por teclado (Fase 4): recorre cada pantalla
@@ -41,6 +41,12 @@ test('venta → cobrar → Comprobante → Esc → la barra de comandos recupera
 }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
+
   await openCashSession(page);
 
   await commandBar.fill('arroz');

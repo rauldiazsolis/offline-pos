@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Minibackend de demo — offline-pos</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }
+      h1 { font-size: 1.25rem; }
+      section { margin-bottom: 2rem; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
+      button { padding: 0.5rem 1rem; cursor: pointer; }
+      #reset-status { margin-left: 1rem; color: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Minibackend de demo — offline-pos</h1>
+    <button id="reset-btn">Reset demo</button>
+    <span id="reset-status"></span>
+
+    <section>
+      <h2>Ventas sincronizadas</h2>
+      <table id="sales-table"><thead><tr><th>id</th><th>total</th><th>status</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Turnos de caja cerrados</h2>
+      <table id="cash-sessions-table"><thead><tr><th>id</th><th>openingAmount</th><th>closingAmount</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Clientes creados desde el POS</h2>
+      <table id="customers-table"><thead><tr><th>id</th><th>name</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Intentos de cuenta corriente (siempre 501)</h2>
+      <table id="account-holds-table"><thead><tr><th>kind</th><th>createdAt</th></tr></thead><tbody></tbody></table>
+    </section>
+
+    <script>
+      async function loadTable(url, tbodyId, rowFn) {
+        const response = await fetch(url);
+        const rows = await response.json();
+        const tbody = document.getElementById(tbodyId);
+        tbody.innerHTML = rows.map(rowFn).join('');
+      }
+
+      function refresh() {
+        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status}</td></tr>`);
+        loadTable('/_demo/api/cash-sessions', 'cash-sessions-table', (c) => `<tr><td>${c.id}</td><td>${c.openingAmount}</td><td>${c.closingAmount ?? ''}</td></tr>`);
+        loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${c.name}</td></tr>`);
+        loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.kind}</td><td>${h.createdAt}</td></tr>`);
+      }
+
+      document.getElementById('reset-btn').addEventListener('click', async () => {
+        const status = document.getElementById('reset-status');
+        status.textContent = 'Reiniciando...';
+        await fetch('/_demo/reset', { method: 'POST' });
+        status.textContent = 'Listo.';
+        refresh();
+      });
+
+      refresh();
+    </script>
+  </body>
+</html>
