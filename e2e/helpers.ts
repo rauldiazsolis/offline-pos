@@ -1,4 +1,65 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, type Page } from '@playwright/test';
+import { putIntoStore } from './indexed-db.ts';
+
+type CatalogFixtureEntry = {
+  sku: string;
+  barcodes: string[];
+  name: string;
+  price: number;
+  taxRate: number;
+  category: string;
+  tracksStock: boolean;
+  initialStock: number;
+};
+
+// Mismo fixture que `storage/seed-catalog.ts` usa en producción — leído
+// crudo desde disco (no importado como módulo TS) para no acoplar el e2e a
+// código interno de la app, mismo criterio que `indexed-db.ts`.
+const catalogFixture = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../src/storage/fixtures/catalog.json', import.meta.url)),
+    'utf-8',
+  ),
+) as CatalogFixtureEntry[];
+
+/**
+ * Siembra el catálogo directo en IndexedDB (sin pasar por Dexie/el código de
+ * la app, mismo criterio que `getAllFromStore`/`putIntoStore`) — desde
+ * Fase 7, `bootstrap.ts` ya no siembra nada al arrancar (los datos vienen
+ * del backend vía sync), así que los specs 100% offline (sin backend, ver
+ * CLAUDE.md) necesitan poblar el catálogo a mano para poder buscar/vender.
+ * `CatalogRepository` (`storage/catalog-repository.ts`) se arma una sola vez
+ * en el bootstrap a partir de lo que ya esté en Dexie — por eso hace falta
+ * un `reload()` después de sembrar para que lo recoja. Llamar **antes** de
+ * `context.setOffline(true)`: el reload necesita la app real todavía
+ * accesible, y sembrar en IndexedDB no depende de la red de todos modos.
+ */
+export async function seedCatalog(page: Page): Promise<void> {
+  const now = new Date().toISOString();
+  for (const entry of catalogFixture) {
+    const productId = `e2e-${entry.sku}`;
+    await putIntoStore(page, 'products', {
+      id: productId,
+      sku: entry.sku,
+      barcodes: entry.barcodes,
+      name: entry.name,
+      price: entry.price,
+      taxRate: entry.taxRate,
+      category: entry.category,
+      tracksStock: entry.tracksStock,
+    });
+    await putIntoStore(page, 'stock', {
+      productId,
+      quantity: entry.initialStock,
+      updatedAt: now,
+    });
+  }
+
+  await page.reload();
+  await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+}
 
 /**
  * Fase 6: `/COBRAR` (y `Ctrl+Enter`) exige un turno de caja abierto — todo

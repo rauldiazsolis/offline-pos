@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = { id: string; status: string; total: number };
@@ -12,6 +12,10 @@ test('vender offline: buscar, agregar al carrito, cobrar y persistir', async ({
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   // La app ya cargó (assets + catálogo sembrado) — recién ahora se corta la
   // red, para probar exactamente lo que Fase 1 promete: la capa de datos no

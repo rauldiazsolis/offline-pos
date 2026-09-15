@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 
 /**
  * Issue #17: la venta en curso vivía solo en memoria — un refresh la
@@ -11,6 +11,10 @@ test('recargar la página no borra el carrito en curso', async ({ page }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
@@ -29,6 +33,12 @@ test('cerrar la venta limpia el draft — el siguiente refresh arranca con el ca
 }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
+
   await openCashSession(page);
 
   await commandBar.fill('arroz');

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredCashSession = {
@@ -24,6 +24,10 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   await openCashSession(page, 500);
 
@@ -84,6 +88,11 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
 test('sin turno abierto, /COBRAR (Ctrl+Enter) rechaza cobrar', async ({ page }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+  // Fase 7: sin backend en este spec, el catálogo no llega solo — se siembra
+  // a mano (ver `helpers.ts::seedCatalog`).
+  await seedCatalog(page);
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
