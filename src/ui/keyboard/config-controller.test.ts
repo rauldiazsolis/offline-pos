@@ -20,6 +20,10 @@ describe('enterConfigScreen', () => {
     expect(activeScreenSignal.value).toBe('config');
     expect(configStepSignal.value).toBe('baseUrl');
   });
+
+  it('precarga la URL del minibackend de demo como default editable', () => {
+    expect(configBufferSignal.value).toBe('http://localhost:4000');
+  });
 });
 
 describe('submitConfigStep', () => {
