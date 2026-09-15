@@ -1,27 +1,45 @@
 import { err, ok, type Result } from '../domain/result.ts';
+import { loadSyncConfig } from '../sync/config.ts';
 import { clearSyncCursors } from '../sync/cursor.ts';
+import { resetDemoBackend } from '../sync/demo-backend-reset.ts';
+import { runSyncCycle } from '../sync/engine.ts';
 import { db } from './db.ts';
-import { seedCatalogIfEmpty } from './seed-catalog.ts';
-import { seedCustomersIfEmpty } from './seed-customers.ts';
 
 /**
- * `/DEMO_RESET` (Ciclo 8, retoma el issue #36): vuelve la terminal a un
- * estado local limpio para reiniciar una demo — borra catálogo, stock,
- * clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos
- * de caja, la venta en curso y el outbox pendiente, y vuelve a sembrar
- * catálogo y clientes desde el fixture local (mismas funciones que usa
- * `bootstrap.ts`) para que la terminal quede operable de inmediato, sin
- * depender de una reconexión al backend. Los cursores de pull también se
- * limpian (`sync/cursor.ts::clearSyncCursors`) — si no, el próximo pull solo
- * traería deltas desde el cursor viejo y nunca repondría lo que se acaba de
- * borrar localmente.
+ * `/DEMO_RESET` (Ciclo 8, retomado en Fase 7 — issue #36): vuelve la
+ * terminal a un estado limpio para reiniciar una demo. Desde que los datos
+ * de demo viven en el minibackend (no en un fixture local, ver
+ * `docs/superpowers/specs/2026-09-15-fase-7-minibackend-demo-design.md`),
+ * el orden importa:
  *
- * A propósito NO toca la configuración de `/CONFIG` (URL del backend, API
- * key, locale) — decisión explícita del usuario: es la conexión de esta
- * terminal, no un dato de demo, y perderla obligaría a reconfigurar el
- * backend en cada reset.
+ * 1. Si hay `/CONFIG` configurado, primero `POST /_demo/reset` contra el
+ *    backend — si falla (backend no disponible), se corta acá, sin tocar
+ *    nada local: dejar la terminal vacía sin poder repoblarla sería peor
+ *    que no resetear nada.
+ * 2. Borra todo lo local (catálogo, stock, clientes, cuentas, ventas,
+ *    movimientos, turnos de caja, la venta en curso y el outbox pendiente).
+ * 3. Limpia los cursores de pull (si no, el resync del paso 4 solo traería
+ *    deltas desde el cursor viejo).
+ * 4. Si había `/CONFIG`, dispara un resync completo (`runSyncCycle`) para
+ *    repoblar desde el backend ya reseteado — reusa el motor de sync
+ *    existente en vez de duplicar su lógica de pull.
+ *
+ * Sin `/CONFIG`, se saltan los pasos 1 y 4: la terminal queda vacía (mismo
+ * criterio que `bootstrap.ts`, que tampoco siembra nada localmente).
+ *
+ * A propósito NO toca la configuración de `/CONFIG` (URL, API key, locale)
+ * — es la conexión de esta terminal, no un dato de demo.
  */
 export async function demoReset(): Promise<Result<void>> {
+  const configResult = loadSyncConfig();
+
+  if (configResult.ok) {
+    const backendReset = await resetDemoBackend(configResult.value.baseUrl);
+    if (!backendReset.ok) {
+      return backendReset;
+    }
+  }
+
   try {
     await db.transaction(
       'rw',
@@ -60,18 +78,8 @@ export async function demoReset(): Promise<Result<void>> {
 
   clearSyncCursors();
 
-  const now = new Date().toISOString();
-
-  const catalogSeed = await seedCatalogIfEmpty({ now });
-  if (!catalogSeed.ok) {
-    return catalogSeed;
-  }
-
-  // No fatal, mismo criterio que bootstrap.ts: son datos de ejemplo, no algo
-  // de lo que dependa poder vender.
-  const customerSeed = await seedCustomersIfEmpty({ now });
-  if (!customerSeed.ok) {
-    console.error('No se pudieron re-sembrar los clientes de ejemplo:', customerSeed.error);
+  if (configResult.ok) {
+    await runSyncCycle();
   }
 
   return ok(undefined);
