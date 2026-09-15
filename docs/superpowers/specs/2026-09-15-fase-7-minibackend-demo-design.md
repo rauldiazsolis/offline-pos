@@ -126,13 +126,14 @@ tooling de desarrollo local, no algo que se exponga.
 - `src/ui/bootstrap.ts`: se sacan las llamadas a `seedCatalogIfEmpty`/`seedCustomersIfEmpty`.
 - `src/storage/seed-catalog.ts`/`seed-customers.ts` + fixtures se mantienen, solo para tests (ver
   "Decisión reabierta" arriba).
-- `src/storage/demo-reset.ts` (`/DEMO_RESET`): en vez de re-sembrar localmente, después de borrar
-  todo local dispara un pull completo contra el backend configurado (si `/CONFIG` está seteado) —
-  reusa la lógica de sync existente (`sync/engine.ts`) en vez de duplicarla. Sin `/CONFIG`, queda
-  vacía (mismo criterio que el bootstrap). Nada impide además llamar primero a
-  `POST /_demo/reset` del propio minibackend si se quiere que "reset" en el POS también reinicie
-  los datos del lado del backend — a definir el detalle exacto en el plan de implementación (ver
-  "Pendiente para el plan" más abajo).
+- `src/storage/demo-reset.ts` (`/DEMO_RESET`): con `/CONFIG` seteado, ahora hace tres pasos en
+  orden — (1) `POST /_demo/reset` contra el backend configurado, para que también vuelva a su
+  semilla inicial; (2) borra todo lo local (mismo alcance que hoy: catálogo, stock, clientes,
+  cuentas, ventas, movimientos, turnos de caja, `draftCart`, outbox pendiente, cursores de pull);
+  (3) dispara un pull completo, repoblando desde el backend ya reseteado. Si el paso (1) falla
+  (backend no disponible, por ejemplo), `/DEMO_RESET` no continúa con (2)/(3) y muestra el error —
+  evita dejar la terminal local vacía sin poder repoblarla. Sin `/CONFIG`, se salta el paso (1) y
+  solo borra lo local (mismo criterio que el bootstrap: sin backend configurado, queda vacía).
 - `/CONFIG`: el campo de URL trae `http://localhost:4000` precargado como default/placeholder (no
   forzado — sigue siendo editable) para que levantar la demo completa sea de un solo paso.
 
@@ -160,9 +161,3 @@ instala Chromium para el resto de los e2e).
 - El resto de las piezas de Fase 7 (manifest PWA, flujo de actualización del service worker,
   documentación del Connector API, hardening/lanzamiento) — se planifican por separado, una vez
   terminada esta.
-
-## Pendiente para el plan de implementación
-
-Detalle exacto de si `/DEMO_RESET` del POS llama también a `POST /_demo/reset` del backend (vs.
-solo confiar en que el usuario resetea el backend por separado desde su panel) — decisión menor,
-no bloquea escribir el plan, pero conviene resolverla ahí antes de tocar código.
