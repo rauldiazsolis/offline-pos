@@ -51,6 +51,18 @@ describe('submitConfigStep', () => {
     expect(configErrorSignal.value).toBeNull();
   });
 
+  // El minibackend de demo exige `Authorization: Bearer <token no vacío>` en
+  // toda ruta (`demo-backend/src/router.ts::hasValidBearerToken`). Sin este
+  // default, aceptar la URL precargada y confirmar "opcional" en blanco deja
+  // el catálogo vacío por un 401 silencioso (`sync/engine.ts` traga errores
+  // de pull) — ver hallazgo de la revisión final de Fase 7.
+  it('precarga un apiKey default editable al confirmar la URL', () => {
+    configBufferSignal.value = 'https://api.example.com';
+    submitConfigStep();
+
+    expect(configBufferSignal.value).toBe('demo-token');
+  });
+
   it('avanza a locale tras confirmar el apiKey', () => {
     configBufferSignal.value = 'https://api.example.com';
     submitConfigStep();

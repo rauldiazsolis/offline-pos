@@ -373,17 +373,26 @@ confirmación — decisión explícita del usuario (una primera versión pedía 
 `/DESCARTAR CONFIRMAR`, con un aviso en el slot de error si se tipeaba `/DESCARTAR` solo; se sacó por
 pedido directo: perder un carrito no guardado es barato de rehacer, no justifica un paso extra).
 
-**`/DEMO_RESET` (Ciclo 8, retoma el issue #36)**: pantalla de confirmación dedicada
-(`ui/screens/demo-reset-screen.tsx`), mismo patrón que `/ANULAR` pero de un solo paso (no hay nada
-que elegir — o se resetea todo, o no se hace nada). `storage/demo-reset.ts::demoReset` borra
-catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos de caja, la
-venta en curso (`draftCart`) y el outbox pendiente, limpia los cursores de pull
-(`sync/cursor.ts::clearSyncCursors` — si no, el próximo pull solo traería deltas desde el cursor viejo
-y nunca repondría lo que se acaba de borrar) y vuelve a sembrar catálogo y clientes desde el fixture
-local (mismas `seedCatalogIfEmpty`/`seedCustomersIfEmpty` que usa `bootstrap.ts`), así la terminal
-queda operable de inmediato sin depender de una reconexión. A propósito **no** toca la configuración
-de `/CONFIG` (URL del backend, API key, locale) — decisión explícita del usuario: es la conexión de
-esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el backend en cada reset.
+**`/DEMO_RESET` (Ciclo 8, retoma el issue #36 — reescrito en Fase 7)**: pantalla de confirmación
+dedicada (`ui/screens/demo-reset-screen.tsx`), mismo patrón que `/ANULAR` pero de un solo paso (no
+hay nada que elegir — o se resetea todo, o no se hace nada). Desde Fase 7 los datos de demo ya no
+viven en un fixture local sino en el minibackend, así que `storage/demo-reset.ts::demoReset` ya
+**no** siembra nada por su cuenta — el orden pasa a ser: si hay `/CONFIG` configurado, primero
+`POST /_demo/reset` contra el backend (si falla, se corta ahí sin tocar nada local — dejar la
+terminal vacía sin poder repoblarla sería peor que no resetear nada); recién después borra todo lo
+local (catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos de
+caja, la venta en curso `draftCart` y el outbox pendiente) y limpia los cursores de pull
+(`sync/cursor.ts::clearSyncCursors`); si había `/CONFIG`, recién ahí dispara un resync completo
+(`runSyncCycle`) para repoblar desde el backend ya reseteado, reusando el motor de sync existente en
+vez de duplicar su lógica de pull. Sin `/CONFIG` configurado, los pasos de red se saltan y la
+terminal queda **vacía**, no operable de inmediato — mismo criterio que un arranque nuevo:
+`ui/bootstrap.ts` tampoco siembra nada localmente desde Fase 7 (los fixtures y
+`seedCatalogIfEmpty`/`seedCustomersIfEmpty` siguen existiendo y los usan los tests, pero ya no se
+llaman al arrancar la app — una terminal recién instalada, sin `/CONFIG` configurado todavía,
+arranca vacía hasta el primer sync). A propósito **no**
+toca la configuración de `/CONFIG` (URL del backend, API key, locale) — decisión explícita del
+usuario: es la conexión de esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el
+backend en cada reset.
 
 La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
