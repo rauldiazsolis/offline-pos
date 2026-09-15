@@ -69,7 +69,15 @@ Regla general: **las funciones de negocio nunca lanzan**. Dos clases de error:
   formado, cualquier dato externo con forma incierta) → siempre `Result<T>`, nunca excepción.
 - **Todo lo demás** (invariante rota, bug) → se deja explotar como excepción real hasta un único
   manejador global (error boundary de Preact + `window.onerror` / `unhandledrejection`). Por ahora
-  ese manejador siempre muestra una pantalla bloqueante, sin retry silencioso.
+  ese manejador siempre muestra una pantalla bloqueante, sin retry silencioso. Única excepción, y no
+  es de negocio sino del propio navegador: "ResizeObserver loop completed with undelivered
+  notifications." (y su variante vieja "ResizeObserver loop limit exceeded") es una advertencia
+  benigna de Chromium, no un bug de la app — puede llegar con `event.error === null` (bug real
+  reportado por el usuario, issue #42: pantalla de error fatal mostrando literalmente "null" al abrir
+  DevTools o hacer zoom fuerte del navegador, que son justo los gestos que más fácil la disparan).
+  `ui/fatal-error.ts::isBenignResizeObserverLoopError` filtra este mensaje puntual antes de llegar a
+  `renderFatalError` — no es una excepción general al "nunca silenciar", es reconocer que esta en
+  particular nunca es un error real de la app.
 
 `try/catch` queda limitado a los adaptadores que envuelven algo que sí lanza por naturaleza (fetch,
 Dexie, `JSON.parse`) y lo convierten a `Result` en el borde — nunca como manejo de flujo de negocio.
@@ -861,9 +869,13 @@ pero sigue necesitando calibrar el umbral), #24 (usar el espacio de la barra de 
 para instrucciones mínimas de uso — el placeholder del Ciclo 8 no alcanza, el usuario quiere algo
 más completo más adelante), #37 (falta UI para crear/editar documento/teléfono de un cliente — sin
 definir cómo), #41 (Ciclo 8 — el zoom responsive no reacciona bien al resize interactivo dentro del
-modo "Responsive" de Chrome DevTools; impacto bajo, ver "Diseño visual" más arriba). #28, #36 y #40
-se cerraron en el Ciclo 8 (Esc cierra el overlay sin tocar el buffer, `/DEMO_RESET`, y preselección
-del menú de "/", respectivamente).
+modo "Responsive" de Chrome DevTools; impacto bajo, ver "Diseño visual" más arriba), #42 (crash con
+mensaje "null" al abrir DevTools o hacer zoom fuerte del navegador — diagnóstico: advertencia benigna
+de ResizeObserver de Chromium tratada como fatal; fix propuesto en un branch aparte
+(`fix-42-crash-devtools-zoom`), pendiente de que el usuario lo valide con DevTools real antes de
+mergear — no se pudo reproducir de forma confiable en un entorno automatizado, ver "Manejo de
+errores" más arriba). #28, #36 y #40 se cerraron en el Ciclo 8 (Esc cierra el overlay sin tocar el
+buffer, `/DEMO_RESET`, y preselección del menú de "/", respectivamente).
 
 **Fase 5 (hardware) pospuesta a v2** — decisión tomada al terminar Fase 4: depende de dispositivos
 físicos reales (impresora, cajón) para poder validarse en serio, y ninguna fase posterior depende

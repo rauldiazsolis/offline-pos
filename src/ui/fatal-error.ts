@@ -1,4 +1,24 @@
 /**
+ * "ResizeObserver loop completed with undelivered notifications." (y su
+ * variante más vieja, "ResizeObserver loop limit exceeded") es una
+ * advertencia benigna del propio navegador, no un error real de la app —
+ * Chromium la dispara vía `window.onerror` cuando un `ResizeObserver`
+ * dispara un cambio de layout que el navegador ya venía reevaluando en el
+ * mismo frame, y suele venir con `event.error === null` (de ahí el mensaje
+ * "null" en la pantalla de error fatal — bug real reportado por el usuario,
+ * issue #42, que apareció al abrir DevTools o hacer zoom fuerte del
+ * navegador: ambos cambian el viewport de golpe, justo lo que más fácil
+ * dispara esto). La app usa `ResizeObserver` en varios lugares
+ * (`ui/hooks/use-scroll-indicator.ts`, `ui/state/viewport.ts` — el zoom
+ * responsive del Ciclo 8 hace que este tipo de resize sea más frecuente), así
+ * que nunca hay nada que arreglar del lado de la app cuando esto aparece —
+ * `main.tsx` usa este chequeo para no tratarlo como fatal.
+ */
+export function isBenignResizeObserverLoopError(message: string): boolean {
+  return message.startsWith('ResizeObserver loop');
+}
+
+/**
  * Manejador global de errores que ocurren fuera del árbol de componentes de
  * Preact (bootstrap, listeners globales — ver "Manejo de errores" en
  * CLAUDE.md). Todo lo que no es un error de negocio anticipado se deja
