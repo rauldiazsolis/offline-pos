@@ -39,7 +39,7 @@ function hasValidBearerToken(req: IncomingMessage): boolean {
     return false;
   }
   const match = /^Bearer (.+)$/.exec(header);
-  return match !== null && (match[1] as string).trim() !== '';
+  return match !== null && match[1]?.trim() !== '';
 }
 
 /**
@@ -90,7 +90,11 @@ export async function handleRequest(
       sendJson(res, 401, { error: 'Falta el header Authorization: Bearer <token>' });
       return;
     }
-    await route.handler(req, res, { db, params: { ...(match.groups as Record<string, string>) }, url });
+    try {
+      await route.handler(req, res, { db, params: { ...(match.groups ?? {}) }, url });
+    } catch (error) {
+      sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
+    }
     return;
   }
 

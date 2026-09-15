@@ -93,3 +93,33 @@ describe('idempotencia compartida entre los cuatro recursos', () => {
     expect(second.status).toBe(200);
   });
 });
+
+// Un body malformado (JSON inválido) hace que `readJsonBody` tire en medio
+// del handler — antes de este fix, `router.ts::handleRequest` no lo
+// atrapaba y `app.ts` llama `handleRequest` con `void` (sin `.catch`), así
+// que la promesa rechazada terminaba matando el proceso entero con
+// `--unhandled-rejections=throw` (Node 24). Este test prueba el fix contra
+// el servidor real, no una unidad aislada: si la regresión vuelve, este
+// request cuelga/crashea el proceso de test en vez de solo fallar la
+// aserción.
+describe('body malformado', () => {
+  it('responde 500 con un body de error JSON, sin tirar abajo el servidor', async () => {
+    const response = await fetch(`${baseUrl}/sales`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer demo-token',
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'malformed-1',
+      },
+      body: '{not valid json',
+    });
+
+    expect(response.status).toBe(500);
+    const payload: unknown = await response.json();
+    expect(payload).toHaveProperty('error');
+
+    // El servidor sigue vivo y responde normalmente a un request válido.
+    const followUp = await post('/sales', 'sale-after-malformed', { id: 'sale-after-malformed', total: 10 });
+    expect(followUp.status).toBe(200);
+  });
+});
