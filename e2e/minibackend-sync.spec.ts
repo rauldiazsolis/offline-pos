@@ -4,6 +4,15 @@ import { openCashSession } from './helpers.ts';
 const BACKEND_URL = 'http://localhost:4000';
 
 test('vender con el minibackend real configurado: la venta llega al backend', async ({ page }) => {
+  // `demo-backend/data/demo.sqlite` está en `.gitignore` y sobrevive entre
+  // corridas locales de `pnpm test:e2e` (nada lo borra salvo un checkout
+  // nuevo, como en CI, o un reset explícito) — sin esto, una segunda corrida
+  // local encontraría la venta de $1200 de la corrida anterior y pasaría sin
+  // haber sincronizado nada de verdad. Mismo endpoint que ya usa `/DEMO_RESET`
+  // vía `storage/demo-reset.ts::resetDemoBackend` (Task 14), sin pasar por la
+  // UI del POS — no hace falta, este reset es contra el backend nomás.
+  await page.request.post('http://localhost:4000/_demo/reset');
+
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
