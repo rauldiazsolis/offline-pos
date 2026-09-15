@@ -18,7 +18,7 @@ import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { formatMoney } from '../format.ts';
+import { formatDate, formatMoney } from '../format.ts';
 
 const arrozResult: CatalogSearchResult = {
   product: {
@@ -106,6 +106,16 @@ afterEach(async () => {
 });
 
 describe('CommandBarInput', () => {
+  // Ciclo 8, punto 8: el placeholder enseña el uso básico sin ocupar
+  // espacio propio en el layout. No cierra el issue #24 (el usuario
+  // consideró que esto solo no alcanza) — queda abierto para más adelante.
+  it('el input tiene el placeholder de ayuda', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    expect(input.getAttribute('placeholder')).toBe('Escribí para buscar · @ cliente · / comandos');
+  });
+
   it('un código de barras en progreso no dispara ningún resultado de búsqueda', () => {
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -206,6 +216,19 @@ describe('CommandBarInput', () => {
     fireEvent.input(input, { target: { value: '@ana' } });
 
     expect(screen.getByText('12345678', { exact: false })).not.toBeNull();
+  });
+
+  // Ciclo 8, punto 2: sin documento ni teléfono, dos clientes con el mismo
+  // nombre se veían idénticos — la fecha de alta desambigua.
+  it('la fila de cliente sin documento ni teléfono muestra la fecha de alta', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '@ana' } });
+
+    expect(
+      screen.getByText(`Alta: ${formatDate('2026-01-01T00:00:00.000Z')}`, { exact: false }),
+    ).not.toBeNull();
   });
 
   it('"@" con match muestra resultados de cliente en vivo', () => {
@@ -374,14 +397,18 @@ describe('CommandBarInput', () => {
     });
   });
 
-  it('"/CO" (ambiguo) + Enter sin navegar no hace nada', () => {
+  // issue #40 (Ciclo 8): la fila 0 se preselecciona por default, igual que
+  // producto/cliente — Enter sin navegar ejecuta directo el primer match.
+  it('"/CO" (ambiguo) + Enter sin navegar ejecuta directo el primer match (COBRAR)', async () => {
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 
     fireEvent.input(input, { target: { value: '/CO' } });
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(activeScreenSignal.value).toBe('sale');
+    await waitFor(() => {
+      expect(activeScreenSignal.value).toBe('checkout');
+    });
   });
 
   it('"/CO" (ambiguo) + navegar con flechas + Enter ejecuta el elegido', () => {
@@ -389,8 +416,7 @@ describe('CommandBarInput', () => {
     const input = screen.getByLabelText('Barra de comandos');
 
     fireEvent.input(input, { target: { value: '/CO' } });
-    fireEvent.keyDown(input, { key: 'ArrowDown' }); // COBRAR
-    fireEvent.keyDown(input, { key: 'ArrowDown' }); // CONFIG
+    fireEvent.keyDown(input, { key: 'ArrowDown' }); // de COBRAR (fila 0, ya preseleccionada) a CONFIG
     fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(activeScreenSignal.value).toBe('config');
@@ -709,7 +735,10 @@ describe('CommandBarInput', () => {
       const input = screen.getByLabelText('Barra de comandos');
       fireEvent.input(input, { target: { value: '/' } });
 
-      const row = screen.getAllByRole('listitem')[0];
+      // issue #40 (Ciclo 8): la fila 0 ya está preseleccionada por default,
+      // así que el primer ↓ mueve a la fila 1 — mismo criterio que las
+      // otras dos listas, ver los dos tests siguientes.
+      const row = screen.getAllByRole('listitem')[1];
       if (row === undefined) throw new Error('setup falló');
       const scrollSpy = vi.fn();
       row.scrollIntoView = scrollSpy;
@@ -753,15 +782,29 @@ describe('CommandBarInput', () => {
   // Issue #14: cada tecla resetea/reindexa la selección de las tres listas
   // — comandos siempre a null, productos/clientes por identidad.
   describe('reset/reindexado de selección al cambiar el buffer', () => {
-    it('el menú de comandos resetea la selección en cada tecla', () => {
+    // issue #40 (Ciclo 8): el menú de comandos pasó a reindexar por
+    // identidad, igual que producto/cliente — ya no resetea a `null` en
+    // cada tecla.
+    it('el menú de comandos mantiene la selección si el comando sigue en la lista nueva', () => {
       render(<CommandBarInput />);
       const input = screen.getByLabelText('Barra de comandos');
 
       fireEvent.input(input, { target: { value: '/' } });
-      fireEvent.keyDown(input, { key: 'ArrowDown' });
-      expect(commandSelectionIndexSignal.value).toBe(0);
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // CAJA, índice 1
+      expect(commandSelectionIndexSignal.value).toBe(1);
 
-      fireEvent.input(input, { target: { value: '/C' } });
+      fireEvent.input(input, { target: { value: '/C' } }); // CAJA sigue en la lista (COBRAR, CAJA, CONFIG)
+      expect(commandSelectionIndexSignal.value).toBe(1);
+    });
+
+    it('el menú de comandos pierde la selección si el comando ya no está en la lista nueva', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '/' } });
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // CAJA, índice 1
+
+      fireEvent.input(input, { target: { value: '/AN' } }); // solo ANULAR, CAJA ya no está
       expect(commandSelectionIndexSignal.value).toBeNull();
     });
 
@@ -834,6 +877,62 @@ describe('CommandBarInput', () => {
 
       fireEvent.input(input, { target: { value: '@bruno' } }); // ahora es el único, índice 0
       expect(customerSelectionIndexSignal.value).toBe(0);
+    });
+  });
+
+  // Issue #28: como el overlay se deriva puramente del buffer parseado, Esc
+  // no puede simplemente "no hacer nada" con el buffer — necesita un flag
+  // aparte para ocultarlo sin tocar lo que se tipeó.
+  describe('Esc cierra el overlay sin tocar el buffer (issue #28)', () => {
+    it('con resultados de búsqueda visibles, Esc los oculta sin vaciar el buffer', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'arroz' } });
+      expect(screen.getByText('Arroz 1kg')).not.toBeNull();
+
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      expect(screen.queryByText('Arroz 1kg')).toBeNull();
+      expect((input as HTMLInputElement).value).toBe('arroz');
+    });
+
+    it('seguir tipeando después de Esc reabre el overlay', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: 'arroz' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByText('Arroz 1kg')).toBeNull();
+
+      fireEvent.input(input, { target: { value: 'arroz ' } });
+
+      expect(screen.getByText('Arroz 1kg')).not.toBeNull();
+    });
+
+    it('funciona igual para el menú de comandos y para el mensaje de error', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '/' } });
+      expect(screen.getByText('/COBRAR', { exact: false })).not.toBeNull();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByText('/COBRAR', { exact: false })).toBeNull();
+
+      fireEvent.input(input, { target: { value: '$100' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(screen.getByRole('alert')).not.toBeNull();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('con el buffer vacío (nada para cerrar), Esc no hace nada', () => {
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      expect((input as HTMLInputElement).value).toBe('');
     });
   });
 });

@@ -42,3 +42,18 @@ export function setCustomersCursor(cursor: string): void {
     /* best-effort, ver comentario de arriba */
   }
 }
+
+/**
+ * Usado por `/DEMO_RESET` (Ciclo 8, `storage/demo-reset.ts`): sin esto, el
+ * próximo pull solo traería deltas desde el cursor viejo y nunca repondría
+ * el catálogo/clientes que el reset acaba de borrar localmente. Best-effort,
+ * mismo criterio que el resto de este módulo.
+ */
+export function clearSyncCursors(): void {
+  try {
+    localStorage.removeItem(PRODUCTS_CURSOR_KEY);
+    localStorage.removeItem(CUSTOMERS_CURSOR_KEY);
+  } catch {
+    /* best-effort, ver comentario de arriba */
+  }
+}

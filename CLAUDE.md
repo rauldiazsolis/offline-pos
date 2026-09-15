@@ -221,15 +221,28 @@ real: volver de un popup con Esc).
 
 **Menú de "/" — filtra, navega, ejecuta sin ambigüedad**: escribir después de `/` filtra
 `AVAILABLE_COMMANDS` por prefijo (`commandResultsSignal`) en vez de mostrar siempre la lista
-completa. A diferencia de la búsqueda de productos/clientes (donde la fila 0 se preselecciona por
-default y Enter sin tocar flechas ejecuta esa fila — bajo riesgo, flujo rápido), el menú de comandos
-**no preselecciona nada**: ejecutar el comando equivocado por accidente tiene consecuencias reales.
-Enter ejecuta directo solo si el filtro deja un único comando posible; con 2+ y sin haber navegado
-con ↑/↓ explícitamente, no hace nada. Este menú (y las listas de resultados de producto/cliente)
-se renderiza como un **overlay que se abre hacia arriba** desde el input (`position: absolute`,
-`bottom: 100%`, con `maxHeight` + `overflow-y: auto`, y solo se monta cuando hay algo que mostrar) —
-no participa del flujo normal del documento, así que nunca empuja el carrito ni cambia el scroll de
-la página al aparecer o crecer.
+completa. Hasta el Ciclo 7, a diferencia de la búsqueda de productos/clientes (donde la fila 0 se
+preselecciona por default y Enter sin tocar flechas ejecuta esa fila — bajo riesgo, flujo rápido), el
+menú de comandos no preseleccionaba nada: ejecutar el comando equivocado por accidente tiene
+consecuencias reales. El issue #40 (Ciclo 8) unificó el criterio a pedido del usuario — la fila 0 se
+preselecciona igual que en las otras dos listas, Enter sin tocar flechas ejecuta directo el primer
+match del filtro. El riesgo que motivaba la excepción ya no aplica igual: `/DEMO_RESET` tiene su
+propia pantalla de confirmación, `/DESCARTAR` descarta algo que ni se había guardado, y el resto de
+los comandos no es destructivo — frenar en el menú no compraba nada, solo agregaba fricción al camino
+rápido. Este menú (y las listas de resultados de producto/cliente) se renderiza como un **overlay que
+se abre hacia arriba** desde el input (`position: absolute`, `bottom: 100%`, con `maxHeight` +
+`overflow-y: auto`, y solo se monta cuando hay algo que mostrar) — no participa del flujo normal del
+documento, así que nunca empuja el carrito ni cambia el scroll de la página al aparecer o crecer.
+
+**Esc cierra el overlay sin tocar el buffer (issue #28, Ciclo 8)**: antes, Esc con el menú de "/", la
+lista de "@" o los resultados de búsqueda abiertos no hacía nada — el overlay se deriva puramente del
+buffer parseado (`parsedSignal`), así que no alcanza con "no hacer nada" para ocultarlo: hace falta un
+estado aparte de verdad "abierto/cerrado". `overlayDismissedSignal`
+(`ui/state/command-bar.ts`) es ese estado — `true` cuando el usuario lo cerró a mano con Esc.
+`command-bar-controller.ts::updateCommandBarBuffer` lo resetea a `false` en cada tecla, así que seguir
+tipeando reabre el overlay que corresponda al contenido nuevo (cerrar no es lo mismo que "olvidar" lo
+tipeado). Con la barra vacía (nada para cerrar), Esc no hace nada — vaciar el buffer entero es un
+alcance distinto, no lo que pedía este issue.
 
 **Recargo/descuento global (`<signo><número>%`)**: completa RF-03 (la parte "por línea" —
 `domain/cart.ts::applyLineDiscount` — existe desde Fase 1 pero nunca se conectó a ningún comando).
@@ -256,16 +269,30 @@ selección/flechas de siempre, sin nada nuevo ahí. `ui/state/command-bar.ts::se
 devuelve esta unión (`UnifiedSearchResult`, línea libre | producto), no solo `CatalogSearchResult`.
 
 **Cliente sin tipear nada (`@` solo)**: a diferencia de la búsqueda de artículos, `@` sin texto
-muestra los clientes más recientes (`CustomerRepository.listRecent()`) en vez de una lista vacía
-esperando que se tipee algo — no tiene sentido hacer esperar texto para algo tan frecuente como
-adjuntar el último cliente atendido. La primera fila de esa lista siempre es "Consumidor Final"
-(`ui/state/command-bar.ts::CustomerOrClear`, tipo `{ kind: 'clear' }`) — es la forma de desadjuntar
-el cliente actual. Antes era un caso especial ("@" vacío + Enter sin nada seleccionado), pero desde
-que la query vacía muestra clientes recientes ese caso especial dejó de dispararse (la lista ya no
-está vacía) — un bug real reportado por el usuario: no había forma de sacar un cliente adjunto.
-Ponerlo como fila de la lista (idea del propio usuario) lo resuelve de raíz y es más discoverable.
-Con una query puntual (buscando/creando un cliente específico) no aparece — no tiene sentido
-mezclarlo con el flujo de crear un cliente nuevo.
+muestra una lista (`CustomerRepository.listRecent()`) en vez de una lista vacía esperando que se
+tipee algo — no tiene sentido hacer esperar texto para algo tan frecuente como adjuntar un cliente. La
+primera fila de esa lista siempre es "Consumidor Final" (`ui/state/command-bar.ts::CustomerOrClear`,
+tipo `{ kind: 'clear' }`) — es la forma de desadjuntar el cliente actual. Antes era un caso especial
+("@" vacío + Enter sin nada seleccionado), pero desde que la query vacía muestra esta lista ese caso
+especial dejó de dispararse (la lista ya no está vacía) — un bug real reportado por el usuario: no
+había forma de sacar un cliente adjunto. Ponerlo como fila de la lista (idea del propio usuario) lo
+resuelve de raíz y es más discoverable. Con una query puntual (buscando/creando un cliente
+específico) no aparece — no tiene sentido mezclarlo con el flujo de crear un cliente nuevo.
+
+`listRecent()` ordena **alfabéticamente** por nombre, no por fecha de alta (Ciclo 8, punto 1 —
+`storage/customer-repository.ts`; el nombre de la función quedó de cuando sí ordenaba por fecha, el
+contrato de "sin necesidad de query" no cambió) — más fácil ubicar un nombre conocido a ojo en una
+lista larga. A propósito **solo** ahí: `search()` con texto (`@algo`) sigue ordenado por relevancia
+del fuzzy match — forzar alfabético ahí empeoraría la búsqueda.
+
+**Desambiguación de clientes con el mismo nombre (Ciclo 8, punto 2)**: la fila de `@` ya mostraba
+documento/teléfono debajo del nombre cuando el cliente los tenía, pero casi todos los clientes se
+crean con `@<nombre>` sin esos datos (no hay UI para cargarlos, issue #37) — dos "Juan Pérez" se veían
+idénticos. Sin documento ni teléfono, la fila muestra "Alta: `<fecha>`" en su lugar
+(`CommandBarInput.tsx`, `ui/format.ts::formatDate` — mismo locale configurable que `formatMoney`,
+`timeZone: 'UTC'` a propósito para que la fecha no dependa de la zona horaria de cada terminal, un
+bug real que agarró un test, no inspección visual). Desambiguación barata: el dato ya estaba en
+`Customer.createdAt`, no hizo falta ningún campo nuevo.
 
 **Formato de precio × cantidad en la fila de producto**: `<unitario>` resaltado (contraste
 completo + negrita) con cantidad 1; `<unitario> x <cantidad> = <total>` con la parte
@@ -307,12 +334,14 @@ selección, ocultar la scrollbar entre navegadores con propiedades distintas, ma
 middle-click-drag, diseñar el fade).
 
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (Fase 6 — abre o cierra el
-turno de caja, ver más abajo), `/ANULAR`, `/CONFIG` (configura la conexión con el sistema externo,
-runtime vía `localStorage` — no hay variables de entorno ni pantalla de config de terminal más
-amplia todavía) y `/SINCRONIZAR` (fuerza un ciclo de sync ahora mismo, RF-12 "bajo demanda" — no
-cambia de pantalla, el feedback es la barra de estado). `/CUENTA` (Fase 3) es distinto: solo existe
-dentro de la pantalla de cobro, no en la barra de comandos principal — por eso no está en
-`commands.ts`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
+turno de caja, ver más abajo), `/ANULAR`, `/DESCARTAR` (Ciclo 8 — vacía la venta en curso, ver más
+abajo), `/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
+variables de entorno ni pantalla de config de terminal más amplia todavía), `/SINCRONIZAR` (fuerza un
+ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de
+estado) y `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
+abajo). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de
+comandos principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente
+contra el cliente adjunto con `@`.
 
 **Turno de caja obligatorio para cobrar (Fase 6)**: `/CAJA` abre (pide el monto de apertura) o
 cierra (pide el efectivo contado) el turno — con uno ya abierto, entra directo al resumen en vez de
@@ -327,6 +356,26 @@ contado) — tarjeta/cuenta corriente no tienen equivalente físico para "contar
 básico sí desglosa el total por cada medio de pago. Un turno **abierto** nunca se sincroniza (mismo
 criterio que una `Sale` con `status: 'open'`, Fase 1: nace ya cerrada) — solo se encola en el
 outbox al cerrarse, ya completo (ver "Connector API" más abajo).
+
+**`/DESCARTAR` (Ciclo 8)**: vacía la venta en curso completa — líneas, cliente adjunto y el % de
+recargo/descuento — vía `domain/cart.ts::discardCart`. A propósito distinto de `/ANULAR`: esa anula
+una venta **ya cerrada** (implicancias de auditoría, RF-06); esto descarta un carrito que ni siquiera
+se había guardado, así que mezclarlos en el mismo comando confundiría el significado de "anular". Sin
+confirmación — decisión explícita del usuario (una primera versión pedía escribir
+`/DESCARTAR CONFIRMAR`, con un aviso en el slot de error si se tipeaba `/DESCARTAR` solo; se sacó por
+pedido directo: perder un carrito no guardado es barato de rehacer, no justifica un paso extra).
+
+**`/DEMO_RESET` (Ciclo 8, retoma el issue #36)**: pantalla de confirmación dedicada
+(`ui/screens/demo-reset-screen.tsx`), mismo patrón que `/ANULAR` pero de un solo paso (no hay nada
+que elegir — o se resetea todo, o no se hace nada). `storage/demo-reset.ts::demoReset` borra
+catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos de caja, la
+venta en curso (`draftCart`) y el outbox pendiente, limpia los cursores de pull
+(`sync/cursor.ts::clearSyncCursors` — si no, el próximo pull solo traería deltas desde el cursor viejo
+y nunca repondría lo que se acaba de borrar) y vuelve a sembrar catálogo y clientes desde el fixture
+local (mismas `seedCatalogIfEmpty`/`seedCustomersIfEmpty` que usa `bootstrap.ts`), así la terminal
+queda operable de inmediato sin depender de una reconexión. A propósito **no** toca la configuración
+de `/CONFIG` (URL del backend, API key, locale) — decisión explícita del usuario: es la conexión de
+esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el backend en cada reset.
 
 La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
@@ -434,6 +483,112 @@ Ciclo 7:
   rediseñadas. `storage/seed-customers.ts::seedCustomersIfEmpty` (mismo patrón que
   `seedCatalogIfEmpty`, pero no fatal si falla — son datos de ejemplo, no algo de lo que dependa
   poder vender).
+
+Ciclo 8:
+- **Grid `1fr clamp(320px, 33.333%, 420px)`**: la columna de Cliente/Total (antes `1fr` puro, sin
+  techo) ya no crece sin límite en pantallas muy anchas — sigue proporcional hacia abajo, pero no más
+  ancha que 420px. Primera versión (`2fr minmax(320px, 420px)`) tenía un bug real, reportado por el
+  usuario con una captura a 1024px de ancho: el algoritmo de Grid agranda los tracks no flexibles
+  hasta su máximo antes de repartir el espacio sobrante entre los `fr`, así que la columna saltaba
+  directo a 420px apenas había espacio de sobra, en vez de mantenerse en el tercio proporcional
+  (341px a 1024px) hasta que ese tercio superara los 420px — la relación terminaba quedando ~1.4:1,
+  no ~2:1. `clamp()` con un porcentaje no tiene ese problema (sale del cálculo de `fr` por completo).
+- **Total siempre visible, incluso con el carrito vacío**: `TotalsCard` (`CartView.tsx`) ya no se
+  oculta cuando `cart.lines.length === 0` — mismo criterio que ya tenía la tarjeta de Cliente desde el
+  Ciclo 6 (siempre presente, con un default: "Consumidor Final" ahí, $0,00 acá). Distinto del fix de
+  Ciclo 5 (que ya hacía que Subtotal/Descuento/Total fueran siempre visibles **dentro** de la
+  tarjeta) — este cambio es sobre la tarjeta entera.
+- **Más margen entre la tabla y el indicador de scroll, y "bigotes" en sus extremos**: el
+  `padding-right` de `.cart-view__scroll-inner` separa el contenido del indicador, que antes quedaba
+  pegado contra el borde. `ScrollIndicatorBar.tsx` suma dos marcas fijas ("bigotes") en los extremos
+  del carril, arriba y abajo del thumb que se mueve — a diferencia del thumb (que cambia de alto y
+  posición según cuánto se ve), los bigotes no se mueven nunca, enmarcando el carril completo para
+  reforzar "hay contenido de este lado" incluso cuando el thumb, por ser chico, queda lejos de ese
+  extremo. En el carrito, el carril (bigote superior incluido) arranca **debajo** del `<thead>`
+  sticky, no en el borde superior del contenedor — aclaración del usuario: el bigote tiene que tener
+  relación visual directa con el área de contenido de la lista, no con el header. Esto obligó a mover
+  `--cart-table-head-h` de `.cart-view__scroll-inner` a `.cart-view__scroll` (`cart-view.css`): un
+  custom property de CSS solo se hereda hacia adentro de donde se define, y `ScrollIndicatorBar` es
+  hermano de `.cart-view__scroll-inner`, no hijo — necesitaba un ancestro común para verlo. Verificado
+  con capturas y con las coordenadas reales de cada elemento (no solo a ojo), mismo método que los
+  fixes de scroll anteriores. Los bigotes son de un color más oscuro/sólido que el thumb (pedido del
+  usuario tras ver la primera versión, donde ambos compartían color y costaba distinguirlos), y un
+  riel fino (1px) de punta a punta detrás del thumb rellena el hueco visual entre este y cada bigote
+  cuando el thumb no llega hasta el extremo.
+- **Placeholder en la barra de comandos**: "Escribí para buscar · @ cliente · / comandos". No cierra
+  el issue #24 — se implementó como parte del lote original, pero al revisarlo el usuario consideró
+  que un placeholder no alcanza para lo que pedía ese issue (queda abierto para algo más completo
+  más adelante).
+- **`/DESCARTAR` y `/DEMO_RESET`**: ver "UX keyboard-first" más arriba para el detalle completo de
+  cada uno.
+- **~22 clientes de ejemplo** (`storage/fixtures/customers.json`, antes 3) — variedad de
+  documento/teléfono presentes/ausentes (incluye un par de "Juan Pérez" duplicados a propósito, para
+  poder probar la desambiguación con datos reales de la demo) en vez de solo lo mínimo para no romper
+  los tests.
+
+**Zoom responsive por debajo de 1024px, con un piso de 600px (Ciclo 8) — decisión reabierta a
+propósito**: el Ciclo 7 había decidido explícitamente un único layout, sin versión angosta ("el
+enfoque de comandos ya asume teclado, no vale la pena mantener una versión mobile-friendly"). El
+usuario volvió a plantear el caso de una ventana angosta, pero pidiendo algo distinto de lo que el
+Ciclo 7 había descartado: no una segunda versión del layout (eso hubiera revivido justo la
+complejidad que se evitó), sino que el layout de 1024px se vea **igual, más chico** — la proporción
+2/3–1/3 nunca se rompe porque nunca reflowea.
+
+Se resolvió con `zoom` de CSS aplicado a un wrapper (`.app-zoom-wrapper` en `tokens.css`, envolviendo
+la pantalla activa en `ui/app.tsx`) fijado en `--app-design-width` (1024px) de ancho lógico —
+`zoom: clamp(600px/1024px, 100vw/1024px, 1)` lo achica para que ocupe el ancho real de la ventana,
+sin subir de 1 en pantallas más anchas que el diseño. `zoom` no es estándar CSS, pero Chromium (el
+navegador de referencia, ver "Stack" arriba) lo soporta bien y evita la complejidad de un
+`transform: scale()` (que no reserva su propio espacio de layout — hay que compensarlo a mano con
+posicionamiento absoluto).
+
+Tres problemas reales, no teóricos, que esto trajo — los tres agarrados por el usuario probando en el
+navegador, no en revisión de código:
+
+1. `100svh` dentro de un ancestro con `zoom` sigue resolviendo contra el viewport real (no contra el
+   `zoom` del ancestro), así que el propio `zoom` termina achicando esa altura de nuevo al
+   renderizar — cada pantalla, ya zoomeada al ancho correcto, quedaba más baja que la ventana real,
+   con un espacio en blanco abajo. Confirmado con un HTML de prueba aislado en Playwright antes de
+   tocar la app real (mismo método que los fixes de scroll) y corregido con `--app-height`
+   (`tokens.css`): dividir `100svh` por el mismo factor de zoom cancela exactamente el achique que el
+   `zoom` le aplica después — cada pantalla usa `var(--app-height)` en vez de `100svh` directo
+   (`sale-screen.tsx` y el resto de `ui/screens/*.tsx`, más `error-boundary.tsx`). `fatal-error.ts` es
+   la única excepción a propósito: escribe directo a `document.body`, fuera de `.app-zoom-wrapper`,
+   porque tiene que seguir funcionando aunque lo que se haya roto sea el bootstrap de la
+   propia app — no le conviene depender de esta lógica.
+2. `.app-zoom-wrapper` con ancho fijo en `--app-design-width` a secas dejaba un espacio en blanco a
+   la derecha en ventanas más anchas que 1024px (`zoom` ya clampeado a 1 ahí) — antes de este cambio,
+   el grid ya ocupaba el 100% real disponible en esas pantallas, así que esto era una regresión real,
+   no el comportamiento previo. `width: max(var(--app-design-width), 100%)` resuelve las dos zonas
+   con una sola regla: por debajo de 1024px de viewport gana el ancho lógico fijo (lo que necesita el
+   `zoom` para escalar bien); a partir de 1024px, `100%` ya es mayor o igual, así que gana el ancho
+   fluido real. `--app-zoom` (`tokens.css`) quedó como variable compartida entre `.app-zoom-wrapper` y
+   `--app-height`, en vez de que cada una recalculara su propia versión de la fórmula del zoom — la
+   versión anterior de `--app-height` asumía el zoom sin clampear, así que por encima de 1024px de
+   viewport quedaba mal compensada de todos modos (mismo bug, dos síntomas).
+3. `viewportWidthSignal` (`ui/state/viewport.ts`) se actualizaba con `window.addEventListener
+   ('resize', ...)` — en el modo "Responsive" de Chrome DevTools, arrastrar el handle de resize dejaba
+   `window.innerWidth` desactualizado durante buena parte del arrastre (el aviso de ancho mínimo
+   aparecía muy por debajo de los 600px reales, no justo ahí). Se cambió a `ResizeObserver` sobre
+   `document.documentElement` — mismo criterio que `ui/hooks/use-scroll-indicator.ts`, que ya usa
+   `ResizeObserver` en vez de un listener suelto por la misma razón: seguir el tamaño real que el
+   navegador termina renderizando, atado a su pipeline de layout, en vez de depender de cuándo (o si)
+   se dispara un evento. Verificado con un resize programático paso a paso en Playwright: el límite
+   quedó exacto en 600px en las dos direcciones (antes tenía un desfasaje de unos pocos px, además del
+   reportado en DevTools).
+
+Por debajo de `MIN_SUPPORTED_WIDTH_PX` (600px, `ui/state/viewport.ts`), `ui/app.tsx` reemplaza toda la
+app por `ui/screens/unsupported-screen.tsx` — a propósito **sin** `.app-zoom-wrapper`, para que el
+mensaje se renderice a tamaño real en vez de forzado al ancho de diseño zoomeado (que a esa altura ya
+no entraría en la ventana). `viewportWidthSignal` es el único lugar de la app que rastrea el tamaño
+del viewport — mismo criterio que `navigator.onLine`/`window.addEventListener
+('online', ...)` en `sync/engine.ts`: leer un global del browser en un solo punto, no repetido por la
+UI.
+
+**Preselección del menú de "/" (issue #40)**: se planteó primero como nota rápida ("anotar: …",
+para cargarlo como issue a futuro) y terminó implementándose en el mismo ciclo, a pedido explícito
+del usuario poco después — ver "UX keyboard-first" más arriba (sección "Menú de '/'") para el detalle
+completo del cambio y su razonamiento.
 
 ## Testing
 
@@ -676,6 +831,22 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   angosto por completo) con división 2/3–1/3; indicador de scroll pasivo en el carrito y los tres
   overlays, reemplazando el alcance de #34 (que se acotó al ver la complejidad real del drag
   táctil) — ver "Diseño visual" y "Patrones establecidos" más arriba para el detalle.
+- Ciclo 8, sobre una tanda de observaciones del usuario tras usar el Ciclo 7: orden alfabético y
+  desambiguación por fecha de alta en la lista de `@`; `/DEMO_RESET` (retoma el issue #36) y
+  `/DESCARTAR`, los dos sin confirmación de más de un paso; grid `1fr clamp(320px, 33.333%, 420px)`;
+  Total siempre visible; más margen y "bigotes" en el indicador de scroll del carrito; placeholder de
+  la barra de comandos (no cierra el issue #24, queda abierto); ~22 clientes de ejemplo; preselección
+  de la fila 0 del menú de "/" (issue #40); Esc cierra el overlay sin tocar el buffer (issue #28); y,
+  reabriendo a propósito la decisión del Ciclo 7 de un único layout, zoom responsive por debajo de
+  1024px con un piso de 600px (por debajo, pantalla bloqueada) — ver "UX keyboard-first" y "Diseño
+  visual" más arriba para el detalle completo de cada uno, incluidos varios bugs reales encontrados
+  probando en el navegador (no solo en revisión de código) y corregidos en el mismo ciclo: el grid no
+  respetaba la proporción 2/3–1/3 al ancho de diseño, el zoom no rellenaba pantallas más anchas que
+  1024px, una fecha con `Intl.DateTimeFormat` sin `timeZone: 'UTC'` podía mostrar el día equivocado
+  según la zona horaria de la terminal, y el tracking de ancho de viewport (`window.addEventListener
+  ('resize', ...)`) tenía un desfasaje real corregido con `ResizeObserver` — aunque el caso puntual de
+  arrastrar el handle de resize en el modo "Responsive" de Chrome DevTools sigue sin resolverse
+  (issue #41, impacto bajo).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
@@ -687,11 +858,12 @@ para trabajar, revisar si tiene esta etiqueta.
 **Issues abiertas sin agendar todavía** (no `backlog`): #23 (detectar entrada de scanner por
 velocidad de tecleo — spike aparte, ahora se puede probar sin lector real vía paste+Enter <300ms,
 pero sigue necesitando calibrar el umbral), #24 (usar el espacio de la barra de comandos también
-para instrucciones mínimas de uso — sin specs todavía), #28 (Esc con un desplegable abierto lo
-cierra sin alterar el buffer — necesita diseño: el desplegable no tiene estado propio de
-"abierto/cerrado", se deriva del buffer parseado), #36 (comando para resetear los datos "de
-fábrica", con las confirmaciones necesarias — sin definir cuántos pasos de confirmación), #37
-(falta UI para crear/editar documento/teléfono de un cliente — sin definir cómo).
+para instrucciones mínimas de uso — el placeholder del Ciclo 8 no alcanza, el usuario quiere algo
+más completo más adelante), #37 (falta UI para crear/editar documento/teléfono de un cliente — sin
+definir cómo), #41 (Ciclo 8 — el zoom responsive no reacciona bien al resize interactivo dentro del
+modo "Responsive" de Chrome DevTools; impacto bajo, ver "Diseño visual" más arriba). #28, #36 y #40
+se cerraron en el Ciclo 8 (Esc cierra el overlay sin tocar el buffer, `/DEMO_RESET`, y preselección
+del menú de "/", respectivamente).
 
 **Fase 5 (hardware) pospuesta a v2** — decisión tomada al terminar Fase 4: depende de dispositivos
 físicos reales (impresora, cajón) para poder validarse en serio, y ninguna fase posterior depende

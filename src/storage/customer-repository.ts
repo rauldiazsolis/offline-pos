@@ -16,8 +16,11 @@ import { newId } from './ids.ts';
 export type CustomerRepository = {
   search(query: string, limit?: number): CustomerSearchResult[];
   /**
-   * Los más recientes, sin necesidad de tipear nada — para que `@` muestre
-   * algo apenas se abre, en vez de esperar una query (issue #21).
+   * Sin necesidad de tipear nada — para que `@` muestre algo apenas se
+   * abre, en vez de esperar una query (issue #21). El nombre quedó de
+   * cuando ordenaba por fecha de alta; desde el Ciclo 8 el orden es
+   * alfabético (más fácil de ubicar un nombre conocido a ojo), la lista
+   * sigue siendo "sin query" — eso no cambió.
    */
   listRecent(limit?: number): CustomerSearchResult[];
   getCustomer(customerId: string): Customer | undefined;
@@ -29,12 +32,17 @@ export async function loadCustomerRepository(): Promise<CustomerRepository> {
   const customers = await db.customers.toArray();
   const search = new FlexSearchCustomerSearch(customers);
   const customersById = new Map(customers.map((customer) => [customer.id, customer]));
-  const byRecency = [...customers].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // Ciclo 8, punto 1: alfabético, no por fecha de alta — más fácil de
+  // ubicar un nombre conocido a ojo en una lista larga de "recientes". Solo
+  // acá: `search()` con texto (@algo) sigue ordenado por relevancia del
+  // fuzzy match (FlexSearchCustomerSearch) — forzar alfabético ahí
+  // empeoraría la búsqueda, decisión explícita del usuario.
+  const alphabetical = [...customers].sort((a, b) => a.name.localeCompare(b.name));
 
   return {
     search: (query, limit) => search.search(query, limit),
     listRecent: (limit = 10) =>
-      byRecency.slice(0, limit).map((customer) => ({ customer, score: 1 })),
+      alphabetical.slice(0, limit).map((customer) => ({ customer, score: 1 })),
     getCustomer: (customerId) => customersById.get(customerId),
     getCustomerAccount: (customerId) => db.customerAccounts.get(customerId),
   };

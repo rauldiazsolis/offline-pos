@@ -1,5 +1,24 @@
 [
   { "name": "Ana García", "document": "30123456", "phone": "11-5555-1234" },
   { "name": "Carlos Pérez", "document": "27890123", "phone": "11-4444-5678" },
-  { "name": "María López", "document": "25456789" }
+  { "name": "María López", "document": "25456789" },
+  { "name": "Juan Pérez", "document": "28901234", "phone": "11-4321-9876" },
+  { "name": "Juan Pérez" },
+  { "name": "Lucía Fernández", "phone": "11-3333-2222" },
+  { "name": "Martín Rodríguez", "document": "29876543", "phone": "11-6789-0123" },
+  { "name": "Sofía Martínez" },
+  { "name": "Diego Sánchez", "document": "26543210" },
+  { "name": "Valentina Romero", "document": "31234567", "phone": "11-7654-3210" },
+  { "name": "Federico Torres", "phone": "11-2345-6789" },
+  { "name": "Camila Ruiz" },
+  { "name": "Nicolás Díaz", "document": "27456789", "phone": "11-8765-4321" },
+  { "name": "Julieta Álvarez", "document": "30987654" },
+  { "name": "Emiliano Castro" },
+  { "name": "Florencia Ortiz", "document": "28765432", "phone": "11-9876-5432" },
+  { "name": "Tomás Molina", "phone": "11-5432-1098" },
+  { "name": "Agustina Silva", "document": "29123456", "phone": "11-1234-5678" },
+  { "name": "Ignacio Herrera" },
+  { "name": "Micaela Acosta", "document": "26789012" },
+  { "name": "Bruno Medina", "document": "31456789", "phone": "11-6543-2109" },
+  { "name": "Delfina Vega" }
 ]

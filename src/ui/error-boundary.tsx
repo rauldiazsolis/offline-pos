@@ -22,7 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <main
           style={{
-            minHeight: '100svh',
+            minHeight: 'var(--app-height)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',

@@ -210,6 +210,20 @@ export function applyLineDiscount(cart: Cart, lineIndex: number, discount: Disco
 }
 
 /**
+ * Vacía la venta en curso por completo: líneas y ajuste global (`/DESCARTAR`,
+ * Ciclo 8) — a propósito distinto de `/ANULAR`, que anula una venta ya
+ * cerrada (con implicancias de auditoría, RF-06). Acá no hay nada que
+ * anular: el carrito ni siquiera se guardó todavía. Nunca falla (no hay
+ * ninguna validación que la rechace), así que no devuelve `Result` como el
+ * resto de las mutaciones de `Cart`. El cliente adjunto vive en un signal
+ * aparte (`ui/state/customer.ts`), no en `Cart` — el caller lo resetea por
+ * su cuenta.
+ */
+export function discardCart(): Cart {
+  return { lines: [] };
+}
+
+/**
  * Aplica (o reemplaza) el recargo/descuento global de la venta (RF-03,
  * `<signo><número>%` en la barra de comandos). `percentage === 0` quita el
  * campo (nunca lo deja en `0` explícito) — es la forma de cancelar un

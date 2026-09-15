@@ -279,9 +279,11 @@ export function CartView(): JSX.Element {
         <div class="cart-view__scroll-inner" ref={scrollRef}>
           <CartTable lines={cart.lines} selectedIndex={selectedIndex} />
         </div>
-        <ScrollIndicatorBar thumb={scrollThumb} variant="light" />
+        {/* topOffset corre el indicador (bigotes incluidos) debajo del
+            header sticky de la tabla — ver ScrollIndicatorBar.tsx. */}
+        <ScrollIndicatorBar thumb={scrollThumb} variant="light" topOffset="var(--cart-table-head-h)" />
       </div>
-      {cart.lines.length > 0 && <TotalsCard cart={cart} totals={totals} />}
+      <TotalsCard cart={cart} totals={totals} />
     </div>
   );
 }

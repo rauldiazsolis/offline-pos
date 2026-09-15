@@ -59,6 +59,73 @@
 }
 
 /*
+ * Ciclo 8: por debajo de 1024px de ancho, en vez de reflow (que rompería la
+ * proporción 2/3–1/3 del carrito — Ciclo 7 decidió a propósito un único
+ * layout, sin versión angosta) se aplica `zoom` — Chromium es el navegador
+ * de referencia (CLAUDE.md), `zoom` no es estándar pero anda bien ahí y
+ * evita la complejidad de un `transform: scale()` (que no reserva su
+ * propio espacio de layout, hay que compensarlo a mano).
+ *
+ * `.app-zoom-wrapper` queda fijo en `--app-design-width` (1024px) de ancho
+ * lógico mientras el viewport es más angosto que eso — el mismo ancho para
+ * el que están pensadas las proporciones del layout — y el `zoom` lo achica
+ * visualmente para que ocupe el ancho real de la ventana (ver esa regla más
+ * abajo para el porqué de `width: max(...)` en vez de un valor fijo).
+ * `clamp()` no deja que el zoom baje de la proporción de `--app-min-width`
+ * (600px) ni que suba de 1 (no se hace zoom IN en pantallas más anchas que
+ * el diseño). Por debajo de 600px de ancho real, `ui/app.tsx` renderiza
+ * `ui/screens/unsupported-screen.tsx` SIN este wrapper — zoomear más allá
+ * de ese punto dejaría todo ilegible, mejor bloquear con un mensaje
+ * explícito a tamaño real.
+ */
+:root {
+  --app-design-width: 1024px;
+  --app-min-width: 600px;
+  /*
+   * Una sola fuente de verdad para el factor de zoom — `.app-zoom-wrapper`
+   * y `--app-height` (abajo) lo consumen igual, en vez de cada uno
+   * recalcular su propia versión de la fórmula (bug real de la primera
+   * versión: `--app-height` asumía el `zoom` sin clampear, así que por
+   * encima de 1024px de viewport, donde el `zoom` real ya está clampeado a
+   * 1, la altura quedaba mal compensada de todos modos).
+   */
+  --app-zoom: clamp(
+    calc(var(--app-min-width) / var(--app-design-width)),
+    calc(100vw / var(--app-design-width)),
+    1
+  );
+  /*
+   * Alto real de la ventana, pre-compensado para el `zoom` de
+   * `.app-zoom-wrapper`: cada pantalla usa esto en vez de `100svh` directo.
+   * `100svh` adentro de un ancestro con `zoom` sigue resolviendo contra el
+   * viewport real (no contra el `zoom` del ancestro), así que el propio
+   * `zoom` lo termina achicando de nuevo al renderizar — dividir por
+   * `--app-zoom` cancela ese achique (confirmado en Chromium con capturas
+   * antes de este cambio, mismo método que los fixes de scroll anteriores).
+   * Con `--app-zoom` en 1 (viewport ≥ 1024px), esto es simplemente
+   * `100svh` sin modificar.
+   */
+  --app-height: calc(100svh / var(--app-zoom));
+}
+
+.app-zoom-wrapper {
+  /*
+   * Bug real reportado por el usuario en la primera versión: con el ancho
+   * fijo en `--app-design-width` a secas, una ventana más ancha que el
+   * diseño (`--app-zoom` ya clampeado a 1) dejaba un espacio en blanco a la
+   * derecha en vez de volver al comportamiento fluido de antes de este
+   * cambio (el grid ya ocupaba el 100% real disponible). `max()` resuelve
+   * las dos zonas con una sola regla: por debajo de 1024px de viewport,
+   * `100%` da menos que `1024px`, así que gana el ancho lógico fijo (lo que
+   * necesita el `zoom` para escalar correctamente); a partir de 1024px,
+   * `100%` ya es mayor o igual, así que gana el ancho fluido real y el
+   * layout vuelve a ocupar toda la ventana, exactamente como antes.
+   */
+  width: max(var(--app-design-width), 100%);
+  zoom: var(--app-zoom);
+}
+
+/*
  * La barra de comandos vive sobre "chrome" oscuro (ver --color-chrome-*) —
  * un outline claro ahí no se lee bien, así que el foco se marca con un
  * borde inferior en el mismo azul de acento en vez del outline por default.
