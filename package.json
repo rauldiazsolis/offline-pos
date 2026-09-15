@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "pnpm --parallel -r run dev",
+    "dev": "vite & pnpm --filter demo-backend run dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
