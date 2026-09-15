@@ -8,7 +8,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: false,
-    // e2e/ es de Playwright, no de Vitest — sin esto, sus *.spec.ts colisionan.
-    exclude: [...defaultExclude, 'e2e/**'],
+    // e2e/ es de Playwright; demo-backend/ tiene su propio Vitest (entorno
+    // node, no jsdom) — sin esto, sus *.test.ts colisionarían acá.
+    exclude: [...defaultExclude, 'e2e/**', 'demo-backend/**'],
   },
 });
