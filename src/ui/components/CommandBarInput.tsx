@@ -1,6 +1,7 @@
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useRef } from 'preact/hooks';
 import {
+  dismissCommandBarOverlay,
   moveSelection,
   removeSelectedCartLine,
   setSelectedCartLineQuantity,
@@ -12,7 +13,7 @@ import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
-import { formatMoney } from '../format.ts';
+import { formatDate, formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
@@ -22,6 +23,7 @@ import {
   commandSelectionIndexSignal,
   customerResultsSignal,
   customerSelectionIndexSignal,
+  overlayDismissedSignal,
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
@@ -60,6 +62,36 @@ export function CommandBarInput() {
   const overlayScrollRef = useRef<HTMLDivElement>(null);
   const overlayScrollThumb = useScrollIndicator(overlayScrollRef);
 
+  const searchResults = searchResultsSignal.value;
+  const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
+  const customerResults = customerResultsSignal.value;
+  const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
+  const parsed = parsedSignal.value;
+  const commandResults = commandResultsSignal.value;
+  // issue #40 (Ciclo 8): la fila 0 se preselecciona por default, igual que producto/cliente.
+  const selectedCommandIndex = commandSelectionIndexSignal.value ?? 0;
+  const showCommandList = parsed.kind === 'command';
+  // Issue #21: la lista se muestra apenas se abre "@", sin esperar texto —
+  // con query vacía son los clientes más recientes (customerResultsSignal).
+  const showCustomerResults = parsed.kind === 'customer';
+
+  const hasError = commandBarErrorSignal.value !== null;
+  const hasCommandResults = showCommandList && commandResults.length > 0;
+  // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
+  // con query vacía, solo si hay clientes recientes — si no, no hay nada que
+  // este overlay deba ocupar en pantalla.
+  const hasCustomerResults =
+    showCustomerResults && (parsed.query !== '' || customerResults.length > 0);
+  const hasSearchResults = !showCommandList && !showCustomerResults && searchResults.length > 0;
+  // Issue #28: Esc cierra el overlay sin tocar el buffer — como su
+  // visibilidad se deriva puramente del buffer parseado, hace falta este
+  // flag aparte (`overlayDismissedSignal`) para poder "ocultarlo" sin
+  // vaciar ni cambiar lo que se tipeó. Se resetea en cada tecla
+  // (`updateCommandBarBuffer`), así que seguir tipeando reabre el overlay
+  // que corresponda a lo nuevo.
+  const showOverlay =
+    !overlayDismissedSignal.value && (hasError || hasCommandResults || hasCustomerResults || hasSearchResults);
+
   // updateCommandBarBuffer (no tocar los signals directo): además de
   // actualizar el buffer, resetea/reindexa la selección de las tres listas
   // — issue #14.
@@ -71,6 +103,17 @@ export function CommandBarInput() {
     if (event.ctrlKey && event.key === 'Enter') {
       event.preventDefault();
       void triggerCheckout();
+      return;
+    }
+
+    // Issue #28: solo actúa si hay algo para cerrar — con el overlay ya
+    // oculto, Esc no hace nada acá (no es "vaciar el buffer", eso es otro
+    // alcance).
+    if (event.key === 'Escape') {
+      if (showOverlay) {
+        event.preventDefault();
+        dismissCommandBarOverlay();
+      }
       return;
     }
 
@@ -109,18 +152,6 @@ export function CommandBarInput() {
     }
   };
 
-  const searchResults = searchResultsSignal.value;
-  const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
-  const customerResults = customerResultsSignal.value;
-  const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
-  const parsed = parsedSignal.value;
-  const commandResults = commandResultsSignal.value;
-  const selectedCommandIndex = commandSelectionIndexSignal.value;
-  const showCommandList = parsed.kind === 'command';
-  // Issue #21: la lista se muestra apenas se abre "@", sin esperar texto —
-  // con query vacía son los clientes más recientes (customerResultsSignal).
-  const showCustomerResults = parsed.kind === 'customer';
-
   const rowStyle = (selected: boolean): { [key: string]: string } => ({
     padding: 'var(--space-2)',
     borderRadius: 'var(--radius-md)',
@@ -152,16 +183,6 @@ export function CommandBarInput() {
     fontWeight: 'bold',
   });
 
-  const hasError = commandBarErrorSignal.value !== null;
-  const hasCommandResults = showCommandList && commandResults.length > 0;
-  // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
-  // con query vacía, solo si hay clientes recientes — si no, no hay nada que
-  // este overlay deba ocupar en pantalla.
-  const hasCustomerResults =
-    showCustomerResults && (parsed.query !== '' || customerResults.length > 0);
-  const hasSearchResults = !showCommandList && !showCustomerResults && searchResults.length > 0;
-  const showOverlay = hasError || hasCommandResults || hasCustomerResults || hasSearchResults;
-
   return (
     // position: relative — ancla del overlay de abajo, que se abre hacia
     // arriba desde acá (issue #9: antes empujaba el carrito al crecer, sin
@@ -174,6 +195,7 @@ export function CommandBarInput() {
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         aria-label="Barra de comandos"
+        placeholder="Escribí para buscar · @ cliente · / comandos"
         class="command-bar-input"
         style={{
           width: '100%',
@@ -248,13 +270,19 @@ export function CommandBarInput() {
                     );
                   }
                   const { customer } = result.result;
-                  const identifier = [customer.document, customer.phone]
-                    .filter((value): value is string => value !== undefined)
-                    .join(' · ');
+                  // Ciclo 8, punto 2: sin documento ni teléfono (el caso
+                  // común — no hay UI todavía para cargarlos, issue #37),
+                  // dos clientes con el mismo nombre se veían idénticos acá.
+                  // La fecha de alta es la desambiguación barata: ya está en
+                  // `Customer.createdAt`, no hace falta ningún dato nuevo.
+                  const identifier =
+                    [customer.document, customer.phone]
+                      .filter((value): value is string => value !== undefined)
+                      .join(' · ') || `Alta: ${formatDate(customer.createdAt)}`;
                   return (
                     <li key={customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
                       <div>{customer.name}</div>
-                      {identifier !== '' && <div style={subtextStyle(selected)}>{identifier}</div>}
+                      <div style={subtextStyle(selected)}>{identifier}</div>
                     </li>
                   );
                 })}

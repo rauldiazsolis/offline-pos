@@ -16,10 +16,15 @@ import { StatusBar } from '../components/StatusBar.tsx';
  * empujar el carrito — de paso resuelve la inestabilidad de layout que
  * causaba estar en flujo normal.
  *
- * `height: '100svh'` + `overflow: 'hidden'` en la raíz (no `minHeight`): con
- * `min-height` nada le pone un techo real a este contenedor, así que un
- * carrito largo hacía crecer el documento entero y el header/footer se
- * desplazaban con el scroll de la página en vez de quedar fijos.
+ * `height: 'var(--app-height)'` + `overflow: 'hidden'` en la raíz (no
+ * `minHeight`): con `min-height` nada le pone un techo real a este
+ * contenedor, así que un carrito largo hacía crecer el documento entero y el
+ * header/footer se desplazaban con el scroll de la página en vez de quedar
+ * fijos. `--app-height` (`tokens.css`, Ciclo 8) es `100svh` ya compensado
+ * para el `zoom` responsive de `.app-zoom-wrapper` — usarlo acá en vez de
+ * `100svh` directo es lo que hace que la pantalla siga ocupando el alto
+ * real de la ventana en anchos angostos, en vez de quedar más baja que la
+ * ventana.
  *
  * `<main>` ya no scrollea directo (issue #18): el único sector con scroll
  * de la pantalla principal es la lista de artículos, dentro de `CartView`
@@ -32,7 +37,7 @@ export function SaleScreen() {
   return (
     <div
       style={{
-        height: '100svh',
+        height: 'var(--app-height)',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',

@@ -4,6 +4,7 @@ import {
   addProductLine,
   adjustFreeformLineQuantity,
   applyLineDiscount,
+  discardCart,
   removeLine,
   setGlobalAdjustment,
   setLineQuantity,
@@ -464,5 +465,11 @@ describe('el ajuste global sobrevive a cualquier otra mutación del carrito', ()
     if (result.ok) {
       expect(result.value.globalAdjustmentPercentage).toBe(10);
     }
+  });
+});
+
+describe('discardCart (/DESCARTAR, Ciclo 8)', () => {
+  it('devuelve un carrito vacío, sin líneas ni ajuste global', () => {
+    expect(discardCart()).toEqual({ lines: [] });
   });
 });

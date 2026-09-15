@@ -2,6 +2,7 @@ import {
   addFreeformLine,
   addProductLine,
   adjustFreeformLineQuantity,
+  discardCart,
   removeLine,
   setGlobalAdjustment,
   setLineQuantity,
@@ -23,6 +24,7 @@ import {
   commandSelectionIndexSignal,
   customerResultsSignal,
   customerSelectionIndexSignal,
+  overlayDismissedSignal,
   parsedSignal,
   searchResultsSignal,
   searchSelectionIndexSignal,
@@ -36,6 +38,7 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
+import { enterDemoResetScreen } from './demo-reset-controller.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 import { runSyncCycle } from '../../sync/engine.ts';
 
@@ -127,6 +130,10 @@ function identityOfCustomerResult(result: CustomerOrClear): string {
   return result.kind === 'clear' ? '__clear__' : result.result.customer.id;
 }
 
+function identityOfCommandResult(command: { name: string }): string {
+  return command.name;
+}
+
 /**
  * Se llama en cada tecla de la barra de comandos (issue #14) — antes, el
  * puntero de selección de ninguna de las tres listas se resetaba al
@@ -134,23 +141,33 @@ function identityOfCustomerResult(result: CustomerOrClear): string {
  * tiene sentido para la lista filtrada nueva (una fila distinta, o
  * directamente fuera de rango).
  *
- * Menú de comandos: reset simple a `null`, siempre — confirmado con el
- * usuario, ejecutar el comando equivocado por accidente tiene consecuencias
- * reales, así que no vale la pena ser "más inteligente" acá. Búsqueda de
- * producto/línea libre y de cliente: "más inteligente" — si el ítem que
- * estaba seleccionado sigue presente en la lista nueva (por identidad), se
- * lo sigue apuntando aunque haya cambiado de posición.
+ * Las tres listas reindexan por identidad de la misma forma (issue #40,
+ * Ciclo 8: el menú de comandos se unificó con el criterio de producto/línea
+ * libre y cliente — ver `commandSelectionIndexSignal` en
+ * `ui/state/command-bar.ts` para el porqué) — si el ítem que estaba
+ * seleccionado sigue presente en la lista filtrada nueva, se lo sigue
+ * apuntando aunque haya cambiado de posición; si no, vuelve a `null`.
  */
 export function updateCommandBarBuffer(value: string): void {
   const previousSearchResults = searchResultsSignal.value;
   const previousSearchIndex = searchSelectionIndexSignal.value;
   const previousCustomerResults = customerResultsSignal.value;
   const previousCustomerIndex = customerSelectionIndexSignal.value;
+  const previousCommandResults = commandResultsSignal.value;
+  const previousCommandIndex = commandSelectionIndexSignal.value;
 
   commandBarBufferSignal.value = value;
   commandBarErrorSignal.value = null;
+  // Issue #28: cualquier tecla que cambie el buffer reabre el overlay que
+  // corresponda al contenido nuevo, aunque se haya cerrado con Esc.
+  overlayDismissedSignal.value = false;
 
-  commandSelectionIndexSignal.value = null;
+  commandSelectionIndexSignal.value = reindexByIdentity(
+    previousCommandResults,
+    previousCommandIndex,
+    commandResultsSignal.value,
+    identityOfCommandResult,
+  );
   searchSelectionIndexSignal.value = reindexByIdentity(
     previousSearchResults,
     previousSearchIndex,
@@ -163,6 +180,11 @@ export function updateCommandBarBuffer(value: string): void {
     customerResultsSignal.value,
     identityOfCustomerResult,
   );
+}
+
+/** Esc con el overlay abierto (issue #28): lo cierra sin tocar el buffer. */
+export function dismissCommandBarOverlay(): void {
+  overlayDismissedSignal.value = true;
 }
 
 /** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
@@ -228,6 +250,21 @@ function triggerVoid(): void {
   clearBuffer();
 }
 
+/**
+ * `/DESCARTAR` (Ciclo 8): vacía la venta en curso completa (líneas, cliente
+ * adjunto, ajuste global) — a propósito distinto de `/ANULAR` (ver
+ * `domain/cart.ts::discardCart`). Sin confirmación (decisión explícita del
+ * usuario): a diferencia de anular una venta ya cerrada, esto descarta un
+ * carrito que ni siquiera se guardó — perderlo es barato de rehacer, no
+ * justifica un paso extra.
+ */
+function triggerDiscardCart(): void {
+  cartSignal.value = discardCart();
+  cartSelectionIndexSignal.value = null;
+  resetAttachedCustomer();
+  clearBuffer();
+}
+
 function runCommand(name: string, _args: string[]): void {
   switch (name) {
     case 'COBRAR':
@@ -240,12 +277,19 @@ function runCommand(name: string, _args: string[]): void {
     case 'ANULAR':
       triggerVoid();
       return;
+    case 'DESCARTAR':
+      triggerDiscardCart();
+      return;
     case 'CONFIG':
       enterConfigScreen();
       clearBuffer();
       return;
     case 'SINCRONIZAR':
       void runSyncCycle();
+      clearBuffer();
+      return;
+    case 'DEMO_RESET':
+      enterDemoResetScreen();
       clearBuffer();
       return;
     default:
@@ -286,26 +330,18 @@ export function submitCommandBar(): void {
       return;
     }
     case 'command': {
-      // Issue #3: filtrado por prefijo (commandResultsSignal) + navegación
-      // explícita — a diferencia de search/customer, acá Enter sin haber
-      // tocado ↑/↓ solo ejecuta si el filtro deja un único comando posible
-      // (sin ambigüedad); con 2+ y sin selección explícita, no hace nada.
+      // Issue #3, unificado con search/customer en el issue #40 (Ciclo 8,
+      // ver `commandSelectionIndexSignal` en `ui/state/command-bar.ts` para
+      // el porqué): la fila 0 ya se preselecciona por default, así que Enter
+      // sin tocar ↑/↓ ejecuta directo el primer match del filtro.
       const results = commandResultsSignal.value;
-      const index = commandSelectionIndexSignal.value;
-      if (index !== null) {
-        const selected = results[index];
-        if (selected !== undefined) {
-          runCommand(selected.name, parsed.args);
-        }
-        return;
-      }
-      if (results.length === 1) {
-        runCommand(results[0]?.name ?? '', parsed.args);
-        return;
-      }
-      if (results.length === 0) {
+      const index = commandSelectionIndexSignal.value ?? 0;
+      const selected = results[index];
+      if (selected === undefined) {
         commandBarErrorSignal.value = `Comando desconocido: /${parsed.name}`;
+        return;
       }
+      runCommand(selected.name, parsed.args);
       return;
     }
     case 'global-adjustment':
@@ -361,12 +397,13 @@ export function submitCommandBar(): void {
 
 /**
  * `assumeFirstSelected`: cuando la UI ya resalta la fila 0 por default antes
- * de cualquier navegación (productos, clientes — issue #4), el punto de
- * partida real tiene que ser `0`, no `-1`/`itemCount`, o el primer ↓ "no se
- * nota" (mueve el signal de `null` a `0`, que ya se veía seleccionado). El
- * carrito y el menú de comandos NO lo usan — ahí nada se resalta hasta que
- * se navega explícitamente, así que el criterio actual (entrar por arriba o
- * por abajo según la dirección) sigue siendo el correcto.
+ * de cualquier navegación (productos, clientes, y desde el issue #40
+ * también comandos — issue #4), el punto de partida real tiene que ser `0`,
+ * no `-1`/`itemCount`, o el primer ↓ "no se nota" (mueve el signal de
+ * `null` a `0`, que ya se veía seleccionado). Solo el carrito NO lo usa —
+ * ahí nada se resalta hasta que se navega explícitamente, así que el
+ * criterio actual (entrar por arriba o por abajo según la dirección) sigue
+ * siendo el correcto para esa lista.
  */
 function moveSelectionOver(
   itemCount: number,
@@ -397,7 +434,9 @@ export function moveSelection(direction: 1 | -1): void {
     return;
   }
   if (parsed.kind === 'command') {
-    moveSelectionOver(commandResultsSignal.value.length, commandSelectionIndexSignal, direction);
+    moveSelectionOver(commandResultsSignal.value.length, commandSelectionIndexSignal, direction, {
+      assumeFirstSelected: true,
+    });
     return;
   }
 

@@ -83,7 +83,7 @@ export function VoidSaleScreen() {
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       style={{
-        height: '100svh',
+        height: 'var(--app-height)',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',

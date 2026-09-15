@@ -72,6 +72,9 @@ export type ErrorMeta = {
   'cash-session/none-open': undefined;
   'cash-session/already-closed': undefined;
   'cash-session/persist-failed': { message: string };
+
+  // storage/demo-reset.ts
+  'demo/reset-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

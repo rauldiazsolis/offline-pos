@@ -23,10 +23,30 @@
  * `start` la deja pegada justo debajo de Cliente, con el espacio que sobra
  * abajo de todo (reportado por el usuario: quería
  * "[cliente][totales][blanco]", no "[cliente][blanco][totales]").
+ *
+ * Ciclo 8, punto 4: `clamp(320px, 33.333%, 420px)` en vez de `1fr` puro para
+ * la columna lateral — sigue proporcional hacia abajo (nunca angosta más
+ * que lo que Cliente/Total necesitan para no verse apretados), pero deja de
+ * crecer sin límite en pantallas muy anchas, donde `1fr` la hacía
+ * desproporcionadamente ancha respecto a la tabla de productos.
+ *
+ * `2fr minmax(320px, 420px)` (primera versión) tenía un bug real: el
+ * algoritmo de Grid agranda los tracks no flexibles hasta su máximo ANTES
+ * de repartir el espacio sobrante entre los `fr` — con `minmax(320px,
+ * 420px)`, eso significaba que la columna lateral saltaba directo a 420px
+ * apenas había espacio de sobra, en vez de mantenerse en el tercio
+ * proporcional (341px a 1024px de ancho) hasta que ese tercio superara los
+ * 420px. `clamp(320px, 33.333%, 420px)` no tiene ese problema: es un único
+ * valor (no `fr` + `minmax` compitiendo), sale del cálculo de fr por
+ * completo — el porcentaje ya da la proporción real de un tercio del
+ * contenedor, y el clamp solo interviene en los extremos. La columna de la
+ * tabla pasa de `2fr` a `1fr` porque ya no hace falta expresar la
+ * proporción ahí: con una sola columna flexible, esa siempre se queda con
+ * "todo lo que sobra" después de resolver la lateral.
  */
 .cart-view {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr clamp(320px, 33.333%, 420px);
   grid-template-rows: auto 1fr;
   grid-template-areas:
     'table customer'
@@ -69,16 +89,26 @@
   grid-area: table;
   position: relative;
   min-height: 0;
+  /* Una sola fuente de verdad: el alto real del header, el margen de scroll
+   * de las filas y el "bigote" superior del indicador (todos más abajo)
+   * siempre tienen que coincidir, o el bug que esto arregla vuelve a
+   * aparecer si uno cambia sin el otro. Vive acá (el contenedor común a
+   * ".cart-view__scroll-inner" y a ScrollIndicatorBar, que son hermanos) en
+   * vez de en ".cart-view__scroll-inner" — un custom property solo se
+   * hereda hacia adentro de donde se define, y ScrollIndicatorBar lo
+   * necesita para no invadir la zona del header (Ciclo 8, punto 7). */
+  --cart-table-head-h: 1.75rem;
 }
 
 .cart-view__scroll-inner {
   height: 100%;
   overflow-y: auto;
   min-height: 0;
-  /* Una sola fuente de verdad: el alto real del header y el margen de
-   * scroll de las filas (más abajo) siempre tienen que coincidir, o el
-   * bug que esto arregla vuelve a aparecer si uno cambia sin el otro. */
-  --cart-table-head-h: 1.75rem;
+  /* Ciclo 8, punto 7: separa la tabla del indicador de scroll (que vive en
+   * el borde derecho de ".cart-view__scroll", fuera de este elemento) —
+   * antes la tabla llegaba hasta el borde sin aire, quedando pegada contra
+   * el indicador. */
+  padding-right: var(--space-3);
 }
 
 /*

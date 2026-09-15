@@ -47,7 +47,7 @@ export function ConfigScreen() {
   return (
     <div
       style={{
-        height: '100svh',
+        height: 'var(--app-height)',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',

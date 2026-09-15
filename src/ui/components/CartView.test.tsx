@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/preact';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CartView } from './CartView.tsx';
+import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
@@ -33,6 +34,18 @@ describe('CartView', () => {
   it('muestra "carrito vacío" cuando no hay líneas', () => {
     render(<CartView />);
     expect(screen.getByText('El carrito está vacío.')).not.toBeNull();
+  });
+
+  // Ciclo 8, punto 5: Total siempre visible, mismo criterio que ya tenía
+  // Cliente — antes desaparecía por completo con el carrito vacío.
+  it('con carrito vacío, igual muestra "Resumen de venta" con $0,00 (Ciclo 8)', () => {
+    const { container } = render(<CartView />);
+    const totalsCard = container.querySelector<HTMLElement>('.cart-view__totals');
+    if (totalsCard === null) throw new Error('setup falló');
+
+    expect(within(totalsCard).getByText('Resumen de venta')).not.toBeNull();
+    // Subtotal, Descuento y Total — las tres filas en $0,00 con carrito vacío.
+    expect(within(totalsCard).getAllByText(formatMoney(0))).toHaveLength(3);
   });
 
   // La tarjeta de cliente siempre se muestra, con o sin cliente adjunto —

@@ -24,6 +24,19 @@ export const parsedSignal = computed<ParsedCommand>(() =>
 );
 
 /**
+ * Esc con el overlay abierto (issue #28) lo cierra sin tocar el buffer.
+ * Como qué overlay mostrar se deriva puramente del buffer parseado (no hay
+ * un estado propio de "abierto/cerrado"), no alcanza con no hacer nada: hay
+ * que poder ocultarlo aunque el buffer parseado siga diciendo "hay algo
+ * para mostrar". Este flag es ese estado aparte — `true` = el usuario lo
+ * cerró a mano. Se resetea a `false` en cada tecla
+ * (`command-bar-controller.ts::updateCommandBarBuffer`): seguir tipeando
+ * reabre el overlay que corresponda a lo nuevo, coherente con lo que se
+ * está buscando en ese momento.
+ */
+export const overlayDismissedSignal = signal(false);
+
+/**
  * Un resultado de "buscar artículo" puede ser un producto del catálogo o una
  * línea libre que ya está en este ticket — la segunda no vive en ningún
  * índice, es la forma de identificar cuál ajustar con `<n>*descripción`/
@@ -125,10 +138,15 @@ export const commandResultsSignal = computed<typeof AVAILABLE_COMMANDS>(() => {
 });
 
 /**
- * Selección visual (↑/↓) sobre `commandResultsSignal` — a propósito, sin
- * default a la fila 0 (a diferencia de `searchSelectionIndexSignal`/
- * `customerSelectionIndexSignal`): ejecutar el comando equivocado sin querer
- * tiene consecuencias reales, así que acá nada queda preseleccionado hasta
- * que el usuario navegue explícitamente (ver `command-bar-controller.ts`).
+ * Selección visual (↑/↓) sobre `commandResultsSignal`. Hasta el Ciclo 7 esto
+ * no preseleccionaba la fila 0 a propósito (ejecutar el comando equivocado
+ * sin querer tenía consecuencias reales) — issue #40 (Ciclo 8) unifica esto
+ * con el criterio de `searchSelectionIndexSignal`/`customerSelectionIndexSignal`
+ * (fila 0 preseleccionada, Enter ejecuta directo), a pedido del usuario. El
+ * riesgo que motivaba la excepción ya no aplica igual: cada comando resuelve
+ * su propia seguridad más abajo en el flujo (`/DEMO_RESET` tiene su propia
+ * pantalla de confirmación; `/DESCARTAR` descarta algo que ni se había
+ * guardado; el resto no es destructivo), así que frenar en el menú no
+ * compraba nada — solo agregaba fricción al camino rápido.
  */
 export const commandSelectionIndexSignal = signal<number | null>(null);

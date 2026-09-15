@@ -8,6 +8,8 @@ export const AVAILABLE_COMMANDS: { name: string; description: string }[] = [
   { name: 'COBRAR', description: 'Cobrar y cerrar la venta (o Ctrl+Enter)' },
   { name: 'CAJA', description: 'Abrir o cerrar el turno de caja' },
   { name: 'ANULAR', description: 'Anular una venta ya cerrada' },
+  { name: 'DESCARTAR', description: 'Vaciar la venta en curso (líneas, cliente y ajuste)' },
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },
   { name: 'SINCRONIZAR', description: 'Sincronizar ahora' },
+  { name: 'DEMO_RESET', description: 'Borrar todos los datos locales y reiniciar la demo' },
 ];

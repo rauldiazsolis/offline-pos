@@ -40,11 +40,11 @@ describe('loadCustomerRepository', () => {
     expect(repo.search('Ana').map((result) => result.customer.id)).toContain(created.value.id);
   });
 
-  it('listRecent devuelve los clientes más nuevos primero, sin necesidad de query', async () => {
+  it('listRecent devuelve los clientes en orden alfabético, sin necesidad de query (Ciclo 8)', async () => {
     await db.customers.bulkAdd([
-      { id: 'c1', name: 'Primero', createdAt: '2026-01-01T00:00:00.000Z' },
-      { id: 'c2', name: 'Segundo', createdAt: '2026-01-03T00:00:00.000Z' },
-      { id: 'c3', name: 'Tercero', createdAt: '2026-01-02T00:00:00.000Z' },
+      { id: 'c1', name: 'Zulema', createdAt: '2026-01-03T00:00:00.000Z' },
+      { id: 'c2', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'c3', name: 'Martín', createdAt: '2026-01-02T00:00:00.000Z' },
     ]);
 
     const repo = await loadCustomerRepository();
