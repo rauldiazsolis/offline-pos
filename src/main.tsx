@@ -2,11 +2,16 @@ import { render } from 'preact';
 import './index.css';
 import { bootstrap } from './ui/bootstrap.ts';
 import { ErrorBoundary } from './ui/error-boundary.tsx';
-import { renderFatalError } from './ui/fatal-error.ts';
+import { isBenignResizeObserverLoopError, renderFatalError } from './ui/fatal-error.ts';
 import { App } from './ui/app.tsx';
 import { startViewportTracking } from './ui/state/viewport.ts';
 
 window.addEventListener('error', (event) => {
+  // Issue #42: ver el porqué en `isBenignResizeObserverLoopError` —
+  // nunca es un error real de la app, así que no llega a `renderFatalError`.
+  if (isBenignResizeObserverLoopError(event.message)) {
+    return;
+  }
   renderFatalError(event.error as unknown);
 });
 window.addEventListener('unhandledrejection', (event) => {
