@@ -53,6 +53,8 @@ describe('confirmDemoReset', () => {
     expect(attachedCustomerSignal.value).toBeUndefined();
     expect(demoResetErrorSignal.value).toBeNull();
     expect(demoResetInProgressSignal.value).toBe(false);
-    await expect(db.products.count()).resolves.toBeGreaterThan(0);
+    // Sin /CONFIG (no configurado en este test), demoReset() ya no re-siembra
+    // localmente — la terminal queda vacía (ver storage/demo-reset.ts).
+    await expect(db.products.count()).resolves.toBe(0);
   });
 });
