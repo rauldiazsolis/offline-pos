@@ -12,9 +12,10 @@ beforeAll(() => {
 
 let server: Server;
 let baseUrl: string;
+let db: ReturnType<typeof openDb>;
 
 beforeEach(async () => {
-  const db = openDb(':memory:');
+  db = openDb(':memory:');
   seedIfEmpty(db, '2026-01-01T00:00:00.000Z');
   server = createApp(db);
   await new Promise<void>((resolve) => {
@@ -76,6 +77,10 @@ describe('POST /customers', () => {
     });
     const body = (await pullResponse.json()) as { items: { id: string; name: string }[] };
     expect(body.items).toEqual([{ id: 'local-1', name: 'Nuevo Cliente' }]);
+
+    // Verify source='pos' in the database for the freshly created customer
+    const row = db.prepare('SELECT source FROM customers WHERE id = ?').get('local-1') as { source: string };
+    expect(row.source).toBe('pos');
   });
 
   it('reenviar la misma Idempotency-Key no duplica el cliente', async () => {

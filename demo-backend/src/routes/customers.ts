@@ -44,7 +44,7 @@ export const customerRoutes: RouteDef[] = [
         ctx.db
           .prepare(
             'INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?) ' +
-              "ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, source = 'pos', updated_at = excluded.updated_at",
+              'ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at',
           )
           .run(body.id, JSON.stringify(body), 'pos', now);
         return { status: 200, body: {} };
