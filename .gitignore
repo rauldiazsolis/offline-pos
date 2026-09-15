@@ -35,3 +35,6 @@ blob-report
 *.njsproj
 *.sln
 *.sw?
+
+# demo-backend
+demo-backend/data
