@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { saveSyncConfig } from '../../sync/config.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 
 const live = (buffer: string) => parseCommandBar(buffer, { finalizing: false });
 const enter = (buffer: string) => parseCommandBar(buffer, { finalizing: true });
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('parseCommandBar', () => {
   it('buffer vacío es "typing"', () => {
@@ -78,7 +83,9 @@ describe('parseCommandBar', () => {
       });
     });
 
-    it('parsea coma como separador decimal', () => {
+    it('con locale es-AR, parsea coma como separador decimal', () => {
+      saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
       expect(live('envío$1500,50')).toEqual({
         kind: 'freeform-line',
         description: 'envío',

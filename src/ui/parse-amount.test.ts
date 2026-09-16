@@ -1,13 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { saveSyncConfig } from '../sync/config.ts';
 import { parseAmount, parseNonNegativeAmount } from './parse-amount.ts';
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('parseAmount', () => {
   it('parsea un monto simple', () => {
     expect(parseAmount('100')).toBe(100);
   });
 
-  it('acepta coma como separador decimal', () => {
+  it('sin locale configurado (en-US en el entorno de test), el punto es el separador decimal', () => {
+    expect(parseAmount('1500.50')).toBe(1500.5);
+  });
+
+  it('con locale es-AR configurado, la coma es el separador decimal', () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
     expect(parseAmount('1.500,50')).toBe(1500.5);
+  });
+
+  it('rechaza cualquier caracter que no sea dígito o separador — símbolos, letras, texto suelto', () => {
+    expect(parseAmount('$3.35')).toBeUndefined();
+    expect(parseAmount('x4,38')).toBeUndefined();
+    expect(parseAmount('cualquier cosa')).toBeUndefined();
   });
 
   it('rechaza 0 — un pago/línea libre de $0 no tiene sentido de negocio', () => {

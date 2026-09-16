@@ -1,16 +1,44 @@
+import { resolveLocale } from './format.ts';
+
+function escapeForCharClass(char: string): string {
+  return char.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
+/** Separador decimal y de miles que usa `Intl.NumberFormat` para ese locale. */
+function localeSeparators(locale: string): { decimal: string; group: string } {
+  const parts = new Intl.NumberFormat(locale).formatToParts(1234.5);
+  const decimal = parts.find((part) => part.type === 'decimal')?.value ?? '.';
+  const group = parts.find((part) => part.type === 'group')?.value ?? ',';
+  return { decimal, group };
+}
+
 /**
- * Fase 1: heurística simple para el separador decimal (coma si está
- * presente, como en `$1500,50`). Reemplazar por `Intl.NumberFormat` con el
- * locale configurado por terminal cuando exista esa config (ver §7 del
- * doc de diseño) — no hay locale configurable todavía. Usado tanto por la
- * línea libre de la barra de comandos como por el input de cobro.
+ * Parsea un monto tipeado por el cajero según el separador decimal/de miles
+ * del locale configurado por terminal (`/CONFIG`, o `navigator.language` si
+ * no hay uno) — reemplaza la heurística fija de Fase 1 ("coma como decimal
+ * si está presente"), que no tenía relación con el locale real ni con lo
+ * que `formatMoney` termina mostrando. Rechaza cualquier caracter que no
+ * sea dígito o alguno de esos dos separadores: `"$3.35"`, `"x4,38"` o
+ * `"cualquier cosa"` quedan inválidos en vez de colarse como texto sin
+ * sentido que el resto de la pila silenciosamente trataba como 0 (issue
+ * encontrada probando el modal de cobro multi-medio, #55). Usado tanto por
+ * la línea libre de la barra de comandos como por los montos de `/CAJA` y
+ * los 6 campos de Cobro.
  */
 function parseNormalized(raw: string): number | undefined {
   const trimmed = raw.trim();
   if (trimmed === '') {
     return undefined;
   }
-  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
+
+  const { decimal, group } = localeSeparators(resolveLocale());
+  const allowed = new RegExp(`^[0-9${escapeForCharClass(group)}${escapeForCharClass(decimal)}]+$`);
+  if (!allowed.test(trimmed)) {
+    return undefined;
+  }
+
+  const withoutGroup = trimmed.split(group).join('');
+  const normalized = decimal === '.' ? withoutGroup : withoutGroup.split(decimal).join('.');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : undefined;
 }
