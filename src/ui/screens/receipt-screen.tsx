@@ -4,7 +4,8 @@ import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
-import { receiptSaleSignal } from '../state/receipt.ts';
+import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
+import { receiptChangeSignal, receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import './receipt-screen.css';
 
@@ -17,6 +18,7 @@ function lineLabel(line: SaleLine): string {
 
 function continueToSale(): void {
   receiptSaleSignal.value = null;
+  receiptChangeSignal.value = 0;
   activeScreenSignal.value = 'sale';
 }
 
@@ -37,8 +39,7 @@ export function ReceiptScreen() {
     return null;
   }
 
-  const paid = sale.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const change = paid - sale.total;
+  const change = receiptChangeSignal.value;
   // Reusa calculateTotals sobre un Cart armado con los datos ya cerrados de
   // la venta — mismo cálculo que en el carrito, sin duplicar la fórmula.
   const totals = calculateTotals({
@@ -127,7 +128,7 @@ export function ReceiptScreen() {
         </div>
         {sale.payments.map((payment, index) => (
           <div key={index} style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Pago ({payment.method})</span>
+            <span>Pago ({PAYMENT_METHOD_LABELS[payment.method]})</span>
             <span>{formatMoney(payment.amount)}</span>
           </div>
         ))}

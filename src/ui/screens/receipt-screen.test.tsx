@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReceiptScreen } from './receipt-screen.tsx';
-import { receiptSaleSignal } from '../state/receipt.ts';
+import { receiptChangeSignal, receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 
@@ -10,11 +10,12 @@ beforeEach(() => {
   receiptSaleSignal.value = {
     id: 'sale-1',
     lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }],
-    payments: [{ method: 'cash', amount: 250 }],
+    payments: [{ method: 'cash', amount: 200 }],
     total: 200,
     status: 'closed',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
+  receiptChangeSignal.value = 50;
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
@@ -62,5 +63,6 @@ describe('ReceiptScreen', () => {
 
     expect(activeScreenSignal.value).toBe('sale');
     expect(receiptSaleSignal.value).toBeNull();
+    expect(receiptChangeSignal.value).toBe(0);
   });
 });

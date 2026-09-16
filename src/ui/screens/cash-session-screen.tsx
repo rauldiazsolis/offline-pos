@@ -1,6 +1,6 @@
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useLayoutEffect } from 'preact/hooks';
-import type { Payment } from '../../domain/sale.ts';
+import type { PaymentMethod } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
@@ -11,6 +11,7 @@ import {
   updateCashBuffer,
 } from '../keyboard/cash-session-controller.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
+import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import {
   cashBufferSignal,
   cashErrorSignal,
@@ -18,15 +19,6 @@ import {
   cashStepSignal,
   cashSummarySignal,
 } from '../state/cash-session.ts';
-
-const PAYMENT_METHOD_LABELS: Record<Payment['method'], string> = {
-  cash: 'Efectivo',
-  debit: 'Tarjeta de Débito',
-  credit: 'Tarjeta de Crédito',
-  transfer: 'Transferencia',
-  qr: 'Código QR',
-  account: 'Cuenta corriente',
-};
 
 const cardStyle = {
   border: '1px solid var(--color-border)',
@@ -134,7 +126,7 @@ export function CashSessionScreen() {
             <span>Ventas</span>
             <span style={{ fontFamily: 'var(--font-mono)' }}>{summary.salesCount}</span>
           </div>
-          {(Object.keys(summary.totalsByMethod) as Payment['method'][]).map((method) => (
+          {(Object.keys(summary.totalsByMethod) as PaymentMethod[]).map((method) => (
             <div style={rowStyle} key={method}>
               <span>{PAYMENT_METHOD_LABELS[method]}</span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>
