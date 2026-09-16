@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { saveSyncConfig } from '../../sync/config.ts';
 import { CheckoutScreen } from './checkout-screen.tsx';
 import { cartSignal } from '../state/cart.ts';
 import { checkoutBuffersSignal, checkoutErrorSignal } from '../state/checkout.ts';
@@ -10,12 +11,25 @@ function emptyBuffers() {
   return { cash: '', debit: '', credit: '', transfer: '', qr: '', account: '' };
 }
 
+function getInput(label: string): HTMLInputElement {
+  // tsc -b exige este cast (getByLabelText devuelve HTMLElement); el
+  // type-checker de eslint, sobre el mismo código, lo marca como
+  // innecesario — desacuerdo real entre las dos herramientas, no algo que
+  // se resuelva reescribiendo la expresión.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+  return screen.getByLabelText(label) as HTMLInputElement;
+}
+
 beforeEach(() => {
   cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
   checkoutBuffersSignal.value = emptyBuffers();
   checkoutErrorSignal.value = null;
   attachedCustomerSignal.value = undefined;
   activeScreenSignal.value = 'checkout';
+});
+
+afterEach(() => {
+  localStorage.clear();
 });
 
 describe('CheckoutScreen', () => {
@@ -98,5 +112,36 @@ describe('CheckoutScreen', () => {
     fireEvent.input(input, { target: { value: 'cualquier cosa' } });
 
     expect(input.style.borderColor).toBe('var(--color-danger)');
+  });
+
+  it('con locale es-AR, la tecla "." se reinterpreta como coma decimal', () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    render(<CheckoutScreen />);
+    const input = getInput('Efectivo');
+
+    fireEvent.input(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: '.' });
+
+    expect(input.value).toBe('1,');
+  });
+
+  it('con locale en-US, la tecla "," se reinterpreta como punto decimal', () => {
+    render(<CheckoutScreen />);
+    const input = getInput('Efectivo');
+
+    fireEvent.input(input, { target: { value: '1' } });
+    fireEvent.keyDown(input, { key: ',' });
+
+    expect(input.value).toBe('1.');
+  });
+
+  it('no permite un segundo separador decimal', () => {
+    render(<CheckoutScreen />);
+    const input = getInput('Efectivo');
+
+    fireEvent.input(input, { target: { value: '1.5' } });
+    fireEvent.keyDown(input, { key: '.' });
+
+    expect(input.value).toBe('1.5');
   });
 });

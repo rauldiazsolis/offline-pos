@@ -4,26 +4,26 @@ function escapeForCharClass(char: string): string {
   return char.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
 }
 
-/** Separador decimal y de miles que usa `Intl.NumberFormat` para ese locale. */
-function localeSeparators(locale: string): { decimal: string; group: string } {
-  const parts = new Intl.NumberFormat(locale).formatToParts(1234.5);
-  const decimal = parts.find((part) => part.type === 'decimal')?.value ?? '.';
-  const group = parts.find((part) => part.type === 'group')?.value ?? ',';
-  return { decimal, group };
+/** Separador decimal que usa `Intl.NumberFormat` para ese locale. */
+export function decimalSeparator(locale: string): string {
+  const parts = new Intl.NumberFormat(locale).formatToParts(1.5);
+  return parts.find((part) => part.type === 'decimal')?.value ?? '.';
 }
 
 /**
- * Parsea un monto tipeado por el cajero según el separador decimal/de miles
- * del locale configurado por terminal (`/CONFIG`, o `navigator.language` si
- * no hay uno) — reemplaza la heurística fija de Fase 1 ("coma como decimal
- * si está presente"), que no tenía relación con el locale real ni con lo
- * que `formatMoney` termina mostrando. Rechaza cualquier caracter que no
- * sea dígito o alguno de esos dos separadores: `"$3.35"`, `"x4,38"` o
- * `"cualquier cosa"` quedan inválidos en vez de colarse como texto sin
- * sentido que el resto de la pila silenciosamente trataba como 0 (issue
- * encontrada probando el modal de cobro multi-medio, #55). Usado tanto por
- * la línea libre de la barra de comandos como por los montos de `/CAJA` y
- * los 6 campos de Cobro.
+ * Parsea un monto tipeado por el cajero según el separador decimal del
+ * locale configurado por terminal (`/CONFIG`, o `navigator.language` si no
+ * hay uno) — reemplaza la heurística fija de Fase 1 ("coma como decimal si
+ * está presente"). No acepta separador de miles: un monto de cobro nunca se
+ * tipea con agrupación ("1500,00", nunca "1.500,00"), así que el caracter
+ * que no es el decimal del locale queda directamente inválido en vez de
+ * interpretarse como miles — bajo `es-AR` (decimal ','), tipear "1.23" con
+ * un teclado que no coincide con la configuración regional ya no se
+ * malinterpreta en silencio como 123 (issue real encontrada por el usuario
+ * probando el modal de cobro multi-medio, #55): antes de este cambio ese
+ * caso se aceptaba sin ningún aviso. `ui/keyboard/decimal-key.ts` completa
+ * esto reinterpretando la tecla `.`/`,` como el separador correcto al
+ * tipear, así ni hace falta que el cajero acierte la tecla física.
  */
 function parseNormalized(raw: string): number | undefined {
   const trimmed = raw.trim();
@@ -31,14 +31,13 @@ function parseNormalized(raw: string): number | undefined {
     return undefined;
   }
 
-  const { decimal, group } = localeSeparators(resolveLocale());
-  const allowed = new RegExp(`^[0-9${escapeForCharClass(group)}${escapeForCharClass(decimal)}]+$`);
+  const decimal = decimalSeparator(resolveLocale());
+  const allowed = new RegExp(`^[0-9${escapeForCharClass(decimal)}]+$`);
   if (!allowed.test(trimmed)) {
     return undefined;
   }
 
-  const withoutGroup = trimmed.split(group).join('');
-  const normalized = decimal === '.' ? withoutGroup : withoutGroup.split(decimal).join('.');
+  const normalized = decimal === '.' ? trimmed : trimmed.split(decimal).join('.');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : undefined;
 }

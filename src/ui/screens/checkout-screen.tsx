@@ -5,6 +5,7 @@ import { calculateTotals } from '../../domain/totals.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { amountTendered, cancelCheckout, changePreview, submitCheckout } from '../keyboard/checkout-controller.ts';
+import { remapDecimalKey } from '../keyboard/decimal-key.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
@@ -105,7 +106,9 @@ export function CheckoutScreen() {
     if (event.key === 'Enter' && event.ctrlKey) {
       event.preventDefault();
       void submitCheckout();
+      return;
     }
+    remapDecimalKey(event);
   };
 
   const handleInput = (method: PaymentMethod) => (event: TargetedEvent<HTMLInputElement>) => {

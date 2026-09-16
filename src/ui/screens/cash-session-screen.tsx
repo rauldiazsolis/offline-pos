@@ -10,6 +10,7 @@ import {
   submitCashStep,
   updateCashBuffer,
 } from '../keyboard/cash-session-controller.ts';
+import { remapDecimalKey } from '../keyboard/decimal-key.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import {
@@ -72,7 +73,9 @@ export function CashSessionScreen() {
     if (event.key === 'Enter') {
       event.preventDefault();
       void submitCashStep();
+      return;
     }
+    remapDecimalKey(event);
   };
 
   const step = cashStepSignal.value;
