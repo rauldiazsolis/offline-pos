@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = { id: string; status: string; total: number };
@@ -37,9 +37,8 @@ test('vender offline: buscar, agregar al carrito, cobrar y persistir', async ({
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
 
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('1200');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Efectivo', 1200);
+  await confirmCheckout(page);
 
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
 

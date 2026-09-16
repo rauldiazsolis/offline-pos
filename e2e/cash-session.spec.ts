@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredCashSession = {
@@ -42,9 +42,8 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
 
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('1200');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Efectivo', 1200);
+  await confirmCheckout(page);
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(commandBar).toBeVisible();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession } from './helpers.ts';
 
 const BACKEND_URL = 'http://localhost:4000';
 
@@ -56,9 +56,8 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
 
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('1200');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Efectivo', 1200);
+  await confirmCheckout(page);
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
 
   await expect

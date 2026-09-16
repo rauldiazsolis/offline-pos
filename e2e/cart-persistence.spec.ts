@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
 
 /**
  * Issue #17: la venta en curso vivía solo en memoria — un refresh la
@@ -46,9 +46,8 @@ test('cerrar la venta limpia el draft — el siguiente refresh arranca con el ca
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
 
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('1200');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Efectivo', 1200);
+  await confirmCheckout(page);
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
 
   await page.reload();
