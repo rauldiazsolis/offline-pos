@@ -19,7 +19,7 @@ import {
 } from '../state/checkout.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
-import { receiptChangeSignal, receiptSaleSignal } from '../state/receipt.ts';
+import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 function parsedTenderSafe(): TenderedAmounts {
@@ -171,7 +171,6 @@ export async function submitCheckout(): Promise<void> {
   }
 
   receiptSaleSignal.value = result.value;
-  receiptChangeSignal.value = resolved.value.change;
   cartSignal.value = { lines: [] };
   resetAttachedCustomer();
   resetCheckout();

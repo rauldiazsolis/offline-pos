@@ -8,7 +8,7 @@ import { cartSignal } from '../state/cart.ts';
 import { checkoutBuffersSignal, checkoutErrorSignal, pendingHoldSignal } from '../state/checkout.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
-import { receiptChangeSignal, receiptSaleSignal } from '../state/receipt.ts';
+import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { amountTendered, cancelCheckout, submitCheckout } from './checkout-controller.ts';
 
@@ -51,7 +51,6 @@ beforeEach(async () => {
   pendingHoldSignal.value = undefined;
   attachedCustomerSignal.value = undefined;
   receiptSaleSignal.value = null;
-  receiptChangeSignal.value = 0;
   activeScreenSignal.value = 'checkout';
 });
 
@@ -79,18 +78,16 @@ describe('submitCheckout', () => {
 
     expect(receiptSaleSignal.value?.status).toBe('closed');
     expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
-    expect(receiptChangeSignal.value).toBe(0);
     expect(cartSignal.value.lines).toEqual([]);
     expect(activeScreenSignal.value).toBe('receipt');
   });
 
-  it('con efectivo de más, guarda el neto y calcula el vuelto (resuelve el bug #48)', async () => {
+  it('con efectivo de más, guarda el neto en vez del monto tendido (resuelve el bug #48)', async () => {
     checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '300' };
 
     await submitCheckout();
 
     expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
-    expect(receiptChangeSignal.value).toBe(100);
   });
 
   it('combina débito y efectivo', async () => {

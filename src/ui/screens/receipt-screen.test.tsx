@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReceiptScreen } from './receipt-screen.tsx';
-import { receiptChangeSignal, receiptSaleSignal } from '../state/receipt.ts';
+import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 
@@ -15,7 +15,6 @@ beforeEach(() => {
     status: 'closed',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
-  receiptChangeSignal.value = 50;
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
@@ -34,12 +33,14 @@ beforeEach(() => {
 });
 
 describe('ReceiptScreen', () => {
-  it('muestra las líneas, el total y el vuelto', () => {
+  it('muestra las líneas, el total y el medio de pago sin la palabra "Pago" ni paréntesis', () => {
     render(<ReceiptScreen />);
 
     expect(screen.getByText(/Arroz 1kg/)).not.toBeNull();
     expect(screen.getByText('Total')).not.toBeNull();
-    expect(screen.getByText('Vuelto')).not.toBeNull();
+    expect(screen.getByText('Efectivo')).not.toBeNull();
+    expect(screen.queryByText(/Pago/)).toBeNull();
+    expect(screen.queryByText('Vuelto')).toBeNull();
   });
 
   it('Enter dispara window.print()', () => {
@@ -63,6 +64,5 @@ describe('ReceiptScreen', () => {
 
     expect(activeScreenSignal.value).toBe('sale');
     expect(receiptSaleSignal.value).toBeNull();
-    expect(receiptChangeSignal.value).toBe(0);
   });
 });
