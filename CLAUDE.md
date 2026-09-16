@@ -864,6 +864,25 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   ('resize', ...)`) tenía un desfasaje real corregido con `ResizeObserver` — aunque el caso puntual de
   arrastrar el handle de resize en el modo "Responsive" de Chrome DevTools sigue sin resolverse
   (issue #41, impacto bajo).
+- Ciclo 9, sobre una sesión de brainstorming dedicada a `feature:cobro` (2026-09-16): Cobro pasa de
+  un único input tipo comando (solo efectivo) a un diálogo modal con 6 campos de monto simultáneos y
+  siempre visibles — Efectivo, Tarjeta de Débito, Tarjeta de Crédito, Transferencia, Código QR,
+  Cuenta corriente. `Payment.method` se amplía de `'cash'|'card'|'other'|'account'` a esos 6 medios
+  reales (se retira el catálogo abierto `'other'`), y `domain/tender.ts::resolveTender` (función
+  pura, nueva) resuelve los `Payment[]` netos a partir de lo tipeado por medio: solo Efectivo puede
+  exceder lo que falta cubrir (el excedente es vuelto), el resto de los medios nunca puede superar el
+  total o es un error de validación al confirmar (Ctrl+Enter) — nunca bloquea el tipeo. Esto resuelve
+  de raíz el bug del arqueo que no descontaba el vuelto entregado: `Payment.amount` pasa a ser
+  siempre el neto aplicado, nunca el monto tendido. Cuenta corriente se deshabilita en el modal sin
+  cliente adjunto (el margen sigue validándose recién al confirmar, igual que antes). El vuelto se
+  pasa al comprobante por un signal efímero (`ui/state/receipt.ts::receiptChangeSignal`) en vez de
+  persistirse en `Sale` — no hay hoy ningún consumidor (como una reimpresión desde Historial) que lo
+  necesite después de mostrado el comprobante. Consolida y cierra las issues #48 (bug del vuelto),
+  #50 (selección de medio de pago) y #55 (rediseño de Cobro como modal, parte del epic #49) en una
+  sola — ver #55 para el diseño completo. La sesión de brainstorming dejó además dos issues de
+  backlog para más adelante: #59 (cobranza de cuenta corriente, pagar deuda existente sin venta —
+  dominio distinto, no toca `Sale`/`Payment`) y #60 (advertir cuando el vuelto supera la denominación
+  de billete más grande, necesita config de denominaciones que no existe hoy).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
