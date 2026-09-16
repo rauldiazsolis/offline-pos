@@ -1,16 +1,43 @@
+import { resolveLocale } from './format.ts';
+
+function escapeForCharClass(char: string): string {
+  return char.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+}
+
+/** Separador decimal que usa `Intl.NumberFormat` para ese locale. */
+export function decimalSeparator(locale: string): string {
+  const parts = new Intl.NumberFormat(locale).formatToParts(1.5);
+  return parts.find((part) => part.type === 'decimal')?.value ?? '.';
+}
+
 /**
- * Fase 1: heurística simple para el separador decimal (coma si está
- * presente, como en `$1500,50`). Reemplazar por `Intl.NumberFormat` con el
- * locale configurado por terminal cuando exista esa config (ver §7 del
- * doc de diseño) — no hay locale configurable todavía. Usado tanto por la
- * línea libre de la barra de comandos como por el input de cobro.
+ * Parsea un monto tipeado por el cajero según el separador decimal del
+ * locale configurado por terminal (`/CONFIG`, o `navigator.language` si no
+ * hay uno) — reemplaza la heurística fija de Fase 1 ("coma como decimal si
+ * está presente"). No acepta separador de miles: un monto de cobro nunca se
+ * tipea con agrupación ("1500,00", nunca "1.500,00"), así que el caracter
+ * que no es el decimal del locale queda directamente inválido en vez de
+ * interpretarse como miles — bajo `es-AR` (decimal ','), tipear "1.23" con
+ * un teclado que no coincide con la configuración regional ya no se
+ * malinterpreta en silencio como 123 (issue real encontrada por el usuario
+ * probando el modal de cobro multi-medio, #55): antes de este cambio ese
+ * caso se aceptaba sin ningún aviso. `ui/keyboard/decimal-key.ts` completa
+ * esto reinterpretando la tecla `.`/`,` como el separador correcto al
+ * tipear, así ni hace falta que el cajero acierte la tecla física.
  */
 function parseNormalized(raw: string): number | undefined {
   const trimmed = raw.trim();
   if (trimmed === '') {
     return undefined;
   }
-  const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
+
+  const decimal = decimalSeparator(resolveLocale());
+  const allowed = new RegExp(`^[0-9${escapeForCharClass(decimal)}]+$`);
+  if (!allowed.test(trimmed)) {
+    return undefined;
+  }
+
+  const normalized = decimal === '.' ? trimmed : trimmed.split(decimal).join('.');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : undefined;
 }

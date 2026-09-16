@@ -360,7 +360,7 @@ components:
       type: object
       required: [method, amount]
       properties:
-        method: { type: string, enum: [cash, card, other, account] }
+        method: { type: string, enum: [cash, debit, credit, transfer, qr, account] }
         amount: { type: number }
         reference:
           type: string

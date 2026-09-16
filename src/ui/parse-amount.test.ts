@@ -1,13 +1,40 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { saveSyncConfig } from '../sync/config.ts';
 import { parseAmount, parseNonNegativeAmount } from './parse-amount.ts';
+
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('parseAmount', () => {
   it('parsea un monto simple', () => {
     expect(parseAmount('100')).toBe(100);
   });
 
-  it('acepta coma como separador decimal', () => {
-    expect(parseAmount('1.500,50')).toBe(1500.5);
+  it('sin locale configurado (en-US en el entorno de test), el punto es el separador decimal', () => {
+    expect(parseAmount('1500.50')).toBe(1500.5);
+  });
+
+  it('con locale es-AR configurado, la coma es el separador decimal', () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
+    expect(parseAmount('1500,50')).toBe(1500.5);
+  });
+
+  it('con locale es-AR, el punto (separador de miles) queda inválido en vez de descartarse en silencio', () => {
+    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
+    // Antes de este fix, "1.23" se interpretaba como miles y se leía 123 —
+    // un teclado que no coincide con la configuración regional (ej. layout
+    // US) tipeaba "." pensando en un decimal y el monto salía 100x mal, sin
+    // ningún aviso. Ahora directamente queda inválido.
+    expect(parseAmount('1.23')).toBeUndefined();
+  });
+
+  it('rechaza cualquier caracter que no sea dígito o separador — símbolos, letras, texto suelto', () => {
+    expect(parseAmount('$3.35')).toBeUndefined();
+    expect(parseAmount('x4,38')).toBeUndefined();
+    expect(parseAmount('cualquier cosa')).toBeUndefined();
   });
 
   it('rechaza 0 — un pago/línea libre de $0 no tiene sentido de negocio', () => {

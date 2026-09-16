@@ -13,6 +13,7 @@ describe('openDb', () => {
     expect(names).toEqual(
       [
         'account_hold_attempts',
+        'account_holds',
         'cash_sessions',
         'customers',
         'idempotency_keys',

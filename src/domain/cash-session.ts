@@ -105,8 +105,10 @@ export function calculateCashSessionSummary(
   const closedSales = sales.filter((sale) => sale.status === 'closed');
   const totalsByMethod: Record<Payment['method'], number> = {
     cash: 0,
-    card: 0,
-    other: 0,
+    debit: 0,
+    credit: 0,
+    transfer: 0,
+    qr: 0,
     account: 0,
   };
   for (const sale of closedSales) {

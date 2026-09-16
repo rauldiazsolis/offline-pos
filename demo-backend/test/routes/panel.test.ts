@@ -79,3 +79,52 @@ describe('GET /_demo/api/customers', () => {
     expect(body).toEqual([{ id: 'pos-1', name: 'Del POS' }]);
   });
 });
+
+describe('GET /_demo/api/customer-accounts', () => {
+  it('trae solo los clientes con cuenta corriente, con el disponible calculado', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'cust-01',
+      JSON.stringify({ id: 'cust-01', name: 'Ana García', creditLimit: 5000, margin: 1000, balance: 200 }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'sin-cuenta',
+      JSON.stringify({ id: 'sin-cuenta', name: 'Sin Cuenta' }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    const response = await fetch(`${baseUrl}/_demo/api/customer-accounts`);
+    const body = (await response.json()) as { id: string; available: number }[];
+    expect(body).toEqual([
+      { id: 'cust-01', name: 'Ana García', creditLimit: 5000, margin: 1000, balance: 200, available: 5800 },
+    ]);
+  });
+});
+
+describe('GET /_demo/api/account-holds y DELETE /_demo/api/account-holds/{id}', () => {
+  it('lista los holds con el nombre del cliente y permite liberar uno pending sin auth', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'cust-01',
+      JSON.stringify({ id: 'cust-01', name: 'Ana García', creditLimit: 5000, margin: 1000, balance: 0 }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    db.prepare(
+      "INSERT INTO account_holds (id, customer_id, amount, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+    ).run('hold-1', 'cust-01', 300, '2026-01-01T00:00:00.000Z');
+
+    const listResponse = await fetch(`${baseUrl}/_demo/api/account-holds`);
+    const list = (await listResponse.json()) as { id: string; customerName: string; status: string }[];
+    expect(list).toEqual([
+      { id: 'hold-1', customerId: 'cust-01', customerName: 'Ana García', amount: 300, status: 'pending', createdAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+
+    const releaseResponse = await fetch(`${baseUrl}/_demo/api/account-holds/hold-1`, { method: 'DELETE' });
+    expect(releaseResponse.status).toBe(200);
+
+    const hold = db.prepare('SELECT status FROM account_holds WHERE id = ?').get('hold-1') as { status: string };
+    expect(hold.status).toBe('released');
+  });
+});

@@ -64,18 +64,81 @@ export const panelRoutes: RouteDef[] = [
     handler: (_req, res, ctx) => {
       const rows = ctx.db
         .prepare(
-          'SELECT kind, payload, created_at FROM account_hold_attempts ORDER BY created_at DESC',
+          'SELECT id, customer_id, amount, status, created_at FROM account_holds ORDER BY created_at DESC',
         )
-        .all() as { kind: string; payload: string; created_at: string }[];
+        .all() as { id: string; customer_id: string; amount: number; status: string; created_at: string }[];
       sendJson(
         res,
         200,
-        rows.map((row) => ({
-          kind: row.kind,
-          payload: JSON.parse(row.payload) as unknown,
-          createdAt: row.created_at,
-        })),
+        rows.map((row) => {
+          const customerRow = ctx.db.prepare('SELECT payload FROM customers WHERE id = ?').get(row.customer_id) as
+            | { payload: string }
+            | undefined;
+          const customerName =
+            customerRow === undefined
+              ? row.customer_id
+              : ((JSON.parse(customerRow.payload) as { name?: string }).name ?? row.customer_id);
+          return {
+            id: row.id,
+            customerId: row.customer_id,
+            customerName,
+            amount: row.amount,
+            status: row.status,
+            createdAt: row.created_at,
+          };
+        }),
       );
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/_demo\/api\/customer-accounts$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      const rows = ctx.db.prepare('SELECT payload FROM customers').all() as { payload: string }[];
+      const accounts = rows
+        .map(
+          (row) =>
+            JSON.parse(row.payload) as {
+              id: string;
+              name: string;
+              creditLimit?: number;
+              margin?: number;
+              balance?: number;
+            },
+        )
+        .filter(
+          (customer) =>
+            customer.creditLimit !== undefined &&
+            customer.margin !== undefined &&
+            customer.balance !== undefined,
+        )
+        .map((customer) => ({
+          id: customer.id,
+          name: customer.name,
+          creditLimit: customer.creditLimit,
+          margin: customer.margin,
+          balance: customer.balance,
+          available: (customer.creditLimit ?? 0) + (customer.margin ?? 0) - (customer.balance ?? 0),
+        }));
+      sendJson(res, 200, accounts);
+    },
+  },
+  {
+    // Libera un hold desde el panel — mismo verbo que el endpoint real del
+    // contrato (`DELETE /account-holds/{id}`) para no mezclar semántica,
+    // pero bajo `/_demo/api/` y sin auth: es una acción del operador del
+    // demo, no del POS, mismo criterio que el resto de `/_demo/api/*`.
+    method: 'DELETE',
+    pattern: /^\/_demo\/api\/account-holds\/(?<holdId>[^/]+)$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      ctx.db
+        .prepare(
+          "UPDATE account_holds SET status = 'released', released_at = ? WHERE id = ? AND status = 'pending'",
+        )
+        .run(new Date().toISOString(), ctx.params.holdId ?? '');
+      sendJson(res, 200, {});
     },
   },
 ];

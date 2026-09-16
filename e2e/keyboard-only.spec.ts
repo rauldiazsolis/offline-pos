@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
 
 /**
  * Auditoría de accesibilidad por teclado (Fase 4): recorre cada pantalla
@@ -54,9 +54,8 @@ test('venta → cobrar → Comprobante → Esc → la barra de comandos recupera
   await commandBar.press('Enter');
 
   await commandBar.press('Control+Enter');
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('1200');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Efectivo', 1200);
+  await confirmCheckout(page);
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
 
   await page.keyboard.press('Escape');

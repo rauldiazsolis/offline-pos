@@ -83,3 +83,17 @@ export async function openCashSession(page: Page, openingAmount = 0): Promise<vo
   await page.keyboard.press('Escape');
   await expect(commandBar).toBeVisible();
 }
+
+/**
+ * Tipea un monto en el campo de un medio de pago de la pantalla de Cobro ya
+ * abierta — `label` es el texto exacto de `ui/payment-labels.ts`
+ * (`PAYMENT_METHOD_LABELS`), ej. 'Efectivo', 'Cuenta corriente'.
+ */
+export async function fillPayment(page: Page, label: string, amount: number): Promise<void> {
+  await page.getByLabel(label).fill(String(amount));
+}
+
+/** Ctrl+Enter en la pantalla de Cobro — confirma el cobro con lo tipeado en los campos. */
+export async function confirmCheckout(page: Page): Promise<void> {
+  await page.keyboard.press('Control+Enter');
+}

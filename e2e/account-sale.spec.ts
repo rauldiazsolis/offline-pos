@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
 import { getAllFromStore, putIntoStore } from './indexed-db.ts';
 
 type StoredCustomer = { id: string; name: string };
@@ -48,9 +48,8 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
 
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('/CUENTA');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Cuenta corriente', 1200);
+  await confirmCheckout(page);
 
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
 
@@ -88,9 +87,8 @@ test('cuenta corriente offline sin cuenta cacheada: rechaza el cobro', async ({
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
 
-  const amountInput = page.getByLabel('Monto a cobrar');
-  await amountInput.fill('/CUENTA');
-  await amountInput.press('Enter');
+  await fillPayment(page, 'Cuenta corriente', 1200);
+  await confirmCheckout(page);
 
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();

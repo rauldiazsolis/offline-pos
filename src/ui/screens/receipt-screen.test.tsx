@@ -10,7 +10,7 @@ beforeEach(() => {
   receiptSaleSignal.value = {
     id: 'sale-1',
     lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }],
-    payments: [{ method: 'cash', amount: 250 }],
+    payments: [{ method: 'cash', amount: 200 }],
     total: 200,
     status: 'closed',
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -33,12 +33,14 @@ beforeEach(() => {
 });
 
 describe('ReceiptScreen', () => {
-  it('muestra las líneas, el total y el vuelto', () => {
+  it('muestra las líneas, el total y el medio de pago sin la palabra "Pago" ni paréntesis', () => {
     render(<ReceiptScreen />);
 
     expect(screen.getByText(/Arroz 1kg/)).not.toBeNull();
     expect(screen.getByText('Total')).not.toBeNull();
-    expect(screen.getByText('Vuelto')).not.toBeNull();
+    expect(screen.getByText('Efectivo')).not.toBeNull();
+    expect(screen.queryByText(/Pago/)).toBeNull();
+    expect(screen.queryByText('Vuelto')).toBeNull();
   });
 
   it('Enter dispara window.print()', () => {

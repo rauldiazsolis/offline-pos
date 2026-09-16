@@ -70,7 +70,7 @@ describe('closeCashSessionAndPersist', () => {
       expect(result.value.session.closingAmount).toBe(590);
       expect(result.value.summary).toEqual({
         salesCount: 1,
-        totalsByMethod: { cash: 100, card: 0, other: 0, account: 0 },
+        totalsByMethod: { cash: 100, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 },
         expectedCash: 600,
         countedCash: 590,
         difference: -10,

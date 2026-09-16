@@ -5,22 +5,12 @@ import { openCashSessionAndPersist } from '../../storage/cash-session-repository
 import { db } from '../../storage/db.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { cartSignal } from '../state/cart.ts';
-import {
-  checkoutBufferSignal,
-  checkoutErrorSignal,
-  checkoutPaymentsSignal,
-  pendingHoldSignal,
-} from '../state/checkout.ts';
+import { checkoutBuffersSignal, checkoutErrorSignal, pendingHoldSignal } from '../state/checkout.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import {
-  amountPaid,
-  cancelCheckout,
-  remainingToPay,
-  submitCheckout,
-} from './checkout-controller.ts';
+import { amountTendered, cancelCheckout, submitCheckout } from './checkout-controller.ts';
 
 function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
@@ -33,6 +23,10 @@ function fakeCustomerRepository(account: CustomerAccount | undefined): void {
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(account),
   });
+}
+
+function emptyBuffers() {
+  return { cash: '', debit: '', credit: '', transfer: '', qr: '', account: '' };
 }
 
 beforeEach(async () => {
@@ -52,8 +46,7 @@ beforeEach(async () => {
   await openCashSessionAndPersist({ openingAmount: 0 });
 
   cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] };
-  checkoutPaymentsSignal.value = [];
-  checkoutBufferSignal.value = '';
+  checkoutBuffersSignal.value = emptyBuffers();
   checkoutErrorSignal.value = null;
   pendingHoldSignal.value = undefined;
   attachedCustomerSignal.value = undefined;
@@ -69,57 +62,83 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe('submitCheckout', () => {
-  it('agrega un pago parcial sin cerrar la venta', () => {
-    checkoutBufferSignal.value = '100';
-    void submitCheckout();
+describe('amountTendered', () => {
+  it('suma lo tipeado en todos los campos, tratando texto inválido como 0', () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '100', debit: 'abc', credit: '50' };
 
-    expect(checkoutPaymentsSignal.value).toEqual([{ method: 'cash', amount: 100 }]);
-    expect(amountPaid()).toBe(100);
-    expect(remainingToPay()).toBe(100);
-    expect(activeScreenSignal.value).toBe('checkout');
-  });
-
-  it('agrega un pago y cierra la venta en el mismo Enter si cubre el total', async () => {
-    checkoutBufferSignal.value = '200';
-    void submitCheckout();
-
-    await vi.waitUntil(() => activeScreenSignal.value === 'receipt');
-
-    expect(receiptSaleSignal.value?.status).toBe('closed');
-    expect(cartSignal.value.lines).toEqual([]);
-  });
-
-  it('permite pagar en dos partes y cierra al completar el total', async () => {
-    checkoutBufferSignal.value = '100';
-    void submitCheckout();
-    expect(activeScreenSignal.value).toBe('checkout');
-
-    checkoutBufferSignal.value = '100';
-    void submitCheckout();
-
-    await vi.waitUntil(() => activeScreenSignal.value === 'receipt');
-    expect(receiptSaleSignal.value?.payments).toHaveLength(2);
-  });
-
-  it('muestra un error con un monto inválido', () => {
-    checkoutBufferSignal.value = 'abc';
-    void submitCheckout();
-
-    expect(checkoutErrorSignal.value).not.toBeNull();
-    expect(checkoutPaymentsSignal.value).toEqual([]);
+    expect(amountTendered()).toBe(150);
   });
 });
 
-describe('/CUENTA', () => {
-  const customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+describe('submitCheckout', () => {
+  it('con el total exacto en efectivo, cierra la venta sin vuelto', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
 
-  it('sin cliente adjunto, rechaza con account/no-customer-attached', async () => {
-    checkoutBufferSignal.value = '/CUENTA';
+    await submitCheckout();
+
+    expect(receiptSaleSignal.value?.status).toBe('closed');
+    expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
+    expect(cartSignal.value.lines).toEqual([]);
+    expect(activeScreenSignal.value).toBe('receipt');
+  });
+
+  it('con efectivo de más, guarda el neto en vez del monto tendido (resuelve el bug #48)', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '300' };
+
+    await submitCheckout();
+
+    expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
+  });
+
+  it('combina débito y efectivo', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), debit: '150', cash: '50' };
+
+    await submitCheckout();
+
+    expect(receiptSaleSignal.value?.payments).toEqual([
+      { method: 'debit', amount: 150 },
+      { method: 'cash', amount: 50 },
+    ]);
+  });
+
+  it('no cubre el total: muestra error y no cierra la venta', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '100' };
+
     await submitCheckout();
 
     expect(checkoutErrorSignal.value).not.toBeNull();
-    expect(checkoutPaymentsSignal.value).toEqual([]);
+    expect(activeScreenSignal.value).toBe('checkout');
+    expect(receiptSaleSignal.value).toBeNull();
+  });
+
+  it('un medio no-efectivo que supera el total: muestra error y no cierra', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), debit: '300' };
+
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('un campo con texto inválido: muestra error', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: 'abc' };
+
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+  });
+});
+
+describe('cuenta corriente', () => {
+  const customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+
+  it('sin cliente adjunto, rechaza con account/no-customer-attached', async () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+    expect(receiptSaleSignal.value).toBeNull();
   });
 
   it('con red y hold aprobado, cierra la venta a cuenta corriente', async () => {
@@ -136,7 +155,7 @@ describe('/CUENTA', () => {
       }),
     );
 
-    checkoutBufferSignal.value = '/CUENTA';
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
     expect(receiptSaleSignal.value?.payments).toEqual([
@@ -159,7 +178,7 @@ describe('/CUENTA', () => {
       }),
     );
 
-    checkoutBufferSignal.value = '/CUENTA';
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
     expect(checkoutErrorSignal.value).not.toBeNull();
@@ -177,7 +196,7 @@ describe('/CUENTA', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
-    checkoutBufferSignal.value = '/CUENTA';
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
     expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'account', amount: 200 }]);
@@ -194,7 +213,7 @@ describe('/CUENTA', () => {
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
-    checkoutBufferSignal.value = '/CUENTA';
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
     expect(checkoutErrorSignal.value).not.toBeNull();
@@ -203,18 +222,17 @@ describe('/CUENTA', () => {
 });
 
 describe('cancelCheckout', () => {
-  it('vuelve a la pantalla de venta sin persistir nada', async () => {
-    checkoutPaymentsSignal.value = [{ method: 'cash', amount: 50 }];
+  it('vuelve a la pantalla de venta sin persistir nada', () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '50' };
 
     cancelCheckout();
 
     expect(activeScreenSignal.value).toBe('sale');
-    expect(checkoutPaymentsSignal.value).toEqual([]);
-    await expect(db.sales.count()).resolves.toBe(0);
+    expect(checkoutBuffersSignal.value).toEqual(emptyBuffers());
   });
 
   it('con un hold pendiente, lo libera (encola account-hold-release)', async () => {
-    pendingHoldSignal.value = { holdId: 'hold-1', customerId: 'c1' };
+    pendingHoldSignal.value = { holdId: 'hold-1', customerId: 'c1', amount: 200 };
 
     cancelCheckout();
     await vi.waitFor(async () => {

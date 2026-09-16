@@ -4,6 +4,7 @@ import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
+import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import './receipt-screen.css';
@@ -37,8 +38,6 @@ export function ReceiptScreen() {
     return null;
   }
 
-  const paid = sale.payments.reduce((sum, payment) => sum + payment.amount, 0);
-  const change = paid - sale.total;
   // Reusa calculateTotals sobre un Cart armado con los datos ya cerrados de
   // la venta — mismo cálculo que en el carrito, sin duplicar la fórmula.
   const totals = calculateTotals({
@@ -127,16 +126,10 @@ export function ReceiptScreen() {
         </div>
         {sale.payments.map((payment, index) => (
           <div key={index} style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Pago ({payment.method})</span>
+            <span>{PAYMENT_METHOD_LABELS[payment.method]}</span>
             <span>{formatMoney(payment.amount)}</span>
           </div>
         ))}
-        {change > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Vuelto</span>
-            <span>{formatMoney(change)}</span>
-          </div>
-        )}
       </div>
 
       <div class="receipt-no-print" style={{ display: 'flex', gap: 'var(--space-3)' }}>

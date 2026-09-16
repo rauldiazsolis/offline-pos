@@ -8,7 +8,7 @@ import { loadSyncConfig } from '../sync/config.ts';
  * carrito/comprobante, no un catálogo de 50.000 filas) el costo es
  * irrelevante, y así un cambio de `/CONFIG` se refleja sin recargar la app.
  */
-function resolveLocale(): string {
+export function resolveLocale(): string {
   const configResult = loadSyncConfig();
   if (configResult.ok && configResult.value.locale !== undefined) {
     return configResult.value.locale;
