@@ -197,23 +197,31 @@ export function CheckoutScreen() {
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
             Ctrl+Enter para confirmar, Esc para cancelar.
             {!hasCustomer && ' Adjuntá un cliente con @ para habilitar cuenta corriente.'}
           </p>
-          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
             <button
               type="button"
               onClick={cancelCheckout}
-              style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
+              style={{
+                padding: 'var(--space-2) var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                whiteSpace: 'nowrap',
+              }}
             >
               Cancelar
             </button>
             <button
               type="button"
               onClick={() => void submitCheckout()}
-              style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
+              style={{
+                padding: 'var(--space-2) var(--space-3)',
+                borderRadius: 'var(--radius-md)',
+                whiteSpace: 'nowrap',
+              }}
             >
               Confirmar Cobro
             </button>
