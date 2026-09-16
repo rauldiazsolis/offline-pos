@@ -65,6 +65,7 @@ export function resetToSeed(db: DatabaseSync, now: string): void {
     DELETE FROM stock_movements;
     DELETE FROM cash_sessions;
     DELETE FROM account_hold_attempts;
+    DELETE FROM account_holds;
     DELETE FROM idempotency_keys;
   `);
   insertSeedRows(db, now);

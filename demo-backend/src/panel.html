@@ -31,8 +31,12 @@
       <table id="customers-table"><thead><tr><th>id</th><th>name</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
-      <h2>Intentos de cuenta corriente (siempre 501)</h2>
-      <table id="account-holds-table"><thead><tr><th>kind</th><th>createdAt</th></tr></thead><tbody></tbody></table>
+      <h2>Cuentas corrientes</h2>
+      <table id="customer-accounts-table"><thead><tr><th>id</th><th>nombre</th><th>límite</th><th>margen</th><th>saldo</th><th>disponible</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Holds de cuenta corriente</h2>
+      <table id="account-holds-table"><thead><tr><th>id</th><th>cliente</th><th>monto</th><th>estado</th><th>createdAt</th><th></th></tr></thead><tbody></tbody></table>
     </section>
 
     <script>
@@ -43,11 +47,18 @@
         tbody.innerHTML = rows.map(rowFn).join('');
       }
 
+      async function releaseHold(holdId) {
+        await fetch(`/_demo/api/account-holds/${holdId}`, { method: 'DELETE' });
+        refresh();
+      }
+      window.releaseHold = releaseHold;
+
       function refresh() {
         loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status}</td></tr>`);
         loadTable('/_demo/api/cash-sessions', 'cash-sessions-table', (c) => `<tr><td>${c.id}</td><td>${c.openingAmount}</td><td>${c.closingAmount ?? ''}</td></tr>`);
         loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${c.name}</td></tr>`);
-        loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.kind}</td><td>${h.createdAt}</td></tr>`);
+        loadTable('/_demo/api/customer-accounts', 'customer-accounts-table', (a) => `<tr><td>${a.id}</td><td>${a.name}</td><td>${a.creditLimit}</td><td>${a.margin}</td><td>${a.balance}</td><td>${a.available}</td></tr>`);
+        loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.id}</td><td>${h.customerName}</td><td>${h.amount}</td><td>${h.status}</td><td>${h.createdAt}</td><td>${h.status === 'pending' ? `<button onclick="releaseHold('${h.id}')">Liberar</button>` : ''}</td></tr>`);
       }
 
       document.getElementById('reset-btn').addEventListener('click', async () => {
