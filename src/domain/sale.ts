@@ -12,11 +12,18 @@ export type SaleLine =
   | { kind: 'freeform'; description: string; qty: number; unitPrice: number; discount?: Discount };
 
 /**
+ * Medios de pago reales del negocio (issue #55, sesión de brainstorming
+ * 2026-09-16) — se retiró el catálogo abierto `'other'` que tenía Fase 3:
+ * todo pago tiene que mapear a uno de estos.
+ */
+export type PaymentMethod = 'cash' | 'debit' | 'credit' | 'transfer' | 'qr' | 'account';
+
+/**
  * `'account'` (Fase 3, cuenta corriente) usa `reference` para el `holdId`
  * cuando el hold se aprobó con red — sin red (RF-18), no hay `holdId`.
  */
 export type Payment = {
-  method: 'cash' | 'card' | 'other' | 'account';
+  method: PaymentMethod;
   amount: number;
   reference?: string;
 };

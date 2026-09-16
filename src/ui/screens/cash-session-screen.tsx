@@ -21,8 +21,10 @@ import {
 
 const PAYMENT_METHOD_LABELS: Record<Payment['method'], string> = {
   cash: 'Efectivo',
-  card: 'Tarjeta',
-  other: 'Otro',
+  debit: 'Tarjeta de Débito',
+  credit: 'Tarjeta de Crédito',
+  transfer: 'Transferencia',
+  qr: 'Código QR',
   account: 'Cuenta corriente',
 };
 

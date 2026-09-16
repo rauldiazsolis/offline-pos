@@ -82,14 +82,14 @@ describe('calculateCashSessionSummary', () => {
     const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 500, sales: ['s1', 's2'] };
     const sales = [
       buildSale({ id: 's1', payments: [{ method: 'cash', amount: 100 }] }),
-      buildSale({ id: 's2', payments: [{ method: 'card', amount: 200 }] }),
+      buildSale({ id: 's2', payments: [{ method: 'debit', amount: 200 }] }),
     ];
 
     const summary = calculateCashSessionSummary(session, sales);
 
     expect(summary).toEqual({
       salesCount: 2,
-      totalsByMethod: { cash: 100, card: 200, other: 0, account: 0 },
+      totalsByMethod: { cash: 100, debit: 200, credit: 0, transfer: 0, qr: 0, account: 0 },
       expectedCash: 600, // 500 de apertura + 100 en efectivo
     });
   });
