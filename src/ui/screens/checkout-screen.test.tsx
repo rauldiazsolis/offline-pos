@@ -73,4 +73,30 @@ describe('CheckoutScreen', () => {
 
     expect(screen.getByRole('alert')).not.toBeNull();
   });
+
+  it('un error selecciona el campo donde estaba el foco, no siempre Efectivo', () => {
+    render(<CheckoutScreen />);
+    const debitInput = screen.getByLabelText('Tarjeta de Débito');
+    debitInput.focus();
+
+    fireEvent.input(debitInput, { target: { value: '300' } });
+    fireEvent.keyDown(debitInput, { key: 'Enter', ctrlKey: true });
+
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(document.activeElement).toBe(debitInput);
+  });
+
+  it('el placeholder no sugiere que se pueda tipear un signo de moneda', () => {
+    render(<CheckoutScreen />);
+    expect(screen.getByLabelText('Efectivo').getAttribute('placeholder')).toBe('0,00');
+  });
+
+  it('un campo con texto que no parsea como monto se resalta, sin bloquear el tipeo', () => {
+    render(<CheckoutScreen />);
+    const input = screen.getByLabelText('Código QR');
+
+    fireEvent.input(input, { target: { value: 'cualquier cosa' } });
+
+    expect(input.style.borderColor).toBe('var(--color-danger)');
+  });
 });

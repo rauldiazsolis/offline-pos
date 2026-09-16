@@ -1,10 +1,11 @@
+import { useSignalEffect } from '@preact/signals';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import type { PaymentMethod } from '../../domain/sale.ts';
 import { calculateTotals } from '../../domain/totals.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
-import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { amountTendered, cancelCheckout, changePreview, submitCheckout } from '../keyboard/checkout-controller.ts';
+import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
 import { checkoutBuffersSignal, checkoutErrorSignal, TENDERABLE_METHODS } from '../state/checkout.ts';
@@ -83,7 +84,17 @@ const sectionLabelStyle = {
  */
 export function CheckoutScreen() {
   const firstFieldRef = useFocusOnMount<HTMLInputElement>();
-  useSelectOnErrorSignal(firstFieldRef, checkoutErrorSignal);
+
+  // A diferencia del resto de la app (un único input, siempre el mismo),
+  // acá hay 6 campos — un error tiene que seleccionar el que tenía el foco
+  // en ese momento (para poder retipear rápido), no siempre el primero. Por
+  // eso no usa `useSelectOnErrorSignal` (atado a un ref fijo): selecciona
+  // `document.activeElement` tal cual está, sin moverlo.
+  useSignalEffect(() => {
+    if (checkoutErrorSignal.value !== null && document.activeElement instanceof HTMLInputElement) {
+      document.activeElement.select();
+    }
+  });
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
@@ -119,6 +130,11 @@ export function CheckoutScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             {TENDERABLE_METHODS.map((method, index) => {
               const disabled = method === 'account' && !hasCustomer;
+              const raw = checkoutBuffersSignal.value[method];
+              // Solo marca el campo — nunca bloquea el tipeo ni descarta el
+              // texto: la validación real (y el error) pasa recién al
+              // confirmar (Ctrl+Enter).
+              const isInvalid = raw.trim() !== '' && parseNonNegativeAmount(raw) === undefined;
               return (
                 <label key={method} style={fieldRowStyle}>
                   <span>{PAYMENT_METHOD_LABELS[method]}</span>
@@ -126,13 +142,17 @@ export function CheckoutScreen() {
                     {...(index === 0 ? { ref: firstFieldRef } : {})}
                     type="text"
                     inputMode="decimal"
-                    value={checkoutBuffersSignal.value[method]}
+                    value={raw}
                     onInput={handleInput(method)}
                     onKeyDown={handleKeyDown}
                     disabled={disabled}
-                    placeholder="$ 0,00"
+                    placeholder="0,00"
                     aria-label={PAYMENT_METHOD_LABELS[method]}
-                    style={{ ...fieldInputStyle, opacity: disabled ? 0.5 : 1 }}
+                    style={{
+                      ...fieldInputStyle,
+                      opacity: disabled ? 0.5 : 1,
+                      borderColor: isInvalid ? 'var(--color-danger)' : 'var(--color-border)',
+                    }}
                   />
                 </label>
               );
