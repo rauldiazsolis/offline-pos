@@ -115,3 +115,13 @@ describe('pestaña Tickets', () => {
     expect(screen.getByText('Regalo')).not.toBeNull();
   });
 });
+
+describe('pestaña Productos', () => {
+  it('cantidad total por producto, orden por cantidad descendente por defecto', () => {
+    cashSummaryTabSignal.value = 'products';
+    render(<CashSummaryScreen />);
+
+    const rows = screen.getAllByTestId('product-row').map((el) => el.textContent);
+    expect(rows[0]).toContain('2'); // p1 vendido 2 veces, único producto (freeform no cuenta)
+  });
+});

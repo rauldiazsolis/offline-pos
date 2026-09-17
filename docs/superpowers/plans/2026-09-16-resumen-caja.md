@@ -1715,7 +1715,7 @@ git commit -m "feat: pestaña Tickets de /RESUMEN"
   `useScrollSelectedIntoView` (ya existente), `selectedProductIndexSignal`,
   `productFilterSignal` (Task 7).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Agregar a `src/ui/screens/cash-summary-screen.test.tsx`:
 
@@ -1731,12 +1731,12 @@ describe('pestaña Productos', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: FAIL — la pestaña Productos todavía no renderiza nada.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Agregar imports:
 
@@ -1804,12 +1804,12 @@ Reemplazar el placeholder de la Task 10:
           {tab === 'products' && <ProductsTab sales={context.sales} filter={productFilterSignal.value} />}
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/screens/cash-summary-screen.tsx src/ui/screens/cash-summary-screen.test.tsx

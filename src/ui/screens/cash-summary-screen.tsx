@@ -1,10 +1,12 @@
 import { Index } from 'flexsearch';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useMemo } from 'preact/hooks';
+import { calculateProductQuantities, type ProductQuantity } from '../../domain/cash-session.ts';
 import type { Sale, SaleLine } from '../../domain/sale.ts';
 import type { PaymentMethod } from '../../domain/sale.ts';
 import { formatMoney, formatQuantity } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useTicketListNavigation } from '../hooks/use-ticket-list-navigation.ts';
 import {
   exitCashSummaryScreen,
@@ -18,6 +20,7 @@ import {
   cashSummaryContextSignal,
   cashSummaryTabSignal,
   productFilterSignal,
+  selectedProductIndexSignal,
   selectedTicketIndexSignal,
   ticketFilterSignal,
 } from '../state/cash-summary.ts';
@@ -144,6 +147,54 @@ function TicketsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
   );
 }
 
+function sortedProducts(sales: Sale[], filter: string): (ProductQuantity & { name: string; sku: string })[] {
+  const quantities = calculateProductQuantities(sales).map((pq) => {
+    const product = getCatalogRepository().getProduct(pq.productId);
+    return { ...pq, name: product?.name ?? pq.productId, sku: product?.sku ?? '' };
+  });
+  if (filter.trim() === '') {
+    return quantities.sort((a, b) => b.qty - a.qty);
+  }
+  const index = new Index({ tokenize: 'forward' });
+  for (const q of quantities) index.add(q.productId, q.name);
+  const rankedIds = index.search(filter).map(String);
+  const byId = new Map(quantities.map((q) => [q.productId, q]));
+  return rankedIds.map((id) => byId.get(id)).filter((q): q is (typeof quantities)[number] => q !== undefined);
+}
+
+function ProductsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
+  const products = useMemo(() => sortedProducts(sales, filter), [sales, filter]);
+  const rowRef = useScrollSelectedIntoView(selectedProductIndexSignal);
+
+  return (
+    <div style={{ height: '100%', overflowY: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead style={{ position: 'sticky', top: 0, background: 'var(--color-bg)' }}>
+          <tr>
+            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Código</th>
+            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Producto</th>
+            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Cant.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.map((p, index) => (
+            <tr
+              key={p.productId}
+              data-testid="product-row"
+              ref={rowRef(index)}
+              style={{ background: index === selectedProductIndexSignal.value ? 'var(--color-surface)' : undefined }}
+            >
+              <td style={{ padding: 'var(--space-1) var(--space-3)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>{p.sku}</td>
+              <td style={{ padding: 'var(--space-1) var(--space-3)' }}>{p.name}</td>
+              <td style={{ padding: 'var(--space-1) var(--space-3)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatQuantity(p.qty)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
  * `/RESUMEN`: panel lateral fijo + 3 pestañas (Tickets/Productos/Medios de pago). El contenido de
  * cada pestaña vive en componentes propios agregados en tareas siguientes del plan.
@@ -254,7 +305,7 @@ export function CashSummaryScreen() {
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr clamp(240px, 25%, 320px)', minHeight: 0 }}>
         <div style={{ minHeight: 0, overflow: 'hidden' }}>
           {tab === 'tickets' && <TicketsTab sales={context.sales} filter={ticketFilterSignal.value} />}
-          {tab === 'products' && <div />}
+          {tab === 'products' && <ProductsTab sales={context.sales} filter={productFilterSignal.value} />}
           {tab === 'payments' && <div />}
         </div>
         <div
