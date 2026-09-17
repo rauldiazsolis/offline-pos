@@ -125,3 +125,15 @@ describe('pestaña Productos', () => {
     expect(rows[0]).toContain('2'); // p1 vendido 2 veces, único producto (freeform no cuenta)
   });
 });
+
+describe('pestaña Medios de pago', () => {
+  it('desglosa los 6 medios, sin agrupar', () => {
+    cashSummaryTabSignal.value = 'payments';
+    render(<CashSummaryScreen />);
+    const tabContent = within(screen.getByTestId('cash-summary-tab-content'));
+
+    expect(tabContent.getByText('Efectivo')).not.toBeNull();
+    expect(tabContent.getByText('Tarjeta de Débito')).not.toBeNull();
+    expect(tabContent.getByText('Tarjeta de Crédito')).not.toBeNull();
+  });
+});

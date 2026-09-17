@@ -1828,7 +1828,7 @@ git commit -m "feat: pestaña Productos de /RESUMEN"
 - Consumes: `summary.totalsByMethod`, `PAYMENT_METHOD_LABELS` — sin signal de selección ni filtro
   (6 filas fijas, siempre completas).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```typescript
 describe('pestaña Medios de pago', () => {
@@ -1843,12 +1843,12 @@ describe('pestaña Medios de pago', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: FAIL — la pestaña Medios de pago todavía no renderiza nada.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```typescript
 const ALL_METHODS: PaymentMethod[] = ['cash', 'debit', 'credit', 'transfer', 'qr', 'account'];
@@ -1883,12 +1883,12 @@ Reemplazar el placeholder de la Task 10:
           {tab === 'payments' && <PaymentsTab totalsByMethod={summary.totalsByMethod} />}
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/screens/cash-summary-screen.tsx src/ui/screens/cash-summary-screen.test.tsx

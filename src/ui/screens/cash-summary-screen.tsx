@@ -195,6 +195,31 @@ function ProductsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
   );
 }
 
+const ALL_METHODS: PaymentMethod[] = ['cash', 'debit', 'credit', 'transfer', 'qr', 'account'];
+
+function PaymentsTab({ totalsByMethod }: { totalsByMethod: Record<PaymentMethod, number> }) {
+  return (
+    <div style={{ height: '100%', overflowY: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Medio de pago</th>
+            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ALL_METHODS.map((method) => (
+            <tr key={method}>
+              <td style={{ padding: 'var(--space-1) var(--space-3)', fontWeight: 600 }}>{PAYMENT_METHOD_LABELS[method]}</td>
+              <td style={{ padding: 'var(--space-1) var(--space-3)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatMoney(totalsByMethod[method])}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /**
  * `/RESUMEN`: panel lateral fijo + 3 pestañas (Tickets/Productos/Medios de pago). El contenido de
  * cada pestaña vive en componentes propios agregados en tareas siguientes del plan.
@@ -303,10 +328,10 @@ export function CashSummaryScreen() {
       </div>
 
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr clamp(240px, 25%, 320px)', minHeight: 0 }}>
-        <div style={{ minHeight: 0, overflow: 'hidden' }}>
+        <div data-testid="cash-summary-tab-content" style={{ minHeight: 0, overflow: 'hidden' }}>
           {tab === 'tickets' && <TicketsTab sales={context.sales} filter={ticketFilterSignal.value} />}
           {tab === 'products' && <ProductsTab sales={context.sales} filter={productFilterSignal.value} />}
-          {tab === 'payments' && <div />}
+          {tab === 'payments' && <PaymentsTab totalsByMethod={summary.totalsByMethod} />}
         </div>
         <div
           data-testid="cash-summary-sidebar"
