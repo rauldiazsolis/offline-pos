@@ -1016,7 +1016,7 @@ git commit -m "feat: hook de navegación de teclado para la pestaña Tickets de 
   `export function updateTicketFilter(value: string): void`,
   `export function updateProductFilter(value: string): void`.
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 ```typescript
 // src/ui/keyboard/cash-summary-controller.test.ts
@@ -1096,12 +1096,12 @@ describe('updateTicketFilter', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/keyboard/cash-summary-controller.test.ts`
 Expected: FAIL — el módulo no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/ui/keyboard/commands.ts` — agregar al array, después de `'CAJA'`:
 
@@ -1186,12 +1186,12 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
       return;
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/keyboard/cash-summary-controller.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/keyboard/cash-summary-controller.ts src/ui/keyboard/cash-summary-controller.test.ts src/ui/keyboard/commands.ts src/ui/keyboard/command-bar-controller.ts

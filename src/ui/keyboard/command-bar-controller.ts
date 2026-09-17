@@ -37,6 +37,7 @@ import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
+import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDemoResetScreen } from './demo-reset-controller.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
@@ -272,6 +273,10 @@ function runCommand(name: string, _args: string[]): void {
       return;
     case 'CAJA':
       enterCashScreen();
+      clearBuffer();
+      return;
+    case 'RESUMEN':
+      void triggerCashSummary();
       clearBuffer();
       return;
     case 'ANULAR':
