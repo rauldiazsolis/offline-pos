@@ -78,7 +78,10 @@ export async function openCashSession(page: Page, openingAmount = 0): Promise<vo
   const amountInput = page.getByLabel('Monto de apertura del turno');
   await amountInput.fill(String(openingAmount));
   await amountInput.press('Enter');
-  await expect(page.getByText('Turno abierto')).toBeVisible();
+  // El paso 'open' ya no muestra ningún resumen (ver CLAUDE.md, /CAJA
+  // simplificado) — la única señal visible de que el turno abrió es que el
+  // input pasa a pedir el efectivo de cierre.
+  await expect(page.getByLabel('Efectivo contado para cerrar el turno')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(commandBar).toBeVisible();

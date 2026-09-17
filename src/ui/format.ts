@@ -42,3 +42,13 @@ export function formatDate(isoDate: string): string {
     timeZone: 'UTC',
   }).format(new Date(isoDate));
 }
+
+/**
+ * Cantidad vendida, redondeada a 3 decimales sin ceros de más a la derecha — necesario para
+ * productos vendidos por peso, donde puede haber arrastre de punto flotante (ej.
+ * `5.9510000000000005`). `Number(...toFixed(3))` recorta y también saca los ceros de sobra al
+ * volver a stringificar.
+ */
+export function formatQuantity(qty: number): string {
+  return String(Number(qty.toFixed(3)));
+}

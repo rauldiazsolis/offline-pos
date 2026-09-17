@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../sync/config.ts';
-import { formatDate, formatMoney } from './format.ts';
+import { formatDate, formatMoney, formatQuantity } from './format.ts';
 
 afterEach(() => {
   localStorage.clear();
@@ -40,5 +40,23 @@ describe('formatDate (Ciclo 8: desambiguación de clientes)', () => {
     saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
 
     expect(formatDate('2026-03-05T00:00:00.000Z')).toBe('05/03/2026');
+  });
+});
+
+describe('formatQuantity', () => {
+  it('entero sin decimales', () => {
+    expect(formatQuantity(3)).toBe('3');
+  });
+
+  it('redondea a 3 decimales', () => {
+    expect(formatQuantity(5.9514999)).toBe('5.951');
+  });
+
+  it('sin ceros de más a la derecha', () => {
+    expect(formatQuantity(5.95)).toBe('5.95');
+    // Arrastre de punto flotante real (ej. 0.1 + 0.1 + 5.75) — como literal de código fuente
+    // (`5.9500000000000005`) el linter lo rechaza (no se puede representar exacto en un
+    // `double`), así que se construye en runtime, que es como aparece en la práctica.
+    expect(formatQuantity(Number('5.9500000000000005'))).toBe('5.95');
   });
 });
