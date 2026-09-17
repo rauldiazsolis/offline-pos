@@ -36,10 +36,17 @@ export type CashSession = {
 export type CashSessionSummary = {
   salesCount: number;
   totalsByMethod: Record<Payment['method'], number>;
+  totalCollected: number;
+  adjustmentTotal: number;
   expectedCash: number;
   countedCash?: number;
   difference?: number;
 };
+
+/** Subtotal bruto de una venta, sin descuentos ni ajustes — para derivar `adjustmentTotal`. */
+function rawLinesSubtotal(lines: Sale['lines']): number {
+  return lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
+}
 
 function validateAmount(amount: number): Result<void> {
   if (amount < 0) {
@@ -111,13 +118,22 @@ export function calculateCashSessionSummary(
     qr: 0,
     account: 0,
   };
+  let adjustmentTotal = 0;
   for (const sale of closedSales) {
     for (const payment of sale.payments) {
       totalsByMethod[payment.method] += payment.amount;
     }
+    adjustmentTotal += sale.total - rawLinesSubtotal(sale.lines);
   }
+  const totalCollected = Object.values(totalsByMethod).reduce((sum, amount) => sum + amount, 0);
   const expectedCash = session.openingAmount + totalsByMethod.cash;
-  const base: CashSessionSummary = { salesCount: closedSales.length, totalsByMethod, expectedCash };
+  const base: CashSessionSummary = {
+    salesCount: closedSales.length,
+    totalsByMethod,
+    totalCollected,
+    adjustmentTotal,
+    expectedCash,
+  };
   return session.closingAmount !== undefined
     ? { ...base, countedCash: session.closingAmount, difference: session.closingAmount - expectedCash }
     : base;

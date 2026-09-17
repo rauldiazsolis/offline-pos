@@ -120,7 +120,7 @@ git commit -m "feat: código de error cash-session/none-ever para /RESUMEN"
   (además de los campos que ya existían: `salesCount`, `totalsByMethod`, `expectedCash`,
   `countedCash?`, `difference?`).
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 En `src/domain/cash-session.test.ts`, dentro de `describe('calculateCashSessionSummary', ...)`,
 agregar (y ajustar los `toEqual` existentes en el mismo `describe`, ver Step 2b):
@@ -180,13 +180,13 @@ adjustmentTotal: 0,`), el tercero (`excluye una venta anulada...`, agrega `total
 adjustmentTotal: 0,` — la venta anulada no debe sumar a ninguno de los dos), y el de
 `cash-session-repository.test.ts` (`totalCollected: 100, adjustmentTotal: 0,`).
 
-- [ ] **Step 2: Confirmar que fallan**
+- [x] **Step 2: Confirmar que fallan**
 
 Run: `pnpm vitest run src/domain/cash-session.test.ts src/storage/cash-session-repository.test.ts`
 Expected: FAIL — `summary.adjustmentTotal`/`summary.totalCollected` son `undefined`, y los
 `toEqual` no matchean (les faltan los campos nuevos en el objeto real).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 En `src/domain/cash-session.ts`, actualizar el tipo y la función:
 
@@ -243,12 +243,12 @@ export function calculateCashSessionSummary(
 
 (`Sale` ya está importado en el archivo; no hace falta un import nuevo.)
 
-- [ ] **Step 4: Confirmar que pasan**
+- [x] **Step 4: Confirmar que pasan**
 
 Run: `pnpm vitest run src/domain/cash-session.test.ts src/storage/cash-session-repository.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/cash-session.ts src/domain/cash-session.test.ts src/storage/cash-session-repository.test.ts

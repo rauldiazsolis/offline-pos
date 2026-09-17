@@ -52,7 +52,7 @@ describe('closeCashSessionAndPersist', () => {
     await openCashSessionAndPersist({ openingAmount: 500 });
     await db.sales.add({
       id: 's1',
-      lines: [],
+      lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
       payments: [{ method: 'cash', amount: 100 }],
       total: 100,
       status: 'closed',
@@ -71,6 +71,8 @@ describe('closeCashSessionAndPersist', () => {
       expect(result.value.summary).toEqual({
         salesCount: 1,
         totalsByMethod: { cash: 100, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 },
+        totalCollected: 100,
+        adjustmentTotal: 0,
         expectedCash: 600,
         countedCash: 590,
         difference: -10,
