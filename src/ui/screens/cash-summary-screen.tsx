@@ -86,7 +86,7 @@ function TicketRow({ sale, index, nav }: { sale: Sale; index: number; nav: Retur
       }}
     >
       <div
-        className="ticket__header"
+        class="ticket__header"
         style={{
           position: 'sticky',
           top: 0,
@@ -118,7 +118,7 @@ function TicketRow({ sale, index, nav }: { sale: Sale; index: number; nav: Retur
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-1) var(--space-3) var(--space-3)' }}>
         <span>{sale.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(', ')}</span>
-        <span className="ticket__total" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+        <span class="ticket__total" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
           {formatMoney(sale.total)}
         </span>
       </div>
@@ -126,9 +126,15 @@ function TicketRow({ sale, index, nav }: { sale: Sale; index: number; nav: Retur
   );
 }
 
-function TicketsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
-  const filtered = useMemo(() => filterSales(sales, filter), [sales, filter]);
-  const nav = useTicketListNavigation(selectedTicketIndexSignal, filtered.length);
+/**
+ * Presentacional: `filtered`/`nav` los arma `CashSummaryScreen` (no acá) — el `onKeyDown` real
+ * vive en el input de filtro de la pantalla (único input enfocado), así que `nav.handleKeyDown`
+ * tiene que ser alcanzable desde ahí. Tenerlos como hook/estado local de este componente (como en
+ * una versión anterior) los dejaba inalcanzables desde ese `onKeyDown` — un bug real encontrado en
+ * revisión de código: las flechas nunca llegaban a mover la selección en la pantalla real, solo en
+ * el test aislado del hook (que dispara `keydown` directo sobre su propio contenedor de prueba).
+ */
+function TicketsTab({ filtered, nav }: { filtered: Sale[]; nav: ReturnType<typeof useTicketListNavigation> }) {
   const rows = filtered.map((sale, index) => <TicketRow key={sale.id} sale={sale} index={index} nav={nav} />);
 
   // `nav.containerRef` solo toca `.current` cuando React lo invoca (montaje/desmontaje) o dentro
@@ -162,8 +168,7 @@ function sortedProducts(sales: Sale[], filter: string): (ProductQuantity & { nam
   return rankedIds.map((id) => byId.get(id)).filter((q): q is (typeof quantities)[number] => q !== undefined);
 }
 
-function ProductsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
-  const products = useMemo(() => sortedProducts(sales, filter), [sales, filter]);
+function ProductsTab({ products }: { products: (ProductQuantity & { name: string; sku: string })[] }) {
   const rowRef = useScrollSelectedIntoView(selectedProductIndexSignal);
 
   return (
@@ -229,6 +234,23 @@ export function CashSummaryScreen() {
   const context = cashSummaryContextSignal.value;
   const tab = cashSummaryTabSignal.value;
 
+  // Se arman siempre, antes de cualquier `return` condicional — las Rules of Hooks exigen el mismo
+  // orden de hooks en cada render, así que `useMemo`/`useTicketListNavigation` no pueden vivir
+  // después del `if (context === undefined) return null` de más abajo (bug real encontrado en
+  // revisión de código: los hooks quedaban condicionales). Con `sales: []` de fallback, esto no
+  // hace ningún trabajo real mientras no haya contexto todavía.
+  const sales = context?.sales ?? [];
+  // El plugin no sabe que leer `signal.value` en el render ya hace que el componente se
+  // re-renderice cuando cambia (así integra @preact/signals) — desde su perspectiva genérica de
+  // React, `ticketFilterSignal`/`productFilterSignal` son "valores externos" y sugiere sacarlos de
+  // las deps, pero eso rompería la memoización (se recalcularía siempre con el texto del filtro
+  // desactualizado).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filteredTickets = useMemo(() => filterSales(sales, ticketFilterSignal.value), [sales, ticketFilterSignal.value]);
+  const ticketsNav = useTicketListNavigation(selectedTicketIndexSignal, filteredTickets.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ver comentario arriba.
+  const products = useMemo(() => sortedProducts(sales, productFilterSignal.value), [sales, productFilterSignal.value]);
+
   if (context === undefined) {
     return null; // invariante: no se entra a esta pantalla sin contexto (ver triggerCashSummary)
   }
@@ -255,6 +277,22 @@ export function CashSummaryScreen() {
       const nextIdx = (currentIdx + (event.shiftKey ? -1 : 1) + TAB_ORDER.length) % TAB_ORDER.length;
       const nextTab = TAB_ORDER[nextIdx];
       if (nextTab !== undefined) setCashSummaryTab(nextTab);
+      return;
+    }
+    if (tab === 'tickets') {
+      // El input de filtro nunca pierde el foco — `nav.handleKeyDown` recibe el evento nativo
+      // igual, y decide si ArrowUp/ArrowDown/PageUp/PageDown le corresponden.
+      ticketsNav.handleKeyDown(event);
+      return;
+    }
+    if (tab === 'products') {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        selectedProductIndexSignal.value = Math.min((selectedProductIndexSignal.value ?? -1) + 1, products.length - 1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        selectedProductIndexSignal.value = Math.max((selectedProductIndexSignal.value ?? 0) - 1, 0);
+      }
     }
   };
 
@@ -329,8 +367,8 @@ export function CashSummaryScreen() {
 
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr clamp(240px, 25%, 320px)', minHeight: 0 }}>
         <div data-testid="cash-summary-tab-content" style={{ minHeight: 0, overflow: 'hidden' }}>
-          {tab === 'tickets' && <TicketsTab sales={context.sales} filter={ticketFilterSignal.value} />}
-          {tab === 'products' && <ProductsTab sales={context.sales} filter={productFilterSignal.value} />}
+          {tab === 'tickets' && <TicketsTab filtered={filteredTickets} nav={ticketsNav} />}
+          {tab === 'products' && <ProductsTab products={products} />}
           {tab === 'payments' && <PaymentsTab totalsByMethod={summary.totalsByMethod} />}
         </div>
         <div

@@ -4,7 +4,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../storage/db.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
-import { cashSummaryContextSignal, cashSummaryTabSignal } from '../state/cash-summary.ts';
+import {
+  cashSummaryContextSignal,
+  cashSummaryTabSignal,
+  productFilterSignal,
+  selectedProductIndexSignal,
+  selectedTicketIndexSignal,
+  ticketFilterSignal,
+} from '../state/cash-summary.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { CashSummaryScreen } from './cash-summary-screen.tsx';
@@ -60,6 +67,12 @@ beforeEach(async () => {
     isClosed: false,
   };
   cashSummaryTabSignal.value = 'tickets';
+  selectedTicketIndexSignal.value = 0;
+  selectedProductIndexSignal.value = null;
+  // Signals a nivel de módulo — sin este reset, un test anterior que tipeó en el filtro (ej. "el
+  // filtro de texto reduce la lista") lo deja contaminado para el siguiente test del archivo.
+  ticketFilterSignal.value = '';
+  productFilterSignal.value = '';
 });
 
 afterEach(async () => {
@@ -135,5 +148,40 @@ describe('pestaña Medios de pago', () => {
     expect(tabContent.getByText('Efectivo')).not.toBeNull();
     expect(tabContent.getByText('Tarjeta de Débito')).not.toBeNull();
     expect(tabContent.getByText('Tarjeta de Crédito')).not.toBeNull();
+  });
+});
+
+describe('navegación de teclado conectada a la pantalla real (regresión)', () => {
+  // Bug real encontrado en revisión de código: el hook de navegación se testeaba aislado (Task 8)
+  // y funcionaba perfecto ahí, pero `nav.handleKeyDown` nunca se llamaba desde el único
+  // `onKeyDown` real de la pantalla (el input de filtro) — las flechas no hacían nada en la app de
+  // verdad. Estos tests presionan las teclas sobre el input real, no sobre un harness aislado.
+  it('PageDown en Tickets mueve selectedTicketIndexSignal', () => {
+    render(<CashSummaryScreen />);
+    expect(selectedTicketIndexSignal.value).toBe(0);
+
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'PageDown' });
+
+    expect(selectedTicketIndexSignal.value).toBe(1);
+  });
+
+  it('ArrowDown en Productos mueve selectedProductIndexSignal', () => {
+    cashSummaryTabSignal.value = 'products';
+    render(<CashSummaryScreen />);
+    expect(selectedProductIndexSignal.value).toBeNull();
+
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'ArrowDown' });
+
+    expect(selectedProductIndexSignal.value).toBe(0);
+  });
+
+  it('tipear en el filtro de Tickets no deja un índice de selección fuera de rango', () => {
+    render(<CashSummaryScreen />);
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'PageDown' }); // selecciona el ticket 1 (de 2)
+    expect(selectedTicketIndexSignal.value).toBe(1);
+
+    fireEvent.input(screen.getByLabelText('Buscar'), { target: { value: 'Regalo' } }); // filtra a 1 solo ticket
+
+    expect(selectedTicketIndexSignal.value).toBe(0);
   });
 });

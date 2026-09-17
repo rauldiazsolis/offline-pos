@@ -1,5 +1,5 @@
 import type { Signal } from '@preact/signals';
-import { useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 
 const STEP_PX = 64;
 
@@ -33,6 +33,36 @@ export function useTicketListNavigation(
   const containerElRef = useRef<HTMLDivElement | null>(null);
   const ticketElsRef = useRef(new Map<number, HTMLDivElement>());
   const scrollTargetRef = useRef(0);
+
+  // Si `ticketCount` cambia (el filtro de texto narrows/ensancha la lista), tanto la posición de
+  // scroll como el índice seleccionado quedan relativos al conjunto VIEJO de tickets — sin este
+  // reset, `selectedIndex` puede apuntar a un índice que ya no existe (ningún ticket se ve
+  // seleccionado hasta la próxima tecla de flecha) y el scroll queda a mitad de un contenido que ya
+  // no es el mismo. Bug real encontrado en revisión de código, no en el hook aislado (los tests del
+  // hook nunca cambian `ticketCount` a mitad de camino).
+  //
+  // `useLayoutEffect`, no `useEffect`: Preact difiere `useEffect` a un frame (vía rAF, ver
+  // `ui/hooks/use-focus-on-mount.ts`) — con `useEffect` acá, el reset del montaje quedaba en cola y
+  // recién se aplicaba cuando el siguiente render (ej. el de la propia flecha de teclado apenas
+  // apretada) forzaba un flush de efectos pendientes, pisando la selección que esa misma tecla
+  // acababa de fijar. Bug real, agarrado por un test que presiona una tecla justo después de montar
+  // — exactamente el mismo tipo de carrera que ya documentó `useFocusOnMount`.
+  //
+  // `Signal.value =` es la forma correcta de actualizar un signal reactivo (no una mutación de
+  // prop, ver el mismo comentario en `applyScroll`/`selectIndex` más abajo) — acá el plugin marca
+  // todo el hook en vez de solo la línea de la asignación.
+  // eslint-disable-next-line react-hooks/immutability
+  useLayoutEffect(() => {
+    const container = containerElRef.current;
+    scrollTargetRef.current = 0;
+    if (container !== null) container.scrollTop = 0;
+    // eslint-disable-next-line react-hooks/immutability
+    selectedIndex.value = 0;
+    // Deps a propósito solo `[ticketCount]`: tiene que correr únicamente cuando cambia la
+    // cantidad de tickets, no en cada render (sería un reset constante de la selección) —
+    // `selectedIndex` es un signal estable, no hace falta declararlo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticketCount]);
 
   function els(): HTMLDivElement[] {
     const map = ticketElsRef.current;

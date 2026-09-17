@@ -46,9 +46,15 @@ export function setCashSummaryTab(tab: 'tickets' | 'products' | 'payments'): voi
 }
 
 export function updateTicketFilter(value: string): void {
+  // No hace falta resetear `selectedTicketIndexSignal` acá — `useTicketListNavigation` ya lo hace
+  // solo cuando cambia la cantidad de tickets filtrados (ver el efecto en ese hook).
   ticketFilterSignal.value = value;
 }
 
 export function updateProductFilter(value: string): void {
+  // A diferencia de Tickets, la pestaña Productos no tiene un hook que reindexe la selección sola
+  // — sin este reset, un índice seleccionado antes de tipear podía apuntar a una fila que ya no
+  // existe en la lista filtrada (bug real encontrado en revisión de código).
+  selectedProductIndexSignal.value = null;
   productFilterSignal.value = value;
 }
