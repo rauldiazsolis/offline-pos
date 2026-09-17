@@ -558,7 +558,7 @@ git commit -m "feat: storage/cash-summary-repository.ts (getCashSummaryContext)"
 - Produces: `export function formatQuantity(qty: number): string` — redondea a 3 decimales, sin
   ceros de más a la derecha (`5.950` → `"5.95"`, `5.9514999` → `"5.951"`, `3` → `"3"`).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```typescript
 // src/ui/format.test.ts
@@ -581,12 +581,12 @@ describe('formatQuantity', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/format.test.ts`
 Expected: FAIL — `formatQuantity` no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Agregar a `src/ui/format.ts`:
 
@@ -602,12 +602,12 @@ export function formatQuantity(qty: number): string {
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/format.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/format.ts src/ui/format.test.ts
