@@ -165,29 +165,36 @@ simétrico con el `apiKey` opcional que ya tiene el conector REST.
   `sync/account-hold.ts::requestAccountHoldNow`) por `createConnector(config)`.
 - Actualizar los tests existentes que referencian las rutas movidas.
 
-### UI de `/CONFIG` con pasos dinámicos por tipo de conector
+### UI de `/CONFIG`: absorbe y cierra el issue #56
 
-Hoy `ui/screens/config-screen.tsx` ya sigue el mismo principio que el resto de la app (un único
-input siempre enfocado): `configStepSignal` recorre una secuencia **fija** de tres pasos
-(`baseUrl → apiKey → locale`, `STEP_LABELS` hardcodeado), cada `Enter` confirma el paso actual y
-avanza. Con dos conectores posibles, cada uno con sus propios campos (REST: `baseUrl`/`apiKey`;
-Sheets: `webAppUrl`/`sharedSecret`), esa secuencia fija ya no alcanza — se generaliza así, sin
-introducir ningún mecanismo de UI nuevo:
+Hoy `ui/screens/config-screen.tsx` es un wizard secuencial fijo de tres pasos (`baseUrl → apiKey →
+locale`, un input a la vez, `Enter` avanza) — y ya hay un issue abierto, **#56** (parte del epic
+#49, "rediseñar pantallas secundarias como diálogos modales"), pidiendo reemplazar exactamente ese
+wizard por un formulario con **todos los campos visibles a la vez** (Tab/Shift+Tab entre ellos,
+Ctrl+Enter confirma todo junto, Esc cancela) — mismo tratamiento que ya recibió Cobro en el #55
+(que a su vez absorbió #48/#50). Construir un wizard con pasos dinámicos por tipo de conector sobre
+el mecanismo viejo sería trabajo tirado: en cuanto se encarara el #56 se reescribiría todo de
+nuevo. **Se decidió que la Etapa 2 absorbe y cierra el #56 directamente**, mismo criterio que usó
+el #55: un solo rediseño de la pantalla, no dos pasadas.
 
-- **Paso 0, nuevo: "tipo de conector"**. Texto libre (`rest` / `google-sheets`), validado contra los
-  tipos conocidos del registro — mismo slot de error ya existente (`configErrorSignal`) si se
-  tipea otra cosa. Se descartó un menú filtrable con flechas (mismo patrón que el `/` de la barra
-  de comandos): con 2 opciones en una pantalla de setup que se usa una sola vez por terminal, sumar
-  esa maquinaria es más complejidad de la que resuelve — texto libre + validación reusa el 100% del
-  código ya existente en esta pantalla.
-- **Cada conector exporta su propia lista ordenada de pasos** (`configFields:
+Diseño resultante (mismo chrome de diálogo modal — tarjeta centrada, overlay — que ya estableció el
+#55 para Cobro):
+
+- Selector de tipo de conector como primer campo (REST genérico / Google Sheets), visible siempre.
+  Cambiar la selección intercambia en el acto qué campos específicos se muestran debajo — el
+  selector en sí nunca se oculta.
+- Debajo, **todos** los campos del tipo elegido, visibles y editables a la vez (no un campo por
+  vez): `baseUrl`/`apiKey` para REST, `webAppUrl`/`sharedSecret` para Sheets.
+- `locale` es un campo más, siempre visible al final — config de terminal, no de conector (ver
+  "Decisión: mecanismo de selección de conectores").
+- Tab/Shift+Tab navega entre todos los campos (se puede volver atrás a corregir cualquiera antes de
+  confirmar); Ctrl+Enter valida y guarda todo junto; Esc cancela sin guardar. Validación solo al
+  confirmar, nunca mientras se tipea — mismo criterio que Cobro.
+- Cada conector sigue exportando su propia lista ordenada de campos (`configFields:
   { key: string; label: string; optional: boolean }[]`, en `connectors/rest/config.ts` y
-  `connectors/google-sheets/config.ts`, junto a su `configSchema`/factory) en vez de que
-  `config-screen.tsx` conozca los campos de cada tipo.
-- `config-controller.ts` encadena `['type', ...selectedConnector.configFields, 'locale']` — el
-  `STEP_LABELS` fijo de hoy se reemplaza por leer la label del paso activo desde ahí.
-  `locale` sigue siendo el último paso siempre, compartido por todos los tipos (config de terminal,
-  no de conector — ver "Decisión: mecanismo de selección de conectores").
+  `connectors/google-sheets/config.ts`, junto a su `configSchema`/factory) — lo que cambia respecto
+  al diseño anterior es que esa lista ahora describe qué renderizar en el set de campos visibles del
+  tipo activo, no una cola de pasos secuenciales.
 
 ## Etapa 3 — Adaptación de dominio: crédito ilimitado explícito
 
@@ -223,8 +230,9 @@ Cambios (viven en `domain/customer.ts` y el wire schema `ConnectorCustomer` de `
   única fuente de verdad confiable.
 - Etapa 2: actualizar tests de rutas movidas; sumar tests de `connector-registry.ts` (arma el
   conector correcto según `type`, rechaza config inválida) y de `config-controller.ts`/
-  `ConfigScreen` con la secuencia de pasos dinámica (cambia según el tipo elegido, `locale` siempre
-  al final).
+  `ConfigScreen` con el set de campos visibles cambiando según el tipo elegido (`locale` siempre
+  presente), navegación Tab/Shift+Tab entre todos los campos, y validación solo al confirmar —
+  mismos criterios heredados del #56/#49 que ya se testean para Cobro.
 - Etapa 3: extender `domain/customer.test.ts` con el caso `unrestricted` (aprueba sin cuenta
   suficiente, cuenta ausente sigue rechazando).
 
