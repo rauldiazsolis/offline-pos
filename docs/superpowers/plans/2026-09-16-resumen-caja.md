@@ -683,7 +683,7 @@ el mismo comportamiento probado ahí, ahora como código de producción con test
 
 **Files:**
 - Create: `src/ui/hooks/use-ticket-list-navigation.ts`
-- Test: `src/ui/hooks/use-ticket-list-navigation.test.ts`
+- Test: `src/ui/hooks/use-ticket-list-navigation.test.tsx` (`.tsx`, no `.ts` — el test usa JSX)
 
 **Interfaces:**
 - Consumes: un `Signal<number>` externo para la selección (`selectedTicketIndexSignal`, Task 7) y
@@ -706,7 +706,7 @@ export function useTicketListNavigation(
 ): TicketListNavigation;
 ```
 
-- [ ] **Step 1: Escribir los tests que fallan**
+- [x] **Step 1: Escribir los tests que fallan**
 
 ```typescript
 // src/ui/hooks/use-ticket-list-navigation.test.ts
@@ -835,12 +835,12 @@ describe('useTicketListNavigation', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/hooks/use-ticket-list-navigation.test.ts`
 Expected: FAIL — el módulo no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```typescript
 // src/ui/hooks/use-ticket-list-navigation.ts
@@ -984,12 +984,12 @@ export function useTicketListNavigation(
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/hooks/use-ticket-list-navigation.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/hooks/use-ticket-list-navigation.ts src/ui/hooks/use-ticket-list-navigation.test.ts
