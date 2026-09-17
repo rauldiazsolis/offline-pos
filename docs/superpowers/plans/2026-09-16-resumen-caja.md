@@ -632,7 +632,7 @@ git commit -m "feat: formatQuantity"
 Sin lógica que testear (son declaraciones de signals, mismo criterio que `ui/state/cash-session.ts`
 — no tiene test propio). No hay ciclo TDD acá; es la base que consumen las tareas siguientes.
 
-- [ ] **Step 1: `ActiveScreen`**
+- [x] **Step 1: `ActiveScreen`**
 
 En `src/ui/state/screen.ts`:
 
@@ -640,7 +640,7 @@ En `src/ui/state/screen.ts`:
 export type ActiveScreen = 'sale' | 'checkout' | 'receipt' | 'void' | 'config' | 'cash' | 'cash-summary' | 'demo-reset';
 ```
 
-- [ ] **Step 2: Nuevo módulo de estado**
+- [x] **Step 2: Nuevo módulo de estado**
 
 ```typescript
 // src/ui/state/cash-summary.ts
@@ -661,12 +661,12 @@ export const selectedTicketIndexSignal = signal(0);
 export const selectedProductIndexSignal = signal<number | null>(null);
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `pnpm typecheck` (o `tsc --noEmit`, según el script real del `package.json`)
 Expected: sin errores nuevos.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/ui/state/screen.ts src/ui/state/cash-summary.ts
