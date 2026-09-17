@@ -268,7 +268,7 @@ git commit -m "feat: totalCollected y adjustmentTotal en CashSessionSummary"
 - Produces: `export type ProductQuantity = { productId: string; qty: number }`,
   `export function calculateProductQuantities(sales: Sale[]): ProductQuantity[]`.
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Agregar a `src/domain/cash-session.test.ts`:
 
@@ -306,12 +306,12 @@ describe('calculateProductQuantities', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/domain/cash-session.test.ts`
 Expected: FAIL — `calculateProductQuantities` no existe todavía.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Agregar al final de `src/domain/cash-session.ts`:
 
@@ -337,12 +337,12 @@ export function calculateProductQuantities(sales: Sale[]): ProductQuantity[] {
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/domain/cash-session.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/cash-session.ts src/domain/cash-session.test.ts

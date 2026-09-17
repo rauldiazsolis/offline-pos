@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateCashSessionSummary,
+  calculateProductQuantities,
   closeCashSession,
   openCashSession,
   recordSaleInCashSession,
@@ -172,5 +173,51 @@ describe('calculateCashSessionSummary', () => {
     const summary = calculateCashSessionSummary(session, sales);
 
     expect(summary.totalCollected).toBe(100);
+  });
+});
+
+describe('calculateProductQuantities', () => {
+  it('agrupa por productId, sumando cantidades entre ventas', () => {
+    const sales = [
+      buildSale({ id: 's1', lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] }),
+      buildSale({
+        id: 's2',
+        lines: [
+          { kind: 'product', productId: 'p1', qty: 3, unitPrice: 100 },
+          { kind: 'product', productId: 'p2', qty: 1, unitPrice: 50 },
+        ],
+      }),
+    ];
+
+    const result = calculateProductQuantities(sales);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        { productId: 'p1', qty: 5 },
+        { productId: 'p2', qty: 1 },
+      ]),
+    );
+    expect(result).toHaveLength(2);
+  });
+
+  it('ignora líneas libres (sin identidad de producto)', () => {
+    const sales = [
+      buildSale({ id: 's1', lines: [{ kind: 'freeform', description: 'Regalo', qty: 1, unitPrice: 100 }] }),
+    ];
+
+    expect(calculateProductQuantities(sales)).toEqual([]);
+  });
+
+  it('excluye ventas anuladas', () => {
+    const sales = [
+      buildSale({
+        id: 's1',
+        lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }],
+        status: 'voided',
+        voidedAt: '2026-01-01T11:00:00.000Z',
+      }),
+    ];
+
+    expect(calculateProductQuantities(sales)).toEqual([]);
   });
 });
