@@ -1906,7 +1906,7 @@ Sin test nuevo dedicado (es una poda de UI ya cubierta por la auditoría de tecl
 y por inspección visual manual, mismo criterio que el resto de pulidos visuales de este proyecto
 que no tienen test de componente propio).
 
-- [ ] **Step 1: Sacar el bloque de resumen del paso `'open'`**
+- [x] **Step 1: Sacar el bloque de resumen del paso `'open'`**
 
 En `src/ui/screens/cash-session-screen.tsx`, el bloque
 `{summary !== undefined && session !== undefined && (...)}` (líneas ~114-172 del archivo actual)
@@ -1922,14 +1922,14 @@ monta nada de esto, en `'confirming-close'` se sigue viendo el preview de la dif
 siempre), y en `'closed'` solo la diferencia final (`showArqueo` ya lo acota, no hace falta tocar
 esa parte).
 
-- [ ] **Step 2: Verificar manualmente**
+- [x] **Step 2: Verificar manualmente**
 
 Run: `pnpm dev`, abrir la app, `/CAJA` para abrir un turno con alguna venta ya cargada, volver a
 `/CAJA` — confirmar que el paso `'open'` ya no muestra ningún resumen, solo pide el efectivo
 contado; que al tipear un monto y confirmar aparece el preview de la diferencia; y que al confirmar
 el cierre solo se ve la diferencia final.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/ui/screens/cash-session-screen.tsx
