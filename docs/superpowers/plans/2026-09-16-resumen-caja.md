@@ -442,7 +442,7 @@ git commit -m "feat: getMostRecentClosedCashSession"
   sales: Sale[]; isClosed: boolean }`, `export async function getCashSummaryContext():
   Promise<CashSummaryContext | undefined>` (`undefined` = gate caso 1, "nunca hubo ningún turno").
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```typescript
 // src/storage/cash-summary-repository.test.ts
@@ -491,12 +491,12 @@ describe('getCashSummaryContext', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/storage/cash-summary-repository.test.ts`
 Expected: FAIL — el archivo `cash-summary-repository.ts` no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```typescript
 // src/storage/cash-summary-repository.ts
@@ -533,12 +533,12 @@ export async function getCashSummaryContext(): Promise<CashSummaryContext | unde
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/storage/cash-summary-repository.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage/cash-summary-repository.ts src/storage/cash-summary-repository.test.ts
