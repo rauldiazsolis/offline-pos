@@ -49,14 +49,18 @@ acotado a propósito:
   inmediatos, sin llamar al puente) — en la práctica `pushStockMovement` nunca se invoca porque
   ningún producto de este conector tiene `tracksStock: true`
   (`storage/sale-repository.ts` solo genera movimientos para productos que trackean stock).
-- **`sales`**: push real, una fila por línea de venta (más útil para análisis en la planilla con
-  SUMIF/tablas dinámicas que una fila por venta).
+- **`sales`**: push real, a dos pestañas. "Ventas": una fila por línea de venta (más útil para
+  análisis con SUMIF/tablas dinámicas que una fila por venta). "Pagos": una fila por `Payment` de
+  la venta (`saleId`, `method`, `amount`) — separada de "Ventas" porque una venta puede pagarse con
+  varios medios a la vez (Ciclo 9, cobro con tender mixto), no hay un único "medio" por línea.
 - **Fiado ("cuenta corriente")**: identificación de cliente sí, bloqueo/restricción de crédito no
   — ver Etapa 3.
-- **`cash-sessions`**: fuera de alcance de esta primera versión. El turno de caja sigue siendo
-  obligatorio para cobrar (gate local, Fase 6, no depende del conector), pero el evento
-  `pushCashSession` es un no-op (`ok(undefined)` inmediato) — el turno cerrado no viaja a la
-  planilla. Se documenta como decisión explícita de alcance, no como omisión.
+- **`cash-sessions`**: el turno de caja sigue siendo obligatorio para cobrar (gate local, Fase 6,
+  no depende del conector) — la limpieza/arqueo periódico de caja (diario o semanal, a criterio del
+  comerciante) sí tiene sentido registrarlo en la planilla, así que `pushCashSession` **es una
+  acción real**, no un no-op: agrega una fila a "Turnos" con el resumen del turno cerrado (ver
+  contrato del puente más abajo). Nunca hay `pull` de turnos — ningún conector lo tiene (el puerto
+  `Connector` no define un método para eso), así que esto no es una limitación específica de Sheets.
 
 ## Etapa 1 — Conector aislado
 
@@ -119,14 +123,14 @@ Acciones (una por método del puerto `Connector`, salvo las marcadas "no llama a
 |---|---|---|
 | `pullProducts` | `{ since?: string }` | Devuelve **todo** el catálogo siempre (sin delta real — la planilla de un micro-comercio es chica, no se justifica la complejidad de un cursor). `tracksStock: false` fijo por producto. |
 | `pullCustomers` | `{ since?: string }` | Todo el listado de la pestaña "Clientes". Cada cliente devuelto trae `unrestricted: true` (ver Etapa 3). |
-| `pushSale` | `{ sale }` | Una fila por línea en la pestaña "Ventas". `idempotencyKey` = `sale.id`. |
+| `pushSale` | `{ sale }` | Una fila por línea en "Ventas" + una fila por `Payment` en "Pagos". `idempotencyKey` = `sale.id` (misma key para ambas escrituras, atómicas dentro de la misma ejecución del script). |
 | `pushCustomer` | `{ customer }` | Una fila en "Clientes". `idempotencyKey` = `customer.id`. |
 | `requestAccountHold` | — | **No llama al puente.** Se resuelve localmente en el conector TS: siempre `{ approved: true, holdId: <ULID nuevo> }`, sin red — no tiene sentido pagar la latencia de un round-trip para una decisión que siempre es "sí". |
 | `pushAccountHoldConfirm` | `{ holdId, saleId, customerId, amount, confirmedAt }` | Una fila en "CuentaCorriente" (el ledger real de fiado). |
 | `releaseAccountHold` | — | **No llama al puente**, mismo motivo que `requestAccountHold`: nunca hubo una reserva real que liberar. |
 | `pullStock` | — | No-op, `ok([])` sin red. |
 | `pushStockMovement` | — | No-op, `ok(undefined)` sin red. |
-| `pushCashSession` | — | No-op, `ok(undefined)` sin red (fuera de alcance, ver arriba). |
+| `pushCashSession` | `{ session }` | Una fila en "Turnos". `bridge.gs` calcula el total por medio de pago sumando las filas de "Pagos" cuyo `saleId` está en `session.sales[]` — el mismo cálculo que ya hace `domain/cash-session.ts::calculateCashSessionSummary`, pero del lado del puente (el conector TS no tiene ni necesita las `Sale[]` completas, solo el `CashSession` crudo que ya recibe hoy). `idempotencyKey` = `session.id`. |
 
 **Idempotencia y concurrencia**: Sheets/Apps Script no tiene constraints únicos ni transacciones.
 `bridge.gs` mantiene una pestaña oculta `_Idempotency` (key → timestamp); cada acción de escritura
@@ -136,8 +140,8 @@ más de una terminal puede sincronizar al mismo tiempo contra la misma planilla 
 multi-terminal que ya contempla Fase 6, pero acá sin backend real de por medio que lo resuelva).
 
 **Auto-provisión**: cada request corre primero `ensureSheetsExist()` — si faltan las pestañas
-`Productos`/`Clientes`/`Ventas`/`CuentaCorriente`/`_Idempotency`, las crea con sus headers; si la
-planilla estaba completamente vacía (primera vez), además siembra datos de prueba. Resuelve "el
+`Productos`/`Clientes`/`Ventas`/`Pagos`/`CuentaCorriente`/`Turnos`/`_Idempotency`, las crea con sus
+headers; si la planilla estaba completamente vacía (primera vez), además siembra datos de prueba. Resuelve "el
 plugin verifica si ya tiene las planillas que necesita y sino las crea con datos de prueba" sin que
 el conector TS necesite ningún paso de "init" separado — es transparente, corre en cada llamada.
 
@@ -159,10 +163,31 @@ simétrico con el `apiKey` opcional que ya tiene el conector REST.
   Connector`.
 - Reemplazar los dos call sites hardcodeados (`sync/engine.ts::runSyncCycle`,
   `sync/account-hold.ts::requestAccountHoldNow`) por `createConnector(config)`.
-- `ui/screens/config-screen.tsx`: agrega selector de tipo de conector como primer campo; el resto
-  del formulario se condiciona a los campos del tipo elegido (URL+apiKey para REST, webAppUrl+
-  sharedSecret para Sheets).
 - Actualizar los tests existentes que referencian las rutas movidas.
+
+### UI de `/CONFIG` con pasos dinámicos por tipo de conector
+
+Hoy `ui/screens/config-screen.tsx` ya sigue el mismo principio que el resto de la app (un único
+input siempre enfocado): `configStepSignal` recorre una secuencia **fija** de tres pasos
+(`baseUrl → apiKey → locale`, `STEP_LABELS` hardcodeado), cada `Enter` confirma el paso actual y
+avanza. Con dos conectores posibles, cada uno con sus propios campos (REST: `baseUrl`/`apiKey`;
+Sheets: `webAppUrl`/`sharedSecret`), esa secuencia fija ya no alcanza — se generaliza así, sin
+introducir ningún mecanismo de UI nuevo:
+
+- **Paso 0, nuevo: "tipo de conector"**. Texto libre (`rest` / `google-sheets`), validado contra los
+  tipos conocidos del registro — mismo slot de error ya existente (`configErrorSignal`) si se
+  tipea otra cosa. Se descartó un menú filtrable con flechas (mismo patrón que el `/` de la barra
+  de comandos): con 2 opciones en una pantalla de setup que se usa una sola vez por terminal, sumar
+  esa maquinaria es más complejidad de la que resuelve — texto libre + validación reusa el 100% del
+  código ya existente en esta pantalla.
+- **Cada conector exporta su propia lista ordenada de pasos** (`configFields:
+  { key: string; label: string; optional: boolean }[]`, en `connectors/rest/config.ts` y
+  `connectors/google-sheets/config.ts`, junto a su `configSchema`/factory) en vez de que
+  `config-screen.tsx` conozca los campos de cada tipo.
+- `config-controller.ts` encadena `['type', ...selectedConnector.configFields, 'locale']` — el
+  `STEP_LABELS` fijo de hoy se reemplaza por leer la label del paso activo desde ahí.
+  `locale` sigue siendo el último paso siempre, compartido por todos los tipos (config de terminal,
+  no de conector — ver "Decisión: mecanismo de selección de conectores").
 
 ## Etapa 3 — Adaptación de dominio: crédito ilimitado explícito
 
@@ -197,7 +222,9 @@ Cambios (viven en `domain/customer.ts` y el wire schema `ConnectorCustomer` de `
   arriba), mismo criterio que otros casos de este proyecto donde el navegador/entorno real es la
   única fuente de verdad confiable.
 - Etapa 2: actualizar tests de rutas movidas; sumar tests de `connector-registry.ts` (arma el
-  conector correcto según `type`, rechaza config inválida).
+  conector correcto según `type`, rechaza config inválida) y de `config-controller.ts`/
+  `ConfigScreen` con la secuencia de pasos dinámica (cambia según el tipo elegido, `locale` siempre
+  al final).
 - Etapa 3: extender `domain/customer.test.ts` con el caso `unrestricted` (aprueba sin cuenta
   suficiente, cuenta ausente sigue rechazando).
 
@@ -205,8 +232,8 @@ Cambios (viven en `domain/customer.ts` y el wire schema `ConnectorCustomer` de `
 
 - Carga dinámica de código de terceros (conectores realmente "plugin", no del registro cerrado) —
   descartada por riesgo de seguridad, ver "Decisión: qué significa 'plugin' acá".
-- `pull`/reconciliación de `stock` y `cash-sessions` contra Sheets — no forman parte del caso de uso
-  acordado.
+- `pull` de `stock` contra Sheets — no forma parte del caso de uso acordado (`tracksStock: false`
+  fijo alcanza). `cash-sessions` sí se sincroniza (push, ver "Caso de uso" y contrato del puente).
 - Balance de cuenta corriente calculado/pulled-back desde Sheets (ej. vía fórmula agregada en la
   planilla) — el ledger (`CuentaCorriente`) es de solo escritura desde el POS; sumar los saldos
   queda del lado del comerciante en su propia planilla.
