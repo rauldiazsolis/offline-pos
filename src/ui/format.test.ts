@@ -54,6 +54,9 @@ describe('formatQuantity', () => {
 
   it('sin ceros de más a la derecha', () => {
     expect(formatQuantity(5.95)).toBe('5.95');
-    expect(formatQuantity(5.9500000000000005)).toBe('5.95');
+    // Arrastre de punto flotante real (ej. 0.1 + 0.1 + 5.75) — como literal de código fuente
+    // (`5.9500000000000005`) el linter lo rechaza (no se puede representar exacto en un
+    // `double`), así que se construye en runtime, que es como aparece en la práctica.
+    expect(formatQuantity(Number('5.9500000000000005'))).toBe('5.95');
   });
 });
