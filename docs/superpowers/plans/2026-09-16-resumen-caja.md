@@ -1946,7 +1946,7 @@ git commit -m "fix: /CAJA ya no muestra el resumen agregado en el paso 'open'"
 **Interfaces:**
 - Consumes: `openCashSession`, `seedCatalog` (`e2e/helpers.ts`, ya existentes).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Agregar a `e2e/keyboard-only.spec.ts`, después del test de `/CAJA`:
 
@@ -1977,20 +1977,20 @@ test('/RESUMEN sin ningún turno muestra error y no navega', async ({ page }) =>
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm exec playwright test e2e/keyboard-only.spec.ts`
 Expected: FAIL — el build todavía no tiene `/RESUMEN` corriendo contra el build real hasta que las
 tareas anteriores estén todas commiteadas (si se ejecuta este paso después de completar las tareas
 1-14, en cambio, ya debería pasar — ver nota).
 
-- [ ] **Step 3: Confirmar que pasa**
+- [x] **Step 3: Confirmar que pasa**
 
 Run: `pnpm build && pnpm exec playwright test e2e/keyboard-only.spec.ts` (recordar: Playwright corre
 contra el build real, no el dev server — ver CLAUDE.md "Testing")
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add e2e/keyboard-only.spec.ts

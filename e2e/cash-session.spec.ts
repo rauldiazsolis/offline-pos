@@ -55,14 +55,15 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
   expect(afterSale?.sales).toEqual([sale?.id]);
   expect(afterSale?.closedAt).toBeUndefined();
 
-  // Volver a /CAJA con un turno ya abierto entra directo al resumen — no
-  // vuelve a pedir el monto de apertura.
+  // Volver a /CAJA con un turno ya abierto pide directo el efectivo contado
+  // — no vuelve a pedir el monto de apertura, ni muestra ningún resumen
+  // (ver CLAUDE.md, /CAJA simplificado).
   await commandBar.fill('/CAJA');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
-  await expect(page.getByText('Turno abierto')).toBeVisible();
 
   const closingInput = page.getByLabel('Efectivo contado para cerrar el turno');
+  await expect(closingInput).toBeVisible();
   await closingInput.fill('1700'); // 500 de apertura + 1200 de la venta en efectivo, sin diferencia
   await closingInput.press('Enter');
   await expect(
