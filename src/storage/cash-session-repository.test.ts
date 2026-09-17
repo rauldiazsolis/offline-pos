@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   closeCashSessionAndPersist,
   getCurrentOpenCashSession,
+  getMostRecentClosedCashSession,
   openCashSessionAndPersist,
 } from './cash-session-repository.ts';
 import { db } from './db.ts';
@@ -92,5 +93,32 @@ describe('closeCashSessionAndPersist', () => {
     const result = await closeCashSessionAndPersist({ closingAmount: 500 });
 
     expect(result).toEqual({ ok: false, error: 'cash-session/none-open', meta: undefined });
+  });
+});
+
+describe('getMostRecentClosedCashSession', () => {
+  it('undefined si no hay ningún turno cerrado', async () => {
+    expect(await getMostRecentClosedCashSession()).toBeUndefined();
+  });
+
+  it('devuelve el turno cerrado más reciente, no el más viejo', async () => {
+    await openCashSessionAndPersist({ openingAmount: 100 });
+    await closeCashSessionAndPersist({ closingAmount: 100 });
+    await openCashSessionAndPersist({ openingAmount: 200 });
+    await closeCashSessionAndPersist({ closingAmount: 200 });
+
+    const mostRecent = await getMostRecentClosedCashSession();
+
+    expect(mostRecent?.openingAmount).toBe(200);
+  });
+
+  it('ignora un turno abierto — solo mira cerrados', async () => {
+    await openCashSessionAndPersist({ openingAmount: 100 });
+    await closeCashSessionAndPersist({ closingAmount: 100 });
+    await openCashSessionAndPersist({ openingAmount: 999 }); // queda abierto
+
+    const mostRecent = await getMostRecentClosedCashSession();
+
+    expect(mostRecent?.openingAmount).toBe(100);
   });
 });

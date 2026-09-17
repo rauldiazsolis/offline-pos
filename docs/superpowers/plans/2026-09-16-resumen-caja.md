@@ -360,7 +360,7 @@ git commit -m "feat: calculateProductQuantities en el dominio de caja"
 **Interfaces:**
 - Produces: `export async function getMostRecentClosedCashSession(): Promise<CashSession | undefined>`.
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Agregar a `src/storage/cash-session-repository.test.ts`:
 
@@ -395,12 +395,12 @@ describe('getMostRecentClosedCashSession', () => {
 
 Y sumar `getMostRecentClosedCashSession` al `import` del archivo.
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/storage/cash-session-repository.test.ts`
 Expected: FAIL — la función no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 En `src/storage/cash-session-repository.ts`, debajo de `getCurrentOpenCashSession`:
 
@@ -414,12 +414,12 @@ export async function getMostRecentClosedCashSession(): Promise<CashSession | un
 }
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/storage/cash-session-repository.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/storage/cash-session-repository.ts src/storage/cash-session-repository.test.ts

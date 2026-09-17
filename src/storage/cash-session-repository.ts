@@ -20,6 +20,14 @@ export async function getCurrentOpenCashSession(): Promise<CashSession | undefin
   return sessions.find((session) => session.closedAt === undefined);
 }
 
+/** El turno cerrado más reciente, si hay alguno — mismo criterio de "toArray() alcanza" que getCurrentOpenCashSession. */
+export async function getMostRecentClosedCashSession(): Promise<CashSession | undefined> {
+  const sessions = await db.cashSessions.toArray();
+  const closed = sessions.filter((session) => session.closedAt !== undefined);
+  closed.sort((a, b) => (b.closedAt as string).localeCompare(a.closedAt as string));
+  return closed[0];
+}
+
 /** Resuelve las `Sale[]` reales de `session.sales` y calcula el resumen (pura, `domain/cash-session.ts`). */
 async function summarize(session: CashSession): Promise<CashSessionSummary> {
   const sales = await db.sales.bulkGet(session.sales);
