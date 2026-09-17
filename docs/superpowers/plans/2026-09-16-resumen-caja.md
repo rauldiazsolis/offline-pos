@@ -48,7 +48,7 @@ resto del alcance de ese issue es el pase visual a modal, fuera de este plan).
   `cash-session/none-open` — este último exige un turno *abierto*, éste exige que exista
   *cualquier* turno, abierto o cerrado).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```typescript
 // src/ui/errors.test.ts
@@ -64,13 +64,13 @@ describe('describeError', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/errors.test.ts`
 Expected: FAIL — TypeScript no compila todavía (`'cash-session/none-ever'` no es un `ErrorCode`
 válido hasta el Step 3).
 
-- [ ] **Step 3: Agregar el código al registro central y traducirlo**
+- [x] **Step 3: Agregar el código al registro central y traducirlo**
 
 En `src/domain/result.ts`, dentro de `ErrorMeta`, justo debajo de `'cash-session/persist-failed'`:
 
@@ -93,12 +93,12 @@ En `src/ui/errors.ts`, dentro del `switch`, justo debajo del `case 'cash-session
       return 'No hay ningún turno de caja para consultar.';
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/errors.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/domain/result.ts src/ui/errors.ts src/ui/errors.test.ts
