@@ -1523,7 +1523,7 @@ git commit -m "feat: esqueleto de la pantalla /RESUMEN (chrome, panel lateral, p
   `useMemo` a partir de `context.sales` (corpus: nombre de cliente + nombre de cada
   producto/línea libre, indexado por `sale.id`).
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 Agregar a `src/ui/screens/cash-summary-screen.test.tsx` (ajustar el `cashSummaryContextSignal.value`
 del `beforeEach` para incluir `sales` reales — reemplazar `sales: []` por lo siguiente, y agregar
@@ -1574,12 +1574,12 @@ describe('pestaña Tickets', () => {
 
 (`fireEvent` ya está importado en el archivo desde la Task 10.)
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: FAIL — la pestaña Tickets todavía no renderiza nada (placeholder de la Task 10).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Agregar imports al principio de `cash-summary-screen.tsx`:
 
@@ -1690,12 +1690,12 @@ Reemplazar el placeholder de la Task 10 dentro del render principal:
           {tab === 'tickets' && <TicketsTab sales={context.sales} filter={ticketFilterSignal.value} />}
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/screens/cash-summary-screen.tsx src/ui/screens/cash-summary-screen.test.tsx

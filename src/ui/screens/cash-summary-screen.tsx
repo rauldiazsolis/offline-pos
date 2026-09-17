@@ -1,14 +1,27 @@
+import { Index } from 'flexsearch';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import { useMemo } from 'preact/hooks';
+import type { Sale, SaleLine } from '../../domain/sale.ts';
 import type { PaymentMethod } from '../../domain/sale.ts';
-import { formatMoney } from '../format.ts';
+import { formatMoney, formatQuantity } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { useTicketListNavigation } from '../hooks/use-ticket-list-navigation.ts';
 import {
   exitCashSummaryScreen,
   setCashSummaryTab,
   updateProductFilter,
   updateTicketFilter,
 } from '../keyboard/cash-summary-controller.ts';
-import { cashSummaryContextSignal, cashSummaryTabSignal, productFilterSignal, ticketFilterSignal } from '../state/cash-summary.ts';
+import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
+import { getCatalogRepository } from '../state/catalog.ts';
+import {
+  cashSummaryContextSignal,
+  cashSummaryTabSignal,
+  productFilterSignal,
+  selectedTicketIndexSignal,
+  ticketFilterSignal,
+} from '../state/cash-summary.ts';
+import { getCustomerRepository } from '../state/customer-repository.ts';
 
 const NON_CASH_METHODS: PaymentMethod[] = ['debit', 'credit', 'transfer', 'qr', 'account'];
 
@@ -32,6 +45,104 @@ const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
   products: 'Productos',
   payments: 'Medios de pago',
 };
+
+function lineLabel(line: SaleLine): string {
+  return line.kind === 'product'
+    ? (getCatalogRepository().getProduct(line.productId)?.name ?? line.productId)
+    : line.description;
+}
+
+function filterSales(sales: Sale[], query: string): Sale[] {
+  if (query.trim() === '') return sales;
+  const index = new Index({ tokenize: 'forward' });
+  for (const sale of sales) {
+    const customerName = sale.customerId !== undefined ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '') : '';
+    const lineNames = sale.lines.map(lineLabel).join(' ');
+    index.add(sale.id, `${customerName} ${lineNames}`);
+  }
+  const ids = new Set(index.search(query).map(String));
+  return sales.filter((sale) => ids.has(sale.id));
+}
+
+/**
+ * Fila de ticket como componente propio (no un `.map()` inline en `TicketsTab`) — el ref callback
+ * que devuelve `nav.ticketRef(index)` toca `.current` recién cuando React lo invoca (montaje/
+ * desmontaje) o dentro de `handleKeyDown` (disparado desde `onKeyDown`, nunca durante el render);
+ * como componente separado, esa lectura queda en el nivel superior de SU propio render, que es la
+ * forma que el análisis estático de `react-hooks/refs` espera.
+ */
+function TicketRow({ sale, index, nav }: { sale: Sale; index: number; nav: ReturnType<typeof useTicketListNavigation> }) {
+  const customer = sale.customerId !== undefined ? getCustomerRepository().getCustomer(sale.customerId) : undefined;
+  const isSelected = index === selectedTicketIndexSignal.value;
+  return (
+    <div
+      ref={nav.ticketRef(index)}
+      style={{
+        background: isSelected ? 'var(--color-surface)' : 'transparent',
+        borderTop: index > 0 ? '1px solid var(--color-border)' : undefined,
+      }}
+    >
+      <div
+        className="ticket__header"
+        style={{
+          position: 'sticky',
+          top: 0,
+          background: isSelected ? 'var(--color-surface)' : 'var(--color-bg)',
+          padding: 'var(--space-2) var(--space-3)',
+          boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 600 }}>Ticket #{sale.id}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+            {new Date(sale.createdAt).toLocaleString()}
+          </span>
+        </div>
+        {customer !== undefined && (
+          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+            Cliente: <b style={{ color: 'var(--color-text)' }}>{customer.name}</b>
+          </p>
+        )}
+      </div>
+      <div style={{ padding: 'var(--space-1) var(--space-3)' }}>
+        {sale.lines.map((line, lineIndex) => (
+          <div key={lineIndex} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 'var(--space-2)' }}>
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>{formatQuantity(line.qty)}x</span>
+            <span>{lineLabel(line)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(line.unitPrice * line.qty)}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-1) var(--space-3) var(--space-3)' }}>
+        <span>{sale.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(', ')}</span>
+        <span className="ticket__total" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+          {formatMoney(sale.total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TicketsTab({ sales, filter }: { sales: Sale[]; filter: string }) {
+  const filtered = useMemo(() => filterSales(sales, filter), [sales, filter]);
+  const nav = useTicketListNavigation(selectedTicketIndexSignal, filtered.length);
+  const rows = filtered.map((sale, index) => <TicketRow key={sale.id} sale={sale} index={index} nav={nav} />);
+
+  // `nav.containerRef` solo toca `.current` cuando React lo invoca (montaje/desmontaje) o dentro
+  // de `handleKeyDown` (vía `onKeyDown`, nunca durante el render) — el análisis estático del
+  // plugin no distingue eso al ver que otro miembro del mismo hook comparte esa ref.
+  return (
+    // eslint-disable-next-line react-hooks/refs
+    <div ref={nav.containerRef} style={{ height: '100%', overflowY: 'auto', outline: 'none' }}>
+      {filtered.length === 0 && (
+        <p style={{ padding: 'var(--space-3)', color: 'var(--color-text-muted)' }}>
+          Ningún ticket coincide con la búsqueda.
+        </p>
+      )}
+      {rows}
+    </div>
+  );
+}
 
 /**
  * `/RESUMEN`: panel lateral fijo + 3 pestañas (Tickets/Productos/Medios de pago). El contenido de
@@ -142,11 +253,12 @@ export function CashSummaryScreen() {
 
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr clamp(240px, 25%, 320px)', minHeight: 0 }}>
         <div style={{ minHeight: 0, overflow: 'hidden' }}>
-          {tab === 'tickets' && <div />}
+          {tab === 'tickets' && <TicketsTab sales={context.sales} filter={ticketFilterSignal.value} />}
           {tab === 'products' && <div />}
           {tab === 'payments' && <div />}
         </div>
         <div
+          data-testid="cash-summary-sidebar"
           style={{
             borderLeft: '1px solid var(--color-border)',
             padding: 'var(--space-3)',
