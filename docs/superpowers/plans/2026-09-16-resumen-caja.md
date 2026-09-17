@@ -1219,7 +1219,7 @@ mismo archivo.
   (`ui/payment-labels.ts`, ya existente), `formatMoney` (`ui/format.ts`, ya existente).
 - Produces: `export function CashSummaryScreen(): JSX.Element`.
 
-- [ ] **Step 1: Escribir el test que falla**
+- [x] **Step 1: Escribir el test que falla**
 
 ```typescript
 // src/ui/screens/cash-summary-screen.test.tsx
@@ -1282,12 +1282,12 @@ describe('CashSummaryScreen', () => {
 });
 ```
 
-- [ ] **Step 2: Confirmar que falla**
+- [x] **Step 2: Confirmar que falla**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: FAIL — el módulo no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 ```typescript
 // src/ui/screens/cash-summary-screen.tsx
@@ -1495,12 +1495,12 @@ import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
       return <CashSummaryScreen />;
 ```
 
-- [ ] **Step 4: Confirmar que pasa**
+- [x] **Step 4: Confirmar que pasa**
 
 Run: `pnpm vitest run src/ui/screens/cash-summary-screen.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/ui/screens/cash-summary-screen.tsx src/ui/screens/cash-summary-screen.test.tsx src/ui/app.tsx
