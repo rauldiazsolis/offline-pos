@@ -1,7 +1,7 @@
-import { createRestFetchConnector } from '../connectors/rest/rest-fetch-connector.ts';
 import type { Result } from '../domain/result.ts';
 import type { AccountHoldResult } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
+import { createConnector } from './connector-registry.ts';
 
 /**
  * Pide un hold síncrono contra el saldo real (§5, RF-17) — arma el conector
@@ -21,7 +21,7 @@ export async function requestAccountHoldNow(params: {
     return configResult;
   }
 
-  const connector = createRestFetchConnector(configResult.value);
+  const connector = createConnector(configResult.value);
   return connector.requestAccountHold(
     { customerId: params.customerId, amount: params.amount },
     params.idempotencyKey,

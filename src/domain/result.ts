@@ -78,6 +78,7 @@ export type ErrorMeta = {
   // storage/demo-reset.ts
   'demo/reset-failed': { message: string };
   'demo/backend-reset-failed': { message: string };
+  'demo/unavailable-for-connector': { connectorLabel: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

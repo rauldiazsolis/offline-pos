@@ -43,7 +43,12 @@ describe('ConfigScreen', () => {
     expect(activeScreenSignal.value).toBe('sale');
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { baseUrl: 'https://api.example.com', apiKey: 'secret', locale: 'en-US' },
+      value: {
+        type: 'rest',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'secret',
+        locale: 'en-US',
+      },
     });
   });
 

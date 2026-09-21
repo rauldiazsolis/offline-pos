@@ -7,7 +7,6 @@ import {
   type OutboxEvent,
 } from '../domain/outbox.ts';
 import type { Result } from '../domain/result.ts';
-import { createRestFetchConnector } from '../connectors/rest/rest-fetch-connector.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
@@ -21,6 +20,7 @@ import {
 } from '../ui/state/sync.ts';
 import type { Connector } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
+import { createConnector } from './connector-registry.ts';
 import {
   getCustomersCursor,
   getProductsCursor,
@@ -191,7 +191,7 @@ export async function runSyncCycle(): Promise<void> {
     }
     setSyncConfigured(true);
 
-    const connector = createRestFetchConnector(configResult.value);
+    const connector = createConnector(configResult.value);
     await syncOnce(connector, new Date().toISOString());
   } finally {
     syncInProgress = false;

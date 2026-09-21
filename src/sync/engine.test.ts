@@ -428,7 +428,7 @@ describe('runSyncCycle', () => {
   });
 
   it('con config guardada, arma el conector real y corre un ciclo', async () => {
-    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -445,8 +445,29 @@ describe('runSyncCycle', () => {
     expect(syncStatusSignal.value).toBe('online-idle');
   });
 
+  it('con config de Google Sheets guardada, sincroniza contra el Web App (Etapa 2, #68)', async () => {
+    const webAppUrl = 'https://script.google.com/macros/s/abc/exec';
+    saveSyncConfig({ type: 'google-sheets', webAppUrl });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ ok: true, data: { items: [] } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await runSyncCycle();
+
+    expect(syncConfiguredSignal.value).toBe(true);
+    expect(syncStatusSignal.value).toBe('online-idle');
+    expect(fetchMock).toHaveBeenCalled();
+    for (const [url] of fetchMock.mock.calls) {
+      expect(url).toBe(webAppUrl);
+    }
+  });
+
   it('no arranca un segundo ciclo si el anterior sigue en curso (issue #1)', async () => {
-    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
 
     // Con latencia real controlada, a diferencia del resto de los tests de
     // este archivo (que resuelven al instante): es justo la condición bajo

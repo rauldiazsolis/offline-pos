@@ -1,4 +1,5 @@
-import { saveSyncConfig, syncConfigSchema } from '../../sync/config.ts';
+import { restConfigSchema } from '../../connectors/rest/config.ts';
+import { saveSyncConfig } from '../../sync/config.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { setSyncConfigured } from '../state/sync.ts';
 import {
@@ -30,7 +31,7 @@ function submitBaseUrl(): void {
     return;
   }
 
-  const parsed = syncConfigSchema.shape.baseUrl.safeParse(buffer);
+  const parsed = restConfigSchema.shape.baseUrl.safeParse(buffer);
   if (!parsed.success) {
     configErrorSignal.value = 'Ingresá una URL válida (ej. https://api.miempresa.com).';
     return;
@@ -52,6 +53,7 @@ function submitApiKey(): void {
 function submitLocale(): void {
   const locale = configBufferSignal.value.trim();
   const config = {
+    type: 'rest' as const,
     baseUrl: configBaseUrlSignal.value,
     ...(configApiKeySignal.value !== '' ? { apiKey: configApiKeySignal.value } : {}),
     ...(locale !== '' ? { locale } : {}),

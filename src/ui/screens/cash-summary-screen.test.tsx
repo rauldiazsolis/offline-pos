@@ -20,7 +20,7 @@ import { CashSummaryScreen } from './cash-summary-screen.tsx';
 
 beforeEach(async () => {
   await db.open();
-  saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+  saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,

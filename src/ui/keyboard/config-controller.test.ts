@@ -84,7 +84,12 @@ describe('submitConfigStep', () => {
     expect(syncConfiguredSignal.value).toBe(true);
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { baseUrl: 'https://api.example.com', apiKey: 'secret-key', locale: 'en-US' },
+      value: {
+        type: 'rest',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'secret-key',
+        locale: 'en-US',
+      },
     });
   });
 
@@ -96,7 +101,10 @@ describe('submitConfigStep', () => {
     configBufferSignal.value = '';
     submitConfigStep();
 
-    expect(loadSyncConfig()).toEqual({ ok: true, value: { baseUrl: 'https://api.example.com' } });
+    expect(loadSyncConfig()).toEqual({
+      ok: true,
+      value: { type: 'rest', baseUrl: 'https://api.example.com' },
+    });
   });
 });
 
