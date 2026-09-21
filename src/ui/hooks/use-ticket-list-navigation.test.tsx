@@ -14,14 +14,17 @@ function TestHarness({
   clientHeight = 300,
   selectedIndex,
   onKeyDownResult,
+  onReady,
 }: {
   heights: number[];
   headerHeight?: number;
   clientHeight?: number;
   selectedIndex: Signal<number>;
   onKeyDownResult?: (handled: boolean) => void;
+  onReady?: (nav: ReturnType<typeof useTicketListNavigation>) => void;
 }) {
   const nav = useTicketListNavigation(selectedIndex, heights.length);
+  onReady?.(nav);
   const offsets: number[] = [];
   let running = 0;
   for (let i = 0; i < heights.length; i++) {
@@ -120,5 +123,25 @@ describe('useTicketListNavigation', () => {
     getByTestId('container').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
 
     expect(handled).toBe(false);
+  });
+
+  it('select mueve la selección y hace scroll hasta ese ticket (click con mouse)', () => {
+    const selectedIndex = signal(0);
+    let nav: ReturnType<typeof useTicketListNavigation> | undefined;
+    const { getByTestId } = render(
+      <TestHarness
+        heights={[400, 400, 400]}
+        selectedIndex={selectedIndex}
+        onReady={(n) => {
+          nav = n;
+        }}
+      />,
+    );
+    const container = getByTestId('container');
+
+    nav?.select(2);
+
+    expect(selectedIndex.value).toBe(2);
+    expect(container.scrollTop).toBe(800);
   });
 });

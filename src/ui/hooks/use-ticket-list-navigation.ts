@@ -7,6 +7,7 @@ export type TicketListNavigation = {
   containerRef: (el: HTMLDivElement | null) => void;
   ticketRef: (index: number) => (el: HTMLDivElement | null) => void;
   handleKeyDown: (event: KeyboardEvent) => boolean;
+  select: (index: number) => void;
 };
 
 /**
@@ -175,5 +176,11 @@ export function useTicketListNavigation(
       else ticketElsRef.current.set(index, el);
     },
     handleKeyDown,
+    // Click en una fila (mouse) — mismo mecanismo que PageUp/PageDown, así el scroll queda
+    // consistente con el teclado en vez de solo tocar el signal de selección.
+    select: (index) => {
+      const container = containerElRef.current;
+      if (container !== null) selectIndex(container, index);
+    },
   };
 }
