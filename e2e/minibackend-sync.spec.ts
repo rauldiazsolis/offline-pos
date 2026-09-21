@@ -20,7 +20,7 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
 
   // Sin valores por omisión (Etapa 2b): hay que elegir el tipo y tipear la URL.
-  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel('Tipo de conexión').selectOption('rest-demo');
   await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
 
   // El minibackend de demo implementa el contrato al pie de la letra —
@@ -40,6 +40,10 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await apiKeyInput.press('Control+Enter');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
+
+  // Con el conector rest-demo el menú de "/" ofrece /DEMO_RESET (Etapa 2c).
+  await commandBar.fill('/DEMO');
+  await expect(page.getByText('DEMO_RESET')).toBeVisible();
 
   await commandBar.fill('/SINCRONIZAR');
   await commandBar.press('Enter');
