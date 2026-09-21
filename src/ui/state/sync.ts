@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals';
 import type { Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
+import type { ConnectorType } from '../../sync/connector-registry.ts';
 
 /**
  * Estado de sincronización para la barra de estado (ver §7 del doc de
@@ -35,6 +36,17 @@ export const connectionStateSignal = signal<ConnectionState>('unconfigured');
 
 export function setConnectionState(state: ConnectionState): void {
   connectionStateSignal.value = state;
+}
+
+/**
+ * Tipo del conector de la config activa (`null` = sin configurar): de acá sale
+ * qué comandos extra ofrece la barra (Etapa 2c, #77). Lo fijan `bootstrap` al
+ * arrancar y `applyConnection` al cambiar de conexión.
+ */
+export const activeConnectorTypeSignal = signal<ConnectorType | null>(null);
+
+export function setActiveConnectorType(type: ConnectorType | null): void {
+  activeConnectorTypeSignal.value = type;
 }
 
 /**

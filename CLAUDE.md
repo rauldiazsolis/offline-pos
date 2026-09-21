@@ -42,7 +42,7 @@ src/
   domain/          # entidades y lógica de negocio pura (Sale, Product, etc.)
   storage/         # Dexie schema, outbox, seed de catálogo, repositorios
   sync/            # motor de sincronización, config de la terminal, registro de conectores (connector-registry.ts)
-  connectors/      # un subdirectorio por conector (rest/, google-sheets/): su config, sus campos para /CONFIG y su factory
+  connectors/      # un subdirectorio por conector (rest/, rest-demo/, google-sheets/): su config, sus campos para /CONFIG y su factory
   ui/
     screens/       # Venta, Cobro, Caja, Historial
     components/    # inputs, tablas, paleta de comandos
@@ -277,7 +277,7 @@ que no dispara de forma confiable cuando Preact desmonta y vuelve a montar una p
 real: volver de un popup con Esc).
 
 **Menú de "/" — filtra, navega, ejecuta sin ambigüedad**: escribir después de `/` filtra
-`AVAILABLE_COMMANDS` por prefijo (`commandResultsSignal`) en vez de mostrar siempre la lista
+`availableCommands()` por prefijo (`commandResultsSignal`) en vez de mostrar siempre la lista
 completa. Hasta el Ciclo 7, a diferencia de la búsqueda de productos/clientes (donde la fila 0 se
 preselecciona por default y Enter sin tocar flechas ejecuta esa fila — bajo riesgo, flujo rápido), el
 menú de comandos no preseleccionaba nada: ejecutar el comando equivocado por accidente tiene
@@ -451,13 +451,22 @@ toca la configuración de `/CONFIG` (URL del backend, API key, locale) — decis
 usuario: es la conexión de esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el
 backend en cada reset.
 
-Con un conector que no es REST (hoy Google Sheets) `/DEMO_RESET` está **bloqueado**: el
-`POST /_demo/reset` solo existe en el minibackend REST de demo y una config de Sheets ni siquiera
-tiene `baseUrl`. `storage/demo-reset.ts::checkDemoResetAvailable` lo verifica y
-`enterDemoResetScreen` muestra el aviso ("no está disponible con Google Sheets…", ErrorCode
-`demo/unavailable-for-connector`) apenas se abre la pantalla; `demoReset()` lo repite de fondo antes
-de tocar nada, mismo criterio que el gate de turno de caja de `/COBRAR`. La planilla nunca se
-resetea desde el POS.
+**Comandos por conector (Etapa 2c, #77)**: `/DEMO_RESET` ya no es un comando del núcleo — solo
+existe con el conector `rest-demo` ("REST (minibackend de demo)"), un tipo propio del registro que
+reusa la implementación REST (`createConnector` agrupa `'rest'` y `'rest-demo'`) y se distingue solo
+por declarar ese comando. Con `rest` genérico o Google Sheets el menú de "/" no lo ofrece y tipearlo
+da "Comando desconocido: /DEMO_RESET" — el `POST /_demo/reset` no es parte del contrato del
+`Connector` y una config de Sheets ni siquiera tiene `baseUrl`. Mecanismo: cada tipo declara
+`commands: ConnectorCommand[]` (`connectors/connector-command.ts`: `{ name, description, action }`,
+con `action` de un union cerrado `ConnectorActionId`) en `CONNECTOR_TYPES`; la UI mapea cada acción a
+su comportamiento en `ui/keyboard/connector-actions.ts` (`Record` exhaustivo: una acción nueva sin
+implementar no compila). `ui/keyboard/commands.ts::availableCommands()` = `CORE_COMMANDS` + los del
+conector activo, leído de `activeConnectorTypeSignal` (`ui/state/sync.ts`), que fijan `bootstrap`
+(solo con conexión `active`) y `applyConnection`. `demoReset()` mantiene una guarda de fondo
+(`demo/unavailable-for-connector`) por si se llega por otro camino. Una terminal que ya tenía config
+`rest` apuntando al minibackend pierde `/DEMO_RESET` hasta reconfigurarse como `rest-demo` en
+`/CONFIG` (los datos no se pierden: mismo origen, no hay borrado). La planilla nunca se resetea desde
+el POS.
 
 La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
@@ -996,9 +1005,9 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   contra el minibackend y una planilla reales): conexión verificada — probar antes de guardar,
   limpiar lo local al cambiar de origen con una advertencia clara (con un último intento de enviar lo
   pendiente al conector actual), arranque bloqueado sin conexión activa, sin valores por omisión y
-  estado de sync honesto (cierra #53) — ver "Ciclo de vida de la conexión". Pendiente: Etapa 2c
-  (#77, comandos por conector: tipo `rest-demo` con `/DEMO_RESET`) y Etapa 3 (#69, crédito ilimitado
-  explícito en cuenta corriente).
+  estado de sync honesto (cierra #53) — ver "Ciclo de vida de la conexión". Etapa 2c (#77): comandos
+  declarados por conector y tipo `rest-demo` — `/DEMO_RESET` solo con ese tipo, ver "Comandos por
+  conector". Pendiente: Etapa 3 (#69, crédito ilimitado explícito en cuenta corriente).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

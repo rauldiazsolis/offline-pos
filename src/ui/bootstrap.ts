@@ -9,7 +9,7 @@ import { setCatalogRepository } from './state/catalog.ts';
 import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
-import { setConnectionState } from './state/sync.ts';
+import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
 import { resetConfigForm } from './state/sync-config.ts';
 
 /**
@@ -54,6 +54,7 @@ export async function bootstrap(): Promise<void> {
   const configResult = loadSyncConfig();
   const state = connectionState(configResult);
   setConnectionState(state);
+  setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   if (state !== 'active') {
     resetConfigForm(configResult.ok ? configResult.value : undefined);
   }

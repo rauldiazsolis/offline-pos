@@ -10,6 +10,7 @@ export type ConfigFormValues = Record<ConnectorType, Record<string, string>>;
 function blankFormValues(): ConfigFormValues {
   return {
     rest: { baseUrl: '', apiKey: '' },
+    'rest-demo': { baseUrl: '', apiKey: '' },
     'google-sheets': { webAppUrl: '', sharedSecret: '' },
   };
 }

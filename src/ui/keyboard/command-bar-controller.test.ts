@@ -7,7 +7,9 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { submitCommandBar, triggerCheckout } from './command-bar-controller.ts';
+import { availableCommands } from './commands.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -61,10 +63,15 @@ describe('/DESCARTAR (Ciclo 8, sin confirmación)', () => {
   });
 });
 
-describe('/DEMO_RESET (Ciclo 8)', () => {
+describe('/DEMO_RESET (Ciclo 8; comando del conector rest-demo desde la Etapa 2c)', () => {
   beforeEach(() => {
     activeScreenSignal.value = 'sale';
     demoResetErrorSignal.value = null;
+    activeConnectorTypeSignal.value = 'rest-demo';
+  });
+
+  afterEach(() => {
+    activeConnectorTypeSignal.value = null;
   });
 
   it('abre la pantalla de confirmación dedicada, sin borrar nada todavía', async () => {
@@ -74,5 +81,42 @@ describe('/DEMO_RESET (Ciclo 8)', () => {
 
     expect(activeScreenSignal.value).toBe('demo-reset');
     await expect(db.products.count()).resolves.toBe(0);
+  });
+
+  it.each(['rest', 'google-sheets', null] as const)(
+    'con el conector %s no existe: da "Comando desconocido" y no cambia de pantalla',
+    (connectorType) => {
+      activeConnectorTypeSignal.value = connectorType;
+      commandBarBufferSignal.value = '/DEMO_RESET';
+
+      submitCommandBar();
+
+      expect(commandBarErrorSignal.value).toBe('Comando desconocido: /DEMO_RESET');
+      expect(activeScreenSignal.value).toBe('sale');
+    },
+  );
+});
+
+describe('availableCommands (Etapa 2c)', () => {
+  const CORE = ['COBRAR', 'CAJA', 'RESUMEN', 'ANULAR', 'DESCARTAR', 'CONFIG', 'SINCRONIZAR'];
+
+  afterEach(() => {
+    activeConnectorTypeSignal.value = null;
+  });
+
+  it('siempre ofrece los comandos del núcleo', () => {
+    for (const type of ['rest', 'rest-demo', 'google-sheets', null] as const) {
+      activeConnectorTypeSignal.value = type;
+      const names = availableCommands().map((command) => command.name);
+      expect(names).toEqual(expect.arrayContaining(CORE));
+    }
+  });
+
+  it('suma DEMO_RESET solo con el conector rest-demo', () => {
+    activeConnectorTypeSignal.value = 'rest-demo';
+    expect(availableCommands().map((command) => command.name)).toContain('DEMO_RESET');
+
+    activeConnectorTypeSignal.value = 'rest';
+    expect(availableCommands().map((command) => command.name)).not.toContain('DEMO_RESET');
   });
 });

@@ -35,29 +35,6 @@ describe('enterDemoResetScreen / exitDemoResetScreen', () => {
     await expect(db.products.count()).resolves.toBe(0);
   });
 
-  it('con un conector de Google Sheets, muestra el aviso de no disponible apenas se abre', () => {
-    saveSyncConfig({
-      type: 'google-sheets',
-      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
-    });
-
-    enterDemoResetScreen();
-
-    expect(activeScreenSignal.value).toBe('demo-reset');
-    expect(demoResetErrorSignal.value).toBe(
-      '/DEMO_RESET no está disponible con Google Sheets: solo funciona con el backend REST de demo.',
-    );
-  });
-
-  it('con un conector REST o sin config, no muestra ningún aviso', () => {
-    enterDemoResetScreen();
-    expect(demoResetErrorSignal.value).toBeNull();
-
-    exitDemoResetScreen();
-    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000' });
-    enterDemoResetScreen();
-    expect(demoResetErrorSignal.value).toBeNull();
-  });
 });
 
 describe('confirmDemoReset', () => {
@@ -83,7 +60,7 @@ describe('confirmDemoReset', () => {
     await expect(db.products.count()).resolves.toBe(0);
   });
 
-  it('con un conector de Google Sheets, Enter no borra nada y mantiene el aviso', async () => {
+  it('con un conector de Google Sheets, Enter no borra nada y muestra el aviso', async () => {
     await seedCatalogIfEmpty({ now: '2026-01-01T00:00:00.000Z' });
     saveSyncConfig({
       type: 'google-sheets',

@@ -1,5 +1,5 @@
 import { err, ok, type Result } from '../domain/result.ts';
-import { loadSyncConfig, type SyncConfig } from '../sync/config.ts';
+import { loadSyncConfig } from '../sync/config.ts';
 import { connectorLabel, type ConnectorType } from '../sync/connector-registry.ts';
 import { clearSyncCursors } from '../sync/cursor.ts';
 import { resetDemoBackend } from '../sync/demo-backend-reset.ts';
@@ -9,18 +9,6 @@ import { clearAllTables } from './local-data.ts';
 
 function unavailableFor(type: ConnectorType): Result<never> {
   return err('demo/unavailable-for-connector', { connectorLabel: connectorLabel(type) });
-}
-
-/**
- * `/DEMO_RESET` solo tiene sentido contra el minibackend REST de demo: el
- * `POST /_demo/reset` no es parte del contrato del `Connector` y una config
- * de otro tipo (Google Sheets) ni siquiera tiene `baseUrl`. Decisión del
- * usuario (Etapa 2, #68): bloquearlo con un aviso claro, no resetear a medias.
- * Lo consulta también `ui/keyboard/demo-reset-controller.ts` para avisar al
- * abrir la pantalla.
- */
-export function checkDemoResetAvailable(config: SyncConfig): Result<void> {
-  return config.type === 'rest' ? ok(undefined) : unavailableFor(config.type);
 }
 
 /**
@@ -48,14 +36,17 @@ export function checkDemoResetAvailable(config: SyncConfig): Result<void> {
  * A propósito NO toca la configuración de `/CONFIG` (URL, API key, locale)
  * — es la conexión de esta terminal, no un dato de demo.
  *
- * Con un conector que no sea REST se bloquea antes de tocar nada
- * (`checkDemoResetAvailable`).
+ * Solo el conector `rest-demo` lo soporta: el `POST /_demo/reset` no es parte
+ * del contrato del `Connector`, y una config de Sheets ni siquiera tiene
+ * `baseUrl`. La barra de comandos ya no ofrece `/DEMO_RESET` con otro
+ * conector (Etapa 2c, #77); esta guarda de fondo se mantiene y bloquea antes
+ * de tocar nada, por si se llega por otro camino.
  */
 export async function demoReset(): Promise<Result<void>> {
   const configResult = loadSyncConfig();
 
   if (configResult.ok) {
-    if (configResult.value.type !== 'rest') {
+    if (configResult.value.type !== 'rest-demo') {
       return unavailableFor(configResult.value.type);
     }
     const backendReset = await resetDemoBackend(configResult.value.baseUrl);

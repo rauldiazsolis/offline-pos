@@ -2,7 +2,7 @@ import { computed, signal } from '@preact/signals';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import type { SaleLine } from '../../domain/sale.ts';
-import { AVAILABLE_COMMANDS } from '../keyboard/commands.ts';
+import { availableCommands, type CommandInfo } from '../keyboard/commands.ts';
 import { parseCommandBar, type ParsedCommand } from '../keyboard/parse-command-bar.ts';
 import { getCatalogRepository } from './catalog.ts';
 import { cartSignal } from './cart.ts';
@@ -129,12 +129,12 @@ export const customerSelectionIndexSignal = signal<number | null>(null);
  * `parsed.name === ''` (buffer es solo `/`) matchea todo — mismo caso que
  * antes de filtrar.
  */
-export const commandResultsSignal = computed<typeof AVAILABLE_COMMANDS>(() => {
+export const commandResultsSignal = computed<CommandInfo[]>(() => {
   const parsed = parsedSignal.value;
   if (parsed.kind !== 'command') {
     return [];
   }
-  return AVAILABLE_COMMANDS.filter((command) => command.name.startsWith(parsed.name));
+  return availableCommands().filter((command) => command.name.startsWith(parsed.name));
 });
 
 /**

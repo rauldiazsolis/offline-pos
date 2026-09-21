@@ -92,6 +92,7 @@ function normalizeEndpoint(raw: string): string {
 export function originKey(config: SyncConfig): string {
   switch (config.type) {
     case 'rest':
+    case 'rest-demo':
       return normalizeEndpoint(config.baseUrl);
     case 'google-sheets':
       return normalizeEndpoint(config.webAppUrl);

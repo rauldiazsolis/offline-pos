@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import { googleSheetsConfigSchema } from '../connectors/google-sheets/config.ts';
 import { restConfigSchema } from '../connectors/rest/config.ts';
+import { restDemoConfigSchema } from '../connectors/rest-demo/config.ts';
 import {
   CONNECTOR_TYPES,
+  connectorCommands,
   connectorConfigSchema,
   connectorFields,
   connectorLabel,
@@ -71,6 +73,16 @@ describe('createConnector', () => {
     expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://api.example.com/products');
   });
 
+  it('type rest-demo: arma el mismo conector REST (GET a {baseUrl}/products)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({ items: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const connector = createConnector({ type: 'rest-demo', baseUrl: 'http://localhost:4000' });
+    await connector.pullProducts({});
+
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://localhost:4000/products');
+  });
+
   it('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true, data: { items: [] } }));
     vi.stubGlobal('fetch', fetchMock);
@@ -88,14 +100,19 @@ describe('createConnector', () => {
 });
 
 describe('CONNECTOR_TYPES', () => {
-  it('lista REST y Google Sheets con su etiqueta', () => {
+  it('lista REST, REST (minibackend de demo) y Google Sheets con su etiqueta', () => {
     expect(CONNECTOR_TYPES.map((info) => [info.type, info.label])).toEqual([
       ['rest', 'REST genérico'],
+      ['rest-demo', 'REST (minibackend de demo)'],
       ['google-sheets', 'Google Sheets'],
     ]);
   });
 
-  const schemas = { rest: restConfigSchema, 'google-sheets': googleSheetsConfigSchema };
+  const schemas = {
+    rest: restConfigSchema,
+    'rest-demo': restDemoConfigSchema,
+    'google-sheets': googleSheetsConfigSchema,
+  };
 
   it.each(CONNECTOR_TYPES)(
     'los campos de $type coinciden con las claves y la opcionalidad de su schema',
@@ -119,11 +136,38 @@ describe('connectorLabel / connectorFields', () => {
   });
 });
 
+describe('connectorCommands', () => {
+  it('rest-demo declara /DEMO_RESET', () => {
+    expect(connectorCommands('rest-demo')).toEqual([
+      {
+        name: 'DEMO_RESET',
+        description: 'Borrar todos los datos locales y reiniciar la demo',
+        action: 'demo-reset',
+      },
+    ]);
+  });
+
+  it('rest, google-sheets y "sin conector" no declaran comandos propios', () => {
+    expect(connectorCommands('rest')).toEqual([]);
+    expect(connectorCommands('google-sheets')).toEqual([]);
+    expect(connectorCommands(null)).toEqual([]);
+  });
+});
+
 describe('toFieldValues', () => {
   it('rest: baseUrl y apiKey (ausente → cadena vacía)', () => {
     expect(toFieldValues({ type: 'rest', baseUrl: 'https://api.example.com' })).toEqual({
       baseUrl: 'https://api.example.com',
       apiKey: '',
+    });
+  });
+
+  it('rest-demo: baseUrl y apiKey, igual que rest', () => {
+    expect(
+      toFieldValues({ type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'k' }),
+    ).toEqual({
+      baseUrl: 'http://localhost:4000',
+      apiKey: 'k',
     });
   });
 

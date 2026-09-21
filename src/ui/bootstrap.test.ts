@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../storage/db.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { bootstrap } from './bootstrap.ts';
-import { connectionStateSignal } from './state/sync.ts';
+import { activeConnectorTypeSignal, connectionStateSignal } from './state/sync.ts';
 import { configFieldValuesSignal, configTypeSignal } from './state/sync-config.ts';
 
 // Con una config activa, `startSyncEngine` arrancaría un ciclo real que sigue
@@ -57,5 +57,22 @@ describe('bootstrap', () => {
     await bootstrap();
 
     expect(connectionStateSignal.value).toBe('active');
+  });
+
+  it('el conector activo sale de la config guardada, y solo si está verificada', async () => {
+    await bootstrap();
+    expect(activeConnectorTypeSignal.value).toBeNull();
+
+    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000' });
+    await bootstrap();
+    expect(activeConnectorTypeSignal.value).toBeNull();
+
+    saveSyncConfig({
+      type: 'rest-demo',
+      baseUrl: 'http://localhost:4000',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await bootstrap();
+    expect(activeConnectorTypeSignal.value).toBe('rest-demo');
   });
 });

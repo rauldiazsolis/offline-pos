@@ -54,8 +54,8 @@ Limitaciones conocidas:
   confirmación); sí queda en `Pagos` con `medio = account`.
 - Anular una venta después de cerrado el turno no reescribe la fila ya escrita en `Turnos`.
 - El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
-- `/DEMO_RESET` no está disponible con este conector (solo funciona con el backend REST de demo); la
-  planilla nunca se resetea desde el POS.
+- `/DEMO_RESET` no existe con este conector (solo lo declara el tipo `rest-demo`, ver "Comandos por
+  conector" en CLAUDE.md): no aparece en el menú de "/". La planilla nunca se resetea desde el POS.
 
 ## Contrato del puente
 
