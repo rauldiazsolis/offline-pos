@@ -6,7 +6,7 @@ import { db } from '../../storage/db.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
 import { cartSignal } from '../state/cart.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { connectionStateSignal } from '../state/sync.ts';
+import { connectionStateSignal, syncPausedSignal } from '../state/sync.ts';
 import {
   configConfirmationSignal,
   configErrorFieldSignal,
@@ -142,6 +142,45 @@ describe('enterConfigScreen', () => {
 
     expect(configTypeSignal.value).toBe('rest');
     expect(configFieldValuesSignal.value.rest.apiKey).toBe('vieja');
+  });
+});
+
+describe('sincronización mientras /CONFIG está abierto', () => {
+  it('se pausa al abrir /CONFIG y se reanuda al cancelar', () => {
+    enterConfigScreen();
+    expect(syncPausedSignal.value).toBe(true);
+
+    connectionStateSignal.value = 'active';
+    cancelConfigScreen();
+
+    expect(syncPausedSignal.value).toBe(false);
+  });
+
+  it('se reanuda al aplicar una conexión nueva', async () => {
+    stubRestBackend();
+    enterConfigScreen();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+
+    await submitConfig();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(syncPausedSignal.value).toBe(false);
+  });
+
+  it('sigue pausada si la prueba falla (el formulario sigue abierto)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    );
+    enterConfigScreen();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+
+    await submitConfig();
+
+    expect(activeScreenSignal.value).toBe('config');
+    expect(syncPausedSignal.value).toBe(true);
   });
 });
 
@@ -386,6 +425,10 @@ describe('Esc', () => {
 
     handleConfigEscape();
     expect(configPhaseSignal.value).toBe('editing');
+    // La prueba toma el cerrojo de sync antes de tocar la red: el primer fetch sale un instante después.
+    await vi.waitFor(() => {
+      expect(calls).toBe(1);
+    });
     resolveFirst(okResponse({ items: [] }));
     await pending;
 

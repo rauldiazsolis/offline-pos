@@ -78,6 +78,12 @@ describe('describeError', () => {
     ).toBe('El sistema externo respondió con un error: Secreto compartido inválido');
   });
 
+  it('connection/sync-busy pide esperar y reintentar', () => {
+    expect(describeError({ ok: false, error: 'connection/sync-busy', meta: undefined })).toBe(
+      'Hay una sincronización en curso que todavía no terminó. Esperá unos segundos y probá de nuevo.',
+    );
+  });
+
   it('connection/apply-failed', () => {
     expect(
       describeError({ ok: false, error: 'connection/apply-failed', meta: { message: 'boom' } }),

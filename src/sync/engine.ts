@@ -20,6 +20,7 @@ import {
   setPendingOutboxCount,
   setSyncConfigured,
   setSyncStatus,
+  syncPausedSignal,
 } from '../ui/state/sync.ts';
 import type { Connector } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
@@ -253,6 +254,10 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * probarla antes de operar (Etapa 2b).
  */
 export async function runSyncCycle(): Promise<void> {
+  // `/CONFIG` abierto: no arrancar ciclos (ver `syncPausedSignal`).
+  if (syncPausedSignal.value) {
+    return;
+  }
   const release = tryAcquireSyncLock();
   if (release === undefined) {
     return;

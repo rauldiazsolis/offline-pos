@@ -6,6 +6,7 @@ import { fakeConnector } from '../test/fake-connector.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector } from './connector.ts';
 import { originKey, planConnectionChange, probeConnection, withTimeout } from './connection.ts';
+import { tryAcquireSyncLock } from './engine.ts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -127,6 +128,65 @@ describe('probeConnection', () => {
     expect(result.ok).toBe(true);
     const paths = fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
     expect(paths).toEqual(['/products', '/stock', '/customers']);
+  });
+});
+
+describe('probeConnection — convivencia con el motor de sync', () => {
+  it('espera a que termine un ciclo en curso antes de tocar la red', async () => {
+    const release = tryAcquireSyncLock();
+    if (release === undefined) throw new Error('el cerrojo debería estar libre');
+    const pullProducts = vi.fn(() => Promise.resolve(ok({ items: [] })));
+
+    const probing = probeConnection(config, { connector: fakeConnector({ pullProducts }) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(pullProducts).not.toHaveBeenCalled();
+
+    release();
+    const result = await probing;
+
+    expect(result.ok).toBe(true);
+    expect(pullProducts).toHaveBeenCalledTimes(1);
+  });
+
+  it('mientras prueba tiene el cerrojo: ningún ciclo de sync puede arrancar en paralelo', async () => {
+    let lockDuringProbe: unknown = 'sin medir';
+    const connector = fakeConnector({
+      pullProducts: () => {
+        lockDuringProbe = tryAcquireSyncLock();
+        return Promise.resolve(ok({ items: [] }));
+      },
+    });
+
+    await probeConnection(config, { connector });
+
+    expect(lockDuringProbe).toBeUndefined();
+  });
+
+  it('al terminar (bien o mal) libera el cerrojo', async () => {
+    await probeConnection(config, {
+      connector: fakeConnector({
+        pullProducts: () => Promise.resolve(err('sync/request-failed', { message: 'boom' })),
+      }),
+    });
+
+    const release = tryAcquireSyncLock();
+    expect(release).not.toBeUndefined();
+    release?.();
+  });
+
+  it('si el ciclo en curso no termina a tiempo, devuelve connection/sync-busy sin probar', async () => {
+    const release = tryAcquireSyncLock();
+    if (release === undefined) throw new Error('el cerrojo debería estar libre');
+    const pullProducts = vi.fn(() => Promise.resolve(ok({ items: [] })));
+
+    const result = await probeConnection(config, {
+      connector: fakeConnector({ pullProducts }),
+      lockWaitMs: 40,
+    });
+    release();
+
+    expect(result).toEqual({ ok: false, error: 'connection/sync-busy', meta: undefined });
+    expect(pullProducts).not.toHaveBeenCalled();
   });
 });
 

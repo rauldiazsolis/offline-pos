@@ -59,6 +59,8 @@ export type ErrorMeta = {
   'sync/remote-error': { message: string };
   // sync/apply-connection.ts
   'connection/apply-failed': { message: string };
+  // sync/connection.ts: un ciclo de sync en curso no terminó a tiempo para probar
+  'connection/sync-busy': undefined;
 
   // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
   'account/hold-rejected': { reasonCode: string };

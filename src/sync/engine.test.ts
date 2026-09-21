@@ -8,6 +8,7 @@ import {
   lastSyncedAtSignal,
   localCatalogCountsSignal,
   pendingOutboxCountSignal,
+  setSyncPaused,
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
@@ -475,6 +476,26 @@ describe('runSyncCycle', () => {
 
     expect(syncStatusSignal.value).toBe('offline');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('con la sincronización pausada (/CONFIG abierto) no corre el ciclo ni llama a fetch', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    setSyncPaused(true);
+
+    try {
+      await runSyncCycle();
+    } finally {
+      setSyncPaused(false);
+    }
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(syncStatusSignal.value).not.toBe('syncing');
   });
 
   it('sin config guardada, marca syncConfigured en false', async () => {

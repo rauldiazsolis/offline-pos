@@ -39,6 +39,18 @@ export function setConnectionState(state: ConnectionState): void {
 }
 
 /**
+ * `true` mientras `/CONFIG` está abierto: `runSyncCycle` no arranca ciclos. Con un
+ * conector lento y de a un request por vez (el puente de Sheets), un ciclo del
+ * conector actual en paralelo con la prueba del nuevo se pisa con ella (timeouts,
+ * "Planilla ocupada") y le cambia el estado a la barra mientras se configura.
+ */
+export const syncPausedSignal = signal(false);
+
+export function setSyncPaused(paused: boolean): void {
+  syncPausedSignal.value = paused;
+}
+
+/**
  * Tipo del conector de la config activa (`null` = sin configurar): de acá sale
  * qué comandos extra ofrece la barra (Etapa 2c, #77). Lo fijan `bootstrap` al
  * arrancar y `applyConnection` al cambiar de conexión.

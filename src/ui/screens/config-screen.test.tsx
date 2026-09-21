@@ -169,9 +169,17 @@ describe('ConfigScreen — probar y guardar', () => {
   });
 
   it('muestra "Probando conexión…" mientras espera', async () => {
+    // La prueba toma el cerrojo de sync mientras dura: se termina la espera al final del test
+    // para no dejarlo tomado para el siguiente.
+    let failPending: (reason: Error) => void = () => undefined;
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => new Promise<Response>(() => undefined)),
+      vi.fn(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            failPending = reject;
+          }),
+      ),
     );
     render(<ConfigScreen />);
     chooseRest();
@@ -182,6 +190,11 @@ describe('ConfigScreen — probar y guardar', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Probando conexión…')).not.toBeNull();
+    });
+
+    failPending(new Error('fin del test'));
+    await waitFor(() => {
+      expect(screen.queryByText('Probando conexión…')).toBeNull();
     });
   });
 

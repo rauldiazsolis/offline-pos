@@ -12,7 +12,7 @@ import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { resetAttachedCustomer } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { connectionStateSignal } from '../state/sync.ts';
+import { connectionStateSignal, setSyncPaused } from '../state/sync.ts';
 import {
   configConfirmationSignal,
   configErrorFieldSignal,
@@ -41,6 +41,9 @@ export function enterConfigScreen(): void {
   pendingApply = undefined;
   const saved = loadSyncConfig();
   resetConfigForm(saved.ok ? saved.value : undefined);
+  // Mientras se configura no hay ciclos de sync (ver `syncPausedSignal`); se reanuda
+  // al cancelar o al aplicar la conexión nueva.
+  setSyncPaused(true);
   activeScreenSignal.value = 'config';
 }
 
@@ -49,6 +52,7 @@ export function cancelConfigScreen(): void {
   submitToken += 1;
   pendingApply = undefined;
   resetConfigForm();
+  setSyncPaused(false);
   activeScreenSignal.value = 'sale';
 }
 
@@ -170,6 +174,7 @@ async function applyAndFinish(pending: PendingApply): Promise<void> {
   }
   pendingApply = undefined;
   resetConfigForm();
+  setSyncPaused(false);
   activeScreenSignal.value = 'sale';
   void runSyncCycle();
 }

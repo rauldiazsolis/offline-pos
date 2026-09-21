@@ -62,8 +62,12 @@ export async function callBridge<S extends z.ZodType>(
   try {
     json = await response.json();
   } catch {
-    return err('sync/invalid-payload', {
-      issues: [{ path: '', message: 'La respuesta del puente no es JSON válido' }],
+    // Apps Script devuelve una página HTML (login, cuota superada, error del servicio) en vez del
+    // envelope cuando algo falla antes de llegar a `doPost`: lo más útil es decir qué revisar.
+    return err('sync/remote-error', {
+      message:
+        'el puente no devolvió una respuesta válida. Revisá que la implementación del Web App ' +
+        "esté con acceso 'Cualquier persona' y que no se haya superado la cuota diaria de Apps Script.",
     });
   }
 
