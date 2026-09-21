@@ -54,6 +54,11 @@ export type ErrorMeta = {
   'sync/request-failed': { status?: number; message: string };
   'sync/config-missing': undefined;
   'sync/config-invalid': { issues: { path: string; message: string }[] };
+  // sync/connection.ts (prueba de conexión) y connectors/google-sheets/bridge-client.ts
+  'sync/timeout': { seconds: number };
+  'sync/remote-error': { message: string };
+  // sync/apply-connection.ts
+  'connection/apply-failed': { message: string };
 
   // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
   'account/hold-rejected': { reasonCode: string };

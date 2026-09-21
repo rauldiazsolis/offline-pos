@@ -136,7 +136,7 @@ describe('pullProducts', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sync/request-failed');
+      expect(result.error).toBe('sync/remote-error');
       expect(result.meta).toEqual({ message: 'Planilla ocupada' });
     }
   });
@@ -303,7 +303,7 @@ describe('pushes', () => {
     });
   });
 
-  it('un push propaga el error del puente como sync/request-failed', async () => {
+  it('un push propaga el error del puente como sync/remote-error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeError('Venta no encontrada: sale-1')));
     const connector = createGoogleSheetsConnector(config);
 
@@ -311,7 +311,7 @@ describe('pushes', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sync/request-failed');
+      expect(result.error).toBe('sync/remote-error');
       expect(result.meta).toEqual({ message: 'Venta no encontrada: sale-1' });
     }
   });

@@ -77,7 +77,7 @@ describe('callBridge — response', () => {
     expect(result).toEqual({ ok: true, value: { value: 7 } });
   });
 
-  it('mapea { ok: false, error } del puente a sync/request-failed con el mensaje', async () => {
+  it('mapea { ok: false, error } del puente a sync/remote-error con el mensaje', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(jsonResponse({ ok: false, error: 'Venta no encontrada' })),
@@ -87,7 +87,7 @@ describe('callBridge — response', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sync/request-failed');
+      expect(result.error).toBe('sync/remote-error');
       expect(result.meta).toEqual({ message: 'Venta no encontrada' });
     }
   });

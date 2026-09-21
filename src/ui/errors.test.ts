@@ -19,4 +19,78 @@ describe('describeError', () => {
       '/DEMO_RESET no está disponible con Google Sheets: solo funciona con el backend REST de demo.',
     );
   });
+
+  it('sync/request-failed sin status es un problema de conectividad', () => {
+    const message = describeError({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { message: 'Failed to fetch' },
+    });
+
+    expect(message).toBe(
+      'No se pudo conectar con el servidor (Failed to fetch). ¿Está en línea y corriendo?',
+    );
+  });
+
+  it.each([401, 403])('sync/request-failed con %i: rechazó las credenciales', (status) => {
+    const message = describeError({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { status, message: 'x' },
+    });
+
+    expect(message).toBe(`El servidor rechazó las credenciales (${String(status)}).`);
+  });
+
+  it('sync/request-failed con 404 sugiere revisar la URL', () => {
+    const message = describeError({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { status: 404, message: 'x' },
+    });
+
+    expect(message).toBe('El servidor no encontró el recurso (404). ¿La URL es correcta?');
+  });
+
+  it('sync/request-failed con otro status', () => {
+    const message = describeError({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { status: 500, message: 'x' },
+    });
+
+    expect(message).toBe('El servidor respondió con un error (500).');
+  });
+
+  it('sync/timeout', () => {
+    expect(describeError({ ok: false, error: 'sync/timeout', meta: { seconds: 20 } })).toBe(
+      'El servidor no respondió en 20 segundos.',
+    );
+  });
+
+  it('sync/remote-error', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'sync/remote-error',
+        meta: { message: 'Secreto compartido inválido' },
+      }),
+    ).toBe('El sistema externo respondió con un error: Secreto compartido inválido');
+  });
+
+  it('connection/apply-failed', () => {
+    expect(
+      describeError({ ok: false, error: 'connection/apply-failed', meta: { message: 'boom' } }),
+    ).toBe('No se pudo aplicar la conexión (boom).');
+  });
+
+  it('demo/backend-reset-failed sugiere revisar que el backend esté corriendo', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'demo/backend-reset-failed',
+        meta: { message: 'Failed to fetch' },
+      }),
+    ).toBe('No se pudo reiniciar el minibackend de demo (Failed to fetch). ¿Está corriendo?');
+  });
 });
