@@ -7,7 +7,7 @@ import {
   type OutboxEvent,
 } from '../domain/outbox.ts';
 import type { Result } from '../domain/result.ts';
-import { createRestFetchConnector } from '../connectors/rest-fetch-connector.ts';
+import { createRestFetchConnector } from '../connectors/rest/rest-fetch-connector.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';

@@ -1,4 +1,4 @@
-import { createRestFetchConnector } from '../connectors/rest-fetch-connector.ts';
+import { createRestFetchConnector } from '../connectors/rest/rest-fetch-connector.ts';
 import type { Result } from '../domain/result.ts';
 import type { AccountHoldResult } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
