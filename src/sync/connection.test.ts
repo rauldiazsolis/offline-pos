@@ -1,0 +1,224 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Product } from '../domain/product.ts';
+import { err, ok } from '../domain/result.ts';
+import type { LocalDataSummary } from '../storage/local-data.ts';
+import { fakeConnector } from '../test/fake-connector.ts';
+import type { SyncConfig } from './config.ts';
+import type { Connector } from './connector.ts';
+import { originKey, planConnectionChange, probeConnection, withTimeout } from './connection.ts';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const config: SyncConfig = { type: 'rest', baseUrl: 'https://api.example.com' };
+
+const product: Product = {
+  id: 'p1',
+  sku: 'S1',
+  barcodes: [],
+  name: 'Arroz',
+  price: 100,
+  taxRate: 0.21,
+  category: 'x',
+  tracksStock: false,
+};
+
+describe('withTimeout', () => {
+  it('devuelve el resultado si llega a tiempo', async () => {
+    const result = await withTimeout(Promise.resolve(ok(42)), 1000);
+
+    expect(result).toEqual({ ok: true, value: 42 });
+  });
+
+  it('devuelve sync/timeout si vence', async () => {
+    const never = new Promise<never>(() => undefined);
+
+    const result = await withTimeout(never, 30);
+
+    expect(result).toEqual({ ok: false, error: 'sync/timeout', meta: { seconds: 1 } });
+  });
+});
+
+describe('probeConnection', () => {
+  it('trae productos, stock y clientes en memoria, con los cursores', async () => {
+    const connector = fakeConnector({
+      pullProducts: () => Promise.resolve(ok({ items: [product], nextCursor: 'cur-p' })),
+      pullStock: () =>
+        Promise.resolve(
+          ok([{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }]),
+        ),
+      pullCustomers: () =>
+        Promise.resolve(ok({ items: [{ id: 'c1', name: 'Ana' }], nextCursor: 'cur-c' })),
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        products: [product],
+        stock: [{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }],
+        customers: [{ id: 'c1', name: 'Ana' }],
+        cursors: { products: 'cur-p', customers: 'cur-c' },
+      },
+    });
+  });
+
+  it('sin cursores en la respuesta, no los inventa', async () => {
+    const result = await probeConnection(config, { connector: fakeConnector() });
+
+    expect(result).toEqual({
+      ok: true,
+      value: { products: [], stock: [], customers: [], cursors: {} },
+    });
+  });
+
+  it('todo o nada: si falla el pull de productos, devuelve ese error y no sigue', async () => {
+    const pullStock = vi.fn<Connector['pullStock']>().mockResolvedValue(ok([]));
+    const failure = err('sync/request-failed', { status: 401, message: 'x' });
+    const connector = fakeConnector({
+      pullProducts: () => Promise.resolve(failure),
+      pullStock,
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result).toEqual(failure);
+    expect(pullStock).not.toHaveBeenCalled();
+  });
+
+  it('todo o nada: si falla el pull de clientes, la prueba falla aunque productos hayan andado', async () => {
+    const connector = fakeConnector({
+      pullProducts: () => Promise.resolve(ok({ items: [product] })),
+      pullCustomers: () => Promise.resolve(err('sync/request-failed', { message: 'down' })),
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('un backend colgado devuelve sync/timeout en vez de esperar para siempre', async () => {
+    const connector = fakeConnector({
+      pullProducts: () => new Promise<never>(() => undefined),
+    });
+
+    const result = await probeConnection(config, { connector, timeoutMs: 30 });
+
+    expect(result).toMatchObject({ ok: false, error: 'sync/timeout' });
+  });
+
+  it('sin conector inyectado, arma el real desde la config (REST: GET a {baseUrl}/products)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      const path = new URL(url).pathname;
+      const body = path === '/stock' ? [] : { items: [] };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve(body),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await probeConnection(config);
+
+    expect(result.ok).toBe(true);
+    const paths = fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
+    expect(paths).toEqual(['/products', '/stock', '/customers']);
+  });
+});
+
+describe('originKey', () => {
+  it('normaliza: sin barra final y con el host en minúsculas', () => {
+    expect(originKey({ type: 'rest', baseUrl: 'https://Api.Example.com/' })).toBe(
+      'https://api.example.com',
+    );
+    expect(originKey({ type: 'rest', baseUrl: 'https://api.example.com/v1/' })).toBe(
+      'https://api.example.com/v1',
+    );
+  });
+
+  it('usa webAppUrl para Google Sheets', () => {
+    expect(
+      originKey({
+        type: 'google-sheets',
+        webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+      }),
+    ).toBe('https://script.google.com/macros/s/abc/exec');
+  });
+
+  it('la API key, el secreto y el locale no forman parte del origen', () => {
+    expect(
+      originKey({
+        type: 'rest',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'a',
+        locale: 'es-AR',
+      }),
+    ).toBe(originKey({ type: 'rest', baseUrl: 'https://api.example.com', apiKey: 'b' }));
+  });
+
+  it('dos backends distintos tienen orígenes distintos', () => {
+    expect(originKey({ type: 'rest', baseUrl: 'https://a.example.com' })).not.toBe(
+      originKey({ type: 'rest', baseUrl: 'https://b.example.com' }),
+    );
+  });
+});
+
+describe('planConnectionChange', () => {
+  const empty: LocalDataSummary = {
+    products: 0,
+    customers: 0,
+    sales: 0,
+    cashSessions: 0,
+    pendingOutbox: 0,
+    pendingSales: 0,
+    draftCartLines: 0,
+  };
+  const withSales: LocalDataSummary = { ...empty, products: 10, sales: 3 };
+  const other: SyncConfig = { type: 'rest', baseUrl: 'https://otro.example.com' };
+
+  it('mismo origen (aunque cambie la API key): no borra ni pregunta, tenga o no datos', () => {
+    const plan = planConnectionChange({
+      current: config,
+      candidate: { ...config, apiKey: 'nueva' },
+      localData: withSales,
+    });
+
+    expect(plan).toEqual({ wipe: false, needsConfirmation: false });
+  });
+
+  it('origen distinto con datos del usuario: borra y pide confirmación', () => {
+    const plan = planConnectionChange({ current: config, candidate: other, localData: withSales });
+
+    expect(plan).toEqual({ wipe: true, needsConfirmation: true });
+  });
+
+  it('origen distinto con solo catálogo y clientes: borra sin preguntar', () => {
+    const plan = planConnectionChange({
+      current: config,
+      candidate: other,
+      localData: { ...empty, products: 50, customers: 20 },
+    });
+
+    expect(plan).toEqual({ wipe: true, needsConfirmation: false });
+  });
+
+  it('sin config actual pero con datos del usuario: origen desconocido, pide confirmación', () => {
+    const plan = planConnectionChange({
+      current: undefined,
+      candidate: config,
+      localData: withSales,
+    });
+
+    expect(plan).toEqual({ wipe: true, needsConfirmation: true });
+  });
+
+  it('primer arranque (sin config ni datos): borra (no-op) y no pregunta', () => {
+    const plan = planConnectionChange({ current: undefined, candidate: config, localData: empty });
+
+    expect(plan).toEqual({ wipe: true, needsConfirmation: false });
+  });
+});
