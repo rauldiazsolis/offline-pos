@@ -56,8 +56,18 @@ describe('googleSheetsConfigSchema', () => {
 describe('googleSheetsConfigFields', () => {
   it('lista webAppUrl (obligatorio) y sharedSecret (opcional), en ese orden', () => {
     expect(googleSheetsConfigFields).toEqual([
-      { key: 'webAppUrl', label: 'URL del Web App de Google Apps Script', optional: false },
-      { key: 'sharedSecret', label: 'Secreto compartido', optional: true },
+      {
+        key: 'webAppUrl',
+        label: 'URL del Web App de Google Apps Script',
+        optional: false,
+        placeholder: 'https://script.google.com/macros/s/…/exec',
+      },
+      {
+        key: 'sharedSecret',
+        label: 'Secreto compartido',
+        optional: true,
+        placeholder: 'Valor de SHARED_SECRET, si lo configuraste',
+      },
     ]);
   });
 });

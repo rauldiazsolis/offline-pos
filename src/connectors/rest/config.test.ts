@@ -37,8 +37,18 @@ describe('restConfigSchema', () => {
 describe('restConfigFields', () => {
   it('lista baseUrl (obligatorio) y apiKey (opcional), en ese orden', () => {
     expect(restConfigFields).toEqual([
-      { key: 'baseUrl', label: 'URL del sistema externo', optional: false },
-      { key: 'apiKey', label: 'API key', optional: true },
+      {
+        key: 'baseUrl',
+        label: 'URL del sistema externo',
+        optional: false,
+        placeholder: 'https://api.miempresa.com',
+      },
+      {
+        key: 'apiKey',
+        label: 'API key',
+        optional: true,
+        placeholder: 'Token de acceso, si el backend lo exige',
+      },
     ]);
   });
 });

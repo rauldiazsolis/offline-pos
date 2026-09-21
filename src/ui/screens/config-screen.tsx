@@ -70,6 +70,7 @@ const LOCALE_FIELD: ConfigField = {
   key: 'locale',
   label: 'Locale (ej. es-AR — en blanco usa el del navegador)',
   optional: true,
+  placeholder: 'es-AR',
 };
 
 function fieldLabel(field: ConfigField): string {

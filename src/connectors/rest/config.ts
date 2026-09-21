@@ -21,6 +21,16 @@ export type RestConfig = z.infer<typeof restConfigSchema>;
 export type RestConnectionConfig = Omit<RestConfig, 'type'>;
 
 export const restConfigFields: ConfigField<keyof RestConnectionConfig>[] = [
-  { key: 'baseUrl', label: 'URL del sistema externo', optional: false },
-  { key: 'apiKey', label: 'API key', optional: true },
+  {
+    key: 'baseUrl',
+    label: 'URL del sistema externo',
+    optional: false,
+    placeholder: 'https://api.miempresa.com',
+  },
+  {
+    key: 'apiKey',
+    label: 'API key',
+    optional: true,
+    placeholder: 'Token de acceso, si el backend lo exige',
+  },
 ];
