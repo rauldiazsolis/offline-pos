@@ -1,20 +1,35 @@
 import { z } from 'zod';
 import { err, ok, type Result } from '../domain/result.ts';
 import { toZodIssues } from '../domain/zod-issues.ts';
+import { connectorConfigSchema } from './connector-registry.ts';
 
 /**
- * Configuración del conector, editada por el humano vía `/CONFIG` (ver
- * `ui/screens/config-screen.tsx`). Separada de `cursor.ts` a propósito:
- * esto es lo único que la pantalla de config toca.
+ * Antes del registro de conectores (Etapa 2, #68) la config guardada no tenía
+ * `type` — solo existía el conector REST. Un objeto sin `type` se lee como
+ * `type: 'rest'`; la próxima vez que se guarde, queda con `type`. Recibe
+ * `unknown` porque es lo que Zod le pasa a un `preprocess`: el resultado se
+ * valida de inmediato contra `connectorConfigSchema`.
  */
-export const syncConfigSchema = z.object({
-  baseUrl: z.url(),
-  apiKey: z.string().optional(),
-  // §7 del doc de diseño: locale configurable por terminal, usado por
-  // `ui/format.ts` para `Intl.NumberFormat`. Default `navigator.language`
-  // si no se configura.
-  locale: z.string().optional(),
-});
+function withLegacyType(value: unknown): unknown {
+  if (typeof value === 'object' && value !== null && !('type' in value)) {
+    return { ...value, type: 'rest' };
+  }
+  return value;
+}
+
+/**
+ * Configuración de la terminal, editada por el humano vía `/CONFIG` (ver
+ * `ui/screens/config-screen.tsx`): los campos del conector elegido
+ * (`connectorConfigSchema`, discriminado por `type`) más `locale`, que queda
+ * afuera de la unión porque es config de terminal transversal (§7 del doc de
+ * diseño, Fase 4: usado por `ui/format.ts` para `Intl.NumberFormat`, default
+ * `navigator.language` si no se configura), no de un backend. Separada de
+ * `cursor.ts` a propósito: esto es lo único que la pantalla de config toca.
+ */
+export const syncConfigSchema = z.preprocess(
+  withLegacyType,
+  connectorConfigSchema.and(z.object({ locale: z.string().optional() })),
+);
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
 

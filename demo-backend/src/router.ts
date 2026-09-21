@@ -50,7 +50,7 @@ function hasValidBearerToken(req: IncomingMessage): boolean {
  * Un demo público sin cookies/credenciales no necesita restringir el
  * origen — `*` alcanza. `Idempotency-Key` se suma a los headers permitidos
  * porque todo `POST` de eventos de negocio lo manda (ver
- * `connectors/rest-fetch-connector.ts::buildHeaders`).
+ * `connectors/rest/rest-fetch-connector.ts::buildHeaders`).
  */
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',

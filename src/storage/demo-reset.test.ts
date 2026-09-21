@@ -72,7 +72,7 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: llama primero a POST /_demo/reset del backend antes de borrar nada local', async () => {
-    saveSyncConfig({ baseUrl: 'http://localhost:4000' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000' });
     const fetchMock = fetchRouter();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -84,7 +84,7 @@ describe('demoReset', () => {
   });
 
   it('si POST /_demo/reset falla, no borra nada local y devuelve el error', async () => {
-    saveSyncConfig({ baseUrl: 'http://localhost:4000' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000' });
     const created = await createCustomerLocally('Cliente de prueba');
     if (!created.ok) throw new Error('setup falló');
     vi.stubGlobal(
@@ -99,7 +99,7 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: dispara un resync después de borrar, repoblando desde el backend', async () => {
-    saveSyncConfig({ baseUrl: 'http://localhost:4000' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000' });
     vi.stubGlobal(
       'fetch',
       fetchRouter({
@@ -138,14 +138,35 @@ describe('demoReset', () => {
   });
 
   it('no toca la configuración de /CONFIG (URL, API key, locale)', async () => {
-    saveSyncConfig({ baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR' });
     vi.stubGlobal('fetch', fetchRouter());
 
     await demoReset();
 
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR' },
+      value: { type: 'rest', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR' },
     });
+  });
+
+  it('con un conector que no es REST: devuelve demo/unavailable-for-connector sin tocar nada ni llamar al backend', async () => {
+    saveSyncConfig({
+      type: 'google-sheets',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+    });
+    const created = await createCustomerLocally('Cliente de prueba');
+    if (!created.ok) throw new Error('setup falló');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await demoReset();
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'demo/unavailable-for-connector',
+      meta: { connectorLabel: 'Google Sheets' },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(db.customers.get(created.value.id)).resolves.not.toBeUndefined();
   });
 });

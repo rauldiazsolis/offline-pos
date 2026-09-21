@@ -91,6 +91,8 @@ export function describeError(failure: Failure): string {
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':
       return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}).`;
+    case 'demo/unavailable-for-connector':
+      return `/DEMO_RESET no está disponible con ${failure.meta.connectorLabel}: solo funciona con el backend REST de demo.`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

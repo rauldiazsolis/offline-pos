@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { CashSession } from '../domain/cash-session.ts';
-import type { Customer } from '../domain/customer.ts';
-import { productSchema, type Product } from '../domain/product.ts';
-import { err, ok, type Result } from '../domain/result.ts';
-import type { Sale } from '../domain/sale.ts';
-import { stockItemSchema, type StockItem, type StockMovement } from '../domain/stock.ts';
-import { toZodIssues } from '../domain/zod-issues.ts';
+import type { CashSession } from '../../domain/cash-session.ts';
+import type { Customer } from '../../domain/customer.ts';
+import { productSchema, type Product } from '../../domain/product.ts';
+import { err, ok, type Result } from '../../domain/result.ts';
+import type { Sale } from '../../domain/sale.ts';
+import { stockItemSchema, type StockItem, type StockMovement } from '../../domain/stock.ts';
+import { toZodIssues } from '../../domain/zod-issues.ts';
 import {
   accountHoldResultSchema,
   connectorCustomerSchema,
@@ -13,8 +13,8 @@ import {
   type Connector,
   type ConnectorCustomer,
   type ConnectorPullResult,
-} from '../sync/connector.ts';
-import type { SyncConfig } from '../sync/config.ts';
+} from '../../sync/connector.ts';
+import type { RestConnectionConfig } from './config.ts';
 
 const productsPullResponseSchema = z.object({
   items: z.array(productSchema),
@@ -26,7 +26,7 @@ const customersPullResponseSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
-function buildHeaders(config: SyncConfig, idempotencyKey?: string): HeadersInit {
+function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): HeadersInit {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (config.apiKey !== undefined) {
     headers.Authorization = `Bearer ${config.apiKey}`;
@@ -66,7 +66,7 @@ async function fetchJson(url: string, headers: HeadersInit): Promise<Result<unkn
  * validado" es para datos que entran, no para lo que nosotros mandamos. La
  * *respuesta* de un pull sí es externa → se valida.
  */
-export function createRestFetchConnector(config: SyncConfig): Connector {
+export function createRestFetchConnector(config: RestConnectionConfig): Connector {
   async function postEvent(
     path: string,
     idempotencyKey: string,

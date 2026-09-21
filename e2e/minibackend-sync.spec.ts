@@ -25,7 +25,6 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
 
   const urlInput = page.getByLabel(/URL del sistema externo/);
   await expect(urlInput).toHaveValue(BACKEND_URL);
-  await urlInput.press('Enter');
 
   // El minibackend de demo implementa el contrato al pie de la letra —
   // `security: bearerAuth` es global en `docs/connector-api.openapi.yaml`,
@@ -39,9 +38,10 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   // igual muestra "Sincronizado" sin que el catálogo haya llegado.
   const apiKeyInput = page.getByLabel(/API key/);
   await apiKeyInput.fill('demo-api-key');
-  await apiKeyInput.press('Enter');
 
-  await page.getByLabel(/Locale/).press('Enter');
+  // Ctrl+Enter guarda todos los campos juntos (el formulario reemplazó al
+  // wizard de 3 pasos; Enter solo ya no avanza nada).
+  await apiKeyInput.press('Control+Enter');
   await expect(commandBar).toBeVisible();
 
   await commandBar.fill('/SINCRONIZAR');

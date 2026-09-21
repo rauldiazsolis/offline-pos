@@ -84,7 +84,7 @@ describe('parseCommandBar', () => {
     });
 
     it('con locale es-AR, parsea coma como separador decimal', () => {
-      saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+      saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
 
       expect(live('envío$1500,50')).toEqual({
         kind: 'freeform-line',

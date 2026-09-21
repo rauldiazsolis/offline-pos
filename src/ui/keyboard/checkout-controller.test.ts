@@ -143,7 +143,7 @@ describe('cuenta corriente', () => {
 
   it('con red y hold aprobado, cierra la venta a cuenta corriente', async () => {
     attachedCustomerSignal.value = customer;
-    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
     setOnline(true);
     vi.stubGlobal(
       'fetch',
@@ -166,7 +166,7 @@ describe('cuenta corriente', () => {
 
   it('con red y hold rechazado, muestra el error y no cierra la venta', async () => {
     attachedCustomerSignal.value = customer;
-    saveSyncConfig({ baseUrl: 'https://api.example.com' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
     setOnline(true);
     vi.stubGlobal(
       'fetch',

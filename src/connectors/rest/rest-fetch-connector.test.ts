@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Customer } from '../domain/customer.ts';
-import type { Product } from '../domain/product.ts';
-import type { Sale } from '../domain/sale.ts';
+import type { Customer } from '../../domain/customer.ts';
+import type { Product } from '../../domain/product.ts';
+import type { Sale } from '../../domain/sale.ts';
 import { createRestFetchConnector } from './rest-fetch-connector.ts';
 
 const config = { baseUrl: 'https://api.example.com', apiKey: 'secret-key' };

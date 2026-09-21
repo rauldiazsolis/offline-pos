@@ -57,7 +57,7 @@ export const eventRoutes: RouteDef[] = [
     pattern: /^\/sales\/(?<saleId>[^/]+)\/void$/,
     // `saleId` viaja en la URL, pero `writeEventRoute` no pasa `ctx.params`
     // a `insert` — se toma del body en su lugar (el POS lo manda igual, ver
-    // `pushSaleVoid` en connectors/rest-fetch-connector.ts del POS).
+    // `pushSaleVoid` en connectors/rest/rest-fetch-connector.ts del POS).
     insert: (db, id, body, now) => {
       const saleId = (body as { saleId: string }).saleId;
       db

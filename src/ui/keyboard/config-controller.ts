@@ -1,82 +1,98 @@
-import { saveSyncConfig, syncConfigSchema } from '../../sync/config.ts';
+import { loadSyncConfig, saveSyncConfig, syncConfigSchema } from '../../sync/config.ts';
+import { connectorFields, type ConnectorType } from '../../sync/connector-registry.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { setSyncConfigured } from '../state/sync.ts';
 import {
-  configApiKeySignal,
-  configBaseUrlSignal,
-  configBufferSignal,
+  configErrorFieldSignal,
   configErrorSignal,
-  configStepSignal,
-  DEFAULT_API_KEY,
-  resetConfigFlow,
+  configFieldValuesSignal,
+  configLocaleSignal,
+  configTypeSignal,
+  resetConfigForm,
 } from '../state/sync-config.ts';
 
-/** `/CONFIG`: entra al flujo de tres pasos (baseUrl → apiKey opcional → locale opcional). */
+/** `/CONFIG`: abre el formulario, precargado con la config guardada (o los defaults del demo si no hay). */
 export function enterConfigScreen(): void {
-  resetConfigFlow();
+  const saved = loadSyncConfig();
+  resetConfigForm(saved.ok ? saved.value : undefined);
   activeScreenSignal.value = 'config';
 }
 
-/** Esc en cualquier paso: sale sin guardar nada. */
+/** Esc: sale sin guardar nada. */
 export function cancelConfigScreen(): void {
-  resetConfigFlow();
+  resetConfigForm();
   activeScreenSignal.value = 'sale';
 }
 
-function submitBaseUrl(): void {
-  const buffer = configBufferSignal.value.trim();
-  if (buffer === '') {
-    configErrorSignal.value = 'La URL no puede estar vacía.';
-    return;
+function clearConfigError(): void {
+  configErrorSignal.value = null;
+  configErrorFieldSignal.value = null;
+}
+
+/** Cambia el conector elegido — los campos que se muestran cambian en el acto, sin perder lo tipeado en el otro. */
+export function setConfigType(type: ConnectorType): void {
+  configTypeSignal.value = type;
+  clearConfigError();
+}
+
+/** Edita un campo del conector activo. */
+export function setConfigField(key: string, value: string): void {
+  const type = configTypeSignal.value;
+  const all = configFieldValuesSignal.value;
+  configFieldValuesSignal.value = { ...all, [type]: { ...all[type], [key]: value } };
+  clearConfigError();
+}
+
+export function setConfigLocale(value: string): void {
+  configLocaleSignal.value = value;
+  clearConfigError();
+}
+
+/**
+ * Ctrl+Enter: valida todo junto y guarda. La validación ocurre solo acá,
+ * nunca mientras se tipea (mismo criterio que Cobro, #55). Un valor vacío se
+ * omite de la config guardada (un opcional en blanco no se guarda).
+ */
+export function submitConfig(): void {
+  const type = configTypeSignal.value;
+  const fields = connectorFields(type);
+  const raw = configFieldValuesSignal.value[type];
+
+  const candidate: Record<string, string> = { type };
+  for (const field of fields) {
+    const value = (raw[field.key] ?? '').trim();
+    if (value !== '') {
+      candidate[field.key] = value;
+    }
+  }
+  const locale = configLocaleSignal.value.trim();
+  if (locale !== '') {
+    candidate.locale = locale;
   }
 
-  const parsed = syncConfigSchema.shape.baseUrl.safeParse(buffer);
+  const parsed = syncConfigSchema.safeParse(candidate);
   if (!parsed.success) {
-    configErrorSignal.value = 'Ingresá una URL válida (ej. https://api.miempresa.com).';
+    const offendingKey = parsed.error.issues[0]?.path[0];
+    const field = fields.find((candidateField) => candidateField.key === offendingKey);
+    if (field === undefined) {
+      configErrorSignal.value = 'La configuración no es válida.';
+      return;
+    }
+    const isEmpty = (raw[field.key] ?? '').trim() === '';
+    configErrorFieldSignal.value = field.key;
+    configErrorSignal.value = isEmpty
+      ? `Completá «${field.label}».`
+      : `«${field.label}» no es válido.`;
     return;
   }
 
-  configBaseUrlSignal.value = parsed.data;
-  configBufferSignal.value = DEFAULT_API_KEY;
-  configErrorSignal.value = null;
-  configStepSignal.value = 'apiKey';
-}
-
-function submitApiKey(): void {
-  configApiKeySignal.value = configBufferSignal.value.trim();
-  configBufferSignal.value = '';
-  configErrorSignal.value = null;
-  configStepSignal.value = 'locale';
-}
-
-function submitLocale(): void {
-  const locale = configBufferSignal.value.trim();
-  const config = {
-    baseUrl: configBaseUrlSignal.value,
-    ...(configApiKeySignal.value !== '' ? { apiKey: configApiKeySignal.value } : {}),
-    ...(locale !== '' ? { locale } : {}),
-  };
-
-  const saveResult = saveSyncConfig(config);
+  const saveResult = saveSyncConfig(parsed.data);
   if (!saveResult.ok) {
     configErrorSignal.value = 'No se pudo guardar la configuración.';
     return;
   }
 
   setSyncConfigured(true);
-  resetConfigFlow();
+  resetConfigForm();
   activeScreenSignal.value = 'sale';
-}
-
-/** Enter en la pantalla de config: confirma el paso actual y avanza (o guarda, en el último). */
-export function submitConfigStep(): void {
-  if (configStepSignal.value === 'baseUrl') {
-    submitBaseUrl();
-    return;
-  }
-  if (configStepSignal.value === 'apiKey') {
-    submitApiKey();
-    return;
-  }
-  submitLocale();
 }

@@ -41,8 +41,8 @@ algo que el propio motor ya resuelve no se justificaba, dado que se prefiere min
 src/
   domain/          # entidades y lógica de negocio pura (Sale, Product, etc.)
   storage/         # Dexie schema, outbox, seed de catálogo, repositorios
-  sync/            # motor de sincronización, adaptador del Connector API
-  connectors/      # implementaciones de referencia (ej. REST genérico)
+  sync/            # motor de sincronización, config de la terminal, registro de conectores (connector-registry.ts)
+  connectors/      # un subdirectorio por conector (rest/, google-sheets/): su config, sus campos para /CONFIG y su factory
   ui/
     screens/       # Venta, Cobro, Caja, Historial
     components/    # inputs, tablas, paleta de comandos
@@ -194,11 +194,22 @@ no son vocabulario de dominio puro (`domain/customer.ts::splitConnectorCustomer`
 que sí traduce esa forma cruda a los tipos del dominio). El motor de sync (`sync/engine.ts`) consume
 casi todo el puerto; la única excepción es `requestAccountHold`, invocada directo desde
 `ui/keyboard/checkout-controller.ts` vía `sync/account-hold.ts` (ver "Patrón outbox" más arriba).
-`connectors/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`. Todo `POST`
-de eventos de negocio es idempotente vía `Idempotency-Key`. Autenticación (Bearer)
-se configura por terminal vía `/CONFIG` (runtime, `localStorage` — `sync/config.ts`), desacoplada
-del contrato. Un integrador nuevo implementa el contrato — nunca se toca código del POS para sumar
-un backend (RNF-06).
+`connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
+`connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
+de un puente Apps Script (`bridge.gs`, ver su README). Cada conector es dueño de su schema de config
+y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
+arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
+implementación (`sync/engine.ts::runSyncCycle` y `sync/account-hold.ts::requestAccountHoldNow` ya no
+instancian ninguno directo). "Plugin" acá significa un registro cerrado de conectores compilados, no
+carga de código de terceros en runtime (descartada: ejecución de código arbitrario en una app que
+maneja ventas y pagos) — un conector nuevo es un PR al repo. Todo `POST` de eventos de negocio es
+idempotente vía `Idempotency-Key`. La conexión se configura por terminal vía `/CONFIG` (runtime,
+`localStorage` — `sync/config.ts`), desacoplada del contrato: lo guardado es `{ type, …campos del
+conector, locale? }`, y una config guardada sin `type` (anterior al registro) se lee como
+`type: 'rest'` (`z.preprocess` en `syncConfigSchema`), así ninguna terminal ya configurada pierde su
+conexión al actualizar. Un integrador nuevo implementa el contrato — un backend que ya habla el
+contrato REST no requiere tocar código del POS (RNF-06); un backend con otro formato (como la planilla
+de Sheets) entra como un conector nuevo del registro.
 
 ## UX keyboard-first
 
@@ -344,7 +355,12 @@ middle-click-drag, diseñar el fade).
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (Fase 6 — abre o cierra el
 turno de caja, ver más abajo), `/ANULAR`, `/DESCARTAR` (Ciclo 8 — vacía la venta en curso, ver más
 abajo), `/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
-variables de entorno ni pantalla de config de terminal más amplia todavía), `/SINCRONIZAR` (fuerza un
+variables de entorno ni pantalla de config de terminal más amplia todavía; diálogo modal con el mismo
+chrome que Cobro: primer campo el selector de tipo de conector, todos los campos del tipo elegido
+visibles a la vez más `locale` al final, Tab/Shift+Tab navega, Ctrl+Enter valida y guarda todo junto,
+Esc cancela y Enter solo no hace nada; la validación es solo al confirmar y un error deja el campo
+afectado enfocado y seleccionado; abre precargado con la config guardada, o con los defaults del demo
+si no hay ninguna — Etapa 2 del epic #66, cierra #56), `/SINCRONIZAR` (fuerza un
 ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de
 estado) y `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
 abajo). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de
@@ -394,6 +410,14 @@ toca la configuración de `/CONFIG` (URL del backend, API key, locale) — decis
 usuario: es la conexión de esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el
 backend en cada reset.
 
+Con un conector que no es REST (hoy Google Sheets) `/DEMO_RESET` está **bloqueado**: el
+`POST /_demo/reset` solo existe en el minibackend REST de demo y una config de Sheets ni siquiera
+tiene `baseUrl`. `storage/demo-reset.ts::checkDemoResetAvailable` lo verifica y
+`enterDemoResetScreen` muestra el aviso ("no está disponible con Google Sheets…", ErrorCode
+`demo/unavailable-for-connector`) apenas se abre la pantalla; `demoReset()` lo repite de fondo antes
+de tocar nada, mismo criterio que el gate de turno de caja de `/COBRAR`. La planilla nunca se
+resetea desde el POS.
+
 La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decisión tomada con el
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
 carrito, así que con el input abajo la línea recién agregada aparece pegada a donde se está
@@ -409,7 +433,7 @@ offline. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine` direc
 
 Otros principios no negociables: todo alcanzable en ≤2 pasos sin mouse (RNF-04), foco siempre
 visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`
-(Fase 4 — tercer paso opcional de `/CONFIG`, `ui/format.ts` lo lee en cada llamada, default
+(Fase 4 — campo opcional de `/CONFIG`, `ui/format.ts` lo lee en cada llamada, default
 `navigator.language`). "Login de terminal 100% teclado" (PIN + Enter) es un principio del doc de
 diseño que **todavía no está implementado ni asignado a ninguna fase** — no hay modelo de
 usuario/terminal en el dominio (§4). Se decidió dejarlo fuera del alcance de Fase 4 a propósito
@@ -900,6 +924,19 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   buscador, y el `mousedown` sobre cualquier cosa no enfocable se cancela (si no, el foco cae a
   `<body>` y los `keydown` dejan de llegar al contenedor). Las demás pantallas siguen sin mouse a
   propósito.
+
+- Conectores plugin (epic #66, sesión de brainstorming 2026-09-17): Etapa 1 (#67) — conector de
+  Google Sheets aislado (`connectors/google-sheets/`) con un puente Apps Script; Etapa 2 (#68) —
+  registro cerrado de conectores (`sync/connector-registry.ts`), `/CONFIG` como modal con selector de
+  tipo (absorbe #56), config guardada sin `type` leída como REST y `/DEMO_RESET` bloqueado con
+  Sheets. Al contrastar el spec con el código aparecieron tres puntos que el spec no cubría (la
+  migración de la config vieja, `/DEMO_RESET` sin `baseUrl`, y que `/CONFIG` nunca precargaba lo
+  guardado) — se resolvieron con el usuario, ver el plan en
+  `docs/superpowers/plans/2026-09-21-registro-de-conectores-etapa-2.md`. Un bug real, encontrado por
+  el e2e y no por los tests de jsdom: la selección del campo con error se aplicaba con
+  `useSignalEffect` (diferido), dejando una ventana en la que tipear agregaba texto en vez de
+  reemplazarlo — se pasó a `useLayoutEffect`. Pendiente: Etapa 3 (#69, crédito ilimitado explícito
+  en cuenta corriente).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

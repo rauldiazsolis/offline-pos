@@ -1,9 +1,9 @@
 import { z } from 'zod';
+import type { ConfigField } from '../config-field.ts';
 
 /**
- * Config del conector de Google Sheets. `type` es el discriminador que va a
- * usar el registro de conectores (Etapa 2, `sync/connector-registry.ts`);
- * hoy este schema es local a la carpeta y no está conectado a `SyncConfig`.
+ * Config del conector de Google Sheets. `type` es el discriminador del
+ * registro de conectores (`sync/connector-registry.ts`, Etapa 2).
  *
  * `webAppUrl` es la URL del Apps Script desplegado como Web App ("Execute
  * as: Me", "Who has access: Anyone") — no requiere login de Google.
@@ -18,3 +18,8 @@ export const googleSheetsConfigSchema = z.object({
 });
 
 export type GoogleSheetsConfig = z.infer<typeof googleSheetsConfigSchema>;
+
+export const googleSheetsConfigFields: ConfigField<Exclude<keyof GoogleSheetsConfig, 'type'>>[] = [
+  { key: 'webAppUrl', label: 'URL del Web App de Google Apps Script', optional: false },
+  { key: 'sharedSecret', label: 'Secreto compartido', optional: true },
+];

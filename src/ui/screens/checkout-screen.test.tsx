@@ -115,7 +115,7 @@ describe('CheckoutScreen', () => {
   });
 
   it('con locale es-AR, la tecla "." se reinterpreta como coma decimal', () => {
-    saveSyncConfig({ baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
     render(<CheckoutScreen />);
     const input = getInput('Efectivo');
 

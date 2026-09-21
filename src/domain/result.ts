@@ -49,7 +49,7 @@ export type ErrorMeta = {
   'sale/persist-failed': { message: string };
   'sale/not-found': { saleId: string };
 
-  // sync/config.ts, sync/engine.ts, connectors/rest-fetch-connector.ts
+  // sync/config.ts, sync/engine.ts, connectors/rest/rest-fetch-connector.ts
   'sync/invalid-payload': { issues: { path: string; message: string }[] };
   'sync/request-failed': { status?: number; message: string };
   'sync/config-missing': undefined;
@@ -78,6 +78,7 @@ export type ErrorMeta = {
   // storage/demo-reset.ts
   'demo/reset-failed': { message: string };
   'demo/backend-reset-failed': { message: string };
+  'demo/unavailable-for-connector': { connectorLabel: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;
