@@ -22,6 +22,23 @@ describe('saveSyncConfig / loadSyncConfig', () => {
     });
   });
 
+  it('guarda y relee verifiedAt', () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(loadSyncConfig()).toEqual({
+      ok: true,
+      value: {
+        type: 'rest',
+        baseUrl: 'https://api.example.com',
+        verifiedAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+  });
+
   it('guarda y relee locale', () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'en-US' });
 

@@ -1,4 +1,6 @@
 import { signal } from '@preact/signals';
+import type { Failure } from '../../domain/result.ts';
+import type { ConnectionState } from '../../sync/connection-state.ts';
 
 /**
  * Estado de sincronización para la barra de estado (ver §7 del doc de
@@ -26,4 +28,30 @@ export function setLastSyncedAt(isoDate: string): void {
 
 export function setSyncConfigured(configured: boolean): void {
   syncConfiguredSignal.value = configured;
+}
+
+/** Estado de la conexión (Etapa 2b): `App` bloquea todo salvo `/CONFIG` mientras no sea `active`. */
+export const connectionStateSignal = signal<ConnectionState>('unconfigured');
+
+export function setConnectionState(state: ConnectionState): void {
+  connectionStateSignal.value = state;
+}
+
+/**
+ * Motivo del último fallo de sync (un pull que falló), tal cual — la barra de
+ * estado lo traduce con `describeError`: `sync/` no importa `ui/errors.ts`.
+ */
+export const lastSyncFailureSignal = signal<Failure | null>(null);
+
+export function setLastSyncFailure(failure: Failure | null): void {
+  lastSyncFailureSignal.value = failure;
+}
+
+/** Lo que hay en la base local (contado, no lo que trajo el último pull — un delta trae solo cambios). */
+export type LocalCatalogCounts = { products: number; customers: number };
+
+export const localCatalogCountsSignal = signal<LocalCatalogCounts | null>(null);
+
+export function setLocalCatalogCounts(counts: LocalCatalogCounts | null): void {
+  localCatalogCountsSignal.value = counts;
 }
