@@ -397,3 +397,91 @@ describe('escritura por encabezado (Etapa 2d)', () => {
     expect(ventas.values()[0]).toContain('Id de venta');
   });
 });
+
+describe('pestañas nuevas (Etapa 2d)', () => {
+  it('nacen con el tamaño exacto: encabezado y una fila plantilla, sin columnas de sobra', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pullProducts');
+
+    const turnos = spreadsheet.getSheetByName('Turnos');
+    expect([turnos?.getMaxRows(), turnos?.getMaxColumns()]).toEqual([2, 14]);
+    const productos = spreadsheet.getSheetByName('Productos');
+    expect([productos?.getMaxRows(), productos?.getMaxColumns()]).toEqual([6, 7]); // 5 sembrados
+  });
+
+  it('el encabezado va congelado y la pestaña de idempotencia oculta', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pullProducts');
+
+    expect(spreadsheet.getSheetByName('Pagos')?.frozenRows).toBe(1);
+    expect(spreadsheet.getSheetByName('_Idempotency')?.hidden).toBe(true);
+    expect(spreadsheet.getSheetByName('Productos')?.hidden).toBe(false);
+  });
+
+  it('la fila plantilla lleva formato y validación por columna', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pullProducts');
+
+    const pagos = spreadsheet.getSheetByName('Pagos');
+    expect(pagos?.formats(2)).toEqual(['@', 'dd/mm/yyyy hh:mm', '@', '#,##0.00', '@', '@']);
+    expect(pagos?.validations(2)[2]).toEqual({
+      list: [
+        'Efectivo',
+        'Tarjeta de débito',
+        'Tarjeta de crédito',
+        'Transferencia',
+        'Código QR',
+        'Cuenta corriente',
+      ],
+      allowInvalid: false,
+    });
+    expect(pagos?.validations(2)[5]).toEqual({ list: ['Cerrada', 'Anulada'], allowInvalid: false });
+    expect(pagos?.validations(2)[0]).toBeNull();
+    expect(spreadsheet.getSheetByName('Productos')?.formats(2)).toEqual([
+      '@',
+      '@',
+      '@',
+      '@',
+      '#,##0.00',
+      '0.0%',
+      '@',
+    ]);
+  });
+
+  it.each([false, true])(
+    'la primera venta llena la fila plantilla y las siguientes copian su formato (validación cuenta como contenido: %s)',
+    (validationCountsAsContent) => {
+      const { spreadsheet, call } = loadBridge({ validationCountsAsContent });
+
+      call('pushSale', { sale: SALE }, 'k1');
+
+      const ventas = spreadsheet.getSheetByName('Ventas');
+      expect(ventas?.values()[1]?.[0]).toBe('s1'); // la fila 2 se llenó
+      expect(ventas?.getMaxRows()).toBe(3); // encabezado + 2 líneas, sin fila vacía
+      expect(ventas?.formats(3)).toEqual(ventas?.formats(2));
+      expect(ventas?.validations(3)).toEqual(ventas?.validations(2));
+
+      call('pushSale', { sale: { ...SALE, id: 's2' } }, 'k2');
+
+      expect(ventas?.getMaxRows()).toBe(5);
+      expect(ventas?.formats(5)).toEqual(ventas?.formats(2));
+      expect(ventas?.validations(5)).toEqual(ventas?.validations(2));
+      expect(spreadsheet.getSheetByName('Pagos')?.getMaxRows()).toBe(5);
+    },
+  );
+
+  it('no redimensiona una pestaña que ya existía', () => {
+    const { spreadsheet, call } = loadBridge();
+    const productos = spreadsheet.addSheet('Productos', [
+      ['Id', 'SKU', 'Códigos de barras', 'Nombre', 'Precio', 'IVA', 'Categoría'],
+      ...Array.from({ length: 12 }, () => ['', '', '', '', '', '', '']),
+    ]);
+
+    call('pullProducts');
+
+    expect([productos.getMaxRows(), productos.getMaxColumns()]).toEqual([13, 7]);
+  });
+});

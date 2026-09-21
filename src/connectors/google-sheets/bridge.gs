@@ -250,31 +250,72 @@ function respond(body) {
 
 // ------------------------------------------------------- auto-provisión
 
+// Formato numérico de la fila plantilla, por tipo de columna. `text` (@) evita que Sheets convierta
+// un código de barras o un id en número (y un texto que empiece con "=" en fórmula).
+var NUMBER_FORMATS = {
+  text: '@',
+  integer: '0',
+  number: '#,##0.00',
+  percent: '0.0%',
+  datetime: 'dd/mm/yyyy hh:mm',
+};
+
+/** Lista desplegable para las columnas cuyos valores están en VALUE_LABELS; `null` si no aplica. */
+function validationFor(column) {
+  var labels = VALUE_LABELS[column.key];
+  if (!labels) {
+    return null;
+  }
+  var list = Object.keys(labels).map(function (internal) {
+    return labels[internal];
+  });
+  return SpreadsheetApp.newDataValidation()
+    .requireValueInList(list, true)
+    .setAllowInvalid(false)
+    .build();
+}
+
 function ensureSheetsExist() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(SCHEMA).forEach(function (name) {
-    if (spreadsheet.getSheetByName(name)) {
-      return;
-    }
-    var defs = SCHEMA[name];
-    var labels = defs.map(function (column) {
-      return COLUMN_LABELS[name][column.key];
-    });
-    var sheet = spreadsheet.insertSheet(name);
-    sheet.getRange(1, 1, 1, labels.length).setValues([labels]).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    defs.forEach(function (column, index) {
-      if (column.type === 'text') {
-        sheet.getRange(1, index + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
-      }
-    });
-    if (SEED[name]) {
-      appendObjects(name, SEED[name]);
-    }
-    if (name === '_Idempotency') {
-      sheet.hideSheet();
+    if (!spreadsheet.getSheetByName(name)) {
+      createSheet(spreadsheet, name);
     }
   });
+}
+
+/**
+ * Crea una pestaña con el tamaño exacto: el encabezado y UNA fila de datos vacía — la plantilla — que
+ * lleva el formato y la validación de cada columna. Las filas que se agreguen después los copian de
+ * ahí (appendObjects). No se toca ninguna pestaña que ya existe.
+ */
+function createSheet(spreadsheet, name) {
+  var defs = SCHEMA[name];
+  var labels = defs.map(function (column) {
+    return COLUMN_LABELS[name][column.key];
+  });
+  var sheet = spreadsheet.insertSheet(name);
+  if (sheet.getMaxColumns() > defs.length) {
+    sheet.deleteColumns(defs.length + 1, sheet.getMaxColumns() - defs.length);
+  }
+  if (sheet.getMaxRows() > 2) {
+    sheet.deleteRows(3, sheet.getMaxRows() - 2);
+  }
+  sheet.getRange(1, 1, 1, defs.length).setValues([labels]).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  var template = sheet.getRange(2, 1, 1, defs.length);
+  template.setNumberFormats([
+    defs.map(function (column) {
+      return NUMBER_FORMATS[column.type];
+    }),
+  ]);
+  template.setDataValidations([defs.map(validationFor)]);
+  if (name === '_Idempotency') {
+    sheet.hideSheet();
+  }
+  if (SEED[name]) {
+    appendObjects(name, SEED[name]);
+  }
 }
 
 // --------------------------------------------------------------- helpers
@@ -431,7 +472,23 @@ function appendObjects(name, objects) {
   if (needed > 0) {
     sheet.insertRowsAfter(sheet.getMaxRows(), needed);
   }
-  sheet.getRange(first, 1, rows.length, header.width).setValues(rows);
+  // Formato y validación salen de la fila plantilla (2), no de la herencia de Sheets: así no depende
+  // de cómo se inserten las filas. Primero el formato, después los valores (un '@' evita conversiones).
+  var template = sheet.getRange(2, 1, 1, header.width);
+  var formats = template.getNumberFormats()[0];
+  var rules = template.getDataValidations()[0];
+  var block = sheet.getRange(first, 1, rows.length, header.width);
+  block.setNumberFormats(
+    rows.map(function () {
+      return formats;
+    }),
+  );
+  block.setDataValidations(
+    rows.map(function () {
+      return rules;
+    }),
+  );
+  block.setValues(rows);
 }
 
 function setCells(name, rowNumber, values) {
