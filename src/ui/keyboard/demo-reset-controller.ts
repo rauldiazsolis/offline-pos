@@ -1,6 +1,7 @@
 import { loadCatalogRepository } from '../../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../../storage/customer-repository.ts';
-import { demoReset } from '../../storage/demo-reset.ts';
+import { checkDemoResetAvailable, demoReset } from '../../storage/demo-reset.ts';
+import { loadSyncConfig } from '../../sync/config.ts';
 import { describeError } from '../errors.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -9,9 +10,17 @@ import { setCustomerRepository } from '../state/customer-repository.ts';
 import { demoResetErrorSignal, demoResetInProgressSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
-/** `/DEMO_RESET`: entra a la pantalla de confirmación dedicada (mismo patrón que `/ANULAR`). */
+/**
+ * `/DEMO_RESET`: entra a la pantalla de confirmación dedicada (mismo patrón
+ * que `/ANULAR`). Con un conector que no es REST muestra el aviso de "no
+ * disponible" apenas se abre, en vez de dejar que el usuario llegue a
+ * confirmar para enterarse — `demoReset()` lo vuelve a verificar de fondo.
+ */
 export function enterDemoResetScreen(): void {
-  demoResetErrorSignal.value = null;
+  const configResult = loadSyncConfig();
+  const availability = configResult.ok ? checkDemoResetAvailable(configResult.value) : undefined;
+  demoResetErrorSignal.value =
+    availability !== undefined && !availability.ok ? describeError(availability) : null;
   demoResetInProgressSignal.value = false;
   activeScreenSignal.value = 'demo-reset';
 }
