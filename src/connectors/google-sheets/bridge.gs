@@ -1,4 +1,14 @@
 /**
+ * @OnlyCurrentDoc
+ *
+ * Fuerza el permiso mínimo: solo esta planilla (spreadsheets.currentonly), no
+ * "todas tus hojas de cálculo" (spreadsheets), que es lo que Apps Script pide
+ * por defecto apenas el código usa SpreadsheetApp. Este script nunca abre otra
+ * planilla (no usa openById/openByUrl), así que no necesita más. Si algún día
+ * hiciera falta abrir otra, esta línea hay que sacarla.
+ */
+
+/**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
  *
  * Un solo endpoint: doPost(e). Request (Content-Type text/plain, para evitar

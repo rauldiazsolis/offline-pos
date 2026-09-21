@@ -23,6 +23,12 @@ Script** (`bridge.gs`) desplegado como Web App.
 permisos y solo expone las acciones de `bridge.gs`. Es la única forma de que el POS escriba sin que
 nadie tenga que iniciar sesión en Google. Con `SHARED_SECRET`, además, hace falta conocer el secreto.
 
+**Permisos que pide Google al autorizar el script:** solo acceso a _esta_ planilla ("See, edit,
+create, and delete **this** spreadsheet"). `bridge.gs` lleva la anotación `@OnlyCurrentDoc` justamente
+para eso. Si la pantalla de autorización dice "**all** your Google Sheets spreadsheets", cancelá:
+revisá que la anotación esté en la primera línea del script y volvé a autorizar. Google además
+muestra un aviso de "app no verificada": es normal en un script propio y personal.
+
 Si la planilla no tiene las pestañas que el puente necesita, las crea sola en el primer request (y
 siembra datos de prueba en `Productos` y `Clientes`).
 
