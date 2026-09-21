@@ -14,6 +14,7 @@ import { countLocalCatalog } from '../storage/local-data.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
+  lastSyncFailureSignal,
   setLastSyncFailure,
   setLastSyncedAt,
   setLocalCatalogCounts,
@@ -212,6 +213,27 @@ export async function syncOnce(connector: Connector, now: string): Promise<SyncR
 }
 
 /**
+ * Ciclo de **solo envío**: empuja el outbox pendiente sin traer catálogo, stock ni
+ * clientes. Lo disparan los eventos nuevos del outbox (venta, anulación, cliente,
+ * cierre de caja) y los reintentos: cuesta un request en vez de tres, y una venta
+ * no espera al próximo ciclo completo. No toca `lastSyncedAt` ni los conteos del
+ * catálogo (no los refrescó), y no borra una falla de pull sin resolver: mientras
+ * esa siga, el estado sigue siendo `sync-error`.
+ */
+export async function pushOnce(connector: Connector, now: string): Promise<PushSummary> {
+  setSyncStatus('syncing');
+
+  const push = await pushPendingEvents(connector, now);
+
+  const events = await db.outbox.toArray();
+  setPendingOutboxCount(events.filter((event) => event.status === 'pending').length);
+  setSyncStatus(
+    lastSyncFailureSignal.value !== null || isSyncStruggling(events) ? 'sync-error' : 'online-idle',
+  );
+  return push;
+}
+
+/**
  * Es responsabilidad de la app no saturar a la API: si un push tarda más
  * que el intervalo del loop (una API lenta de verdad), el próximo disparo
  * (`setInterval`, evento `online`, o `/SINCRONIZAR`) no debe arrancar un
@@ -253,7 +275,7 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * Una config sin probar (`verifiedAt` ausente) no sincroniza: la app pide
  * probarla antes de operar (Etapa 2b).
  */
-export async function runSyncCycle(): Promise<void> {
+export async function runSyncCycle(options: { pull?: boolean } = {}): Promise<void> {
   // `/CONFIG` abierto: no arrancar ciclos (ver `syncPausedSignal`).
   if (syncPausedSignal.value) {
     return;
@@ -277,7 +299,12 @@ export async function runSyncCycle(): Promise<void> {
     setSyncConfigured(true);
 
     const connector = createConnector(configResult.value);
-    await syncOnce(connector, new Date().toISOString());
+    const now = new Date().toISOString();
+    if (options.pull === false) {
+      await pushOnce(connector, now);
+    } else {
+      await syncOnce(connector, now);
+    }
   } finally {
     release();
   }

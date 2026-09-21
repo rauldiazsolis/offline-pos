@@ -17,6 +17,7 @@ import { saveSyncConfig } from './config.ts';
 import { getCustomersCursor, getProductsCursor } from './cursor.ts';
 import {
   acquireSyncLockWaiting,
+  pushOnce,
   pushPendingEvents,
   runSyncCycle,
   syncOnce,
@@ -684,5 +685,99 @@ describe('cerrojo de sync', () => {
 
     expect(acquired).toBeUndefined();
     release?.();
+  });
+});
+
+function pendingSaleEvent(id = 'sale-1') {
+  return {
+    type: 'sale' as const,
+    sale: { ...sale, id },
+    id,
+    status: 'pending' as const,
+    retries: 0,
+    createdAt: now,
+    nextAttemptAt: now,
+  };
+}
+
+describe('pushOnce (ciclo de solo envío)', () => {
+  it('empuja los pendientes sin pullear catálogo, stock ni clientes', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
+    const pullProducts = vi.fn();
+    const pullStock = vi.fn();
+    const pullCustomers = vi.fn();
+
+    const summary = await pushOnce(
+      fakeConnector({ pushSale, pullProducts, pullStock, pullCustomers }),
+      now,
+    );
+
+    expect(summary).toEqual({ attempted: 1, failed: 0 });
+    expect(pushSale).toHaveBeenCalledWith(expect.objectContaining({ id: 'sale-1' }), 'sale-1');
+    expect(pullProducts).not.toHaveBeenCalled();
+    expect(pullStock).not.toHaveBeenCalled();
+    expect(pullCustomers).not.toHaveBeenCalled();
+    expect((await db.outbox.get('sale-1'))?.status).toBe('synced');
+  });
+
+  it('sin fallas pendientes deja online-idle, actualiza el conteo y no toca la última sync', async () => {
+    lastSyncFailureSignal.value = null; // otros tests del archivo pueden dejarla puesta
+    await db.outbox.add(pendingSaleEvent());
+    const before = lastSyncedAtSignal.value;
+
+    await pushOnce(fakeConnector(), now);
+
+    expect(syncStatusSignal.value).toBe('online-idle');
+    expect(pendingOutboxCountSignal.value).toBe(0);
+    expect(lastSyncedAtSignal.value).toBe(before);
+  });
+
+  it('conserva sync-error si quedó una falla de pull sin resolver', async () => {
+    lastSyncFailureSignal.value = { ok: false, error: 'sync/timeout', meta: { seconds: 20 } };
+
+    try {
+      await pushOnce(fakeConnector(), now);
+      expect(syncStatusSignal.value).toBe('sync-error');
+    } finally {
+      lastSyncFailureSignal.value = null;
+    }
+  });
+
+  it('un envío que falla deja el evento pendiente con su backoff y cuenta como fallido', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const pushSale = vi.fn().mockResolvedValue(err('sync/request-failed', { message: 'boom' }));
+
+    const summary = await pushOnce(fakeConnector({ pushSale }), now);
+
+    expect(summary).toEqual({ attempted: 1, failed: 1 });
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+  });
+});
+
+describe('runSyncCycle({ pull: false })', () => {
+  it('con config REST solo envía el outbox: ningún GET de catálogo, stock o clientes', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await db.outbox.add(pendingSaleEvent());
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({}),
+      } as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await runSyncCycle({ pull: false });
+
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit | undefined][];
+    expect(calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(url).pathname}`)).toEqual([
+      'POST /sales',
+    ]);
   });
 });
