@@ -2017,3 +2017,1993 @@ git commit -m "feat: aplicar la conexión de forma transaccional y enviar pendie
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 ```
+
+---
+
+### Task 8: `placeholder` por campo de conector
+
+**Files:**
+- Modify: `src/connectors/config-field.ts`, `src/connectors/rest/config.ts`, `src/connectors/rest/config.test.ts`, `src/connectors/google-sheets/config.ts`, `src/connectors/google-sheets/config.test.ts`
+
+**Interfaces:**
+- Consumes: nada.
+- Produces: `ConfigField` con `placeholder: string` (texto de ayuda, **no** un valor por omisión); `restConfigFields` y `googleSheetsConfigFields` lo incluyen.
+
+- [ ] **Step 1: Tests que fallan**
+
+En `src/connectors/rest/config.test.ts`, el test `'lista baseUrl (obligatorio) y apiKey (opcional), en ese orden'` pasa a esperar:
+
+```ts
+    expect(restConfigFields).toEqual([
+      {
+        key: 'baseUrl',
+        label: 'URL del sistema externo',
+        optional: false,
+        placeholder: 'https://api.miempresa.com',
+      },
+      {
+        key: 'apiKey',
+        label: 'API key',
+        optional: true,
+        placeholder: 'Token de acceso, si el backend lo exige',
+      },
+    ]);
+```
+
+En `src/connectors/google-sheets/config.test.ts`, el de `googleSheetsConfigFields` pasa a esperar:
+
+```ts
+    expect(googleSheetsConfigFields).toEqual([
+      {
+        key: 'webAppUrl',
+        label: 'URL del Web App de Google Apps Script',
+        optional: false,
+        placeholder: 'https://script.google.com/macros/s/…/exec',
+      },
+      {
+        key: 'sharedSecret',
+        label: 'Secreto compartido',
+        optional: true,
+        placeholder: 'Valor de SHARED_SECRET, si lo configuraste',
+      },
+    ]);
+```
+
+Run: `pnpm vitest run src/connectors/` → FAIL.
+
+- [ ] **Step 2: Implementación**
+
+`src/connectors/config-field.ts`: sumar al tipo, con su comentario:
+
+```ts
+export type ConfigField<K extends string = string> = {
+  key: K;
+  label: string;
+  optional: boolean;
+  /** Ejemplo de ayuda que muestra el campo vacío — nunca un valor por omisión (Etapa 2b: no se asume ninguna configuración). */
+  placeholder: string;
+};
+```
+
+`src/connectors/rest/config.ts` y `src/connectors/google-sheets/config.ts`: agregar a cada objeto de `…ConfigFields` el `placeholder` de los tests de arriba.
+
+- [ ] **Step 3: Verificar y commitear**
+
+Run: `pnpm test; pnpm typecheck; pnpm lint`
+Expected: verde. (`src/ui/screens/config-screen.tsx` define `LOCALE_FIELD: ConfigField` — si el typecheck falla ahí por el campo nuevo, agregarle `placeholder: 'es-AR'` ya en este task.)
+
+```bash
+git add -A src
+git commit -m "feat: placeholder por campo de conector, sin valores por omisión (#76)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 9: `/CONFIG` con fases — probar, confirmar y aplicar (estado, controlador, pantalla)
+
+Un solo task: estado, controlador y pantalla se usan entre sí y separarlos dejaría un commit con la pantalla apuntando a signals que ya no existen. Incluye adaptar los dos e2e que recorren el formulario.
+
+**Files:**
+- Rewrite: `src/ui/state/sync-config.ts`, `src/ui/keyboard/config-controller.ts`, `src/ui/keyboard/config-controller.test.ts`, `src/ui/screens/config-screen.tsx`, `src/ui/screens/config-screen.test.tsx`
+- Modify: `e2e/minibackend-sync.spec.ts`, `e2e/config-connector.spec.ts`
+
+**Interfaces:**
+- Consumes: `probeConnection`, `planConnectionChange` (Task 6); `applyConnection`, `flushPendingBeforeWipe` (Task 7); `summarizeLocalData` (Task 3); `describeError` (Task 1); `connectionStateSignal` (Task 2); `runSyncCycle`.
+- Produces:
+  - Estado (`ui/state/sync-config.ts`): `type ConfigPhase = 'editing' | 'probing' | 'confirming' | 'applying'`; `configPhaseSignal`; `configConfirmationSignal: Signal<LocalDataSummary | null>`; `configTypeSignal: Signal<ConnectorType | null>` (sin tipo elegido = `null`); `configFieldValuesSignal`, `configLocaleSignal`, `configErrorSignal`, `configErrorFieldSignal`; `resetConfigForm(saved?: SyncConfig)`. **Se eliminan** `DEFAULT_BASE_URL` y `DEFAULT_API_KEY`.
+  - Controlador: `enterConfigScreen()`, `cancelConfigScreen()`, `handleConfigEscape()`, `setConfigType(type: ConnectorType | null)`, `setConfigField(key, value)`, `setConfigLocale(value)`, `submitConfig(): Promise<void>`, `confirmConfigChange(): Promise<void>`, `backToEditing()`.
+  - Pantalla: `ConfigScreen`; con la conexión no `active` funciona en **modo requerido** (sin "Cancelar", Esc no sale).
+
+- [ ] **Step 1: Estado — `src/ui/state/sync-config.ts`**
+
+```ts
+import { signal } from '@preact/signals';
+import type { LocalDataSummary } from '../../storage/local-data.ts';
+import type { SyncConfig } from '../../sync/config.ts';
+import { toFieldValues, type ConnectorType } from '../../sync/connector-registry.ts';
+
+/** Valores de los campos de cada conector, como strings (lo que se tipea). */
+export type ConfigFormValues = Record<ConnectorType, Record<string, string>>;
+
+/** Sin valores por omisión (Etapa 2b): todo arranca vacío; los ejemplos son `placeholder`s. */
+function blankFormValues(): ConfigFormValues {
+  return {
+    rest: { baseUrl: '', apiKey: '' },
+    'google-sheets': { webAppUrl: '', sharedSecret: '' },
+  };
+}
+
+/** Fase del diálogo: editar → probar → (confirmar el borrado) → aplicar. */
+export type ConfigPhase = 'editing' | 'probing' | 'confirming' | 'applying';
+
+/** Conector elegido en el selector; `null` = todavía no se eligió ninguno. */
+export const configTypeSignal = signal<ConnectorType | null>(null);
+/**
+ * Valores tipeados **por conector**: cambiar el tipo no pierde lo que ya se
+ * cargó en el otro, y solo los campos del tipo activo llegan a guardarse.
+ */
+export const configFieldValuesSignal = signal<ConfigFormValues>(blankFormValues());
+/** `locale` es config de terminal (no de conector): un solo valor, siempre visible una vez elegido un tipo. */
+export const configLocaleSignal = signal('');
+export const configErrorSignal = signal<string | null>(null);
+/** Clave del campo al que apunta el error, para enfocarlo y seleccionarlo (`data-config-field`). */
+export const configErrorFieldSignal = signal<string | null>(null);
+export const configPhaseSignal = signal<ConfigPhase>('editing');
+/** Lo que se perdería al cambiar de conexión — solo tiene valor en la fase `confirming`. */
+export const configConfirmationSignal = signal<LocalDataSummary | null>(null);
+
+/**
+ * Deja el formulario en su estado inicial. Con `saved`, precarga esa config
+ * (tipo, campos y locale) — así reconfigurar un solo dato no obliga a
+ * retipear los demás; sin ella (terminal nueva), todo vacío y sin tipo.
+ */
+export function resetConfigForm(saved?: SyncConfig): void {
+  const values = blankFormValues();
+  if (saved !== undefined) {
+    values[saved.type] = toFieldValues(saved);
+  }
+  configTypeSignal.value = saved?.type ?? null;
+  configFieldValuesSignal.value = values;
+  configLocaleSignal.value = saved?.locale ?? '';
+  configErrorSignal.value = null;
+  configErrorFieldSignal.value = null;
+  configPhaseSignal.value = 'editing';
+  configConfirmationSignal.value = null;
+}
+```
+
+- [ ] **Step 2: Tests del controlador que fallan — reemplazar `src/ui/keyboard/config-controller.test.ts`**
+
+```ts
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildOutboxEventForSale } from '../../domain/outbox.ts';
+import type { Sale } from '../../domain/sale.ts';
+import { db } from '../../storage/db.ts';
+import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
+import { cartSignal } from '../state/cart.ts';
+import { activeScreenSignal } from '../state/screen.ts';
+import { connectionStateSignal } from '../state/sync.ts';
+import {
+  configConfirmationSignal,
+  configErrorFieldSignal,
+  configErrorSignal,
+  configFieldValuesSignal,
+  configLocaleSignal,
+  configPhaseSignal,
+  configTypeSignal,
+} from '../state/sync-config.ts';
+import {
+  backToEditing,
+  cancelConfigScreen,
+  confirmConfigChange,
+  enterConfigScreen,
+  handleConfigEscape,
+  setConfigField,
+  setConfigLocale,
+  setConfigType,
+  submitConfig,
+} from './config-controller.ts';
+
+const now = '2026-01-01T00:00:00.000Z';
+const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
+
+const product = {
+  id: 'p1',
+  sku: 'S1',
+  barcodes: [],
+  name: 'Arroz',
+  price: 100,
+  taxRate: 0.21,
+  category: 'x',
+  tracksStock: false,
+};
+
+function okResponse(body: unknown): Response {
+  return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
+}
+
+/** Backend REST de mentira: productos, stock y clientes responden; cualquier POST/DELETE da OK. */
+function stubRestBackend(): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn((url: string) => {
+    const path = new URL(url).pathname;
+    if (path === '/products') return Promise.resolve(okResponse({ items: [product] }));
+    if (path === '/stock') return Promise.resolve(okResponse([]));
+    if (path === '/customers') return Promise.resolve(okResponse({ items: [{ id: 'c1', name: 'Ana' }] }));
+    return Promise.resolve(okResponse({}));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+function makeSale(id: string): Sale {
+  return { id, lines: [], payments: [], total: 0, status: 'closed', createdAt: now };
+}
+
+async function seedUserDataFor(config: Parameters<typeof saveSyncConfig>[0]): Promise<void> {
+  saveSyncConfig(config);
+  await db.sales.put(makeSale('s1'));
+  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+}
+
+beforeEach(async () => {
+  await db.open();
+  activeScreenSignal.value = 'sale';
+  connectionStateSignal.value = 'unconfigured';
+  enterConfigScreen();
+});
+
+afterEach(async () => {
+  db.close();
+  await db.delete();
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+describe('enterConfigScreen', () => {
+  it('cambia a la pantalla config, sin tipo elegido, con los campos vacíos y sin error', () => {
+    expect(activeScreenSignal.value).toBe('config');
+    expect(configTypeSignal.value).toBeNull();
+    expect(configFieldValuesSignal.value.rest).toEqual({ baseUrl: '', apiKey: '' });
+    expect(configFieldValuesSignal.value['google-sheets']).toEqual({ webAppUrl: '', sharedSecret: '' });
+    expect(configLocaleSignal.value).toBe('');
+    expect(configErrorSignal.value).toBeNull();
+    expect(configPhaseSignal.value).toBe('editing');
+  });
+
+  it('con una config REST guardada, precarga esos valores', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
+    enterConfigScreen();
+
+    expect(configTypeSignal.value).toBe('rest');
+    expect(configFieldValuesSignal.value.rest).toEqual({
+      baseUrl: 'https://api.example.com',
+      apiKey: '',
+    });
+    expect(configLocaleSignal.value).toBe('es-AR');
+  });
+
+  it('con una config de Google Sheets guardada, abre en ese tipo con sus valores', () => {
+    saveSyncConfig({ type: 'google-sheets', webAppUrl: WEB_APP_URL, sharedSecret: 's3cr3t' });
+
+    enterConfigScreen();
+
+    expect(configTypeSignal.value).toBe('google-sheets');
+    expect(configFieldValuesSignal.value['google-sheets']).toEqual({
+      webAppUrl: WEB_APP_URL,
+      sharedSecret: 's3cr3t',
+    });
+  });
+
+  it('con una config guardada sin type (formato anterior a la Etapa 2), la precarga como REST', () => {
+    localStorage.setItem(
+      'offline-pos:sync-config',
+      JSON.stringify({ baseUrl: 'https://api.example.com', apiKey: 'vieja' }),
+    );
+
+    enterConfigScreen();
+
+    expect(configTypeSignal.value).toBe('rest');
+    expect(configFieldValuesSignal.value.rest.apiKey).toBe('vieja');
+  });
+});
+
+describe('edición del formulario', () => {
+  it('cambiar el tipo no pierde lo tipeado en el otro', () => {
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+    setConfigType('google-sheets');
+    setConfigField('webAppUrl', WEB_APP_URL);
+    setConfigType('rest');
+
+    expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
+    expect(configFieldValuesSignal.value['google-sheets'].webAppUrl).toBe(WEB_APP_URL);
+  });
+
+  it('volver a "sin tipo" también es válido', () => {
+    setConfigType('rest');
+    setConfigType(null);
+
+    expect(configTypeSignal.value).toBeNull();
+  });
+
+  it('editar limpia el error visible', () => {
+    setConfigType('rest');
+    void submitConfig();
+    expect(configErrorSignal.value).not.toBeNull();
+
+    setConfigField('baseUrl', 'x');
+
+    expect(configErrorSignal.value).toBeNull();
+    expect(configErrorFieldSignal.value).toBeNull();
+  });
+});
+
+describe('submitConfig — validación (antes de probar)', () => {
+  it('sin tipo elegido pide elegir uno y no prueba nada', async () => {
+    const fetchMock = stubRestBackend();
+
+    await submitConfig();
+
+    expect(configErrorSignal.value).toBe('Elegí un tipo de conexión.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('una URL vacía señala ese campo', async () => {
+    setConfigType('rest');
+
+    await submitConfig();
+
+    expect(configErrorSignal.value).toBe('Completá «URL del sistema externo».');
+    expect(configErrorFieldSignal.value).toBe('baseUrl');
+    expect(configPhaseSignal.value).toBe('editing');
+  });
+
+  it('una URL inválida señala ese campo y no prueba nada', async () => {
+    const fetchMock = stubRestBackend();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'no-es-una-url');
+
+    await submitConfig();
+
+    expect(configErrorSignal.value).toBe('«URL del sistema externo» no es válido.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('submitConfig — primer arranque (sin datos locales)', () => {
+  it('prueba, aplica y deja la conexión activa con la config guardada con verifiedAt', async () => {
+    stubRestBackend();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+    setConfigField('apiKey', 'secreto');
+    setConfigLocale('es-AR');
+
+    await submitConfig();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(connectionStateSignal.value).toBe('active');
+    expect(configPhaseSignal.value).toBe('editing');
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value).toMatchObject({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      apiKey: 'secreto',
+      locale: 'es-AR',
+    });
+    expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
+    await expect(db.products.count()).resolves.toBe(1);
+    await expect(db.customers.count()).resolves.toBe(1);
+  });
+
+  it('si la prueba falla: mensaje legible, el formulario queda como estaba y no cambia nada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+
+    await submitConfig();
+
+    expect(configErrorSignal.value).toBe(
+      'No se pudo conectar con el servidor (Failed to fetch). ¿Está en línea y corriendo?',
+    );
+    expect(configPhaseSignal.value).toBe('editing');
+    expect(activeScreenSignal.value).toBe('config');
+    expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
+    expect(loadSyncConfig().ok).toBe(false);
+    expect(connectionStateSignal.value).toBe('unconfigured');
+    await expect(db.products.count()).resolves.toBe(0);
+  });
+});
+
+describe('submitConfig — cambio de conexión con datos locales', () => {
+  const oldConfig = {
+    type: 'rest' as const,
+    baseUrl: 'https://viejo.example.com',
+    verifiedAt: '2025-12-01T00:00:00.000Z',
+  };
+
+  it('mismo origen (cambia solo la API key): no pide confirmación y conserva los datos', async () => {
+    stubRestBackend();
+    await seedUserDataFor(oldConfig);
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+    setConfigField('apiKey', 'nueva');
+
+    await submitConfig();
+
+    expect(configPhaseSignal.value).toBe('editing');
+    expect(activeScreenSignal.value).toBe('sale');
+    await expect(db.sales.count()).resolves.toBe(1);
+  });
+
+  it('origen distinto: envía lo pendiente al conector actual y pide confirmación con los conteos', async () => {
+    const fetchMock = stubRestBackend();
+    await seedUserDataFor(oldConfig);
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+    setConfigField('baseUrl', 'https://nuevo.example.com');
+
+    await submitConfig();
+
+    expect(configPhaseSignal.value).toBe('confirming');
+    expect(activeScreenSignal.value).toBe('config');
+    expect(configConfirmationSignal.value).toMatchObject({ sales: 1 });
+    // El último intento de envío fue contra el backend VIEJO.
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls).toContain('https://viejo.example.com/sales');
+    // Nada cambió todavía.
+    await expect(db.sales.count()).resolves.toBe(1);
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value.type === 'rest' && saved.value.baseUrl).toBe(
+      'https://viejo.example.com',
+    );
+  });
+
+  it('confirmar borra lo local, carga lo del backend nuevo y vacía la venta en curso', async () => {
+    stubRestBackend();
+    await seedUserDataFor(oldConfig);
+    connectionStateSignal.value = 'active';
+    cartSignal.value = { lines: [{ kind: 'freeform', description: 'x', qty: 1, unitPrice: 1 }] };
+    enterConfigScreen();
+    setConfigField('baseUrl', 'https://nuevo.example.com');
+    await submitConfig();
+
+    await confirmConfigChange();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    await expect(db.sales.count()).resolves.toBe(0);
+    await expect(db.outbox.count()).resolves.toBe(0);
+    await expect(db.products.count()).resolves.toBe(1);
+    expect(cartSignal.value).toEqual({ lines: [] });
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value.type === 'rest' && saved.value.baseUrl).toBe(
+      'https://nuevo.example.com',
+    );
+  });
+
+  it('Esc en la confirmación vuelve a editar sin borrar nada', async () => {
+    stubRestBackend();
+    await seedUserDataFor(oldConfig);
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+    setConfigField('baseUrl', 'https://nuevo.example.com');
+    await submitConfig();
+
+    handleConfigEscape();
+
+    expect(configPhaseSignal.value).toBe('editing');
+    expect(configConfirmationSignal.value).toBeNull();
+    await expect(db.sales.count()).resolves.toBe(1);
+  });
+
+  it('backToEditing hace lo mismo que Esc en la confirmación', async () => {
+    stubRestBackend();
+    await seedUserDataFor(oldConfig);
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+    setConfigField('baseUrl', 'https://nuevo.example.com');
+    await submitConfig();
+
+    backToEditing();
+
+    expect(configPhaseSignal.value).toBe('editing');
+  });
+});
+
+describe('Esc', () => {
+  it('con la conexión activa y editando, cancela y vuelve a la venta sin guardar', () => {
+    connectionStateSignal.value = 'active';
+
+    handleConfigEscape();
+
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('modo requerido (conexión sin activar): Esc no sale de la pantalla', () => {
+    connectionStateSignal.value = 'unconfigured';
+
+    handleConfigEscape();
+
+    expect(activeScreenSignal.value).toBe('config');
+  });
+
+  it('durante la prueba cancela la prueba: el resultado tardío se descarta', async () => {
+    let resolveFirst: (response: Response) => void = () => undefined;
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        calls += 1;
+        if (calls === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve(
+          okResponse(new URL(url).pathname === '/stock' ? [] : { items: [] }),
+        );
+      }),
+    );
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+    const pending = submitConfig();
+    expect(configPhaseSignal.value).toBe('probing');
+
+    handleConfigEscape();
+    expect(configPhaseSignal.value).toBe('editing');
+    resolveFirst(okResponse({ items: [] }));
+    await pending;
+
+    expect(configPhaseSignal.value).toBe('editing');
+    expect(activeScreenSignal.value).toBe('config');
+    expect(loadSyncConfig().ok).toBe(false);
+  });
+});
+
+describe('cancelConfigScreen', () => {
+  it('vuelve a la venta sin guardar nada', () => {
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+
+    cancelConfigScreen();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(loadSyncConfig().ok).toBe(false);
+  });
+});
+```
+
+Run: `pnpm vitest run src/ui/keyboard/config-controller.test.ts` → FAIL (el controlador viejo no exporta nada de esto).
+
+- [ ] **Step 3: Controlador — reemplazar `src/ui/keyboard/config-controller.ts`**
+
+```ts
+import { applyConnection, flushPendingBeforeWipe } from '../../sync/apply-connection.ts';
+import { loadSyncConfig, syncConfigSchema, type SyncConfig } from '../../sync/config.ts';
+import {
+  planConnectionChange,
+  probeConnection,
+  type ProbeSnapshot,
+} from '../../sync/connection.ts';
+import { connectorFields, type ConnectorType } from '../../sync/connector-registry.ts';
+import { runSyncCycle } from '../../sync/engine.ts';
+import { summarizeLocalData } from '../../storage/local-data.ts';
+import { describeError } from '../errors.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
+import { resetAttachedCustomer } from '../state/customer.ts';
+import { activeScreenSignal } from '../state/screen.ts';
+import { connectionStateSignal } from '../state/sync.ts';
+import {
+  configConfirmationSignal,
+  configErrorFieldSignal,
+  configErrorSignal,
+  configFieldValuesSignal,
+  configLocaleSignal,
+  configPhaseSignal,
+  configTypeSignal,
+  resetConfigForm,
+} from '../state/sync-config.ts';
+
+type PendingApply = { candidate: SyncConfig; snapshot: ProbeSnapshot; wipe: boolean };
+
+/**
+ * Token de la prueba en curso: `handleConfigEscape` lo incrementa para
+ * cancelar, y la prueba, al volver, descarta su resultado si el token ya no
+ * es el suyo (no se cancela el `fetch`, solo se ignora lo que traiga).
+ */
+let submitToken = 0;
+/** Lo que se aplica si el usuario confirma el borrado (fase `confirming`). */
+let pendingApply: PendingApply | undefined;
+
+/** `/CONFIG`: abre el formulario, precargado con la config guardada (o vacío si no hay). */
+export function enterConfigScreen(): void {
+  submitToken += 1;
+  pendingApply = undefined;
+  const saved = loadSyncConfig();
+  resetConfigForm(saved.ok ? saved.value : undefined);
+  activeScreenSignal.value = 'config';
+}
+
+/** Sale de la pantalla sin guardar nada (solo con la conexión activa; ver `handleConfigEscape`). */
+export function cancelConfigScreen(): void {
+  submitToken += 1;
+  pendingApply = undefined;
+  resetConfigForm();
+  activeScreenSignal.value = 'sale';
+}
+
+/** Vuelve del paso de confirmación a editar el formulario, sin borrar nada. */
+export function backToEditing(): void {
+  pendingApply = undefined;
+  configConfirmationSignal.value = null;
+  configPhaseSignal.value = 'editing';
+}
+
+/**
+ * Esc según la fase: probando → cancela la prueba; confirmando → vuelve a
+ * editar; aplicando → se ignora (es corto y no se puede interrumpir); editando
+ * → sale, salvo en modo requerido (conexión todavía no activa), donde no hay
+ * a dónde salir.
+ */
+export function handleConfigEscape(): void {
+  switch (configPhaseSignal.value) {
+    case 'probing':
+      submitToken += 1;
+      configPhaseSignal.value = 'editing';
+      return;
+    case 'confirming':
+      backToEditing();
+      return;
+    case 'applying':
+      return;
+    default:
+      if (connectionStateSignal.value === 'active') {
+        cancelConfigScreen();
+      }
+  }
+}
+
+function clearConfigError(): void {
+  configErrorSignal.value = null;
+  configErrorFieldSignal.value = null;
+}
+
+/** Cambia el conector elegido — los campos que se muestran cambian en el acto, sin perder lo tipeado en el otro. */
+export function setConfigType(type: ConnectorType | null): void {
+  configTypeSignal.value = type;
+  clearConfigError();
+}
+
+/** Edita un campo del conector activo. */
+export function setConfigField(key: string, value: string): void {
+  const type = configTypeSignal.value;
+  if (type === null) {
+    return;
+  }
+  const all = configFieldValuesSignal.value;
+  configFieldValuesSignal.value = { ...all, [type]: { ...all[type], [key]: value } };
+  clearConfigError();
+}
+
+export function setConfigLocale(value: string): void {
+  configLocaleSignal.value = value;
+  clearConfigError();
+}
+
+/**
+ * Valida el formulario (solo al confirmar, nunca mientras se tipea) y arma la
+ * config candidata. Un valor vacío se omite (un opcional en blanco no se
+ * guarda). En caso de error deja el mensaje y el campo señalado en los signals.
+ */
+function validateForm(): SyncConfig | undefined {
+  const type = configTypeSignal.value;
+  if (type === null) {
+    configErrorSignal.value = 'Elegí un tipo de conexión.';
+    return undefined;
+  }
+  const fields = connectorFields(type);
+  const raw = configFieldValuesSignal.value[type];
+
+  const candidate: Record<string, string> = { type };
+  for (const field of fields) {
+    const value = (raw[field.key] ?? '').trim();
+    if (value !== '') {
+      candidate[field.key] = value;
+    }
+  }
+  const locale = configLocaleSignal.value.trim();
+  if (locale !== '') {
+    candidate.locale = locale;
+  }
+
+  const parsed = syncConfigSchema.safeParse(candidate);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  const offendingKey = parsed.error.issues[0]?.path[0];
+  const field = fields.find((candidateField) => candidateField.key === offendingKey);
+  if (field === undefined) {
+    configErrorSignal.value = 'La configuración no es válida.';
+    return undefined;
+  }
+  const isEmpty = (raw[field.key] ?? '').trim() === '';
+  configErrorFieldSignal.value = field.key;
+  configErrorSignal.value = isEmpty
+    ? `Completá «${field.label}».`
+    : `«${field.label}» no es válido.`;
+  return undefined;
+}
+
+async function applyAndFinish(pending: PendingApply): Promise<void> {
+  configPhaseSignal.value = 'applying';
+  const result = await applyConnection({ ...pending, now: new Date().toISOString() });
+  if (!result.ok) {
+    configPhaseSignal.value = 'editing';
+    configErrorSignal.value = describeError(result);
+    return;
+  }
+  if (pending.wipe) {
+    // La venta en curso ya no existe en la base: se vacía también en memoria.
+    cartSignal.value = { lines: [] };
+    cartSelectionIndexSignal.value = null;
+    resetAttachedCustomer();
+  }
+  pendingApply = undefined;
+  resetConfigForm();
+  activeScreenSignal.value = 'sale';
+  void runSyncCycle();
+}
+
+/**
+ * Ctrl+Enter: valida, **prueba** la conexión (pull completo en memoria,
+ * todo o nada), **planea** (¿cambió el origen? ¿se perderían datos del
+ * usuario?) y, según eso, aplica directo o pide confirmación. Nada local ni
+ * guardado cambia hasta que la prueba salió bien y, si hace falta, el usuario
+ * confirmó el borrado.
+ */
+export async function submitConfig(): Promise<void> {
+  if (configPhaseSignal.value !== 'editing') {
+    return;
+  }
+  const candidate = validateForm();
+  if (candidate === undefined) {
+    return;
+  }
+
+  clearConfigError();
+  submitToken += 1;
+  const token = submitToken;
+  configPhaseSignal.value = 'probing';
+
+  const probe = await probeConnection(candidate);
+  if (token !== submitToken) {
+    return;
+  }
+  if (!probe.ok) {
+    configPhaseSignal.value = 'editing';
+    configErrorSignal.value = describeError(probe);
+    return;
+  }
+
+  const currentResult = loadSyncConfig();
+  const current = currentResult.ok ? currentResult.value : undefined;
+  const plan = planConnectionChange({
+    current,
+    candidate,
+    localData: await summarizeLocalData(),
+  });
+  const pending: PendingApply = { candidate, snapshot: probe.value, wipe: plan.wipe };
+
+  if (!plan.needsConfirmation) {
+    await applyAndFinish(pending);
+    return;
+  }
+
+  // Antes de advertir qué se pierde: un último intento de enviar lo pendiente
+  // al backend ACTUAL, así el conteo de "sin enviar" es el que de verdad queda.
+  if (current !== undefined && navigator.onLine) {
+    await flushPendingBeforeWipe(current);
+  }
+  const summary = await summarizeLocalData();
+  if (token !== submitToken) {
+    return;
+  }
+  pendingApply = pending;
+  configConfirmationSignal.value = summary;
+  configPhaseSignal.value = 'confirming';
+}
+
+/** Enter en la confirmación: borra lo local y aplica la conexión nueva. */
+export async function confirmConfigChange(): Promise<void> {
+  const pending = pendingApply;
+  if (configPhaseSignal.value !== 'confirming' || pending === undefined) {
+    return;
+  }
+  await applyAndFinish(pending);
+}
+```
+
+Run: `pnpm vitest run src/ui/keyboard/config-controller.test.ts` → PASS (17+ tests). Si el test "origen distinto: envía lo pendiente…" no ve el POST a `viejo.example.com/sales`, revisar que `buildOutboxEventForSale` cree un evento `pending` con `nextAttemptAt` vencido (el envío final usa `ignoreBackoff`, pero el evento tiene que ser de tipo `'sale'`).
+
+- [ ] **Step 4: Tests de la pantalla que fallan — reemplazar `src/ui/screens/config-screen.test.tsx`**
+
+```tsx
+import 'fake-indexeddb/auto';
+import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { db } from '../../storage/db.ts';
+import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
+import { enterConfigScreen } from '../keyboard/config-controller.ts';
+import { activeScreenSignal } from '../state/screen.ts';
+import { connectionStateSignal } from '../state/sync.ts';
+import { ConfigScreen } from './config-screen.tsx';
+
+const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
+const CTRL_ENTER = { key: 'Enter', ctrlKey: true };
+
+function okResponse(body: unknown): Response {
+  return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
+}
+
+function stubRestBackend(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      const path = new URL(url).pathname;
+      return Promise.resolve(okResponse(path === '/stock' ? [] : { items: [] }));
+    }),
+  );
+}
+
+beforeEach(async () => {
+  await db.open();
+  connectionStateSignal.value = 'active';
+  enterConfigScreen();
+});
+
+afterEach(async () => {
+  db.close();
+  await db.delete();
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+function typeSelect(): HTMLSelectElement {
+  return screen.getByLabelText<HTMLSelectElement>('Tipo de conexión');
+}
+
+function chooseRest(): void {
+  fireEvent.change(typeSelect(), { target: { value: 'rest' } });
+}
+
+describe('ConfigScreen — formulario', () => {
+  it('arranca sin tipo elegido y sin ningún campo, solo el selector', () => {
+    render(<ConfigScreen />);
+
+    expect(typeSelect().value).toBe('');
+    expect(screen.queryByLabelText(/URL del sistema externo/)).toBeNull();
+    expect(screen.queryByLabelText(/Locale/)).toBeNull();
+  });
+
+  it('el foco arranca en el selector de tipo', () => {
+    render(<ConfigScreen />);
+
+    expect(document.activeElement).toBe(typeSelect());
+  });
+
+  it('elegir REST muestra sus campos más el locale, sin valores por omisión y con placeholders', () => {
+    render(<ConfigScreen />);
+
+    chooseRest();
+
+    const url = screen.getByLabelText<HTMLInputElement>(/URL del sistema externo/);
+    expect(url.value).toBe('');
+    expect(url.placeholder).toBe('https://api.miempresa.com');
+    expect(screen.getByLabelText(/API key/)).not.toBeNull();
+    expect(screen.getByLabelText(/Locale/)).not.toBeNull();
+  });
+
+  it('cambiar a Google Sheets intercambia los campos sin ocultar el selector', () => {
+    render(<ConfigScreen />);
+    chooseRest();
+
+    fireEvent.change(typeSelect(), { target: { value: 'google-sheets' } });
+
+    expect(screen.queryByLabelText(/URL del sistema externo/)).toBeNull();
+    expect(screen.getByLabelText(/URL del Web App/)).not.toBeNull();
+    expect(screen.getByLabelText(/Secreto compartido/)).not.toBeNull();
+    expect(typeSelect().value).toBe('google-sheets');
+  });
+
+  it('marca como opcionales los campos opcionales', () => {
+    render(<ConfigScreen />);
+    chooseRest();
+
+    expect(screen.getByLabelText(/API key.*opcional/)).not.toBeNull();
+    expect(screen.queryByLabelText(/URL del sistema externo.*opcional/)).toBeNull();
+  });
+
+  it('valida solo al confirmar: sin error mientras se tipea, alerta al Ctrl+Enter', () => {
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText(/URL del sistema externo/);
+
+    fireEvent.input(url, { target: { value: 'no-es-una-url' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    expect(screen.getByRole('alert').textContent).toContain('URL del sistema externo');
+    expect(activeScreenSignal.value).toBe('config');
+  });
+
+  it('tras un error de validación, el campo queda enfocado y con todo su texto seleccionado', () => {
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText<HTMLInputElement>(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'no-es-una-url' } });
+
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    expect(document.activeElement).toBe(url);
+    expect(url.selectionStart).toBe(0);
+    expect(url.selectionEnd).toBe('no-es-una-url'.length);
+  });
+
+  it('Enter solo no prueba ni guarda nada', () => {
+    stubRestBackend();
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
+
+    fireEvent.keyDown(url, { key: 'Enter' });
+
+    expect(loadSyncConfig().ok).toBe(false);
+    expect(screen.queryByText(/Probando conexión/)).toBeNull();
+  });
+
+  it('precarga la config guardada al abrirse', () => {
+    saveSyncConfig({ type: 'google-sheets', webAppUrl: WEB_APP_URL, locale: 'es-AR' });
+    enterConfigScreen();
+
+    render(<ConfigScreen />);
+
+    expect(typeSelect().value).toBe('google-sheets');
+    expect(screen.getByLabelText<HTMLInputElement>(/URL del Web App/).value).toBe(WEB_APP_URL);
+    expect(screen.getByLabelText<HTMLInputElement>(/Locale/).value).toBe('es-AR');
+  });
+});
+
+describe('ConfigScreen — probar y guardar', () => {
+  it('Ctrl+Enter prueba, guarda con verifiedAt y vuelve a la venta', async () => {
+    stubRestBackend();
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
+
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    await waitFor(() => expect(activeScreenSignal.value).toBe('sale'));
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
+  });
+
+  it('muestra "Probando conexión…" mientras espera', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => undefined)));
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
+
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    await waitFor(() => expect(screen.getByText('Probando conexión…')).not.toBeNull());
+  });
+
+  it('si la prueba falla, muestra el motivo y el formulario queda editable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
+    render(<ConfigScreen />);
+    chooseRest();
+    const url = screen.getByLabelText(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
+
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('No se pudo conectar con el servidor'),
+    );
+    expect(activeScreenSignal.value).toBe('config');
+    expect(loadSyncConfig().ok).toBe(false);
+  });
+});
+
+describe('ConfigScreen — confirmación del borrado', () => {
+  async function openConfirmation(): Promise<void> {
+    stubRestBackend();
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://viejo.example.com',
+      verifiedAt: '2025-12-01T00:00:00.000Z',
+    });
+    await db.sales.put({
+      id: 's1',
+      lines: [],
+      payments: [],
+      total: 0,
+      status: 'closed',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    enterConfigScreen();
+    render(<ConfigScreen />);
+    const url = screen.getByLabelText(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'https://nuevo.example.com' } });
+    fireEvent.keyDown(url, CTRL_ENTER);
+    await waitFor(() => expect(screen.getByText(/Cambiar de conexión borra/)).not.toBeNull());
+  }
+
+  it('muestra qué se pierde, con los conteos', async () => {
+    await openConfirmation();
+
+    expect(screen.getByText(/1 venta/)).not.toBeNull();
+    expect(screen.getByText(/Enter borra y cambia de conexión/)).not.toBeNull();
+  });
+
+  it('Enter confirma: aplica la conexión nueva y vuelve a la venta', async () => {
+    await openConfirmation();
+
+    fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Enter' });
+
+    await waitFor(() => expect(activeScreenSignal.value).toBe('sale'));
+    await expect(db.sales.count()).resolves.toBe(0);
+  });
+
+  it('Esc vuelve a editar sin borrar nada', async () => {
+    await openConfirmation();
+
+    fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByText(/Cambiar de conexión borra/)).toBeNull());
+    await expect(db.sales.count()).resolves.toBe(1);
+    expect(activeScreenSignal.value).toBe('config');
+  });
+});
+
+describe('ConfigScreen — modo normal vs. requerido', () => {
+  it('con la conexión activa: hay botón Cancelar y Esc sale', () => {
+    connectionStateSignal.value = 'active';
+    render(<ConfigScreen />);
+
+    expect(screen.getByRole('button', { name: 'Cancelar' })).not.toBeNull();
+    fireEvent.keyDown(typeSelect(), { key: 'Escape' });
+
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('modo requerido: sin Cancelar, con el texto de bienvenida, y Esc no sale', () => {
+    connectionStateSignal.value = 'unconfigured';
+    render(<ConfigScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
+    expect(screen.getByText('Configurá y probá la conexión para empezar.')).not.toBeNull();
+    fireEvent.keyDown(typeSelect(), { key: 'Escape' });
+
+    expect(activeScreenSignal.value).toBe('config');
+  });
+});
+```
+
+Run: `pnpm vitest run src/ui/screens/config-screen.test.tsx` → FAIL.
+
+- [ ] **Step 5: Pantalla — reemplazar `src/ui/screens/config-screen.tsx`**
+
+```tsx
+import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import { useLayoutEffect, useRef } from 'preact/hooks';
+import type { ConfigField } from '../../connectors/config-field.ts';
+import type { LocalDataSummary } from '../../storage/local-data.ts';
+import { CONNECTOR_TYPES, connectorFields } from '../../sync/connector-registry.ts';
+import {
+  backToEditing,
+  cancelConfigScreen,
+  confirmConfigChange,
+  handleConfigEscape,
+  setConfigField,
+  setConfigLocale,
+  setConfigType,
+  submitConfig,
+} from '../keyboard/config-controller.ts';
+import {
+  configConfirmationSignal,
+  configErrorFieldSignal,
+  configErrorSignal,
+  configFieldValuesSignal,
+  configLocaleSignal,
+  configPhaseSignal,
+  configTypeSignal,
+  type ConfigPhase,
+} from '../state/sync-config.ts';
+import { connectionStateSignal } from '../state/sync.ts';
+
+const overlayStyle = {
+  height: 'var(--app-height)',
+  overflowY: 'auto' as const,
+  display: 'flex',
+  flexDirection: 'column' as const,
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 'var(--space-4)',
+  background: 'var(--color-surface)',
+};
+
+const dialogStyle = {
+  width: '100%',
+  maxWidth: '560px',
+  background: 'var(--color-bg)',
+  borderRadius: 'var(--radius-md)',
+  boxShadow: 'var(--shadow-card)',
+  padding: 'var(--space-4)',
+  display: 'flex',
+  flexDirection: 'column' as const,
+  gap: 'var(--space-3)',
+  color: 'var(--color-text)',
+  fontFamily: 'var(--font-sans)',
+  outline: 'none',
+};
+
+const fieldStyle = { display: 'flex', flexDirection: 'column' as const, gap: 'var(--space-2)' };
+
+const controlStyle = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--font-size-base)',
+  padding: 'var(--space-2)',
+  borderRadius: 'var(--radius-md)',
+  border: '1px solid var(--color-border)',
+  background: 'var(--color-bg)',
+  color: 'var(--color-text)',
+};
+
+const buttonStyle = {
+  padding: 'var(--space-2) var(--space-3)',
+  borderRadius: 'var(--radius-md)',
+  whiteSpace: 'nowrap' as const,
+};
+
+/** `locale` es config de terminal, no de un conector: vive aparte y va siempre al final. */
+const LOCALE_FIELD: ConfigField = {
+  key: 'locale',
+  label: 'Locale (ej. es-AR — en blanco usa el del navegador)',
+  optional: true,
+  placeholder: 'es-AR',
+};
+
+function fieldLabel(field: ConfigField): string {
+  return field.optional ? `${field.label} (opcional)` : field.label;
+}
+
+function plural(count: number, singular: string, pluralForm: string): string {
+  return `${String(count)} ${count === 1 ? singular : pluralForm}`;
+}
+
+/** Lo que se perdería, en una línea: solo lo que existe. */
+function describeLocalDataLoss(summary: LocalDataSummary): string {
+  const parts: string[] = [];
+  if (summary.sales > 0) parts.push(plural(summary.sales, 'venta', 'ventas'));
+  if (summary.cashSessions > 0) parts.push(plural(summary.cashSessions, 'turno de caja', 'turnos de caja'));
+  if (summary.draftCartLines > 0) parts.push('la venta en curso');
+  if (summary.products > 0) parts.push(plural(summary.products, 'producto', 'productos'));
+  if (summary.customers > 0) parts.push(plural(summary.customers, 'cliente', 'clientes'));
+  return parts.join(' · ');
+}
+
+function ConfirmationCard({ summary }: { summary: LocalDataSummary }) {
+  return (
+    <div
+      style={{
+        border: '1px solid var(--color-danger)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-3)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2)',
+      }}
+    >
+      <p style={{ margin: 0, fontWeight: 'bold' }}>
+        Cambiar de conexión borra los datos de esta terminal
+      </p>
+      <p style={{ margin: 0 }}>Se van a borrar: {describeLocalDataLoss(summary)}.</p>
+      {summary.pendingOutbox > 0 && (
+        <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>
+          {plural(summary.pendingOutbox, 'evento sin enviar', 'eventos sin enviar')} al backend
+          actual ({plural(summary.pendingSales, 'venta', 'ventas')}) se perderán.
+        </p>
+      )}
+      <p style={{ margin: 0 }}>La caja empieza limpia con la conexión nueva.</p>
+    </div>
+  );
+}
+
+function footerHint(phase: ConfigPhase, required: boolean): string {
+  switch (phase) {
+    case 'confirming':
+      return 'Enter borra y cambia de conexión · Esc vuelve a editar.';
+    case 'probing':
+      return 'Esc cancela la prueba.';
+    case 'applying':
+      return '';
+    default:
+      return required
+        ? 'Tab para moverte entre campos, Ctrl+Enter para probar y guardar.'
+        : 'Tab para moverte entre campos, Ctrl+Enter para probar y guardar, Esc para cancelar.';
+  }
+}
+
+/**
+ * `/CONFIG` como diálogo modal con fases (Etapa 2b, #76): editar → probar la
+ * conexión → (confirmar el borrado de lo local, si cambia el origen y hay
+ * datos del usuario) → aplicar. Tab/Shift+Tab (nativo) navega, Ctrl+Enter
+ * prueba y guarda todo junto, Esc según la fase (ver `handleConfigEscape`);
+ * Enter solo confirma el borrado en la fase de confirmación. Los atajos se
+ * atienden en el contenedor (los eventos suben desde los campos), así siguen
+ * llegando aunque el foco pase al contenedor en las fases sin campos
+ * editables. Con la conexión todavía no activa es el **modo requerido**: no
+ * hay "Cancelar" ni salida hasta tener una conexión probada.
+ */
+export function ConfigScreen() {
+  const typeRef = useRef<HTMLSelectElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const phase = configPhaseSignal.value;
+  const required = connectionStateSignal.value !== 'active';
+  const errorField = configErrorFieldSignal.value;
+  const error = configErrorSignal.value;
+  const type = configTypeSignal.value;
+  const editing = phase === 'editing';
+
+  // Foco: editando va al selector; en las demás fases al contenedor, para que
+  // Esc/Enter sigan llegando aunque los campos queden de solo lectura.
+  // `useLayoutEffect` (no `useSignalEffect`, que corre diferido y dejó una
+  // ventana de carrera en la Etapa 2).
+  useLayoutEffect(() => {
+    if (phase === 'editing') {
+      typeRef.current?.focus();
+    } else {
+      dialogRef.current?.focus();
+    }
+  }, [phase]);
+
+  // Un error apunta a un campo concreto: enfocarlo y seleccionarlo permite
+  // retipear de una. Declarado después del efecto de fase: si cambian juntos, gana este.
+  useLayoutEffect(() => {
+    if (errorField === null || error === null) {
+      return;
+    }
+    const input = dialogRef.current?.querySelector<HTMLInputElement>(
+      `[data-config-field="${errorField}"]`,
+    );
+    input?.focus();
+    input?.select();
+  }, [errorField, error]);
+
+  const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      handleConfigEscape();
+      return;
+    }
+    if (event.key === 'Enter' && event.ctrlKey && phase === 'editing') {
+      event.preventDefault();
+      void submitConfig();
+      return;
+    }
+    if (event.key === 'Enter' && phase === 'confirming') {
+      event.preventDefault();
+      void confirmConfigChange();
+    }
+  };
+
+  const handleTypeChange = (event: TargetedEvent<HTMLSelectElement>) => {
+    const chosen = CONNECTOR_TYPES.find((info) => info.type === event.currentTarget.value);
+    setConfigType(chosen?.type ?? null);
+  };
+
+  const values = type === null ? undefined : configFieldValuesSignal.value[type];
+  const visibleFields = type === null ? [] : [...connectorFields(type), LOCALE_FIELD];
+  const confirmation = configConfirmationSignal.value;
+
+  return (
+    <div style={overlayStyle}>
+      <div ref={dialogRef} tabIndex={-1} onKeyDown={handleKeyDown} style={dialogStyle}>
+        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Configurar conexión</h1>
+        {required && (
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+            Configurá y probá la conexión para empezar.
+          </p>
+        )}
+
+        {phase === 'confirming' && confirmation !== null ? (
+          <ConfirmationCard summary={confirmation} />
+        ) : (
+          <>
+            <label style={fieldStyle}>
+              <span>Tipo de conexión</span>
+              <select
+                ref={typeRef}
+                value={type ?? ''}
+                onChange={handleTypeChange}
+                disabled={!editing}
+                aria-label="Tipo de conexión"
+                style={controlStyle}
+              >
+                <option value="">Elegí un tipo de conexión…</option>
+                {CONNECTOR_TYPES.map((info) => (
+                  <option key={info.type} value={info.type}>
+                    {info.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {visibleFields.map((field) => {
+              const isLocale = field.key === 'locale';
+              const value = isLocale ? configLocaleSignal.value : (values?.[field.key] ?? '');
+              return (
+                <label key={`${type ?? ''}:${field.key}`} style={fieldStyle}>
+                  <span>{fieldLabel(field)}</span>
+                  <input
+                    type="text"
+                    value={value}
+                    readOnly={!editing}
+                    placeholder={field.placeholder}
+                    onInput={(event) => {
+                      if (isLocale) {
+                        setConfigLocale(event.currentTarget.value);
+                      } else {
+                        setConfigField(field.key, event.currentTarget.value);
+                      }
+                    }}
+                    data-config-field={field.key}
+                    aria-label={fieldLabel(field)}
+                    style={{
+                      ...controlStyle,
+                      borderColor:
+                        errorField === field.key ? 'var(--color-danger)' : 'var(--color-border)',
+                    }}
+                  />
+                </label>
+              );
+            })}
+          </>
+        )}
+
+        <div style={{ minHeight: 'var(--space-8)' }}>
+          {phase === 'probing' && <p role="status" style={{ margin: 0 }}>Probando conexión…</p>}
+          {phase === 'applying' && <p role="status" style={{ margin: 0 }}>Aplicando conexión…</p>}
+          {editing && error !== null && (
+            <p role="alert" style={{ margin: 0, color: 'var(--color-danger)' }}>
+              {error}
+            </p>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+          }}
+        >
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{footerHint(phase, required)}</p>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
+            {phase === 'confirming' ? (
+              <>
+                <button type="button" onClick={backToEditing} style={buttonStyle}>
+                  Volver
+                </button>
+                <button type="button" onClick={() => void confirmConfigChange()} style={buttonStyle}>
+                  Borrar y cambiar
+                </button>
+              </>
+            ) : (
+              <>
+                {!required && (
+                  <button type="button" onClick={cancelConfigScreen} disabled={!editing} style={buttonStyle}>
+                    Cancelar
+                  </button>
+                )}
+                <button type="button" onClick={() => void submitConfig()} disabled={!editing} style={buttonStyle}>
+                  Probar y guardar
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+Run: `pnpm vitest run src/ui/screens/config-screen.test.tsx src/ui/keyboard/config-controller.test.ts` → PASS. Puntos donde suele haber que ajustar: (a) `getByLabelText<HTMLSelectElement>` con genérico (ya usado en la Etapa 2, el lint prohíbe `as` innecesarios); (b) si `fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), …)` no llega al contenedor, verificar que el `<p>` esté dentro del `div` con `onKeyDown`; (c) `role="alert"` debe existir una sola vez por vez en cada fase.
+
+- [ ] **Step 6: Adaptar los dos e2e que recorren el formulario**
+
+`e2e/minibackend-sync.spec.ts`: reemplazar el tramo que va desde `const urlInput = page.getByLabel(/URL del sistema externo/);` hasta `await expect(commandBar).toBeVisible();` (justo antes de `/SINCRONIZAR`), **conservando el comentario largo sobre el Bearer token**, por:
+
+```ts
+  // Sin valores por omisión (Etapa 2b): hay que elegir el tipo y tipear la URL.
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
+
+  // (comentario existente sobre por qué hace falta un Bearer token no vacío)
+  const apiKeyInput = page.getByLabel(/API key/);
+  await apiKeyInput.fill('demo-api-key');
+
+  // Ctrl+Enter prueba la conexión (pull completo) y, si sale bien, la guarda:
+  // el catálogo llega en este mismo paso, no hace falta un sync aparte.
+  await apiKeyInput.press('Control+Enter');
+  await expect(commandBar).toBeVisible();
+```
+
+`e2e/config-connector.spec.ts`:
+- En el `beforeEach`, reemplazar el `route.abort()` por una respuesta exitosa del puente (con CORS), porque ahora guardar **prueba** la conexión:
+
+```ts
+test.beforeEach(async ({ page }) => {
+  // El puente de Sheets simulado: toda acción responde OK con listas vacías.
+  await page.route('https://script.google.com/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ ok: true, data: { items: [] } }),
+    }),
+  );
+});
+```
+
+- En el primer test, después de `typeSelect.press('G')` todo sigue igual (el selector ahora arranca vacío, pero el type-ahead "G" elige Google Sheets). Al final, en vez de comparar el JSON completo guardado, verificar el contenido y la prueba:
+
+```ts
+  const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
+  const parsed = JSON.parse(stored ?? 'null') as Record<string, unknown>;
+  expect(parsed).toMatchObject({ type: 'google-sheets', webAppUrl: WEB_APP_URL });
+  expect(parsed.verifiedAt).toBeTruthy();
+```
+
+- En el test `'Esc cancela sin guardar'`, elegir el tipo antes de llenar la URL (el formulario arranca sin campos): agregar `await page.getByLabel('Tipo de conexión').selectOption('rest');` antes del `fill`.
+
+Run (puertos 4000 y 4173 libres): `pnpm test:e2e e2e/config-connector.spec.ts e2e/minibackend-sync.spec.ts e2e/keyboard-only.spec.ts`
+Expected: PASS. Repetir el de config 10 veces: `pnpm exec playwright test e2e/config-connector.spec.ts --repeat-each=10 --reporter=dot`.
+
+- [ ] **Step 7: Verificar todo y commitear**
+
+Run: `grep -rn "DEFAULT_BASE_URL\|DEFAULT_API_KEY\|configStepSignal\|submitConfigStep" src e2e` (esperado: sin resultados); `pnpm test; pnpm typecheck; pnpm lint`; `pnpm prettier --check --end-of-line auto src/ui/state/sync-config.ts src/ui/keyboard/config-controller.ts src/ui/keyboard/config-controller.test.ts src/ui/screens/config-screen.tsx src/ui/screens/config-screen.test.tsx e2e/config-connector.spec.ts`.
+Expected: verde.
+
+```bash
+git add -A src e2e
+git commit -m "feat: /CONFIG con fases — probar, confirmar el borrado y aplicar la conexión (#76)
+
+Sin valores por omisión, selector sin tipo elegido, modo requerido sin salida.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 10: Fixture e2e con una conexión activa sembrada
+
+Se hace **antes** del bloqueo de arranque (Task 11) para que los e2e sigan verdes: cuando el bloqueo exista, los specs que ejercitan la app ya conectada (y offline) arrancan con una config `active`.
+
+**Files:**
+- Create: `e2e/fixtures.ts`
+- Modify: `e2e/account-sale.spec.ts`, `e2e/cart-persistence.spec.ts`, `e2e/cash-session.spec.ts`, `e2e/keyboard-only.spec.ts`, `e2e/offline-sale.spec.ts`, `e2e/void-sale.spec.ts` (solo la línea de import)
+
+**Interfaces:**
+- Consumes: `SyncConfig.verifiedAt` (Task 2).
+- Produces: `e2e/fixtures.ts` exporta `test` (el de Playwright con la config sembrada), `expect`, `ACTIVE_CONFIG` y `CONFIG_STORAGE_KEY`.
+
+- [ ] **Step 1: Crear `e2e/fixtures.ts`**
+
+```ts
+import { test as base, expect } from '@playwright/test';
+
+export const CONFIG_STORAGE_KEY = 'offline-pos:sync-config';
+
+/**
+ * Conexión `active` (con `verifiedAt`) apuntando a un backend inalcanzable: es
+ * lo que necesitan los specs que ejercitan la app ya conectada y 100% offline
+ * (sin backend real). Desde la Etapa 2b una terminal sin conexión activa solo
+ * muestra `/CONFIG`, así que sin esto ningún spec llegaría a la venta. El sync
+ * contra el puerto 9 falla en silencio (estado `sync-error`) sin molestar.
+ */
+export const ACTIVE_CONFIG = {
+  type: 'rest',
+  baseUrl: 'http://127.0.0.1:9',
+  verifiedAt: '2026-01-01T00:00:00.000Z',
+};
+
+/** `test` de Playwright que siembra `ACTIVE_CONFIG` antes de que cargue la app (en cada navegación). */
+export const test = base.extend({
+  page: async ({ page }, use) => {
+    await page.addInitScript(
+      ({ key, config }) => {
+        localStorage.setItem(key, JSON.stringify(config));
+      },
+      { key: CONFIG_STORAGE_KEY, config: ACTIVE_CONFIG },
+    );
+    await use(page);
+  },
+});
+
+export { expect };
+```
+
+- [ ] **Step 2: Cambiar el import de los seis specs**
+
+Run: `grep -n "@playwright/test" e2e/*.spec.ts` para ver la línea exacta de cada uno. En los seis listados arriba, `import { expect, test } from '@playwright/test';` pasa a `import { expect, test } from './fixtures.ts';` (si alguno importa algo más de `@playwright/test`, como `type Page`, dejar ese import aparte y mover solo `expect`/`test`):
+
+```bash
+sed -i "s#import { expect, test } from '@playwright/test';#import { expect, test } from './fixtures.ts';#" e2e/account-sale.spec.ts e2e/cart-persistence.spec.ts e2e/cash-session.spec.ts e2e/keyboard-only.spec.ts e2e/offline-sale.spec.ts e2e/void-sale.spec.ts
+grep -n "fixtures.ts" e2e/*.spec.ts
+```
+Expected: los seis aparecen; ninguno sigue importando `test` de `@playwright/test`.
+
+- [ ] **Step 3: Verificar y commitear**
+
+Con los puertos 4000 y 4173 libres: `pnpm test:e2e`
+Expected: la suite completa pasa (el bloqueo todavía no existe, la config sembrada es inofensiva).
+
+```bash
+git add -A e2e
+git commit -m "test: fixture e2e que siembra una conexión activa (#76)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 11: Bloqueo de arranque — `App` y `bootstrap`
+
+**Files:**
+- Modify: `src/ui/app.tsx`, `src/ui/app.test.tsx`, `src/ui/bootstrap.ts`, `src/ui/bootstrap.test.ts`
+
+**Interfaces:**
+- Consumes: `connectionState` (Task 2), `connectionStateSignal`/`setConnectionState` (Task 2), `resetConfigForm` (Task 9), `ConfigScreen` en modo requerido (Task 9).
+- Produces: sin conexión `active`, `App` muestra **solo** `ConfigScreen`; `bootstrap()` calcula el estado desde la config guardada y precarga el formulario si la conexión no está activa.
+
+- [ ] **Step 1: Tests que fallan**
+
+`src/ui/app.test.tsx`: sumar `import { connectionStateSignal } from './state/sync.ts';`, poner `connectionStateSignal.value = 'active';` en el `beforeEach` existente (para que los tests actuales sigan viendo la venta) y agregar:
+
+```tsx
+describe('App (Etapa 2b: bloqueo de arranque)', () => {
+  it.each(['unconfigured', 'unverified'] as const)(
+    'con la conexión %s muestra solo la configuración: no hay pantalla de venta ni barra de comandos',
+    (state) => {
+      connectionStateSignal.value = state;
+
+      render(<App />);
+
+      expect(screen.getByRole('heading', { name: 'Configurar conexión' })).not.toBeNull();
+      expect(screen.queryByLabelText('Barra de comandos')).toBeNull();
+    },
+  );
+
+  it('con la conexión activa muestra la pantalla de venta', () => {
+    connectionStateSignal.value = 'active';
+
+    render(<App />);
+
+    expect(screen.getByLabelText('Barra de comandos')).not.toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Configurar conexión' })).toBeNull();
+  });
+});
+```
+
+`src/ui/bootstrap.test.ts`: sumar imports de `saveSyncConfig` (`'../sync/config.ts'`), `connectionStateSignal` (`'./state/sync.ts'`), `configTypeSignal`/`configFieldValuesSignal` (`'./state/sync-config.ts'`) y agregar dentro del `describe('bootstrap', …)`:
+
+```ts
+  it('sin config guardada: la conexión queda unconfigured', async () => {
+    await bootstrap();
+
+    expect(connectionStateSignal.value).toBe('unconfigured');
+  });
+
+  it('con una config sin verifiedAt (por ejemplo, la guardada antes de la Etapa 2b): unverified y el formulario queda precargado', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+
+    await bootstrap();
+
+    expect(connectionStateSignal.value).toBe('unverified');
+    expect(configTypeSignal.value).toBe('rest');
+    expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
+  });
+
+  it('con una config con verifiedAt: active', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await bootstrap();
+
+    expect(connectionStateSignal.value).toBe('active');
+  });
+```
+
+Run: `pnpm vitest run src/ui/app.test.tsx src/ui/bootstrap.test.ts` → FAIL.
+
+- [ ] **Step 2: Implementación**
+
+`src/ui/app.tsx`: importar `connectionStateSignal` desde `'./state/sync.ts'` y, al principio de `ActiveScreen`, antes del `switch`:
+
+```tsx
+function ActiveScreen() {
+  // Etapa 2b (#76): sin una conexión activa no hay ninguna otra pantalla
+  // posible — ni venta ni barra de comandos. La única salida es probar una
+  // conexión en `/CONFIG` (modo requerido: sin Cancelar y Esc no sale).
+  if (connectionStateSignal.value !== 'active') {
+    return <ConfigScreen />;
+  }
+  switch (activeScreenSignal.value) {
+```
+(el resto del `switch` queda igual).
+
+`src/ui/bootstrap.ts`: agregar imports `connectionState` (`'../sync/connection-state.ts'`), `loadSyncConfig` (`'../sync/config.ts'`), `setConnectionState` (`'./state/sync.ts'`), `resetConfigForm` (`'./state/sync-config.ts'`), y al final de `bootstrap()`, **antes** de `startSyncEngine()`:
+
+```ts
+  // Etapa 2b (#76): sin una conexión probada la app solo muestra `/CONFIG`
+  // (ver `ui/app.tsx`). Si hay una config guardada pero sin probar (por ejemplo
+  // la de antes de 2b), el formulario abre precargado para que un Ctrl+Enter
+  // alcance — el origen no cambia, así que no se pierde ningún dato.
+  const configResult = loadSyncConfig();
+  const state = connectionState(configResult);
+  setConnectionState(state);
+  if (state !== 'active') {
+    resetConfigForm(configResult.ok ? configResult.value : undefined);
+  }
+```
+
+Actualizar además el comentario de cabecera de `bootstrap()` (frase "una terminal recién instalada, sin `/CONFIG` configurado todavía, arranca vacía hasta el primer sync") para decir que ahora arranca directamente en `/CONFIG` hasta probar una conexión.
+
+- [ ] **Step 3: Verificar y commitear**
+
+Run: `pnpm test; pnpm typecheck; pnpm lint` y, con puertos libres, `pnpm test:e2e`.
+Expected: verde. Los e2e que estaban en `@playwright/test` puro (`config-connector`, `minibackend-sync`) fallan en este punto porque abren `/CONFIG` desde la barra de comandos y ahora la app arranca en la pantalla de configuración: se arreglan en el Task 12; **no commitear con ellos en rojo** — hacer el Task 12 antes del commit, o adaptarlos mínimamente acá. Recomendado: commitear Tasks 11 y 12 seguidos, corriendo la suite completa recién al final del 12.
+
+```bash
+git add -A src
+git commit -m "feat: sin conexión activa la app solo muestra /CONFIG (#76)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12: e2e del ciclo de vida de la conexión
+
+**Files:**
+- Modify: `e2e/minibackend-sync.spec.ts`, `e2e/config-connector.spec.ts`
+- Create: `e2e/connection-lifecycle.spec.ts`
+
+**Interfaces:**
+- Consumes: todo lo anterior; `putIntoStore`/`getAllFromStore` (`e2e/indexed-db.ts`), `test`/`expect`/`ACTIVE_CONFIG` (`e2e/fixtures.ts`).
+- Produces: cobertura e2e del arranque bloqueado, la prueba fallida, la config vieja y el cambio de conector con advertencia.
+
+- [ ] **Step 1: `minibackend-sync.spec.ts` — arranca directo en la configuración**
+
+Reemplazar el tramo que va desde `await page.goto('/');` hasta justo antes de `await commandBar.fill('/SINCRONIZAR');` por (conservando el comentario largo sobre el Bearer token del minibackend):
+
+```ts
+  await page.goto('/');
+  // Sin config guardada la app abre directo en /CONFIG (modo requerido, Etapa 2b).
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+
+  // Sin valores por omisión: hay que elegir el tipo y tipear la URL.
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
+
+  // (comentario existente sobre por qué hace falta un Bearer token no vacío)
+  const apiKeyInput = page.getByLabel(/API key/);
+  await apiKeyInput.fill('demo-api-key');
+
+  // Ctrl+Enter prueba la conexión (pull completo) y, si sale bien, la guarda:
+  // el catálogo llega en este mismo paso.
+  await apiKeyInput.press('Control+Enter');
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+```
+
+(y borrar la declaración previa de `commandBar`, si quedó duplicada.)
+
+- [ ] **Step 2: `config-connector.spec.ts` — con conexión activa sembrada**
+
+Cambiar el import de `test`/`expect` a `'./fixtures.ts'` (queda `import { expect, test } from './fixtures.ts';` y `import type { Page } from '@playwright/test';`). El primer test y el de Esc se quedan; **borrar** el test `'una config guardada por una versión anterior…'` (se cubre en el spec nuevo). Ajustes:
+- El primer test: como ahora arranca con la config REST activa de `ACTIVE_CONFIG`, el formulario abre en REST precargado; `typeSelect.press('G')` sigue eligiendo Google Sheets. Todo lo demás igual (el puente simulado del `beforeEach` responde OK).
+- El test de Esc: la config activa hace que el formulario abra en REST con `http://127.0.0.1:9`; tipear una URL nueva y Esc no debe cambiar lo guardado:
+
+```ts
+test('Esc cancela sin guardar', async ({ page }) => {
+  await page.goto('/');
+  await openConfig(page);
+  await page.getByLabel(/URL del sistema externo/).fill('http://localhost:9999');
+
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByLabel('Barra de comandos')).toBeFocused();
+  const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
+  expect(stored).toContain('127.0.0.1:9');
+  expect(stored).not.toContain('9999');
+});
+```
+
+- [ ] **Step 3: Spec nuevo `e2e/connection-lifecycle.spec.ts`**
+
+```ts
+import { expect, test } from '@playwright/test';
+import { getAllFromStore, putIntoStore } from './indexed-db.ts';
+
+const STORAGE_KEY = 'offline-pos:sync-config';
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': '*',
+  'access-control-allow-methods': '*',
+};
+
+/** Backend REST simulado en http://backend.test: OPTIONS, productos/stock/clientes vacíos. */
+async function routeRestBackend(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('http://backend.test/**', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS });
+      return;
+    }
+    const path = new URL(route.request().url()).pathname;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: CORS,
+      body: JSON.stringify(path === '/stock' ? [] : { items: [] }),
+    });
+  });
+}
+
+/** Puente de Sheets simulado: un producto propio, sin clientes. */
+async function routeSheetsBridge(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('https://script.google.com/**', async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON() as { action: string } | null;
+    const data =
+      body?.action === 'pullProducts'
+        ? {
+            items: [
+              {
+                id: 'sheet-p1',
+                sku: 'SHEET-1',
+                barcodes: [],
+                name: 'Producto de la planilla',
+                price: 500,
+                taxRate: 0.21,
+                category: 'x',
+              },
+            ],
+          }
+        : { items: [] };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: CORS,
+      body: JSON.stringify({ ok: true, data }),
+    });
+  });
+}
+
+test('sin config guardada la app abre directo en /CONFIG y no hay forma de salir', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(page.getByText('Configurá y probá la conexión para empezar.')).toBeVisible();
+  await expect(page.getByLabel('Barra de comandos')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Cancelar' })).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(page.getByLabel('Barra de comandos')).toHaveCount(0);
+});
+
+test('una prueba fallida deja el modal abierto con lo tipeado y no guarda nada', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill('http://127.0.0.1:9');
+
+  await page.keyboard.press('Control+Enter');
+
+  await expect(page.getByRole('alert')).toContainText('No se pudo conectar con el servidor');
+  await expect(page.getByLabel(/URL del sistema externo/)).toHaveValue('http://127.0.0.1:9');
+  await expect(page.getByLabel('Barra de comandos')).toHaveCount(0);
+  expect(await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)).toBeNull();
+});
+
+test('una config guardada antes de la Etapa 2b (sin type ni verifiedAt) pide probarla una vez, precargada', async ({
+  page,
+}) => {
+  await page.addInitScript((key) => {
+    localStorage.setItem(
+      key,
+      JSON.stringify({ baseUrl: 'http://backend.test', apiKey: 'clave-vieja' }),
+    );
+  }, STORAGE_KEY);
+  await routeRestBackend(page);
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(page.getByLabel('Tipo de conexión')).toHaveValue('rest');
+  await expect(page.getByLabel(/URL del sistema externo/)).toHaveValue('http://backend.test');
+  await expect(page.getByLabel(/API key/)).toHaveValue('clave-vieja');
+
+  await page.keyboard.press('Control+Enter');
+
+  await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+  const stored = JSON.parse((await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY)) ?? 'null') as Record<string, unknown>;
+  expect(stored.verifiedAt).toBeTruthy();
+  expect(stored.type).toBe('rest');
+});
+
+test('cambiar de conector con datos: advierte qué se pierde, y al confirmar borra y carga lo nuevo', async ({
+  page,
+}) => {
+  await routeRestBackend(page);
+  await routeSheetsBridge(page);
+
+  // Primer arranque contra el backend REST simulado.
+  await page.goto('/');
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill('http://backend.test');
+  await page.keyboard.press('Control+Enter');
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+  // Datos del usuario que se perderían: una venta cerrada.
+  await putIntoStore(page, 'sales', {
+    id: 'e2e-sale-1',
+    lines: [],
+    payments: [],
+    total: 0,
+    status: 'closed',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  // Cambiar a Google Sheets.
+  await commandBar.fill('/CONFIG');
+  await commandBar.press('Enter');
+  await page.getByLabel('Tipo de conexión').selectOption('google-sheets');
+  await page.getByLabel(/URL del Web App/).fill('https://script.google.com/macros/s/e2e/exec');
+  await page.keyboard.press('Control+Enter');
+
+  await expect(page.getByText('Cambiar de conexión borra los datos de esta terminal')).toBeVisible();
+  await expect(page.getByText(/1 venta/)).toBeVisible();
+  // Todavía no cambió nada.
+  expect(await getAllFromStore(page, 'sales')).toHaveLength(1);
+
+  await page.keyboard.press('Enter');
+
+  await expect(commandBar).toBeVisible();
+  expect(await getAllFromStore(page, 'sales')).toHaveLength(0);
+  const products = await getAllFromStore<{ name: string }>(page, 'products');
+  expect(products.map((product) => product.name)).toEqual(['Producto de la planilla']);
+});
+
+test('Esc en la confirmación vuelve a editar sin borrar nada', async ({ page }) => {
+  await routeRestBackend(page);
+  await routeSheetsBridge(page);
+  await page.goto('/');
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill('http://backend.test');
+  await page.keyboard.press('Control+Enter');
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+  await putIntoStore(page, 'sales', {
+    id: 'e2e-sale-1',
+    lines: [],
+    payments: [],
+    total: 0,
+    status: 'closed',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  });
+  await commandBar.fill('/CONFIG');
+  await commandBar.press('Enter');
+  await page.getByLabel('Tipo de conexión').selectOption('google-sheets');
+  await page.getByLabel(/URL del Web App/).fill('https://script.google.com/macros/s/e2e/exec');
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByText('Cambiar de conexión borra los datos de esta terminal')).toBeVisible();
+
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByLabel(/URL del Web App/)).toBeVisible();
+  expect(await getAllFromStore(page, 'sales')).toHaveLength(1);
+});
+```
+
+- [ ] **Step 4: Correr, repetir y commitear**
+
+Con los puertos 4000 y 4173 libres:
+`pnpm test:e2e` → la suite completa pasa.
+`pnpm exec playwright test e2e/connection-lifecycle.spec.ts e2e/config-connector.spec.ts --repeat-each=10 --reporter=dot` → sin fallas (los tiempos de la prueba/confirmación son justo el tipo de cosa que se rompe a veces).
+Si el foco tras la confirmación no llega a Enter (el `keyboard.press('Enter')` no dispara `confirmConfigChange`), verificar que el foco esté en el contenedor (`useLayoutEffect` de fase en `config-screen.tsx`).
+
+```bash
+git add -A e2e
+git commit -m "test: e2e del ciclo de vida de la conexión (#76)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 13: Documentación, verificación final y PR
+
+**Files:**
+- Modify: `CLAUDE.md`
+
+- [ ] **Step 1: Actualizar `CLAUDE.md`**
+
+Ubicar los pasajes: `grep -n "/CONFIG\` (configura\|Barra de estado\|sin \`/CONFIG\`\|se configura por terminal vía\|Conectores plugin (epic" CLAUDE.md`. Cambios:
+
+1. **Comando `/CONFIG`** (lista de comandos de "UX keyboard-first"): reemplazar "abre precargado con la config guardada, o con los defaults del demo si no hay ninguna" por: "abre precargado con la config guardada (vacío y sin tipo elegido si no hay ninguna: no hay valores por omisión); Ctrl+Enter no solo valida sino que **prueba la conexión** (pull completo en memoria) y, si cambia el origen y hay datos del usuario, pide confirmar el borrado de lo local antes de aplicar — ver 'Ciclo de vida de la conexión'".
+2. **Nueva sección "Ciclo de vida de la conexión (Etapa 2b)"** debajo de "Connector API": estados `unconfigured`/`unverified`/`active` (`verifiedAt` en `SyncConfig`, `sync/connection-state.ts`); `App` muestra solo `/CONFIG` en modo requerido (sin Cancelar, Esc no sale) hasta tener una conexión `active`, sin depender de la conectividad (offline-first intacto); flujo probar (`sync/connection.ts::probeConnection`, todo o nada, con tiempo máximo) → planear (`planConnectionChange`; origen = endpoint normalizado, el `type` no cuenta) → confirmar (solo si se pierden datos del usuario: ventas, turnos, pendientes del outbox, venta en curso; con un último intento de envío al conector actual) → aplicar (`sync/apply-connection.ts::applyConnection`: una transacción Dexie sobre `db.tables`, cursores reiniciados, config guardada **al final** con `verifiedAt`; toma el cerrojo de `sync/engine.ts`); riesgo residual aceptado del guardado en `localStorage`; las terminales con config anterior a 2b pasan una vez por `/CONFIG` (precargada, sin borrar nada).
+3. **Barra de estado**: el estado `sync-error` ahora también aparece cuando falla cualquier pull (#53), con el motivo traducido (`lastSyncFailureSignal`) y, en `online-idle`, lo que hay en la base local (`localCatalogCountsSignal`); `syncOnce` devuelve un `SyncReport`. Errores de red legibles en `ui/errors.ts` (conectividad, 401/403, 404, timeout, error del puente de Sheets `sync/remote-error`).
+4. **Terminal nueva** (párrafo de `/DEMO_RESET` y de `ui/bootstrap.ts`): "arranca vacía hasta el primer sync" pasa a "arranca directamente en `/CONFIG` hasta probar una conexión".
+5. **Estado del proyecto**, bullet de "Conectores plugin": agregar Etapa 2b (#76) — conexión verificada, bloqueo de arranque, sin defaults, estado de sync honesto (cierra #53); y que la Etapa 2c (#77, comandos por conector) sigue pendiente.
+6. **Testing**: mencionar `e2e/fixtures.ts` (config `active` sembrada para los specs offline) y `src/test/fake-connector.ts`.
+
+- [ ] **Step 2: Verificación final completa**
+
+Con los puertos 4000 y 4173 libres:
+
+```bash
+pnpm test; pnpm typecheck; pnpm typecheck:backend; pnpm lint; pnpm test:backend
+pnpm test:e2e
+git diff --stat origin/main...HEAD | tail -5
+grep -rn "DEFAULT_BASE_URL\|DEFAULT_API_KEY\|submitConfigStep" src e2e
+```
+Expected: todo verde; el diff solo toca lo listado en "File Structure" (más lo de la Etapa 2 si su PR todavía no está mergeado); el `grep` no devuelve nada.
+
+- [ ] **Step 3: Commit, push y PR**
+
+```bash
+git add CLAUDE.md
+git commit -m "docs: ciclo de vida de la conexión (Etapa 2b) en CLAUDE.md (#76)
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+git push -u origin claude/conexion-verificada-2b
+gh pr view 75 --json state --jq .state
+```
+
+Si el PR #75 (Etapa 2) está `MERGED`: `gh pr create --base main --head claude/conexion-verificada-2b`. Si sigue `OPEN`: `gh pr create --base claude/sheets-connector-stage-2 --head claude/conexion-verificada-2b` (GitHub lo re-apunta a `main` cuando #75 se mergee). Título: `feat: conexión verificada — probar, limpiar al cambiar de origen y estado de sync honesto (#76)`. Cuerpo: resumen de las decisiones, plan de pruebas (unitarios, e2e, repeticiones), qué necesita prueba manual del usuario (la prueba real contra su planilla y el minibackend, y el cambio REST→Sheets con ventas cargadas), `Closes #76`, `Closes #53`, parte de #66, y `🤖 Generated with [Claude Code](https://claude.com/claude-code)`. Después: `mcp__ccd_pr__bind_pr` con la URL y `mcp__ccd_pr__get_status` para leer el CI (no hacer polling con `gh`), y una `PushNotification` breve avisando que terminó.
+
+---
+
+## Self-Review
+
+**Spec coverage (Parte 1 del spec):**
+- 1.1 estados y `verifiedAt` → Task 2 (+ migración de terminales existentes en Tasks 2, 11 y e2e del Task 12).
+- 1.2 bloqueo de arranque, modo requerido, engine sin ciclos sin `active`, offline-first → Tasks 4 (gating del motor), 9 (modo requerido), 11 (`App`), 12 (e2e).
+- 1.3 sin defaults, placeholders, selector sin tipo → Tasks 8 y 9.
+- 1.4 aplicar conexión (probar, planear, confirmar con envío previo, aplicar transaccional con cerrojo, config al final, fases del modal, Esc por fase) → Tasks 6, 7 y 9; `demoReset` reutiliza `clearAllTables` → Task 3.
+- 1.5 estado de sync honesto (#53), señales y barra → Tasks 2, 4 y 5.
+- 1.6 errores de red legibles y `sync/timeout` → Task 1 (el timeout lo produce `withTimeout`, Task 6).
+- 1.7 impacto en tests existentes → Tasks 4 (engine), 10 (fixture e2e), 9 y 12 (specs de `/CONFIG`).
+- Testing del spec → cada task trae sus tests; la aplicación transaccional (la más importante) es el Task 7.
+- Fuera de alcance respetado: sin base por conexión, sin re-verificación periódica.
+
+**Placeholder scan:** sin TBD/TODO. Los puntos donde el ejecutor debe mirar el archivo real están acotados y nombrados (firmas de `buildOutboxEventForSale`, el comentario largo del Bearer token que se conserva, la línea exacta de import de cada spec).
+
+**Type consistency:** `LocalDataSummary`/`hasUserData` (Task 3) → `planConnectionChange` (6), `ConfirmationCard` y controlador (9). `ProbeSnapshot`/`withTimeout` (6) → `applyConnection`/`flushPendingBeforeWipe` (7) y controlador (9). `acquireSyncLockWaiting`/`pushPendingEvents`/`tryAcquireSyncLock` (4) → Task 7 y sus tests. `connectionStateSignal`/`setConnectionState`/`lastSyncFailureSignal`/`localCatalogCountsSignal` (2) → Tasks 4, 5, 7, 9, 11. `ConfigPhase`, `configConfirmationSignal`, `handleConfigEscape`, `confirmConfigChange`, `backToEditing` se definen en el Task 9 y solo se usan ahí y en el Task 11/12.
