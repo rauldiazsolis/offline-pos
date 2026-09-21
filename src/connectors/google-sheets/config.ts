@@ -20,6 +20,16 @@ export const googleSheetsConfigSchema = z.object({
 export type GoogleSheetsConfig = z.infer<typeof googleSheetsConfigSchema>;
 
 export const googleSheetsConfigFields: ConfigField<Exclude<keyof GoogleSheetsConfig, 'type'>>[] = [
-  { key: 'webAppUrl', label: 'URL del Web App de Google Apps Script', optional: false },
-  { key: 'sharedSecret', label: 'Secreto compartido', optional: true },
+  {
+    key: 'webAppUrl',
+    label: 'URL del Web App de Google Apps Script',
+    optional: false,
+    placeholder: 'https://script.google.com/macros/s/…/exec',
+  },
+  {
+    key: 'sharedSecret',
+    label: 'Secreto compartido',
+    optional: true,
+    placeholder: 'Valor de SHARED_SECRET, si lo configuraste',
+  },
 ];

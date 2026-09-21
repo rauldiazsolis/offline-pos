@@ -5,6 +5,7 @@ import {
   buildCustomer,
   canChargeOffline,
   splitConnectorCustomer,
+  splitConnectorCustomers,
   type CustomerAccount,
 } from './customer.ts';
 
@@ -141,5 +142,20 @@ describe('splitConnectorCustomer', () => {
     );
 
     expect(account).toBeUndefined();
+  });
+});
+
+describe('splitConnectorCustomers', () => {
+  it('separa cada fila en Customer y, si trae los tres campos de crédito, CustomerAccount', () => {
+    const { customers, accounts } = splitConnectorCustomers(
+      [
+        { id: 'c1', name: 'Ana' },
+        { id: 'c2', name: 'Beto', creditLimit: 100, margin: 10, balance: 5 },
+      ],
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(customers.map((customer) => customer.id)).toEqual(['c1', 'c2']);
+    expect(accounts.map((account) => account.customerId)).toEqual(['c2']);
   });
 });

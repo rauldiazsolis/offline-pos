@@ -72,7 +72,7 @@ export async function callBridge<S extends z.ZodType>(
     return err('sync/invalid-payload', { issues: toZodIssues(envelope.error) });
   }
   if (!envelope.data.ok) {
-    return err('sync/request-failed', { message: envelope.data.error });
+    return err('sync/remote-error', { message: envelope.data.error });
   }
 
   const data = dataSchema.safeParse(envelope.data.data);

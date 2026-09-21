@@ -9,9 +9,16 @@ import { SaleScreen } from './screens/sale-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
 import { VoidSaleScreen } from './screens/void-sale-screen.tsx';
 import { activeScreenSignal } from './state/screen.ts';
+import { connectionStateSignal } from './state/sync.ts';
 import { MIN_SUPPORTED_WIDTH_PX, viewportWidthSignal } from './state/viewport.ts';
 
 function ActiveScreen() {
+  // Etapa 2b (#76): sin una conexión activa no hay ninguna otra pantalla
+  // posible — ni venta ni barra de comandos. La única salida es probar una
+  // conexión en `/CONFIG` (modo requerido: sin Cancelar y Esc no sale).
+  if (connectionStateSignal.value !== 'active') {
+    return <ConfigScreen />;
+  }
   switch (activeScreenSignal.value) {
     case 'checkout':
       return <CheckoutScreen />;

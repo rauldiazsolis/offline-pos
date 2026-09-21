@@ -211,6 +211,44 @@ conexión al actualizar. Un integrador nuevo implementa el contrato — un backe
 contrato REST no requiere tocar código del POS (RNF-06); un backend con otro formato (como la planilla
 de Sheets) entra como un conector nuevo del registro.
 
+## Ciclo de vida de la conexión (Etapa 2b, #76)
+
+Una conexión (conector + config) solo se activa después de **probarla**. `SyncConfig` guarda
+`verifiedAt` (fecha de la última prueba exitosa); `sync/connection-state.ts::connectionState` deriva
+`unconfigured` (sin config), `unverified` (config sin `verifiedAt`, incluidas las guardadas antes de
+2b) o `active`. Si no es `active`, `ui/app.tsx` muestra **solo** `/CONFIG` en **modo requerido** — ni
+venta ni barra de comandos, sin "Cancelar", Esc no sale — y `runSyncCycle` no corre. El bloqueo
+depende únicamente de lo guardado, nunca de la conectividad: una terminal `active` abre y opera
+offline como siempre; solo el primer arranque y el cambio de conector necesitan red, porque probar es
+hacer un pull. Las terminales configuradas antes de 2b pasan **una vez** por `/CONFIG` (precargada,
+sin perder datos: el origen no cambia). No hay valores por omisión: los campos arrancan vacíos y los
+ejemplos son `placeholder`s (`ConfigField.placeholder`); el selector de tipo arranca sin elegir.
+
+Ctrl+Enter en `/CONFIG` recorre cuatro fases (`configPhaseSignal`):
+1. **Probar** (`sync/connection.ts::probeConnection`): pull completo de productos, stock y clientes
+   **en memoria**, todo o nada, con tiempo máximo (`withTimeout`, sin cambiar el puerto `Connector`).
+   No toca IndexedDB, ni los cursores, ni la config guardada. Si falla, el modal queda abierto con lo
+   tipeado y un mensaje legible; Esc cancela la prueba en vuelo (un token descarta su resultado).
+2. **Planear** (`planConnectionChange`, pura): el *origen* es el endpoint normalizado (`baseUrl` o
+   `webAppUrl`) — el `type` no cuenta; cambiar solo la API key, el secreto o el locale es el mismo
+   origen. `wipe` si cambió el origen (o no hay config actual: origen desconocido, se trata como
+   ajeno); `needsConfirmation` si además hay **datos del usuario** (ventas, turnos, pendientes del
+   outbox o venta en curso — `storage/local-data.ts::hasUserData`). Un catálogo o clientes solos se
+   reemplazan sin preguntar; nunca se descartan ventas locales en silencio.
+3. **Confirmar**, solo si hace falta: antes, un último intento de enviar el outbox al conector
+   **actual** (`flushPendingBeforeWipe`: ignora el backoff, toma el cerrojo, con tope de tiempo); la
+   pantalla muestra los conteos con lo no enviado destacado. Enter borra y cambia, Esc vuelve a editar.
+4. **Aplicar** (`sync/apply-connection.ts::applyConnection`): toma el cerrojo de `sync/engine.ts`
+   (`tryAcquireSyncLock`/`acquireSyncLockWaiting`, ningún ciclo se intercala), una sola transacción
+   Dexie sobre `db.tables` (limpia si `wipe` con `clearAllTables`, carga el snapshot), reinicia los
+   cursores y **al final** guarda la config con `verifiedAt`. Riesgo residual aceptado: el guardado
+   vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después del
+   commit (un `setItem` de un string chico), el próximo arranque encontraría la config anterior con
+   datos nuevos.
+
+Un solo lugar borra lo local: `clearAllTables` (`db.tables`, así una tabla futura queda incluida sola),
+compartido con `/DEMO_RESET`.
+
 ## UX keyboard-first
 
 Principio central: **un único input siempre enfocado** (la barra de comandos) — se elimina el
@@ -359,8 +397,11 @@ variables de entorno ni pantalla de config de terminal más amplia todavía; di�
 chrome que Cobro: primer campo el selector de tipo de conector, todos los campos del tipo elegido
 visibles a la vez más `locale` al final, Tab/Shift+Tab navega, Ctrl+Enter valida y guarda todo junto,
 Esc cancela y Enter solo no hace nada; la validación es solo al confirmar y un error deja el campo
-afectado enfocado y seleccionado; abre precargado con la config guardada, o con los defaults del demo
-si no hay ninguna — Etapa 2 del epic #66, cierra #56), `/SINCRONIZAR` (fuerza un
+afectado enfocado y seleccionado; abre precargado con la config guardada, o vacío y sin tipo elegido
+si no hay ninguna — no hay valores por omisión; Ctrl+Enter no solo valida sino que **prueba la
+conexión** (pull completo en memoria) y, si cambia el origen y hay datos del usuario, pide confirmar
+el borrado de lo local antes de aplicar, ver "Ciclo de vida de la conexión" — Etapas 2 y 2b del epic
+#66, cierra #56), `/SINCRONIZAR` (fuerza un
 ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de
 estado) y `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
 abajo). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de
@@ -404,8 +445,8 @@ vez de duplicar su lógica de pull. Sin `/CONFIG` configurado, los pasos de red 
 terminal queda **vacía**, no operable de inmediato — mismo criterio que un arranque nuevo:
 `ui/bootstrap.ts` tampoco siembra nada localmente desde Fase 7 (los fixtures y
 `seedCatalogIfEmpty`/`seedCustomersIfEmpty` siguen existiendo y los usan los tests, pero ya no se
-llaman al arrancar la app — una terminal recién instalada, sin `/CONFIG` configurado todavía,
-arranca vacía hasta el primer sync). A propósito **no**
+llaman al arrancar la app — una terminal recién instalada, sin una conexión probada todavía,
+arranca directamente en `/CONFIG`, ver "Ciclo de vida de la conexión"). A propósito **no**
 toca la configuración de `/CONFIG` (URL del backend, API key, locale) — decisión explícita del
 usuario: es la conexión de esta terminal, no un dato de demo, y perderla obligaría a reconfigurar el
 backend en cada reset.
@@ -427,9 +468,15 @@ hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos, ver `isSyncStruggling` en
-`domain/outbox.ts`) — más un quinto, "sin configurar", con precedencia sobre todo salvo estar
-offline. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine` directo, eso lo resuelve
-`sync/engine.ts`.
+`domain/outbox.ts`, **o cualquier pull que falle**, #53) — más un quinto, "sin configurar", con
+precedencia sobre todo salvo estar offline. En `sync-error` muestra el motivo traducido
+(`lastSyncFailureSignal` + `describeError`) y la hora de la última sync exitosa; en `online-idle`, lo
+que hay en la base local (`localCatalogCountsSignal`, contado — un pull por delta trae solo cambios).
+`syncOnce` devuelve un `SyncReport` con el resultado de cada parte y `lastSyncedAt` solo se actualiza
+en un ciclo completamente exitoso. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine`
+directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un solo lugar
+(`ui/errors.ts`): conectividad (`Failed to fetch` y equivalentes), 401/403, 404, timeout
+(`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
 
 Otros principios no negociables: todo alcanzable en ≤2 pasos sin mouse (RNF-04), foco siempre
 visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`
@@ -662,6 +709,16 @@ por la UI real, no por IndexedDB directo (`openCashSession`: sin turno abierto n
 así que todo spec que llegue a `/COBRAR` lo necesita) — distinto de `indexed-db.ts`, que es
 lectura/escritura cruda para datos que en producción vendrían de un pull (`CustomerAccount`) y que
 no tiene sentido ejercitar por UI en cada test.
+
+`e2e/fixtures.ts` (Etapa 2b) exporta un `test` de Playwright que siembra una conexión `active`
+(`ACTIVE_CONFIG`, con `verifiedAt`, apuntando a un backend inalcanzable) antes de cargar la app: sin
+conexión activa la app solo muestra `/CONFIG`, así que todo spec que ejercite la app ya conectada
+(y offline) importa `test`/`expect` de ahí en vez de `@playwright/test`. Los que prueban el
+arranque y la configuración (`connection-lifecycle`, `minibackend-sync`) usan el de Playwright a
+secas. Para los unit tests, `src/test/fake-connector.ts` da un `Connector` de mentira. Un bug real de
+esta etapa, encontrado por el e2e y no por jsdom: `useSignalEffect` corre diferido y dejaba una
+ventana en la que tipear tras un error agregaba texto en vez de reemplazarlo — se usa
+`useLayoutEffect`.
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
 
@@ -935,8 +992,13 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   `docs/superpowers/plans/2026-09-21-registro-de-conectores-etapa-2.md`. Un bug real, encontrado por
   el e2e y no por los tests de jsdom: la selección del campo con error se aplicaba con
   `useSignalEffect` (diferido), dejando una ventana en la que tipear agregaba texto en vez de
-  reemplazarlo — se pasó a `useLayoutEffect`. Pendiente: Etapa 3 (#69, crédito ilimitado explícito
-  en cuenta corriente).
+  reemplazarlo — se pasó a `useLayoutEffect`. Etapa 2b (#76, tras la prueba manual de la Etapa 2
+  contra el minibackend y una planilla reales): conexión verificada — probar antes de guardar,
+  limpiar lo local al cambiar de origen con una advertencia clara (con un último intento de enviar lo
+  pendiente al conector actual), arranque bloqueado sin conexión activa, sin valores por omisión y
+  estado de sync honesto (cierra #53) — ver "Ciclo de vida de la conexión". Pendiente: Etapa 2c
+  (#77, comandos por conector: tipo `rest-demo` con `/DEMO_RESET`) y Etapa 3 (#69, crédito ilimitado
+  explícito en cuenta corriente).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

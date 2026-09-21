@@ -124,6 +124,27 @@ export function splitConnectorCustomer(
   };
 }
 
+/**
+ * Versión en lote de `splitConnectorCustomer`: la usan el pull del motor de
+ * sync y la aplicación de una conexión nueva (`sync/apply-connection.ts`), así
+ * la transformación vive en un solo lugar.
+ */
+export function splitConnectorCustomers(
+  raws: Parameters<typeof splitConnectorCustomer>[0][],
+  params: { now: string },
+): { customers: Customer[]; accounts: CustomerAccount[] } {
+  const customers: Customer[] = [];
+  const accounts: CustomerAccount[] = [];
+  for (const raw of raws) {
+    const split = splitConnectorCustomer(raw, params);
+    customers.push(split.customer);
+    if (split.account !== undefined) {
+      accounts.push(split.account);
+    }
+  }
+  return { customers, accounts };
+}
+
 /** Movimiento de cuenta generado al cerrar una venta con un pago `'account'`. */
 export function buildAccountMovementForSale(params: {
   id: string;

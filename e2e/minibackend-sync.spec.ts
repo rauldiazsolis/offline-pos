@@ -14,17 +14,14 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await page.request.post('http://localhost:4000/_demo/reset');
 
   await page.goto('/');
-  const commandBar = page.getByLabel('Barra de comandos');
-  await expect(commandBar).toBeVisible();
-
-  // Con el catálogo todavía vacío (Fase 7: ya no hay seed local), configurar
-  // el minibackend y forzar un sync es requisito antes de poder vender.
-  await commandBar.fill('/CONFIG');
-  await commandBar.press('Enter');
+  // Sin config guardada la app abre directo en /CONFIG (modo requerido, Etapa
+  // 2b): configurar y probar la conexión con el minibackend es requisito antes
+  // de poder vender (Fase 7: ya no hay seed local).
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
 
-  const urlInput = page.getByLabel(/URL del sistema externo/);
-  await expect(urlInput).toHaveValue(BACKEND_URL);
+  // Sin valores por omisión (Etapa 2b): hay que elegir el tipo y tipear la URL.
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
 
   // El minibackend de demo implementa el contrato al pie de la letra —
   // `security: bearerAuth` es global en `docs/connector-api.openapi.yaml`,
@@ -32,16 +29,16 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   // pull de catálogo/clientes devuelve 401 sin un Bearer token (cualquier
   // valor no vacío alcanza, el minibackend no valida el contenido — ver
   // `demo-backend/src/router.ts::hasValidBearerToken`). Dejarlo en blanco
-  // (como si de verdad fuera opcional para este backend) hace que el pull
-  // falle en silencio: `sync/engine.ts::syncOnce` no distingue un pull
-  // fallido de uno exitoso en el estado de sync, así que la barra de estado
-  // igual muestra "Sincronizado" sin que el catálogo haya llegado.
+  // (como si de verdad fuera opcional para este backend) hace que la PRUEBA
+  // de conexión falle con "El servidor rechazó las credenciales (401)" — antes
+  // de la Etapa 2b el pull fallaba en silencio y la barra decía "Sincronizado".
   const apiKeyInput = page.getByLabel(/API key/);
   await apiKeyInput.fill('demo-api-key');
 
-  // Ctrl+Enter guarda todos los campos juntos (el formulario reemplazó al
-  // wizard de 3 pasos; Enter solo ya no avanza nada).
+  // Ctrl+Enter prueba la conexión (pull completo) y, si sale bien, la guarda:
+  // el catálogo llega en este mismo paso, no hace falta un sync aparte.
   await apiKeyInput.press('Control+Enter');
+  const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
 
   await commandBar.fill('/SINCRONIZAR');

@@ -55,10 +55,25 @@ export function describeError(failure: Failure): string {
       return 'No se encontró esa venta.';
     case 'sync/invalid-payload':
       return 'El servidor devolvió datos con un formato inesperado.';
-    case 'sync/request-failed':
-      return failure.meta.status !== undefined
-        ? `El servidor respondió con un error (${String(failure.meta.status)}).`
-        : `No se pudo conectar con el servidor (${failure.meta.message}).`;
+    case 'sync/request-failed': {
+      const { status, message } = failure.meta;
+      if (status === undefined) {
+        return `No se pudo conectar con el servidor (${message}). ¿Está en línea y corriendo?`;
+      }
+      if (status === 401 || status === 403) {
+        return `El servidor rechazó las credenciales (${String(status)}).`;
+      }
+      if (status === 404) {
+        return 'El servidor no encontró el recurso (404). ¿La URL es correcta?';
+      }
+      return `El servidor respondió con un error (${String(status)}).`;
+    }
+    case 'sync/timeout':
+      return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
+    case 'sync/remote-error':
+      return `El sistema externo respondió con un error: ${failure.meta.message}`;
+    case 'connection/apply-failed':
+      return `No se pudo aplicar la conexión (${failure.meta.message}).`;
     case 'sync/config-missing':
       return 'No hay conexión configurada todavía. Usá /CONFIG.';
     case 'sync/config-invalid':
@@ -90,7 +105,7 @@ export function describeError(failure: Failure): string {
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':
-      return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}).`;
+      return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}). ¿Está corriendo?`;
     case 'demo/unavailable-for-connector':
       return `/DEMO_RESET no está disponible con ${failure.meta.connectorLabel}: solo funciona con el backend REST de demo.`;
     default: {

@@ -1,12 +1,20 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/e2e/exec';
 const STORAGE_KEY = 'offline-pos:sync-config';
 
 test.beforeEach(async ({ page }) => {
-  // Ningún test de este archivo necesita hablar con Google: si el motor de
-  // sync intenta sincronizar contra el Web App, que falle rápido y en silencio.
-  await page.route('https://script.google.com/**', (route) => route.abort());
+  // El puente de Sheets simulado: guardar una conexión ahora la PRUEBA (pull
+  // completo), así que toda acción responde OK con listas vacías (con CORS).
+  await page.route('https://script.google.com/**', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ ok: true, data: { items: [] } }),
+    }),
+  );
 });
 
 async function openConfig(page: Page): Promise<void> {
@@ -47,42 +55,29 @@ test('elegir Google Sheets solo con teclado, validar al confirmar, guardar y ver
   await expect(page.getByLabel('Barra de comandos')).toBeFocused();
 
   const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
-  expect(JSON.parse(stored ?? 'null')).toEqual({ type: 'google-sheets', webAppUrl: WEB_APP_URL });
+  const parsed = JSON.parse(stored ?? 'null') as Record<string, unknown>;
+  expect(parsed).toMatchObject({ type: 'google-sheets', webAppUrl: WEB_APP_URL });
+  // Se guardó tras PROBAR la conexión: queda marcada como verificada.
+  expect(parsed.verifiedAt).toBeTruthy();
 
-  // Reabrir /CONFIG muestra lo guardado, no los defaults del demo.
+  // Reabrir /CONFIG muestra lo guardado, no el formulario vacío.
   await openConfig(page);
   await expect(page.getByLabel('Tipo de conexión')).toHaveValue('google-sheets');
   await expect(page.getByLabel(/URL del Web App/)).toHaveValue(WEB_APP_URL);
 });
 
-test('una config guardada por una versión anterior (sin type) se lee como REST y se precarga', async ({
-  page,
-}) => {
-  await page.addInitScript((key) => {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ baseUrl: 'http://localhost:4123', apiKey: 'clave-vieja' }),
-    );
-  }, STORAGE_KEY);
-
-  await page.goto('/');
-  await openConfig(page);
-
-  await expect(page.getByLabel('Tipo de conexión')).toHaveValue('rest');
-  // Valores distintos de los defaults del demo (4000 / demo-token): prueba que
-  // se leyó la config vieja y no que cayó a los defaults por "inválida".
-  await expect(page.getByLabel(/URL del sistema externo/)).toHaveValue('http://localhost:4123');
-  await expect(page.getByLabel(/API key/)).toHaveValue('clave-vieja');
-});
-
 test('Esc cancela sin guardar', async ({ page }) => {
   await page.goto('/');
   await openConfig(page);
+  // El formulario arranca sin campos: primero hay que elegir el tipo.
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
   await page.getByLabel(/URL del sistema externo/).fill('http://localhost:9999');
 
   await page.keyboard.press('Escape');
 
   await expect(page.getByLabel('Barra de comandos')).toBeFocused();
+  // Lo guardado no cambió: sigue la conexión activa del fixture.
   const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
-  expect(stored).toBeNull();
+  expect(stored).toContain('127.0.0.1:9');
+  expect(stored).not.toContain('9999');
 });

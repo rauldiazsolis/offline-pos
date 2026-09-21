@@ -2,7 +2,9 @@ import { render, screen } from '@testing-library/preact';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import {
+  lastSyncFailureSignal,
   lastSyncedAtSignal,
+  localCatalogCountsSignal,
   pendingOutboxCountSignal,
   syncConfiguredSignal,
   syncStatusSignal,
@@ -12,6 +14,8 @@ beforeEach(() => {
   syncStatusSignal.value = 'offline';
   pendingOutboxCountSignal.value = 0;
   lastSyncedAtSignal.value = null;
+  lastSyncFailureSignal.value = null;
+  localCatalogCountsSignal.value = null;
   syncConfiguredSignal.value = true;
 });
 
@@ -67,5 +71,39 @@ describe('StatusBar', () => {
     render(<StatusBar />);
 
     expect(screen.getByText(/^Sincronizado \(/)).not.toBeNull();
+  });
+
+  it('en sync-error muestra el motivo traducido', () => {
+    syncStatusSignal.value = 'sync-error';
+    lastSyncFailureSignal.value = {
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { status: 401, message: 'x' },
+    };
+
+    render(<StatusBar />);
+
+    expect(
+      screen.getByText('Problema de sincronización: El servidor rechazó las credenciales (401).'),
+    ).not.toBeNull();
+  });
+
+  it('en sync-error muestra también la hora de la última sync exitosa', () => {
+    syncStatusSignal.value = 'sync-error';
+    lastSyncedAtSignal.value = '2026-01-01T00:00:00.000Z';
+
+    render(<StatusBar />);
+
+    expect(screen.getByText(/^Problema de sincronización · última sync OK /)).not.toBeNull();
+  });
+
+  it('en online-idle muestra lo que hay en la base local', () => {
+    syncStatusSignal.value = 'online-idle';
+    lastSyncedAtSignal.value = '2026-01-01T00:00:00.000Z';
+    localCatalogCountsSignal.value = { products: 120, customers: 22 };
+
+    render(<StatusBar />);
+
+    expect(screen.getByText(/· 120 productos · 22 clientes$/)).not.toBeNull();
   });
 });

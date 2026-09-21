@@ -28,7 +28,16 @@ function withLegacyType(value: unknown): unknown {
  */
 export const syncConfigSchema = z.preprocess(
   withLegacyType,
-  connectorConfigSchema.and(z.object({ locale: z.string().optional() })),
+  connectorConfigSchema.and(
+    z.object({
+      locale: z.string().optional(),
+      // Fecha ISO de la última prueba de conexión exitosa (Etapa 2b, #76). La
+      // escribe únicamente `sync/apply-connection.ts::applyConnection`; una
+      // config sin este campo (incluidas las guardadas antes de 2b) es "sin
+      // probar" y la app pide probarla antes de operar.
+      verifiedAt: z.string().optional(),
+    }),
+  ),
 );
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
