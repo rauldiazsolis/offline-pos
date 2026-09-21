@@ -1,19 +1,23 @@
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { loadDraftCart } from '../storage/draft-cart-repository.ts';
+import { loadSyncConfig } from '../sync/config.ts';
+import { connectionState } from '../sync/connection-state.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCatalogRepository } from './state/catalog.ts';
 import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
+import { setConnectionState } from './state/sync.ts';
+import { resetConfigForm } from './state/sync-config.ts';
 
 /**
  * Arma los repositorios antes del primer render y arranca el motor de sync.
  * Se llama una sola vez desde `main.tsx`. Ya no siembra catálogo/clientes
  * localmente (Fase 7): esos datos ahora vienen del minibackend de demo (o de
- * cualquier backend real) vía pull — una terminal recién instalada, sin
- * `/CONFIG` configurado todavía, arranca vacía hasta el primer sync. Los
+ * cualquier backend real) vía pull — una terminal recién instalada, sin una
+ * conexión probada todavía, arranca directamente en `/CONFIG` (Etapa 2b). Los
  * fixtures y `seedCatalogIfEmpty`/`seedCustomersIfEmpty`
  * (`storage/seed-catalog.ts`, `storage/seed-customers.ts`) se mantienen — los
  * siguen usando los tests unitarios. Los specs e2e que a propósito prueban el
@@ -41,6 +45,18 @@ export async function bootstrap(): Promise<void> {
     }
   }
   startCartPersistence();
+
+  // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
+  // conexión probada la app solo muestra `/CONFIG` (ver `ui/app.tsx`). Si hay
+  // una config guardada pero sin probar (por ejemplo la de antes de 2b), el
+  // formulario abre precargado para que un Ctrl+Enter alcance — el origen no
+  // cambia, así que no se pierde ningún dato.
+  const configResult = loadSyncConfig();
+  const state = connectionState(configResult);
+  setConnectionState(state);
+  if (state !== 'active') {
+    resetConfigForm(configResult.ok ? configResult.value : undefined);
+  }
 
   startSyncEngine();
 }

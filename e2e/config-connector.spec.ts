@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/e2e/exec';
 const STORAGE_KEY = 'offline-pos:sync-config';
@@ -95,6 +96,8 @@ test('Esc cancela sin guardar', async ({ page }) => {
   await page.keyboard.press('Escape');
 
   await expect(page.getByLabel('Barra de comandos')).toBeFocused();
+  // Lo guardado no cambió: sigue la conexión activa del fixture.
   const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
-  expect(stored).toBeNull();
+  expect(stored).toContain('127.0.0.1:9');
+  expect(stored).not.toContain('9999');
 });
