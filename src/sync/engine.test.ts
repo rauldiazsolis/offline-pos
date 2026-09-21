@@ -4,6 +4,9 @@ import { ok, err } from '../domain/result.ts';
 import { db } from '../storage/db.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
+  lastSyncFailureSignal,
+  lastSyncedAtSignal,
+  localCatalogCountsSignal,
   pendingOutboxCountSignal,
   syncConfiguredSignal,
   syncStatusSignal,
@@ -11,7 +14,13 @@ import {
 import type { AccountHoldResult, Connector, ConnectorCustomer, ConnectorPullResult } from './connector.ts';
 import { saveSyncConfig } from './config.ts';
 import { getCustomersCursor, getProductsCursor } from './cursor.ts';
-import { runSyncCycle, syncOnce } from './engine.ts';
+import {
+  acquireSyncLockWaiting,
+  pushPendingEvents,
+  runSyncCycle,
+  syncOnce,
+  tryAcquireSyncLock,
+} from './engine.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
@@ -249,13 +258,60 @@ describe('syncOnce — pull', () => {
     expect(stored?.quantity).toBe(7);
   });
 
-  it('no rompe el ciclo si el pull falla', async () => {
-    const pullProducts = vi
-      .fn<Connector['pullProducts']>()
-      .mockResolvedValue(err('sync/request-failed', { message: 'down' }));
+  it('si un pull falla: no rompe el ciclo, pasa a sync-error, guarda el motivo y no marca la sync como exitosa', async () => {
+    lastSyncedAtSignal.value = null;
+    const failure = err('sync/request-failed', { status: 401, message: 'x' });
+    const pullProducts = vi.fn<Connector['pullProducts']>().mockResolvedValue(failure);
 
-    await expect(syncOnce(fakeConnector({ pullProducts }), now)).resolves.toBeUndefined();
-    expect(syncStatusSignal.value).toBe('online-idle');
+    const report = await syncOnce(fakeConnector({ pullProducts }), now);
+
+    expect(report.pulls.products.ok).toBe(false);
+    expect(syncStatusSignal.value).toBe('sync-error');
+    expect(lastSyncFailureSignal.value).toEqual(failure);
+    expect(lastSyncedAtSignal.value).toBeNull();
+  });
+
+  it.each([
+    [
+      'stock',
+      { pullStock: () => Promise.resolve(err('sync/request-failed', { message: 'down' })) },
+    ],
+    [
+      'clientes',
+      { pullCustomers: () => Promise.resolve(err('sync/request-failed', { message: 'down' })) },
+    ],
+  ] as const)('un pull de %s fallido también es sync-error', async (_name, overrides) => {
+    await syncOnce(fakeConnector(overrides), now);
+
+    expect(syncStatusSignal.value).toBe('sync-error');
+    expect(lastSyncFailureSignal.value).not.toBeNull();
+  });
+
+  it('tras un ciclo exitoso limpia el motivo del fallo y guarda lo que hay en la base local', async () => {
+    await db.products.put({
+      id: 'p1',
+      sku: 'S1',
+      barcodes: [],
+      name: 'Arroz',
+      price: 100,
+      taxRate: 0.21,
+      category: 'x',
+      tracksStock: false,
+    });
+    await syncOnce(
+      fakeConnector({
+        pullProducts: () => Promise.resolve(err('sync/request-failed', { message: 'down' })),
+      }),
+      now,
+    );
+    expect(lastSyncFailureSignal.value).not.toBeNull();
+
+    const report = await syncOnce(fakeConnector(), now);
+
+    expect(report.pulls.products.ok).toBe(true);
+    expect(lastSyncFailureSignal.value).toBeNull();
+    expect(localCatalogCountsSignal.value).toEqual({ products: 1, customers: 0 });
+    expect(lastSyncedAtSignal.value).toBe(now);
   });
 });
 
@@ -427,16 +483,32 @@ describe('runSyncCycle', () => {
     expect(syncConfiguredSignal.value).toBe(false);
   });
 
-  it('con config guardada, arma el conector real y corre un ciclo', async () => {
+  it('con una config sin verifiedAt (sin probar) no corre el ciclo ni llama a fetch', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await runSyncCycle();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(syncConfiguredSignal.value).toBe(false);
+  });
+
+  it('con config guardada, arma el conector real y corre un ciclo', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    // Cada ruta con la forma real de su respuesta: `/stock` devuelve un array,
+    // no `{ items }`. Desde #53 un pull con formato inesperado ya no se traga
+    // en silencio (sería `sync-error`), así que el stub tiene que ser fiel.
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ items: [] }),
-      }),
+      vi.fn((url: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve(new URL(url).pathname === '/stock' ? [] : { items: [] }),
+        } as Response),
+      ),
     );
 
     await runSyncCycle();
@@ -447,7 +519,7 @@ describe('runSyncCycle', () => {
 
   it('con config de Google Sheets guardada, sincroniza contra el Web App (Etapa 2, #68)', async () => {
     const webAppUrl = 'https://script.google.com/macros/s/abc/exec';
-    saveSyncConfig({ type: 'google-sheets', webAppUrl });
+    saveSyncConfig({ type: 'google-sheets', webAppUrl, verifiedAt: '2026-01-01T00:00:00.000Z' });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -467,7 +539,7 @@ describe('runSyncCycle', () => {
   });
 
   it('no arranca un segundo ciclo si el anterior sigue en curso (issue #1)', async () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: '2026-01-01T00:00:00.000Z' });
 
     // Con latencia real controlada, a diferencia del resto de los tests de
     // este archivo (que resuelven al instante): es justo la condición bajo
@@ -513,5 +585,83 @@ describe('runSyncCycle', () => {
     const callsAfterFirst = fetchMock.mock.calls.length;
     await runSyncCycle();
     expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  });
+});
+
+describe('pushPendingEvents', () => {
+  it('con ignoreBackoff empuja también los eventos cuyo nextAttemptAt todavía no llegó', async () => {
+    await db.outbox.add({
+      type: 'sale',
+      sale,
+      id: 'sale-1',
+      status: 'pending',
+      retries: 1,
+      createdAt: now,
+      nextAttemptAt: '2026-01-01T01:00:00.000Z', // futuro
+    });
+    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
+
+    const withoutFlag = await pushPendingEvents(fakeConnector({ pushSale }), now);
+    expect(withoutFlag).toEqual({ attempted: 0, failed: 0 });
+
+    const withFlag = await pushPendingEvents(fakeConnector({ pushSale }), now, {
+      ignoreBackoff: true,
+    });
+    expect(withFlag).toEqual({ attempted: 1, failed: 0 });
+    expect(pushSale).toHaveBeenCalledTimes(1);
+  });
+
+  it('cuenta los fallos', async () => {
+    await db.outbox.add({
+      type: 'sale',
+      sale,
+      id: 'sale-1',
+      status: 'pending',
+      retries: 0,
+      createdAt: now,
+      nextAttemptAt: now,
+    });
+
+    const summary = await pushPendingEvents(
+      fakeConnector({
+        pushSale: () => Promise.resolve(err('sync/request-failed', { message: 'x' })),
+      }),
+      now,
+    );
+
+    expect(summary).toEqual({ attempted: 1, failed: 1 });
+  });
+});
+
+describe('cerrojo de sync', () => {
+  it('tryAcquireSyncLock devuelve undefined si ya está tomado y se puede volver a tomar tras liberar', () => {
+    const release = tryAcquireSyncLock();
+    expect(release).not.toBeUndefined();
+    expect(tryAcquireSyncLock()).toBeUndefined();
+
+    release?.();
+
+    const again = tryAcquireSyncLock();
+    expect(again).not.toBeUndefined();
+    again?.();
+  });
+
+  it('acquireSyncLockWaiting espera a que se libere', async () => {
+    const release = tryAcquireSyncLock();
+    setTimeout(() => release?.(), 30);
+
+    const acquired = await acquireSyncLockWaiting(1000);
+
+    expect(acquired).not.toBeUndefined();
+    acquired?.();
+  });
+
+  it('acquireSyncLockWaiting devuelve undefined si vence la espera', async () => {
+    const release = tryAcquireSyncLock();
+
+    const acquired = await acquireSyncLockWaiting(60);
+
+    expect(acquired).toBeUndefined();
+    release?.();
   });
 });
