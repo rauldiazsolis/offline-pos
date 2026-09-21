@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { googleSheetsConfigSchema } from './config.ts';
+import { googleSheetsConfigFields, googleSheetsConfigSchema } from './config.ts';
 
 describe('googleSheetsConfigSchema', () => {
   it('acepta una config mínima sin secreto', () => {
@@ -50,5 +50,14 @@ describe('googleSheetsConfigSchema', () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe('googleSheetsConfigFields', () => {
+  it('lista webAppUrl (obligatorio) y sharedSecret (opcional), en ese orden', () => {
+    expect(googleSheetsConfigFields).toEqual([
+      { key: 'webAppUrl', label: 'URL del Web App de Google Apps Script', optional: false },
+      { key: 'sharedSecret', label: 'Secreto compartido', optional: true },
+    ]);
   });
 });
