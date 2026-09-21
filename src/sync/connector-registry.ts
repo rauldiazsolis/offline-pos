@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ConfigField } from '../connectors/config-field.ts';
+import type { ConnectorCommand } from '../connectors/connector-command.ts';
 import {
   googleSheetsConfigFields,
   googleSheetsConfigSchema,
@@ -7,6 +8,11 @@ import {
 import { createGoogleSheetsConnector } from '../connectors/google-sheets/google-sheets-connector.ts';
 import { restConfigFields, restConfigSchema } from '../connectors/rest/config.ts';
 import { createRestFetchConnector } from '../connectors/rest/rest-fetch-connector.ts';
+import {
+  restDemoCommands,
+  restDemoConfigFields,
+  restDemoConfigSchema,
+} from '../connectors/rest-demo/config.ts';
 import type { Connector } from './connector.ts';
 
 /**
@@ -24,6 +30,7 @@ import type { Connector } from './connector.ts';
  */
 export const connectorConfigSchema = z.discriminatedUnion('type', [
   restConfigSchema,
+  restDemoConfigSchema,
   googleSheetsConfigSchema,
 ]);
 
@@ -34,12 +41,25 @@ export type ConnectorTypeInfo = {
   type: ConnectorType;
   label: string;
   fields: ConfigField[];
+  /** Comandos de la barra que solo existen con este conector (Etapa 2c, #77). */
+  commands: ConnectorCommand[];
 };
 
 /** Orden = orden del selector de `/CONFIG`. */
 export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
-  { type: 'rest', label: 'REST genérico', fields: restConfigFields },
-  { type: 'google-sheets', label: 'Google Sheets', fields: googleSheetsConfigFields },
+  { type: 'rest', label: 'REST genérico', fields: restConfigFields, commands: [] },
+  {
+    type: 'rest-demo',
+    label: 'REST (minibackend de demo)',
+    fields: restDemoConfigFields,
+    commands: restDemoCommands,
+  },
+  {
+    type: 'google-sheets',
+    label: 'Google Sheets',
+    fields: googleSheetsConfigFields,
+    commands: [],
+  },
 ];
 
 export function connectorLabel(type: ConnectorType): string {
@@ -50,6 +70,14 @@ export function connectorFields(type: ConnectorType): ConfigField[] {
   return CONNECTOR_TYPES.find((info) => info.type === type)?.fields ?? [];
 }
 
+/** Comandos que declara un tipo de conector; `null` (todavía sin conector) no declara ninguno. */
+export function connectorCommands(type: ConnectorType | null): ConnectorCommand[] {
+  if (type === null) {
+    return [];
+  }
+  return CONNECTOR_TYPES.find((info) => info.type === type)?.commands ?? [];
+}
+
 /**
  * `config` es `ConnectorConfig`, no `SyncConfig`: `SyncConfig` (con `locale`)
  * le es asignable, y así este módulo no importa de `sync/config.ts` (que sí
@@ -58,6 +86,7 @@ export function connectorFields(type: ConnectorType): ConfigField[] {
 export function createConnector(config: ConnectorConfig): Connector {
   switch (config.type) {
     case 'rest':
+    case 'rest-demo':
       return createRestFetchConnector(config);
     case 'google-sheets':
       return createGoogleSheetsConnector(config);
@@ -77,6 +106,7 @@ export function createConnector(config: ConnectorConfig): Connector {
 export function toFieldValues(config: ConnectorConfig): Record<string, string> {
   switch (config.type) {
     case 'rest':
+    case 'rest-demo':
       return { baseUrl: config.baseUrl, apiKey: config.apiKey ?? '' };
     case 'google-sheets':
       return { webAppUrl: config.webAppUrl, sharedSecret: config.sharedSecret ?? '' };

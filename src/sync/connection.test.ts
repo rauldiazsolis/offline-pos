@@ -140,6 +140,12 @@ describe('originKey', () => {
     );
   });
 
+  it('el type no forma parte del origen: rest y rest-demo con el mismo endpoint son el mismo backend', () => {
+    expect(originKey({ type: 'rest-demo', baseUrl: 'https://Api.Example.com/' })).toBe(
+      originKey({ type: 'rest', baseUrl: 'https://api.example.com' }),
+    );
+  });
+
   it('usa webAppUrl para Google Sheets', () => {
     expect(
       originKey({
