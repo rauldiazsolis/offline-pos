@@ -4,8 +4,8 @@ Backend completo para un micro-comercio sin ERP: el catálogo y las ventas viven
 Google Sheets. Implementa el puerto `Connector` (`src/sync/connector.ts`) contra un **puente Apps
 Script** (`bridge.gs`) desplegado como Web App.
 
-> Estado: Etapa 1 (#67) — el conector existe y está testeado, pero todavía **no está conectado** a
-> `/CONFIG` ni al motor de sync (Etapa 2, #68).
+> Estado: conectado al POS desde la Etapa 2 (#68) — se elige en `/CONFIG` con el tipo de conexión
+> "Google Sheets".
 
 ## Setup (comerciante)
 
@@ -17,7 +17,9 @@ Script** (`bridge.gs`) desplegado como Web App.
 3. Copiar la URL de la aplicación web (`https://script.google.com/macros/s/.../exec`).
 4. (Opcional, recomendado) Proteger el puente con un secreto compartido: Configuración del proyecto >
    Propiedades de la secuencia de comandos > agregar `SHARED_SECRET` con el valor que quieras.
-5. Pegar la URL (y el secreto, si lo pusiste) en `/CONFIG` — disponible desde la Etapa 2.
+5. Pegar la URL (y el secreto, si lo pusiste) en `/CONFIG`: elegir el tipo de conexión "Google
+   Sheets" (con la letra G alcanza) y completar "URL del Web App" y, opcionalmente, "Secreto
+   compartido". Ctrl+Enter guarda.
 
 "Cualquier persona" **no** significa que cualquiera pueda editar tu planilla: el script corre con tus
 permisos y solo expone las acciones de `bridge.gs`. Es la única forma de que el POS escriba sin que
@@ -52,6 +54,8 @@ Limitaciones conocidas:
   confirmación); sí queda en `Pagos` con `medio = account`.
 - Anular una venta después de cerrado el turno no reescribe la fila ya escrita en `Turnos`.
 - El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
+- `/DEMO_RESET` no está disponible con este conector (solo funciona con el backend REST de demo); la
+  planilla nunca se resetea desde el POS.
 
 ## Contrato del puente
 
