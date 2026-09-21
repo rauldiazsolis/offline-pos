@@ -120,6 +120,19 @@ describe('ConfigScreen', () => {
     expect(activeScreenSignal.value).toBe('config');
   });
 
+  it('tras un error de validación, el campo con error queda enfocado y con todo su texto seleccionado', () => {
+    render(<ConfigScreen />);
+    const url = screen.getByLabelText<HTMLInputElement>(/URL del sistema externo/);
+    fireEvent.input(url, { target: { value: 'no-es-una-url' } });
+
+    fireEvent.keyDown(url, CTRL_ENTER);
+
+    // Seleccionado = tipear reemplaza en vez de agregar al final.
+    expect(document.activeElement).toBe(url);
+    expect(url.selectionStart).toBe(0);
+    expect(url.selectionEnd).toBe('no-es-una-url'.length);
+  });
+
   it('Escape cancela sin guardar y vuelve a la venta', () => {
     render(<ConfigScreen />);
     const url = screen.getByLabelText(/URL del sistema externo/);

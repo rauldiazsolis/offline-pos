@@ -1,6 +1,5 @@
-import { useSignalEffect } from '@preact/signals';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
-import { useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { ConfigField } from '../../connectors/config-field.ts';
 import { CONNECTOR_TYPES, connectorFields } from '../../sync/connector-registry.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
@@ -90,19 +89,26 @@ export function ConfigScreen() {
   const typeRef = useFocusOnMount<HTMLSelectElement>();
   const dialogRef = useRef<HTMLDivElement>(null);
 
+  const errorField = configErrorFieldSignal.value;
+  const error = configErrorSignal.value;
+
   // Un error apunta a un campo concreto: enfocarlo y seleccionarlo permite
-  // retipear de una (mismo criterio que Cobro con `select()`).
-  useSignalEffect(() => {
-    const key = configErrorFieldSignal.value;
-    if (key === null || configErrorSignal.value === null) {
+  // retipear de una (mismo criterio que Cobro con `select()`). `useLayoutEffect`
+  // y no `useSignalEffect`: este último corre diferido, y en el navegador real
+  // había una ventana entre que aparece la alerta y que se aplica la selección
+  // — tipear justo ahí agregaba el texto al final en vez de reemplazarlo (lo
+  // encontró el e2e; jsdom no lo ve porque `act` flushea los efectos). El
+  // layout effect corre en el mismo commit que muestra el error.
+  useLayoutEffect(() => {
+    if (errorField === null || error === null) {
       return;
     }
     const input = dialogRef.current?.querySelector<HTMLInputElement>(
-      `[data-config-field="${key}"]`,
+      `[data-config-field="${errorField}"]`,
     );
     input?.focus();
     input?.select();
-  });
+  }, [errorField, error]);
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (event.key === 'Escape') {
