@@ -113,19 +113,77 @@ function columns(defs) {
   });
 }
 
-// Datos de prueba: solo se siembran cuando esta llamada CREA la pestaña.
+// Datos de prueba: solo se siembran cuando esta llamada CREA la pestaña. Claves internas.
 var SEED = {
   Productos: [
-    ['p-001', 'SKU-001', '7790001000011', 'Gaseosa cola 500ml', 1200, 0.21, 'bebidas'],
-    ['p-002', 'SKU-002', '7790001000028,7790001000035', 'Alfajor triple', 900, 0.21, 'golosinas'],
-    ['p-003', 'SKU-003', '7790001000042', 'Yerba 1kg', 4500, 0.21, 'almacen'],
-    ['p-004', 'SKU-004', '', 'Pan (kg)', 2200, 0.105, 'panaderia'],
-    ['p-005', 'SKU-005', '7790001000059', 'Agua mineral 1.5L', 1100, 0.21, 'bebidas'],
+    {
+      id: 'p-001',
+      sku: 'SKU-001',
+      barcodes: '7790001000011',
+      name: 'Gaseosa cola 500ml',
+      price: 1200,
+      taxRate: 0.21,
+      category: 'bebidas',
+    },
+    {
+      id: 'p-002',
+      sku: 'SKU-002',
+      barcodes: '7790001000028,7790001000035',
+      name: 'Alfajor triple',
+      price: 900,
+      taxRate: 0.21,
+      category: 'golosinas',
+    },
+    {
+      id: 'p-003',
+      sku: 'SKU-003',
+      barcodes: '7790001000042',
+      name: 'Yerba 1kg',
+      price: 4500,
+      taxRate: 0.21,
+      category: 'almacen',
+    },
+    {
+      id: 'p-004',
+      sku: 'SKU-004',
+      barcodes: '',
+      name: 'Pan (kg)',
+      price: 2200,
+      taxRate: 0.105,
+      category: 'panaderia',
+    },
+    {
+      id: 'p-005',
+      sku: 'SKU-005',
+      barcodes: '7790001000059',
+      name: 'Agua mineral 1.5L',
+      price: 1100,
+      taxRate: 0.21,
+      category: 'bebidas',
+    },
   ],
   Clientes: [
-    ['c-001', 'Ana Gómez', '30111222', '1155501234', '2026-01-01T00:00:00.000Z'],
-    ['c-002', 'Carlos Ruiz', '', '', '2026-01-01T00:00:00.000Z'],
-    ['c-003', 'Lucía Fernández', '27333444', '1155505678', '2026-01-01T00:00:00.000Z'],
+    {
+      id: 'c-001',
+      name: 'Ana Gómez',
+      document: '30111222',
+      phone: '1155501234',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'c-002',
+      name: 'Carlos Ruiz',
+      document: '',
+      phone: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'c-003',
+      name: 'Lucía Fernández',
+      document: '27333444',
+      phone: '1155505678',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
   ],
 };
 
@@ -211,7 +269,7 @@ function ensureSheetsExist() {
       }
     });
     if (SEED[name]) {
-      appendRows(name, SEED[name]);
+      appendObjects(name, SEED[name]);
     }
     if (name === '_Idempotency') {
       sheet.hideSheet();
@@ -223,14 +281,6 @@ function ensureSheetsExist() {
 
 function getSheet(name) {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-}
-
-function appendRows(name, rows) {
-  if (rows.length === 0) {
-    return;
-  }
-  var sheet = getSheet(name);
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 // ---------------------------------------------------- acceso por encabezado
@@ -322,13 +372,75 @@ function readRows(name) {
     });
 }
 
+/** Valor interno → valor de celda: traduce, convierte ISO 8601 a Date en columnas datetime, vacío → ''. */
+function toCell(column, value) {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  var labels = VALUE_LABELS[column.key];
+  if (labels && labels[value] !== undefined) {
+    return labels[value];
+  }
+  if (column.type === 'datetime' && typeof value === 'string' && value !== '') {
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? value : date;
+  }
+  return value;
+}
+
+/** Primera fila donde escribir: la plantilla (fila 2) si está vacía, si no, la que sigue a la última con datos. */
+function firstFreeRow(sheet, width) {
+  var last = sheet.getLastRow();
+  if (last < 2) {
+    return 2;
+  }
+  var isBlank = sheet
+    .getRange(last, 1, 1, width)
+    .getValues()[0]
+    .every(function (cell) {
+      return cell === '';
+    });
+  return isBlank ? last : last + 1;
+}
+
+/**
+ * Agrega filas a una pestaña. Cada objeto usa claves internas; cada valor va a la columna que indica
+ * el encabezado (una columna ausente se omite; las columnas del usuario quedan vacías).
+ */
+function appendObjects(name, objects) {
+  if (objects.length === 0) {
+    return;
+  }
+  var sheet = getSheet(name);
+  var header = headerMap(sheet, name);
+  var rows = objects.map(function (object) {
+    var cells = [];
+    for (var i = 0; i < header.width; i++) {
+      cells.push('');
+    }
+    SCHEMA[name].forEach(function (column) {
+      var position = header.map[column.key];
+      if (position !== undefined && object[column.key] !== undefined) {
+        cells[position - 1] = toCell(column, object[column.key]);
+      }
+    });
+    return cells;
+  });
+  var first = firstFreeRow(sheet, header.width);
+  var needed = first + rows.length - 1 - sheet.getMaxRows();
+  if (needed > 0) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), needed);
+  }
+  sheet.getRange(first, 1, rows.length, header.width).setValues(rows);
+}
+
 function setCells(name, rowNumber, values) {
   var sheet = getSheet(name);
   var header = headerMap(sheet, name);
-  Object.keys(values).forEach(function (key) {
-    var position = header.map[key];
-    if (position !== undefined) {
-      sheet.getRange(rowNumber, position).setValue(values[key]);
+  SCHEMA[name].forEach(function (column) {
+    var position = header.map[column.key];
+    if (position !== undefined && Object.prototype.hasOwnProperty.call(values, column.key)) {
+      sheet.getRange(rowNumber, position).setValue(toCell(column, values[column.key]));
     }
   });
 }
@@ -345,10 +457,6 @@ function compact(object) {
   return result;
 }
 
-function orEmpty(value) {
-  return value === undefined || value === null ? '' : value;
-}
-
 /**
  * Envuelve una acción de escritura: si la key ya está en _Idempotency responde
  * éxito sin reescribir; si no, escribe y recién ahí registra la key.
@@ -362,7 +470,7 @@ function idempotent(write) {
       return {};
     }
     write(payload);
-    appendRows('_Idempotency', [[key, new Date().toISOString()]]);
+    appendObjects('_Idempotency', [{ key: key, at: new Date().toISOString() }]);
     return {};
   };
 }
@@ -424,39 +532,37 @@ function pushSale(payload) {
   if (!sale || !sale.id) {
     throw new Error('Falta sale');
   }
-  var lineRows = sale.lines.map(function (line, index) {
+  var lines = sale.lines.map(function (line, index) {
     var discount = line.discount || {};
-    return [
-      sale.id,
-      sale.createdAt,
-      orEmpty(sale.customerId),
-      index + 1,
-      line.kind,
-      orEmpty(line.productId),
-      orEmpty(line.description),
-      line.qty,
-      line.unitPrice,
-      orEmpty(discount.type),
-      orEmpty(discount.value),
-      sale.total,
-      orEmpty(sale.globalAdjustmentPercentage),
-      'cerrada',
-      '',
-      '',
-    ];
+    return {
+      saleId: sale.id,
+      fecha: sale.createdAt,
+      customerId: sale.customerId,
+      linea: index + 1,
+      tipo: line.kind,
+      productId: line.productId,
+      descripcion: line.description,
+      cantidad: line.qty,
+      precioUnitario: line.unitPrice,
+      descuentoTipo: discount.type,
+      descuentoValor: discount.value,
+      totalVenta: sale.total,
+      ajusteGlobalPct: sale.globalAdjustmentPercentage,
+      estado: 'cerrada',
+    };
   });
-  var paymentRows = sale.payments.map(function (payment) {
-    return [
-      sale.id,
-      sale.createdAt,
-      payment.method,
-      payment.amount,
-      orEmpty(payment.reference),
-      'cerrada',
-    ];
+  var payments = sale.payments.map(function (payment) {
+    return {
+      saleId: sale.id,
+      fecha: sale.createdAt,
+      medio: payment.method,
+      monto: payment.amount,
+      referencia: payment.reference,
+      estado: 'cerrada',
+    };
   });
-  appendRows('Ventas', lineRows);
-  appendRows('Pagos', paymentRows);
+  appendObjects('Ventas', lines);
+  appendObjects('Pagos', payments);
 }
 
 /** Marca (no borra, RNF-07) las filas de una venta; devuelve cuántas encontró. */
@@ -475,7 +581,7 @@ function pushSaleVoid(payload) {
   var found = markSaleRows('Ventas', payload.saleId, {
     estado: 'anulada',
     anuladaEn: payload.voidedAt,
-    motivoAnulacion: orEmpty(payload.voidReason),
+    motivoAnulacion: payload.voidReason,
   });
   if (found === 0) {
     // La venta todavía no llegó: el motor de sync reintenta con backoff.
@@ -489,14 +595,14 @@ function pushCustomer(payload) {
   if (!customer || !customer.id) {
     throw new Error('Falta customer');
   }
-  appendRows('Clientes', [
-    [
-      customer.id,
-      customer.name,
-      orEmpty(customer.document),
-      orEmpty(customer.phone),
-      customer.createdAt,
-    ],
+  appendObjects('Clientes', [
+    {
+      id: customer.id,
+      name: customer.name,
+      document: customer.document,
+      phone: customer.phone,
+      createdAt: customer.createdAt,
+    },
   ]);
 }
 
@@ -515,14 +621,14 @@ function pushAccountHoldConfirm(payload) {
   if (!saleRow || !paymentRow) {
     throw new Error('Venta a cuenta no encontrada: ' + saleId);
   }
-  appendRows('CuentaCorriente', [
-    [
-      new Date().toISOString(),
-      payload.holdId,
-      saleId,
-      String(saleRow.customerId),
-      Number(paymentRow.monto),
-    ],
+  appendObjects('CuentaCorriente', [
+    {
+      fecha: new Date().toISOString(),
+      holdId: payload.holdId,
+      saleId: saleId,
+      customerId: String(saleRow.customerId),
+      monto: Number(paymentRow.monto),
+    },
   ]);
 }
 
@@ -551,22 +657,22 @@ function pushCashSession(payload) {
   });
   var expectedCash = session.openingAmount + totals.cash;
   var counted = session.closingAmount;
-  appendRows('Turnos', [
-    [
-      session.id,
-      session.openedAt,
-      orEmpty(session.closedAt),
-      session.openingAmount,
-      orEmpty(counted),
-      Object.keys(countedSales).length,
-      totals.cash,
-      totals.debit,
-      totals.credit,
-      totals.transfer,
-      totals.qr,
-      totals.account,
-      expectedCash,
-      counted === undefined ? '' : counted - expectedCash,
-    ],
+  appendObjects('Turnos', [
+    {
+      sessionId: session.id,
+      abiertoEn: session.openedAt,
+      cerradoEn: session.closedAt,
+      aperturaEfectivo: session.openingAmount,
+      contadoEfectivo: counted,
+      ventas: Object.keys(countedSales).length,
+      cash: totals.cash,
+      debit: totals.debit,
+      credit: totals.credit,
+      transfer: totals.transfer,
+      qr: totals.qr,
+      account: totals.account,
+      efectivoEsperado: expectedCash,
+      diferencia: counted === undefined ? undefined : counted - expectedCash,
+    },
   ]);
 }

@@ -52,16 +52,24 @@ function table(spreadsheet: FakeSpreadsheet, name: string): unknown[][] {
   if (sheet === null) {
     throw new Error(`No existe la pestaña ${name}`);
   }
-  return sheet
-    .values()
+  const values = sheet.values();
+  // Ancho real de la tabla: hasta la última columna con encabezado (las de sobra de una hoja sin
+  // recortar no cuentan).
+  const width = (values[0] ?? []).reduce<number>(
+    (last, cell, index) => (cell === '' ? last : index + 1),
+    0,
+  );
+  return values
     .slice(1)
     .filter((line) => line.some((cell) => cell !== ''))
     .map((line) =>
-      line.map((cell) =>
-        Object.prototype.toString.call(cell) === '[object Date]'
-          ? (cell as Date).toISOString()
-          : cell,
-      ),
+      line
+        .slice(0, width)
+        .map((cell) =>
+          Object.prototype.toString.call(cell) === '[object Date]'
+            ? (cell as Date).toISOString()
+            : cell,
+        ),
     );
 }
 
@@ -170,5 +178,222 @@ describe('lectura por encabezado (Etapa 2d)', () => {
     ]);
 
     expect(call('pullCustomers').data).toEqual({ items: [{ id: 'c-1', name: 'Ana' }] });
+  });
+});
+
+const NOW = '2026-01-02T10:00:00.000Z';
+const SALE = {
+  id: 's1',
+  createdAt: NOW,
+  customerId: 'c-001',
+  total: 2100,
+  lines: [
+    { kind: 'product', productId: 'p-001', qty: 1, unitPrice: 1200 },
+    {
+      kind: 'freeform',
+      description: 'Regalo',
+      qty: 1,
+      unitPrice: 900,
+      discount: { type: 'percentage', value: 10 },
+    },
+  ],
+  payments: [
+    { method: 'cash', amount: 1000 },
+    { method: 'account', amount: 1100, reference: 'h-1' },
+  ],
+};
+
+describe('escritura por encabezado (Etapa 2d)', () => {
+  it('pushSale escribe cada línea y cada pago con valores en español y fechas reales', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    const response = call('pushSale', { sale: SALE }, 'k1');
+
+    expect(response.ok).toBe(true);
+    expect(table(spreadsheet, 'Ventas')).toEqual([
+      [
+        's1',
+        NOW,
+        'c-001',
+        1,
+        'Producto',
+        'p-001',
+        '',
+        1,
+        1200,
+        '',
+        '',
+        2100,
+        '',
+        'Cerrada',
+        '',
+        '',
+      ],
+      [
+        's1',
+        NOW,
+        'c-001',
+        2,
+        'Libre',
+        '',
+        'Regalo',
+        1,
+        900,
+        'Porcentaje',
+        10,
+        2100,
+        '',
+        'Cerrada',
+        '',
+        '',
+      ],
+    ]);
+    expect(table(spreadsheet, 'Pagos')).toEqual([
+      ['s1', NOW, 'Efectivo', 1000, '', 'Cerrada'],
+      ['s1', NOW, 'Cuenta corriente', 1100, 'h-1', 'Cerrada'],
+    ]);
+    const fecha = spreadsheet.getSheetByName('Ventas')?.values()[1]?.[1];
+    expect(Object.prototype.toString.call(fecha)).toBe('[object Date]');
+  });
+
+  it('escribe en la columna que indica el encabezado aunque el usuario la haya movido', () => {
+    const { spreadsheet, call } = loadBridge();
+    spreadsheet.addSheet('Pagos', [
+      ['Estado', 'Monto', 'Id de venta', 'Fecha', 'Medio de pago', 'Referencia'],
+    ]);
+
+    call('pushSale', { sale: SALE }, 'k1');
+
+    expect(table(spreadsheet, 'Pagos')).toEqual([
+      ['Cerrada', 1000, 's1', NOW, 'Efectivo', ''],
+      ['Cerrada', 1100, 's1', NOW, 'Cuenta corriente', 'h-1'],
+    ]);
+  });
+
+  it('es idempotente: repetir la misma key no agrega filas', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pushSale', { sale: SALE }, 'k1');
+    const again = call('pushSale', { sale: SALE }, 'k1');
+
+    expect(again.ok).toBe(true);
+    expect(table(spreadsheet, 'Ventas')).toHaveLength(2);
+    expect(table(spreadsheet, 'Pagos')).toHaveLength(2);
+    expect(table(spreadsheet, '_Idempotency')).toHaveLength(1);
+  });
+
+  it('pushSaleVoid marca (no borra) las filas de la venta con estado, fecha y motivo', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushSale', { sale: SALE }, 'k1');
+
+    const response = call(
+      'pushSaleVoid',
+      { saleId: 's1', voidedAt: '2026-01-03T09:00:00.000Z', voidReason: 'error de carga' },
+      'k2',
+    );
+
+    expect(response.ok).toBe(true);
+    for (const line of table(spreadsheet, 'Ventas')) {
+      expect(line.slice(13)).toEqual(['Anulada', '2026-01-03T09:00:00.000Z', 'error de carga']);
+    }
+    for (const line of table(spreadsheet, 'Pagos')) {
+      expect(line[5]).toBe('Anulada');
+    }
+  });
+
+  it('pushSaleVoid de una venta que no llegó falla para que el motor reintente', () => {
+    const { call } = loadBridge();
+
+    expect(call('pushSaleVoid', { saleId: 'nope', voidedAt: NOW }, 'k2')).toEqual({
+      ok: false,
+      error: 'Venta no encontrada: nope',
+    });
+  });
+
+  it('pushCustomer agrega el cliente con su fecha de alta real', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pushCustomer', { customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } }, 'k1');
+
+    expect(table(spreadsheet, 'Clientes')).toHaveLength(4);
+    expect(table(spreadsheet, 'Clientes')[3]).toEqual(['c-9', 'Zoe', '', '', NOW]);
+  });
+
+  it('pushAccountHoldConfirm deriva cliente y monto de Ventas y Pagos', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushSale', { sale: SALE }, 'k1');
+
+    const response = call('pushAccountHoldConfirm', { holdId: 'h-1', saleId: 's1' }, 'k2');
+
+    expect(response.ok).toBe(true);
+    expect(table(spreadsheet, 'CuentaCorriente')).toEqual([
+      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100],
+    ]);
+    expect(call('pushAccountHoldConfirm', { holdId: 'h-2', saleId: 'zzz' }, 'k3')).toEqual({
+      ok: false,
+      error: 'Venta a cuenta no encontrada: zzz',
+    });
+  });
+
+  it('pushCashSession suma por medio de pago solo las ventas cerradas del turno', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushSale', { sale: SALE }, 'k1');
+
+    call(
+      'pushCashSession',
+      {
+        session: {
+          id: 't1',
+          openedAt: NOW,
+          closedAt: '2026-01-02T18:00:00.000Z',
+          openingAmount: 500,
+          closingAmount: 1450,
+          sales: ['s1'],
+        },
+      },
+      'k2',
+    );
+
+    expect(table(spreadsheet, 'Turnos')).toEqual([
+      ['t1', NOW, '2026-01-02T18:00:00.000Z', 500, 1450, 1, 1000, 0, 0, 0, 0, 1100, 1500, -50],
+    ]);
+  });
+
+  it('lee planillas anteriores: encabezados y valores viejos (cash, cerrada) se entienden y se renombran', () => {
+    const { spreadsheet, call } = loadBridge();
+    const ventas = spreadsheet.addSheet('Ventas', [
+      [
+        'saleId',
+        'fecha',
+        'customerId',
+        'linea',
+        'tipo',
+        'productId',
+        'descripcion',
+        'cantidad',
+        'precioUnitario',
+        'descuentoTipo',
+        'descuentoValor',
+        'totalVenta',
+        'ajusteGlobalPct',
+        'estado',
+        'anuladaEn',
+        'motivoAnulacion',
+      ],
+      ['s1', NOW, 'c-001', 1, 'product', 'p-001', '', 1, 1200, '', '', 2100, '', 'cerrada', '', ''],
+    ]);
+    const pagos = spreadsheet.addSheet('Pagos', [
+      ['saleId', 'fecha', 'medio', 'monto', 'referencia', 'estado'],
+      ['s1', NOW, 'account', 1100, 'h-1', 'cerrada'],
+    ]);
+
+    const response = call('pushAccountHoldConfirm', { holdId: 'h-1', saleId: 's1' }, 'k1');
+
+    expect(response.ok).toBe(true);
+    expect(table(spreadsheet, 'CuentaCorriente')).toEqual([
+      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100],
+    ]);
+    expect(pagos.values()[0]).toContain('Medio de pago');
+    expect(ventas.values()[0]).toContain('Id de venta');
   });
 });
