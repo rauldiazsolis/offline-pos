@@ -485,3 +485,14 @@ describe('pestañas nuevas (Etapa 2d)', () => {
     expect([productos.getMaxRows(), productos.getMaxColumns()]).toEqual([13, 7]);
   });
 });
+
+describe('instalación', () => {
+  it('si falta columnas.gs en el proyecto de Apps Script, el error lo dice en claro', () => {
+    const { call } = loadBridge({}, ['bridge.gs']);
+
+    expect(call('pullProducts')).toEqual({
+      ok: false,
+      error: 'Falta el archivo columnas.gs en el proyecto de Apps Script',
+    });
+  });
+});

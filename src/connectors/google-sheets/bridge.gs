@@ -214,6 +214,9 @@ function doPost(e) {
   if (!request || typeof request.action !== 'string') {
     return respond({ ok: false, error: 'Falta action' });
   }
+  if (typeof COLUMN_LABELS === 'undefined' || typeof VALUE_LABELS === 'undefined') {
+    return respond({ ok: false, error: 'Falta el archivo columnas.gs en el proyecto de Apps Script' });
+  }
 
   var expectedSecret = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
   if (expectedSecret && request.sharedSecret !== expectedSecret) {
