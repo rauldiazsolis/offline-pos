@@ -884,6 +884,23 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   dominio distinto, no toca `Sale`/`Payment`) y #60 (advertir cuando el vuelto supera la denominación
   de billete más grande, necesita config de denominaciones que no existe hoy).
 
+- Ciclo 10, sobre una sesión de brainstorming dedicada a `feature:caja` (2026-09-16, PR #65):
+  `/CAJA` pasa a ser puramente transaccional — ciego en cada paso (apertura, conteo), solo muestra
+  el desglose agregado en la confirmación de cierre y, ya cerrado, únicamente la diferencia del
+  arqueo. Todo lo de "cómo vamos" se muda a un comando nuevo, `/RESUMEN`
+  (`ui/screens/cash-summary-screen.tsx`, `ui/keyboard/cash-summary-controller.ts`,
+  `storage/cash-summary-repository.ts`): panel lateral fijo (total recaudado, tickets, desc/recargos,
+  efectivo, otros pagos) + 3 pestañas — Tickets (lista con cabecera sticky y navegación por ticket,
+  `useTicketListNavigation`), Productos (cantidades vendidas, `calculateProductQuantities`) y Medios
+  de pago. Funciona con turno abierto o, si no hay, con el último cerrado; sin ninguno, error. El
+  filtro es independiente por pestaña, busca también por SKU/código de barras y resalta
+  coincidencias (`ui/highlight.tsx`). Atajos: Alt+1/2/3 y Tab/Shift+Tab cambian de pestaña; una
+  tecla imprimible con el foco en un botón vuelve al buscador y continúa el texto. Esta pantalla es
+  la primera que acepta mouse (filas y botones clickeables) — cada click devuelve el foco al
+  buscador, y el `mousedown` sobre cualquier cosa no enfocable se cancela (si no, el foco cae a
+  `<body>` y los `keydown` dejan de llegar al contenedor). Las demás pantallas siguen sin mouse a
+  propósito.
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear

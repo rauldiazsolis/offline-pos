@@ -85,6 +85,8 @@ export function describeError(failure: Failure): string {
       return 'Ese turno ya estaba cerrado.';
     case 'cash-session/persist-failed':
       return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
+    case 'cash-session/none-ever':
+      return 'No hay ningún turno de caja para consultar.';
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':

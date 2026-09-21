@@ -82,18 +82,13 @@ export function CashSessionScreen() {
   const summary = cashSummarySignal.value;
   const session = cashSessionSignal.value;
 
-  // En 'confirming-close' el cierre todavía no se persistió, así que
-  // `summary.countedCash`/`difference` no están seteados aún — se
-  // previsualiza con el monto tipeado. En 'closed' ya son los reales.
-  const countedPreview =
-    step === 'closed' ? summary?.countedCash : parseNonNegativeAmount(cashBufferSignal.value);
+  // Preview de 'confirming-close': el cierre todavía no se persistió, así que se calcula con el
+  // monto tipeado. En 'closed' el resumen ya tiene `difference` real (ver bloque más abajo) — acá
+  // no hace falta previsualizar nada.
+  const countedPreview = parseNonNegativeAmount(cashBufferSignal.value);
   const differencePreview =
-    step === 'closed'
-      ? summary?.difference
-      : countedPreview !== undefined && summary !== undefined
-        ? countedPreview - summary.expectedCash
-        : undefined;
-  const showArqueo = (step === 'confirming-close' || step === 'closed') && countedPreview !== undefined;
+    countedPreview !== undefined && summary !== undefined ? countedPreview - summary.expectedCash : undefined;
+  const showArqueo = step === 'confirming-close' && countedPreview !== undefined;
 
   return (
     <div
@@ -111,7 +106,7 @@ export function CashSessionScreen() {
     >
       <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Caja</h1>
 
-      {summary !== undefined && session !== undefined && (
+      {summary !== undefined && session !== undefined && step === 'confirming-close' && (
         <div style={cardStyle}>
           <div style={rowStyle}>
             <span>Turno abierto</span>
@@ -168,6 +163,24 @@ export function CashSessionScreen() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {step === 'closed' && summary?.difference !== undefined && (
+        <div
+          style={{
+            ...rowStyle,
+            fontWeight: 'bold',
+            color:
+              summary.difference < 0
+                ? 'var(--color-danger)'
+                : summary.difference > 0
+                  ? 'var(--color-accent)'
+                  : 'var(--color-success)',
+          }}
+        >
+          <span>Diferencia</span>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(summary.difference)}</span>
         </div>
       )}
 

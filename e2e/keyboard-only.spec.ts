@@ -76,6 +76,31 @@ test('venta → /CAJA → Esc → la barra de comandos recupera el foco', async 
   await expect(commandBar).toBeFocused();
 });
 
+test('venta → /RESUMEN → Esc → la barra de comandos recupera el foco', async ({ page }) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+  await openCashSession(page);
+
+  await commandBar.fill('/RESUMEN');
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Resumen del turno' })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+
+  await expect(commandBar).toBeFocused();
+});
+
+test('/RESUMEN sin ningún turno muestra error y no navega', async ({ page }) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+
+  await commandBar.fill('/RESUMEN');
+  await commandBar.press('Enter');
+
+  await expect(page.getByText('No hay ningún turno de caja para consultar.')).toBeVisible();
+  await expect(commandBar).toBeFocused();
+});
+
 test('venta → /CONFIG → Esc → la barra de comandos recupera el foco', async ({ page }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
