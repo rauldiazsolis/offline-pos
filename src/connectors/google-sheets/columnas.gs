@@ -1,0 +1,97 @@
+/**
+ * Textos que ve el usuario de la planilla. Es lo ÚNICO que hace falta editar para renombrar una
+ * columna o un valor: la lógica del puente (bridge.gs) trabaja con las claves internas de la izquierda,
+ * que no se tocan. Se pega como segundo archivo del proyecto de Apps Script (los archivos de un
+ * proyecto comparten el ámbito global).
+ *
+ * Al leer, una columna se reconoce por su etiqueta o por su clave interna, sin distinguir mayúsculas,
+ * acentos ni espacios — así una planilla creada con nombres anteriores sigue funcionando.
+ */
+
+// Etiqueta de cada columna, por pestaña. Dentro de una pestaña no puede haber dos iguales.
+var COLUMN_LABELS = {
+  Productos: {
+    id: 'Id',
+    sku: 'SKU',
+    barcodes: 'Códigos de barras',
+    name: 'Nombre',
+    price: 'Precio',
+    taxRate: 'IVA',
+    category: 'Categoría',
+  },
+  Clientes: {
+    id: 'Id',
+    name: 'Nombre',
+    document: 'Documento',
+    phone: 'Teléfono',
+    createdAt: 'Alta',
+  },
+  Ventas: {
+    saleId: 'Id de venta',
+    fecha: 'Fecha',
+    customerId: 'Id de cliente',
+    linea: 'Línea',
+    tipo: 'Tipo',
+    productId: 'Id de producto',
+    descripcion: 'Descripción',
+    cantidad: 'Cantidad',
+    precioUnitario: 'Precio unitario',
+    descuentoTipo: 'Tipo de descuento',
+    descuentoValor: 'Valor del descuento',
+    totalVenta: 'Total de la venta',
+    ajusteGlobalPct: 'Ajuste global %',
+    estado: 'Estado',
+    anuladaEn: 'Anulada el',
+    motivoAnulacion: 'Motivo de anulación',
+  },
+  Pagos: {
+    saleId: 'Id de venta',
+    fecha: 'Fecha',
+    medio: 'Medio de pago',
+    monto: 'Monto',
+    referencia: 'Referencia',
+    estado: 'Estado',
+  },
+  CuentaCorriente: {
+    fecha: 'Fecha',
+    holdId: 'Id de reserva',
+    saleId: 'Id de venta',
+    customerId: 'Id de cliente',
+    monto: 'Monto',
+  },
+  Turnos: {
+    sessionId: 'Id de turno',
+    abiertoEn: 'Abierto el',
+    cerradoEn: 'Cerrado el',
+    aperturaEfectivo: 'Efectivo de apertura',
+    contadoEfectivo: 'Efectivo contado',
+    ventas: 'Cantidad de ventas',
+    cash: 'Efectivo',
+    debit: 'Tarjeta de débito',
+    credit: 'Tarjeta de crédito',
+    transfer: 'Transferencia',
+    qr: 'Código QR',
+    account: 'Cuenta corriente',
+    efectivoEsperado: 'Efectivo esperado',
+    diferencia: 'Diferencia',
+  },
+  _Idempotency: {
+    key: 'Clave',
+    at: 'Registrada el',
+  },
+};
+
+// Etiqueta de cada valor de celda, por clave de columna: valor interno → texto visible.
+var VALUE_LABELS = {
+  tipo: { product: 'Producto', freeform: 'Libre' },
+  descuentoTipo: { amount: 'Monto', percentage: 'Porcentaje' },
+  medio: {
+    cash: 'Efectivo',
+    debit: 'Tarjeta de débito',
+    credit: 'Tarjeta de crédito',
+    transfer: 'Transferencia',
+    qr: 'Código QR',
+    account: 'Cuenta corriente',
+  },
+  estado: { cerrada: 'Cerrada', anulada: 'Anulada' },
+};

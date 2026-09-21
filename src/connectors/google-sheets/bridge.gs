@@ -28,59 +28,90 @@
  * micro-comercio.
  */
 
-var HEADERS = {
-  Productos: ['id', 'sku', 'barcodes', 'name', 'price', 'taxRate', 'category'],
-  Clientes: ['id', 'name', 'document', 'phone', 'createdAt'],
-  Ventas: [
-    'saleId',
-    'fecha',
-    'customerId',
-    'linea',
-    'tipo',
-    'productId',
-    'descripcion',
-    'cantidad',
-    'precioUnitario',
-    'descuentoTipo',
-    'descuentoValor',
-    'totalVenta',
-    'ajusteGlobalPct',
-    'estado',
-    'anuladaEn',
-    'motivoAnulacion',
-  ],
-  Pagos: ['saleId', 'fecha', 'medio', 'monto', 'referencia', 'estado'],
-  CuentaCorriente: ['fecha', 'holdId', 'saleId', 'customerId', 'monto'],
-  Turnos: [
-    'sessionId',
-    'abiertoEn',
-    'cerradoEn',
-    'aperturaEfectivo',
-    'contadoEfectivo',
-    'ventas',
-    'cash',
-    'debit',
-    'credit',
-    'transfer',
-    'qr',
-    'account',
-    'efectivoEsperado',
-    'diferencia',
-  ],
-  _Idempotency: ['key', 'at'],
+/**
+ * Estructura de cada pestaña: las CLAVES internas (estables: las usa la lógica y el payload), en el
+ * orden con que se crea la pestaña, y el tipo de cada columna. Lo que ve el usuario (etiquetas de
+ * columna y de valor) vive en columnas.gs. Cada entrada: [clave, tipo, opcional?].
+ * Tipos: text | integer | number | percent | datetime.
+ */
+var SCHEMA = {
+  Productos: columns([
+    ['id', 'text'],
+    ['sku', 'text'],
+    ['barcodes', 'text', true],
+    ['name', 'text'],
+    ['price', 'number'],
+    ['taxRate', 'percent'],
+    ['category', 'text'],
+  ]),
+  Clientes: columns([
+    ['id', 'text'],
+    ['name', 'text'],
+    ['document', 'text', true],
+    ['phone', 'text', true],
+    ['createdAt', 'datetime'],
+  ]),
+  Ventas: columns([
+    ['saleId', 'text'],
+    ['fecha', 'datetime'],
+    ['customerId', 'text'],
+    ['linea', 'integer'],
+    ['tipo', 'text'],
+    ['productId', 'text'],
+    ['descripcion', 'text'],
+    ['cantidad', 'number'],
+    ['precioUnitario', 'number'],
+    ['descuentoTipo', 'text'],
+    ['descuentoValor', 'number'],
+    ['totalVenta', 'number'],
+    ['ajusteGlobalPct', 'number'],
+    ['estado', 'text'],
+    ['anuladaEn', 'datetime'],
+    ['motivoAnulacion', 'text'],
+  ]),
+  Pagos: columns([
+    ['saleId', 'text'],
+    ['fecha', 'datetime'],
+    ['medio', 'text'],
+    ['monto', 'number'],
+    ['referencia', 'text'],
+    ['estado', 'text'],
+  ]),
+  CuentaCorriente: columns([
+    ['fecha', 'datetime'],
+    ['holdId', 'text'],
+    ['saleId', 'text'],
+    ['customerId', 'text'],
+    ['monto', 'number'],
+  ]),
+  Turnos: columns([
+    ['sessionId', 'text'],
+    ['abiertoEn', 'datetime'],
+    ['cerradoEn', 'datetime'],
+    ['aperturaEfectivo', 'number'],
+    ['contadoEfectivo', 'number'],
+    ['ventas', 'integer'],
+    ['cash', 'number'],
+    ['debit', 'number'],
+    ['credit', 'number'],
+    ['transfer', 'number'],
+    ['qr', 'number'],
+    ['account', 'number'],
+    ['efectivoEsperado', 'number'],
+    ['diferencia', 'number'],
+  ]),
+  // Pestaña oculta: la fecha queda como texto ISO a propósito (no la ve nadie).
+  _Idempotency: columns([
+    ['key', 'text'],
+    ['at', 'text'],
+  ]),
 };
 
-// Columnas que se fuerzan a texto plano: que Sheets no convierta un código de barras
-// o un ISO 8601 en número/fecha.
-var TEXT_COLUMNS = {
-  Productos: ['id', 'sku', 'barcodes'],
-  Clientes: ['id', 'document', 'phone', 'createdAt'],
-  Ventas: ['saleId', 'fecha', 'customerId', 'productId', 'anuladaEn'],
-  Pagos: ['saleId', 'fecha', 'referencia'],
-  CuentaCorriente: ['fecha', 'holdId', 'saleId', 'customerId'],
-  Turnos: ['sessionId', 'abiertoEn', 'cerradoEn'],
-  _Idempotency: ['key', 'at'],
-};
+function columns(defs) {
+  return defs.map(function (def) {
+    return { key: def[0], type: def[1], optional: def[2] === true };
+  });
+}
 
 // Datos de prueba: solo se siembran cuando esta llamada CREA la pestaña.
 var SEED = {
@@ -143,6 +174,7 @@ function doPost(e) {
     return respond({ ok: false, error: 'Planilla ocupada, reintentar' });
   }
   try {
+    headerCache = {};
     ensureSheetsExist();
     return respond({ ok: true, data: handler(request.payload || {}, request.idempotencyKey) });
   } catch (error) {
@@ -162,16 +194,21 @@ function respond(body) {
 
 function ensureSheetsExist() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  Object.keys(HEADERS).forEach(function (name) {
+  Object.keys(SCHEMA).forEach(function (name) {
     if (spreadsheet.getSheetByName(name)) {
       return;
     }
-    var headers = HEADERS[name];
+    var defs = SCHEMA[name];
+    var labels = defs.map(function (column) {
+      return COLUMN_LABELS[name][column.key];
+    });
     var sheet = spreadsheet.insertSheet(name);
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, labels.length).setValues([labels]).setFontWeight('bold');
     sheet.setFrozenRows(1);
-    (TEXT_COLUMNS[name] || []).forEach(function (header) {
-      sheet.getRange(1, headers.indexOf(header) + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+    defs.forEach(function (column, index) {
+      if (column.type === 'text') {
+        sheet.getRange(1, index + 1, sheet.getMaxRows(), 1).setNumberFormat('@');
+      }
     });
     if (SEED[name]) {
       appendRows(name, SEED[name]);
@@ -196,21 +233,90 @@ function appendRows(name, rows) {
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-/** Filas de datos como objetos { header: valor, _row: nº de fila en la hoja }. */
+// ---------------------------------------------------- acceso por encabezado
+
+// Se rearma en cada request (doPost): dentro de uno, la fila 1 no cambia.
+var headerCache = {};
+
+/** Minúsculas, sin acentos ni signos: "Códigos de barras" y "codigosdebarras" son la misma columna. */
+function normalize(text) {
+  return String(text)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Lee la fila 1 de la pestaña y devuelve { map: clave interna → nº de columna (base 1), width }.
+ * Una columna se reconoce por su etiqueta o por su clave interna (compatibilidad con planillas
+ * anteriores). Un encabezado que es EXACTAMENTE la clave interna se reescribe con la etiqueta; uno
+ * que el usuario renombró a otra cosa no se toca. Las columnas que no conocemos se ignoran.
+ * Falta una columna requerida → error que dice cuál.
+ */
+function headerMap(sheet, name) {
+  if (headerCache[name]) {
+    return headerCache[name];
+  }
+  var width = Math.max(sheet.getLastColumn(), 1);
+  var cells = sheet.getRange(1, 1, 1, width).getValues()[0];
+  var lookup = Object.create(null);
+  SCHEMA[name].forEach(function (column) {
+    lookup[normalize(column.key)] = column;
+    lookup[normalize(COLUMN_LABELS[name][column.key])] = column;
+  });
+  var map = Object.create(null);
+  cells.forEach(function (cell, index) {
+    var column = lookup[normalize(cell)];
+    if (column === undefined || map[column.key] !== undefined) {
+      return;
+    }
+    map[column.key] = index + 1;
+    var label = COLUMN_LABELS[name][column.key];
+    if (cell === column.key && cell !== label) {
+      sheet.getRange(1, index + 1).setValue(label);
+    }
+  });
+  SCHEMA[name].forEach(function (column) {
+    if (map[column.key] === undefined && !column.optional) {
+      throw new Error(
+        "Falta la columna '" + COLUMN_LABELS[name][column.key] + "' en la pestaña " + name,
+      );
+    }
+  });
+  headerCache[name] = { map: map, width: width };
+  return headerCache[name];
+}
+
+/** Valor de celda → valor interno: "Efectivo" (o el viejo "cash") → "cash". Lo desconocido pasa igual. */
+function fromCell(key, cell) {
+  var labels = VALUE_LABELS[key];
+  if (!labels || typeof cell !== 'string') {
+    return cell;
+  }
+  var wanted = normalize(cell);
+  var internal = Object.keys(labels).filter(function (candidate) {
+    return normalize(labels[candidate]) === wanted || normalize(candidate) === wanted;
+  })[0];
+  return internal === undefined ? cell : internal;
+}
+
+/** Filas de datos como objetos { clave interna: valor, _row: nº de fila en la hoja }. */
 function readRows(name) {
   var sheet = getSheet(name);
+  var header = headerMap(sheet, name);
   var last = sheet.getLastRow();
   if (last < 2) {
     return [];
   }
-  var headers = HEADERS[name];
   return sheet
-    .getRange(2, 1, last - 1, headers.length)
+    .getRange(2, 1, last - 1, header.width)
     .getValues()
-    .map(function (values, index) {
+    .map(function (cells, index) {
       var row = { _row: index + 2 };
-      headers.forEach(function (header, column) {
-        row[header] = values[column];
+      SCHEMA[name].forEach(function (column) {
+        var position = header.map[column.key];
+        row[column.key] = position === undefined ? '' : fromCell(column.key, cells[position - 1]);
       });
       return row;
     });
@@ -218,9 +324,12 @@ function readRows(name) {
 
 function setCells(name, rowNumber, values) {
   var sheet = getSheet(name);
-  var headers = HEADERS[name];
-  Object.keys(values).forEach(function (header) {
-    sheet.getRange(rowNumber, headers.indexOf(header) + 1).setValue(values[header]);
+  var header = headerMap(sheet, name);
+  Object.keys(values).forEach(function (key) {
+    var position = header.map[key];
+    if (position !== undefined) {
+      sheet.getRange(rowNumber, position).setValue(values[key]);
+    }
   });
 }
 
