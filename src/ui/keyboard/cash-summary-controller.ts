@@ -4,7 +4,9 @@ import { commandBarErrorSignal } from '../state/command-bar.ts';
 import {
   cashSummaryContextSignal,
   cashSummaryTabSignal,
+  paymentFilterSignal,
   productFilterSignal,
+  selectedPaymentIndexSignal,
   selectedProductIndexSignal,
   selectedTicketIndexSignal,
   ticketFilterSignal,
@@ -22,8 +24,10 @@ export async function triggerCashSummary(): Promise<void> {
   cashSummaryTabSignal.value = 'tickets';
   ticketFilterSignal.value = '';
   productFilterSignal.value = '';
+  paymentFilterSignal.value = '';
   selectedTicketIndexSignal.value = 0;
   selectedProductIndexSignal.value = null;
+  selectedPaymentIndexSignal.value = null;
   activeScreenSignal.value = 'cash-summary';
 }
 
@@ -32,8 +36,10 @@ export function exitCashSummaryScreen(): void {
   cashSummaryTabSignal.value = 'tickets';
   ticketFilterSignal.value = '';
   productFilterSignal.value = '';
+  paymentFilterSignal.value = '';
   selectedTicketIndexSignal.value = 0;
   selectedProductIndexSignal.value = null;
+  selectedPaymentIndexSignal.value = null;
   activeScreenSignal.value = 'sale';
 }
 
@@ -41,8 +47,10 @@ export function setCashSummaryTab(tab: 'tickets' | 'products' | 'payments'): voi
   cashSummaryTabSignal.value = tab;
   ticketFilterSignal.value = '';
   productFilterSignal.value = '';
+  paymentFilterSignal.value = '';
   selectedTicketIndexSignal.value = 0;
   selectedProductIndexSignal.value = null;
+  selectedPaymentIndexSignal.value = null;
 }
 
 export function updateTicketFilter(value: string): void {
@@ -57,4 +65,11 @@ export function updateProductFilter(value: string): void {
   // existe en la lista filtrada (bug real encontrado en revisión de código).
   selectedProductIndexSignal.value = null;
   productFilterSignal.value = value;
+}
+
+export function updatePaymentFilter(value: string): void {
+  // Medios de pago es una lista fija (siempre 6 filas) — el filtro acá es puramente para resaltar
+  // coincidencias, nunca oculta filas, así que no hace falta reindexar la selección como en
+  // Productos.
+  paymentFilterSignal.value = value;
 }

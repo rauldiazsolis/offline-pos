@@ -11,5 +11,7 @@ export const cashSummaryContextSignal = signal<CashSummaryContext | undefined>(u
 export const cashSummaryTabSignal = signal<'tickets' | 'products' | 'payments'>('tickets');
 export const ticketFilterSignal = signal('');
 export const productFilterSignal = signal('');
+export const paymentFilterSignal = signal('');
 export const selectedTicketIndexSignal = signal(0);
 export const selectedProductIndexSignal = signal<number | null>(null);
+export const selectedPaymentIndexSignal = signal<number | null>(null);

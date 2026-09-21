@@ -6,6 +6,8 @@ import { commandBarErrorSignal } from '../state/command-bar.ts';
 import {
   cashSummaryContextSignal,
   cashSummaryTabSignal,
+  paymentFilterSignal,
+  selectedPaymentIndexSignal,
   selectedTicketIndexSignal,
   ticketFilterSignal,
 } from '../state/cash-summary.ts';
@@ -14,6 +16,7 @@ import {
   exitCashSummaryScreen,
   setCashSummaryTab,
   triggerCashSummary,
+  updatePaymentFilter,
   updateTicketFilter,
 } from './cash-summary-controller.ts';
 
@@ -73,6 +76,16 @@ describe('setCashSummaryTab', () => {
     expect(cashSummaryTabSignal.value).toBe('products');
     expect(ticketFilterSignal.value).toBe('');
   });
+
+  it('también limpia el filtro y la selección de Medios de pago', () => {
+    paymentFilterSignal.value = 'efec';
+    selectedPaymentIndexSignal.value = 2;
+
+    setCashSummaryTab('tickets');
+
+    expect(paymentFilterSignal.value).toBe('');
+    expect(selectedPaymentIndexSignal.value).toBeNull();
+  });
 });
 
 describe('updateTicketFilter', () => {
@@ -80,5 +93,16 @@ describe('updateTicketFilter', () => {
     updateTicketFilter('torres');
 
     expect(ticketFilterSignal.value).toBe('torres');
+  });
+});
+
+describe('updatePaymentFilter', () => {
+  it('actualiza el signal de filtro de medios de pago sin tocar la selección', () => {
+    selectedPaymentIndexSignal.value = 1;
+
+    updatePaymentFilter('efec');
+
+    expect(paymentFilterSignal.value).toBe('efec');
+    expect(selectedPaymentIndexSignal.value).toBe(1);
   });
 });
