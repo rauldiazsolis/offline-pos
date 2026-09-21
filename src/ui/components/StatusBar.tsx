@@ -1,5 +1,8 @@
+import { describeError } from '../errors.ts';
 import {
+  lastSyncFailureSignal,
   lastSyncedAtSignal,
+  localCatalogCountsSignal,
   pendingOutboxCountSignal,
   syncConfiguredSignal,
   syncStatusSignal,
@@ -40,13 +43,26 @@ function statusText(): string {
     return `Sincronizando (${String(pending)})`;
   }
   if (status === 'sync-error') {
-    return 'Problema de sincronización';
+    const failure = lastSyncFailureSignal.value;
+    const lastSyncedAt = lastSyncedAtSignal.value;
+    const base =
+      failure !== null
+        ? `Problema de sincronización: ${describeError(failure)}`
+        : 'Problema de sincronización';
+    return lastSyncedAt !== null
+      ? `${base} · última sync OK ${new Date(lastSyncedAt).toLocaleTimeString()}`
+      : base;
   }
 
   const lastSyncedAt = lastSyncedAtSignal.value;
-  return lastSyncedAt !== null
-    ? `Sincronizado (${new Date(lastSyncedAt).toLocaleTimeString()})`
-    : 'Sincronizado';
+  const synced =
+    lastSyncedAt !== null
+      ? `Sincronizado (${new Date(lastSyncedAt).toLocaleTimeString()})`
+      : 'Sincronizado';
+  const counts = localCatalogCountsSignal.value;
+  return counts !== null
+    ? `${synced} · ${String(counts.products)} productos · ${String(counts.customers)} clientes`
+    : synced;
 }
 
 export function StatusBar() {
