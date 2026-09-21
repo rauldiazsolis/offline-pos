@@ -415,7 +415,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   - `type LocalDataSummary = { products: number; customers: number; sales: number; cashSessions: number; pendingOutbox: number; pendingSales: number; draftCartLines: number }`
   - `hasUserData(summary): boolean` — `sales`, `cashSessions`, `pendingOutbox` o `draftCartLines` > 0 (un catálogo o clientes solos no son "datos del usuario").
   - `summarizeLocalData(): Promise<LocalDataSummary>`, `countLocalCatalog(): Promise<{ products: number; customers: number }>`
-  - `clearAllTables(): Promise<void[]>` — limpia **todas** las tablas (`db.tables`, así una tabla futura queda incluida sola); tiene que llamarse dentro de una transacción Dexie.
+  - `clearAllTables(): Promise<void>` — limpia **todas** las tablas (`db.tables`, así una tabla futura queda incluida sola); tiene que llamarse dentro de una transacción Dexie.
 
 - [ ] **Step 1: Test que falla**
 
@@ -624,8 +624,8 @@ export async function summarizeLocalData(): Promise<LocalDataSummary> {
  * `db.transaction('rw', db.tables, …)`; lo usan `demoReset` y
  * `sync/apply-connection.ts`.
  */
-export function clearAllTables(): Promise<void[]> {
-  return Promise.all(db.tables.map((table) => table.clear()));
+export async function clearAllTables(): Promise<void> {
+  await Promise.all(db.tables.map((table) => table.clear()));
 }
 ```
 
