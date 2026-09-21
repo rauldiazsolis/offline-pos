@@ -1,57 +1,53 @@
 import { signal } from '@preact/signals';
+import type { LocalDataSummary } from '../../storage/local-data.ts';
 import type { SyncConfig } from '../../sync/config.ts';
 import { toFieldValues, type ConnectorType } from '../../sync/connector-registry.ts';
-
-/** URL default del minibackend de demo (Fase 7) — precargada en REST cuando no hay config guardada, sigue siendo editable. */
-export const DEFAULT_BASE_URL = 'http://localhost:4000';
-/**
- * API key default de REST, precargada igual que `DEFAULT_BASE_URL` — el
- * minibackend de demo solo exige que el header `Authorization: Bearer <token>`
- * no esté vacío (`router.ts::hasValidBearerToken`), cualquier string no vacío
- * sirve. Sin esto, seguir el camino "obvio" del demo (aceptar la URL
- * precargada, dejar el campo "opcional" en blanco) deja el catálogo vacío por
- * un 401 silencioso (`sync/engine.ts` traga errores de pull) — ver hallazgo
- * de la revisión final de Fase 7.
- */
-export const DEFAULT_API_KEY = 'demo-token';
 
 /** Valores de los campos de cada conector, como strings (lo que se tipea). */
 export type ConfigFormValues = Record<ConnectorType, Record<string, string>>;
 
-function defaultFormValues(): ConfigFormValues {
+/** Sin valores por omisión (Etapa 2b): todo arranca vacío; los ejemplos son `placeholder`s. */
+function blankFormValues(): ConfigFormValues {
   return {
-    rest: { baseUrl: DEFAULT_BASE_URL, apiKey: DEFAULT_API_KEY },
+    rest: { baseUrl: '', apiKey: '' },
     'google-sheets': { webAppUrl: '', sharedSecret: '' },
   };
 }
 
-/** Conector elegido en el selector. */
-export const configTypeSignal = signal<ConnectorType>('rest');
+/** Fase del diálogo: editar → probar → (confirmar el borrado) → aplicar. */
+export type ConfigPhase = 'editing' | 'probing' | 'confirming' | 'applying';
+
+/** Conector elegido en el selector; `null` = todavía no se eligió ninguno. */
+export const configTypeSignal = signal<ConnectorType | null>(null);
 /**
  * Valores tipeados **por conector**: cambiar el tipo no pierde lo que ya se
  * cargó en el otro, y solo los campos del tipo activo llegan a guardarse.
  */
-export const configFieldValuesSignal = signal<ConfigFormValues>(defaultFormValues());
-/** `locale` es config de terminal (no de conector): un solo valor, siempre visible. */
+export const configFieldValuesSignal = signal<ConfigFormValues>(blankFormValues());
+/** `locale` es config de terminal (no de conector): un solo valor, visible una vez elegido un tipo. */
 export const configLocaleSignal = signal('');
 export const configErrorSignal = signal<string | null>(null);
 /** Clave del campo al que apunta el error, para enfocarlo y seleccionarlo (`data-config-field`). */
 export const configErrorFieldSignal = signal<string | null>(null);
+export const configPhaseSignal = signal<ConfigPhase>('editing');
+/** Lo que se perdería al cambiar de conexión — solo tiene valor en la fase `confirming`. */
+export const configConfirmationSignal = signal<LocalDataSummary | null>(null);
 
 /**
  * Deja el formulario en su estado inicial. Con `saved`, precarga esa config
  * (tipo, campos y locale) — así reconfigurar un solo dato no obliga a
- * retipear los demás; sin ella (terminal nueva), arranca en REST con los
- * defaults del demo.
+ * retipear los demás; sin ella (terminal nueva), todo vacío y sin tipo.
  */
 export function resetConfigForm(saved?: SyncConfig): void {
-  const values = defaultFormValues();
+  const values = blankFormValues();
   if (saved !== undefined) {
     values[saved.type] = toFieldValues(saved);
   }
-  configTypeSignal.value = saved?.type ?? 'rest';
+  configTypeSignal.value = saved?.type ?? null;
   configFieldValuesSignal.value = values;
   configLocaleSignal.value = saved?.locale ?? '';
   configErrorSignal.value = null;
   configErrorFieldSignal.value = null;
+  configPhaseSignal.value = 'editing';
+  configConfirmationSignal.value = null;
 }

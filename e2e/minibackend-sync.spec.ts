@@ -23,8 +23,9 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
 
-  const urlInput = page.getByLabel(/URL del sistema externo/);
-  await expect(urlInput).toHaveValue(BACKEND_URL);
+  // Sin valores por omisión (Etapa 2b): hay que elegir el tipo y tipear la URL.
+  await page.getByLabel('Tipo de conexión').selectOption('rest');
+  await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
 
   // El minibackend de demo implementa el contrato al pie de la letra —
   // `security: bearerAuth` es global en `docs/connector-api.openapi.yaml`,
@@ -39,8 +40,8 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   const apiKeyInput = page.getByLabel(/API key/);
   await apiKeyInput.fill('demo-api-key');
 
-  // Ctrl+Enter guarda todos los campos juntos (el formulario reemplazó al
-  // wizard de 3 pasos; Enter solo ya no avanza nada).
+  // Ctrl+Enter prueba la conexión (pull completo) y, si sale bien, la guarda:
+  // el catálogo llega en este mismo paso, no hace falta un sync aparte.
   await apiKeyInput.press('Control+Enter');
   await expect(commandBar).toBeVisible();
 
