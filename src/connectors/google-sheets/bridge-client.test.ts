@@ -67,7 +67,10 @@ describe('callBridge — request', () => {
 
 describe('callBridge — response', () => {
   it('devuelve data validada cuando el puente responde ok', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ok: true, data: { value: 7 } })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ ok: true, data: { value: 7 } })),
+    );
 
     const result = await callBridge(config, { action: 'x' }, dataSchema);
 
