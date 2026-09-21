@@ -1,10 +1,17 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../storage/db.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { bootstrap } from './bootstrap.ts';
 import { connectionStateSignal } from './state/sync.ts';
 import { configFieldValuesSignal, configTypeSignal } from './state/sync-config.ts';
+
+// Con una config activa, `startSyncEngine` arrancaría un ciclo real que sigue
+// corriendo después de que el test cierra la base; se neutraliza solo el arranque.
+vi.mock('../sync/engine.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  startSyncEngine: vi.fn(),
+}));
 
 beforeEach(async () => {
   await db.open();
