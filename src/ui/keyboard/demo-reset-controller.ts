@@ -1,7 +1,6 @@
 import { loadCatalogRepository } from '../../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../../storage/customer-repository.ts';
-import { checkDemoResetAvailable, demoReset } from '../../storage/demo-reset.ts';
-import { loadSyncConfig } from '../../sync/config.ts';
+import { demoReset } from '../../storage/demo-reset.ts';
 import { describeError } from '../errors.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -12,15 +11,11 @@ import { activeScreenSignal } from '../state/screen.ts';
 
 /**
  * `/DEMO_RESET`: entra a la pantalla de confirmación dedicada (mismo patrón
- * que `/ANULAR`). Con un conector que no es REST muestra el aviso de "no
- * disponible" apenas se abre, en vez de dejar que el usuario llegue a
- * confirmar para enterarse — `demoReset()` lo vuelve a verificar de fondo.
+ * que `/ANULAR`). Solo se llega acá desde el comando que declara el conector
+ * `rest-demo` (ver `connector-actions.ts`).
  */
 export function enterDemoResetScreen(): void {
-  const configResult = loadSyncConfig();
-  const availability = configResult.ok ? checkDemoResetAvailable(configResult.value) : undefined;
-  demoResetErrorSignal.value =
-    availability !== undefined && !availability.ok ? describeError(availability) : null;
+  demoResetErrorSignal.value = null;
   demoResetInProgressSignal.value = false;
   activeScreenSignal.value = 'demo-reset';
 }

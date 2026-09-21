@@ -6,7 +6,11 @@ import { ok } from '../domain/result.ts';
 import type { Sale } from '../domain/sale.ts';
 import { db } from '../storage/db.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
-import { connectionStateSignal, syncStatusSignal } from '../ui/state/sync.ts';
+import {
+  activeConnectorTypeSignal,
+  connectionStateSignal,
+  syncStatusSignal,
+} from '../ui/state/sync.ts';
 import { applyConnection, flushPendingBeforeWipe } from './apply-connection.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import type { ProbeSnapshot } from './connection.ts';
@@ -63,6 +67,7 @@ async function seedOldWorld(): Promise<void> {
 beforeEach(async () => {
   await db.open();
   connectionStateSignal.value = 'unconfigured';
+  activeConnectorTypeSignal.value = null;
   syncStatusSignal.value = 'offline';
 });
 
@@ -85,6 +90,17 @@ describe('applyConnection', () => {
     expect(loadSyncConfig()).toEqual({ ok: true, value: { ...candidate, verifiedAt: now } });
     expect(connectionStateSignal.value).toBe('active');
     expect(syncStatusSignal.value).toBe('online-idle');
+  });
+
+  it('fija el tipo del conector activo (de ahí salen los comandos de la barra)', async () => {
+    await applyConnection({
+      candidate: { type: 'rest-demo', baseUrl: 'http://localhost:4000' },
+      snapshot,
+      wipe: true,
+      now,
+    });
+
+    expect(activeConnectorTypeSignal.value).toBe('rest-demo');
   });
 
   it('con wipe: borra ventas, outbox, turnos y venta en curso, y deja solo lo del snapshot', async () => {

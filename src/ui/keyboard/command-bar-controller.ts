@@ -35,12 +35,14 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
-import { enterDemoResetScreen } from './demo-reset-controller.ts';
+import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
+import { connectorCommands } from '../../sync/connector-registry.ts';
 import { runSyncCycle } from '../../sync/engine.ts';
 
 /**
@@ -293,12 +295,18 @@ function runCommand(name: string, _args: string[]): void {
       void runSyncCycle();
       clearBuffer();
       return;
-    case 'DEMO_RESET':
-      enterDemoResetScreen();
+    default: {
+      // Comandos que declara el conector activo (Etapa 2c, #77).
+      const declared = connectorCommands(activeConnectorTypeSignal.value).find(
+        (command) => command.name === name,
+      );
+      if (declared === undefined) {
+        commandBarErrorSignal.value = `Comando desconocido: /${name}`;
+        return;
+      }
+      CONNECTOR_ACTIONS[declared.action]();
       clearBuffer();
-      return;
-    default:
-      commandBarErrorSignal.value = `Comando desconocido: /${name}`;
+    }
   }
 }
 

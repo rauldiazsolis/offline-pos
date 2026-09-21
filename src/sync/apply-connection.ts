@@ -7,6 +7,7 @@ import { clearAllTables, countLocalCatalog } from '../storage/local-data.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
+  setActiveConnectorType,
   setConnectionState,
   setLastSyncFailure,
   setLastSyncedAt,
@@ -121,6 +122,7 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     }
 
     setConnectionState('active');
+    setActiveConnectorType(params.candidate.type);
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);

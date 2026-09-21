@@ -72,7 +72,7 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: llama primero a POST /_demo/reset del backend antes de borrar nada local', async () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
     const fetchMock = fetchRouter();
     vi.stubGlobal('fetch', fetchMock);
 
@@ -84,7 +84,7 @@ describe('demoReset', () => {
   });
 
   it('si POST /_demo/reset falla, no borra nada local y devuelve el error', async () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
     const created = await createCustomerLocally('Cliente de prueba');
     if (!created.ok) throw new Error('setup falló');
     vi.stubGlobal(
@@ -99,7 +99,7 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: dispara un resync después de borrar, repoblando desde el backend', async () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
     vi.stubGlobal(
       'fetch',
       fetchRouter({
@@ -138,18 +138,37 @@ describe('demoReset', () => {
   });
 
   it('no toca la configuración de /CONFIG (URL, API key, locale)', async () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' });
     vi.stubGlobal('fetch', fetchRouter());
 
     await demoReset();
 
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { type: 'rest', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' },
+      value: { type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' },
     });
   });
 
-  it('con un conector que no es REST: devuelve demo/unavailable-for-connector sin tocar nada ni llamar al backend', async () => {
+  it('con el REST genérico: devuelve demo/unavailable-for-connector (solo el minibackend de demo lo soporta)', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'http://localhost:4000',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await demoReset();
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'demo/unavailable-for-connector',
+      meta: { connectorLabel: 'REST genérico' },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('con un conector que no es rest-demo: devuelve demo/unavailable-for-connector sin tocar nada ni llamar al backend', async () => {
     saveSyncConfig({
       type: 'google-sheets',
       webAppUrl: 'https://script.google.com/macros/s/abc/exec',
