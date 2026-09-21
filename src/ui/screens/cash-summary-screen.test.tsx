@@ -269,6 +269,22 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('mousedown sobre algo no enfocable (el título) se cancela para no sacarle el foco al buscador', () => {
+    render(<CashSummaryScreen />);
+
+    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del turno'));
+
+    expect(notCancelled).toBe(false);
+  });
+
+  it('mousedown sobre el propio buscador no se cancela (deja reubicar el cursor)', () => {
+    render(<CashSummaryScreen />);
+
+    const notCancelled = fireEvent.mouseDown(screen.getByLabelText('Buscar'));
+
+    expect(notCancelled).toBe(true);
+  });
+
   it('Espacio con el foco en un botón no se redirige (deja que el botón se active)', () => {
     render(<CashSummaryScreen />);
     const productsButton = screen.getByRole('button', { name: /Productos/ });
