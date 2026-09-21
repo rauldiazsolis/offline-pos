@@ -5,6 +5,7 @@ import { clearSyncCursors } from '../sync/cursor.ts';
 import { resetDemoBackend } from '../sync/demo-backend-reset.ts';
 import { runSyncCycle } from '../sync/engine.ts';
 import { db } from './db.ts';
+import { clearAllTables } from './local-data.ts';
 
 function unavailableFor(type: ConnectorType): Result<never> {
   return err('demo/unavailable-for-connector', { connectorLabel: connectorLabel(type) });
@@ -64,35 +65,7 @@ export async function demoReset(): Promise<Result<void>> {
   }
 
   try {
-    await db.transaction(
-      'rw',
-      [
-        db.products,
-        db.stock,
-        db.sales,
-        db.stockMovements,
-        db.outbox,
-        db.customers,
-        db.customerAccounts,
-        db.accountMovements,
-        db.draftCart,
-        db.cashSessions,
-      ],
-      async () => {
-        await Promise.all([
-          db.products.clear(),
-          db.stock.clear(),
-          db.sales.clear(),
-          db.stockMovements.clear(),
-          db.outbox.clear(),
-          db.customers.clear(),
-          db.customerAccounts.clear(),
-          db.accountMovements.clear(),
-          db.draftCart.clear(),
-          db.cashSessions.clear(),
-        ]);
-      },
-    );
+    await db.transaction('rw', db.tables, clearAllTables);
   } catch (error) {
     return err('demo/reset-failed', {
       message: error instanceof Error ? error.message : String(error),
