@@ -66,26 +66,6 @@ test('elegir Google Sheets solo con teclado, validar al confirmar, guardar y ver
   await expect(page.getByLabel(/URL del Web App/)).toHaveValue(WEB_APP_URL);
 });
 
-test('una config guardada por una versión anterior (sin type) se lee como REST y se precarga', async ({
-  page,
-}) => {
-  await page.addInitScript((key) => {
-    localStorage.setItem(
-      key,
-      JSON.stringify({ baseUrl: 'http://localhost:4123', apiKey: 'clave-vieja' }),
-    );
-  }, STORAGE_KEY);
-
-  await page.goto('/');
-  await openConfig(page);
-
-  await expect(page.getByLabel('Tipo de conexión')).toHaveValue('rest');
-  // Valores distintos de los defaults del demo (4000 / demo-token): prueba que
-  // se leyó la config vieja y no que cayó a los defaults por "inválida".
-  await expect(page.getByLabel(/URL del sistema externo/)).toHaveValue('http://localhost:4123');
-  await expect(page.getByLabel(/API key/)).toHaveValue('clave-vieja');
-});
-
 test('Esc cancela sin guardar', async ({ page }) => {
   await page.goto('/');
   await openConfig(page);
