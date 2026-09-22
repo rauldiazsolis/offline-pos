@@ -61,6 +61,9 @@ export type ErrorMeta = {
   'connection/apply-failed': { message: string };
   // sync/connection.ts: un ciclo de sync en curso no terminó a tiempo para probar
   'connection/sync-busy': undefined;
+  // storage/reconcile.ts (foto completa del catálogo)
+  'sync/empty-snapshot': { tables: ('products' | 'stock' | 'customers')[] };
+  'sync/reconcile-failed': { message: string };
 
   // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
   'account/hold-rejected': { reasonCode: string };

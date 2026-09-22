@@ -78,6 +78,22 @@ describe('describeError', () => {
     ).toBe('El sistema externo respondió con un error: Secreto compartido inválido');
   });
 
+  it('sync/empty-snapshot dice qué llegó vacío y que se conservó lo local', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'sync/empty-snapshot',
+        meta: { tables: ['products', 'customers'] },
+      }),
+    ).toBe('El sistema externo devolvió vacío: productos, clientes. Se conservaron los datos locales.');
+  });
+
+  it('sync/reconcile-failed incluye el motivo', () => {
+    expect(
+      describeError({ ok: false, error: 'sync/reconcile-failed', meta: { message: 'boom' } }),
+    ).toBe('No se pudo actualizar el catálogo local (boom).');
+  });
+
   it('connection/sync-busy pide esperar y reintentar', () => {
     expect(describeError({ ok: false, error: 'connection/sync-busy', meta: undefined })).toBe(
       'Hay una sincronización en curso que todavía no terminó. Esperá unos segundos y probá de nuevo.',

@@ -6,11 +6,12 @@ import {
   markSynced,
   type OutboxEvent,
 } from '../domain/outbox.ts';
-import { ok, type Failure, type Result } from '../domain/result.ts';
+import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
 import { countLocalCatalog } from '../storage/local-data.ts';
+import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
@@ -25,13 +26,17 @@ import {
 } from '../ui/state/sync.ts';
 import type { Connector } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
-import { createConnector } from './connector-registry.ts';
+import { connectorPullMode, createConnector } from './connector-registry.ts';
 import {
   getCustomersCursor,
+  getLastFullSyncAt,
   getProductsCursor,
   setCustomersCursor,
+  setLastFullSyncAt,
   setProductsCursor,
 } from './cursor.ts';
+import { isFullRefreshDue } from './full-refresh.ts';
+import { pullEverything, withTimeout } from './pull-snapshot.ts';
 
 function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>> {
   switch (event.type) {
@@ -188,28 +193,93 @@ export async function syncOnce(connector: Connector, now: string): Promise<SyncR
     pulls: { products: catalog.products, stock: catalog.stock, customers },
   };
 
+  await finishCycle(
+    now,
+    [catalog.products, catalog.stock, customers].find((result): result is Failure => !result.ok),
+  );
+  return report;
+}
+
+/**
+ * Cola común de un ciclo completo: conteos y estado honesto (#53). `failure` (un pull que falló, o
+ * una tabla que llegó vacía) deja `sync-error` con el motivo; `lastSyncedAt` solo avanza en un
+ * ciclo completamente exitoso.
+ */
+async function finishCycle(now: string, failure: Failure | undefined): Promise<void> {
   const events = await db.outbox.toArray();
-  const pendingCount = events.filter((event) => event.status === 'pending').length;
-  setPendingOutboxCount(pendingCount);
+  setPendingOutboxCount(events.filter((event) => event.status === 'pending').length);
   setLocalCatalogCounts(await countLocalCatalog());
 
-  const firstFailure = [catalog.products, catalog.stock, customers].find(
-    (result): result is Failure => !result.ok,
-  );
-  if (firstFailure !== undefined) {
-    setLastSyncFailure(firstFailure);
+  if (failure !== undefined) {
+    setLastSyncFailure(failure);
     setSyncStatus('sync-error');
-    return report;
+    return;
   }
   setLastSyncFailure(null);
 
   if (isSyncStruggling(events)) {
     setSyncStatus('sync-error');
-    return report;
+    return;
   }
   setSyncStatus('online-idle');
   setLastSyncedAt(now);
-  return report;
+}
+
+/** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
+export const FULL_REFRESH_TIMEOUT_MS = 60_000;
+
+/** ¿Ya se hizo una foto completa desde que arrancó el motor (esta carga de la página)? */
+let fullRefreshDoneThisSession = false;
+
+/** Marca que en esta sesión todavía no hubo una foto completa (arranque del motor y tests). */
+export function resetFullRefreshSession(): void {
+  fullRefreshDoneThisSession = false;
+}
+
+/**
+ * Ciclo con **foto completa**: push del outbox y después el catálogo entero (sin `since`) en
+ * memoria, todo o nada — si una parte falla no se aplica nada. Recién con las tres partes en la mano
+ * se reconcilia en una transacción (`storage/reconcile.ts`): se actualiza lo que llegó y se borra lo
+ * que el origen dio de baja. Es lo único que se entera de las bajas: un delta nunca las informa.
+ *
+ * Una tabla que llega vacía teniendo datos locales no se borra: queda `sync/empty-snapshot` en la
+ * barra y la foto **no** se da por hecha, así el próximo ciclo la reintenta.
+ */
+export async function syncFull(connector: Connector, now: string): Promise<SyncReport> {
+  setSyncStatus('syncing');
+
+  const push = await pushPendingEvents(connector, now);
+
+  let failure: Failure | undefined;
+  const snapshot = await withTimeout(pullEverything(connector), FULL_REFRESH_TIMEOUT_MS);
+  if (!snapshot.ok) {
+    failure = snapshot;
+  } else {
+    const applied = await reconcileSnapshot(snapshot.value, { now });
+    if (!applied.ok) {
+      failure = applied;
+    } else if (applied.value.skipped.length > 0) {
+      failure = err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure;
+    }
+    if (applied.ok) {
+      if (snapshot.value.cursors.products !== undefined) {
+        setProductsCursor(snapshot.value.cursors.products);
+      }
+      if (snapshot.value.cursors.customers !== undefined) {
+        setCustomersCursor(snapshot.value.cursors.customers);
+      }
+      setCatalogRepository(await loadCatalogRepository());
+      setCustomerRepository(await loadCustomerRepository());
+      if (applied.value.skipped.length === 0) {
+        setLastFullSyncAt(now);
+        fullRefreshDoneThisSession = true;
+      }
+    }
+  }
+
+  await finishCycle(now, failure);
+  const result: Result<void> = failure ?? ok(undefined);
+  return { push, pulls: { products: result, stock: result, customers: result } };
 }
 
 /**
@@ -275,7 +345,9 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * Una config sin probar (`verifiedAt` ausente) no sincroniza: la app pide
  * probarla antes de operar (Etapa 2b).
  */
-export async function runSyncCycle(options: { pull?: boolean } = {}): Promise<void> {
+export async function runSyncCycle(
+  options: { pull?: boolean; full?: boolean } = {},
+): Promise<void> {
   // `/CONFIG` abierto: no arrancar ciclos (ver `syncPausedSignal`).
   if (syncPausedSignal.value) {
     return;
@@ -302,6 +374,16 @@ export async function runSyncCycle(options: { pull?: boolean } = {}): Promise<vo
     const now = new Date().toISOString();
     if (options.pull === false) {
       await pushOnce(connector, now);
+    } else if (
+      isFullRefreshDue({
+        mode: connectorPullMode(configResult.value.type),
+        lastFullAt: getLastFullSyncAt(),
+        now,
+        doneThisSession: fullRefreshDoneThisSession,
+        forced: options.full === true,
+      })
+    ) {
+      await syncFull(connector, now);
     } else {
       await syncOnce(connector, now);
     }
@@ -375,6 +457,7 @@ async function scheduleNextRetry(): Promise<void> {
  * Devuelve la función que lo detiene (tests).
  */
 export function startSyncEngine(): () => void {
+  resetFullRefreshSession();
   void runSyncCycle();
   const interval = setInterval(() => {
     void runSyncCycle();

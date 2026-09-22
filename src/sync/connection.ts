@@ -1,67 +1,17 @@
-import type { Product } from '../domain/product.ts';
-import { err, ok, type Result } from '../domain/result.ts';
-import type { StockItem } from '../domain/stock.ts';
+import { err, type Result } from '../domain/result.ts';
 import { hasUserData, type LocalDataSummary } from '../storage/local-data.ts';
 import type { SyncConfig } from './config.ts';
-import type { Connector, ConnectorCustomer } from './connector.ts';
+import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
 import { acquireSyncLockWaiting } from './engine.ts';
+import { pullEverything, withTimeout, type ProbeSnapshot } from './pull-snapshot.ts';
 
-/** Lo que trae una prueba de conexión: todo en memoria, nada tocó IndexedDB todavía. */
-export type ProbeSnapshot = {
-  products: Product[];
-  stock: StockItem[];
-  customers: ConnectorCustomer[];
-  cursors: { products?: string; customers?: string };
-};
+// `connection.ts` sigue siendo el punto de entrada de la prueba de conexión.
+export { withTimeout, type ProbeSnapshot };
 
 export const PROBE_TIMEOUT_MS = 20_000;
 /** Cuánto espera la prueba a que termine un ciclo de sync en curso antes de rendirse. */
 export const PROBE_LOCK_WAIT_MS = 30_000;
-
-/**
- * Carrera contra un tiempo máximo, sin cambiar el puerto `Connector`: si
- * vence, devuelve `sync/timeout` y el trabajo en vuelo se ignora (no se
- * cancela el `fetch`, solo se descarta su resultado). Un backend colgado no
- * puede dejar "Probando conexión…" para siempre.
- */
-export function withTimeout<T>(promise: Promise<Result<T>>, ms: number): Promise<Result<T>> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      resolve(err('sync/timeout', { seconds: Math.max(1, Math.round(ms / 1000)) }));
-    }, ms);
-    void promise.then((result) => {
-      clearTimeout(timer);
-      resolve(result);
-    });
-  });
-}
-
-async function pullEverything(connector: Connector): Promise<Result<ProbeSnapshot>> {
-  const products = await connector.pullProducts({});
-  if (!products.ok) {
-    return products;
-  }
-  const stock = await connector.pullStock();
-  if (!stock.ok) {
-    return stock;
-  }
-  const customers = await connector.pullCustomers({});
-  if (!customers.ok) {
-    return customers;
-  }
-  return ok({
-    products: products.value.items,
-    stock: stock.value,
-    customers: customers.value.items,
-    cursors: {
-      ...(products.value.nextCursor !== undefined ? { products: products.value.nextCursor } : {}),
-      ...(customers.value.nextCursor !== undefined
-        ? { customers: customers.value.nextCursor }
-        : {}),
-    },
-  });
-}
 
 /**
  * Prueba una conexión candidata (Etapa 2b, #76): el pull completo de

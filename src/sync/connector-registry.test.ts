@@ -9,6 +9,7 @@ import {
   connectorConfigSchema,
   connectorFields,
   connectorLabel,
+  connectorPullMode,
   createConnector,
   toFieldValues,
 } from './connector-registry.ts';
@@ -151,6 +152,20 @@ describe('connectorCommands', () => {
     expect(connectorCommands('rest')).toEqual([]);
     expect(connectorCommands('google-sheets')).toEqual([]);
     expect(connectorCommands(null)).toEqual([]);
+  });
+});
+
+describe('connectorPullMode (Etapa de la foto completa)', () => {
+  it('REST y el minibackend entregan deltas por since; Sheets no tiene delta y cada pull es completo', () => {
+    expect(connectorPullMode('rest')).toBe('delta');
+    expect(connectorPullMode('rest-demo')).toBe('delta');
+    expect(connectorPullMode('google-sheets')).toBe('snapshot');
+  });
+
+  it('todos los tipos lo declaran', () => {
+    for (const info of CONNECTOR_TYPES) {
+      expect(['delta', 'snapshot']).toContain(info.pullMode);
+    }
   });
 });
 

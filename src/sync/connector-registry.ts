@@ -37,9 +37,17 @@ export const connectorConfigSchema = z.discriminatedUnion('type', [
 export type ConnectorConfig = z.infer<typeof connectorConfigSchema>;
 export type ConnectorType = ConnectorConfig['type'];
 
+/**
+ * Cómo entrega el catálogo este conector: `delta` (`since` devuelve solo los cambios: hace falta
+ * una foto completa de vez en cuando para enterarse de las bajas) o `snapshot` (no hay delta, todo
+ * pull ya es completo y reconcilia siempre).
+ */
+export type PullMode = 'delta' | 'snapshot';
+
 export type ConnectorTypeInfo = {
   type: ConnectorType;
   label: string;
+  pullMode: PullMode;
   fields: ConfigField[];
   /** Comandos de la barra que solo existen con este conector (Etapa 2c, #77). */
   commands: ConnectorCommand[];
@@ -47,16 +55,24 @@ export type ConnectorTypeInfo = {
 
 /** Orden = orden del selector de `/CONFIG`. */
 export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
-  { type: 'rest', label: 'REST genérico', fields: restConfigFields, commands: [] },
+  {
+    type: 'rest',
+    label: 'REST genérico',
+    pullMode: 'delta',
+    fields: restConfigFields,
+    commands: [],
+  },
   {
     type: 'rest-demo',
     label: 'REST (minibackend de demo)',
+    pullMode: 'delta',
     fields: restDemoConfigFields,
     commands: restDemoCommands,
   },
   {
     type: 'google-sheets',
     label: 'Google Sheets',
+    pullMode: 'snapshot',
     fields: googleSheetsConfigFields,
     commands: [],
   },
@@ -64,6 +80,10 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
 
 export function connectorLabel(type: ConnectorType): string {
   return CONNECTOR_TYPES.find((info) => info.type === type)?.label ?? type;
+}
+
+export function connectorPullMode(type: ConnectorType): PullMode {
+  return CONNECTOR_TYPES.find((info) => info.type === type)?.pullMode ?? 'delta';
 }
 
 export function connectorFields(type: ConnectorType): ConfigField[] {

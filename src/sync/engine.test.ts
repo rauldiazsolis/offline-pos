@@ -14,13 +14,19 @@ import {
 } from '../ui/state/sync.ts';
 import type { AccountHoldResult, Connector, ConnectorCustomer, ConnectorPullResult } from './connector.ts';
 import { saveSyncConfig } from './config.ts';
-import { getCustomersCursor, getProductsCursor } from './cursor.ts';
+import {
+  getCustomersCursor,
+  getLastFullSyncAt,
+  getProductsCursor,
+  setProductsCursor,
+} from './cursor.ts';
 import {
   acquireSyncLockWaiting,
   cancelScheduledPush,
   pushOnce,
   pushPendingEvents,
   requestPushSoon,
+  resetFullRefreshSession,
   runSyncCycle,
   startSyncEngine,
   syncOnce,
@@ -972,5 +978,174 @@ describe('startSyncEngine', () => {
     await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
     expect(calls).toEqual([]);
+  });
+});
+
+describe('foto completa y reconciliación de bajas', () => {
+  function catalogProduct(id: string): Product {
+    return {
+      id,
+      sku: `SKU-${id}`,
+      barcodes: [],
+      name: `Producto ${id}`,
+      price: 100,
+      taxRate: 0.21,
+      category: 'x',
+      tracksStock: false,
+    };
+  }
+
+  type Backend = { products: Product[]; customers: { id: string; name: string }[]; failCustomers?: boolean };
+
+  /** Backend REST de mentira; registra "MÉTODO /ruta?query" de cada request. */
+  function stubBackend(state: Backend): string[] {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const target = new URL(url);
+        calls.push(`${init?.method ?? 'GET'} ${target.pathname}${target.search}`);
+        const failing = target.pathname === '/customers' && state.failCustomers === true;
+        let body: unknown = {};
+        if (target.pathname === '/products') body = { items: state.products, nextCursor: 'cur-p' };
+        if (target.pathname === '/customers') body = { items: state.customers, nextCursor: 'cur-c' };
+        if (target.pathname === '/stock') body = [];
+        return Promise.resolve({
+          ok: !failing,
+          status: failing ? 500 : 200,
+          statusText: failing ? 'Server Error' : 'OK',
+          json: () => Promise.resolve(body),
+        } as Response);
+      }),
+    );
+    return calls;
+  }
+
+  beforeEach(() => {
+    resetFullRefreshSession();
+    lastSyncFailureSignal.value = null;
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  it('el primer ciclo de la sesión es una foto completa: sin since, borra lo que ya no viene y fija los cursores', async () => {
+    await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
+    setProductsCursor('cursor-viejo');
+    const calls = stubBackend({ products: [catalogProduct('p1')], customers: [] });
+
+    await runSyncCycle();
+
+    expect(calls).toContain('GET /products');
+    expect(calls.some((call) => call.includes('since'))).toBe(false);
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
+    expect(getProductsCursor()).toBe('cur-p');
+    expect(getCustomersCursor()).toBe('cur-c');
+    expect(getLastFullSyncAt()).toBeDefined();
+    expect(syncStatusSignal.value).toBe('online-idle');
+  });
+
+  it('el segundo ciclo de la misma sesión, a menos de 1 hora, vuelve a ser un delta con since', async () => {
+    const calls = stubBackend({ products: [catalogProduct('p1')], customers: [] });
+
+    await runSyncCycle();
+    calls.length = 0;
+    await runSyncCycle();
+
+    expect(calls).toContain('GET /products?since=cur-p');
+    expect(calls).toContain('GET /customers?since=cur-c');
+  });
+
+  it('a la hora vuelve a hacer una foto completa', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const calls = stubBackend({ products: [catalogProduct('p1')], customers: [] });
+      await runSyncCycle();
+
+      vi.setSystemTime(Date.now() + 59 * 60 * 1000);
+      calls.length = 0;
+      await runSyncCycle();
+      expect(calls).toContain('GET /products?since=cur-p');
+
+      vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+      calls.length = 0;
+      await runSyncCycle();
+      expect(calls).toContain('GET /products');
+      expect(calls.some((call) => call.includes('since'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a pedido (full) fuerza la foto completa aunque la última sea reciente', async () => {
+    const calls = stubBackend({ products: [catalogProduct('p1')], customers: [] });
+    await runSyncCycle();
+    calls.length = 0;
+
+    await runSyncCycle({ full: true });
+
+    expect(calls).toContain('GET /products');
+    expect(calls.some((call) => call.includes('since'))).toBe(false);
+  });
+
+  it('con un conector snapshot (Sheets) todo ciclo es completo y reconcilia las bajas', async () => {
+    saveSyncConfig({
+      type: 'google-sheets',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const requests: { action: string; payload: unknown }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init?: RequestInit) => {
+        const body = JSON.parse(init?.body as string) as { action: string; payload: unknown };
+        requests.push(body);
+        const items = body.action === 'pullProducts' ? [catalogProduct('p1')] : [];
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () => Promise.resolve({ ok: true, data: { items } }),
+        } as Response);
+      }),
+    );
+
+    await runSyncCycle();
+    await db.products.put(catalogProduct('p-fantasma'));
+    await runSyncCycle();
+
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
+    expect(requests.filter((request) => request.action === 'pullProducts')).toHaveLength(2);
+    expect(JSON.stringify(requests)).not.toContain('since');
+  });
+
+  it('si una de las tres partes falla, no se aplica nada: ni upsert ni borrado, ni lastFullSyncAt', async () => {
+    await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
+    stubBackend({ products: [catalogProduct('p1')], customers: [], failCustomers: true });
+
+    await runSyncCycle();
+
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1', 'p2']);
+    expect(getLastFullSyncAt()).toBeUndefined();
+    expect(syncStatusSignal.value).toBe('sync-error');
+    expect(lastSyncFailureSignal.value).toMatchObject({ ok: false, error: 'sync/request-failed' });
+  });
+
+  it('un catálogo vacío con datos locales se conserva, se avisa y la foto queda pendiente', async () => {
+    await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
+    stubBackend({ products: [], customers: [] });
+
+    await runSyncCycle();
+
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1', 'p2']);
+    expect(syncStatusSignal.value).toBe('sync-error');
+    expect(lastSyncFailureSignal.value).toEqual({
+      ok: false,
+      error: 'sync/empty-snapshot',
+      meta: { tables: ['products'] },
+    });
+    expect(getLastFullSyncAt()).toBeUndefined();
   });
 });
