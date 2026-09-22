@@ -72,6 +72,12 @@ export function describeError(failure: Failure): string {
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
     case 'sync/remote-error':
       return `El sistema externo respondió con un error: ${failure.meta.message}`;
+    case 'sync/empty-snapshot': {
+      const names = { products: 'productos', stock: 'stock', customers: 'clientes' } as const;
+      return `El sistema externo devolvió vacío: ${failure.meta.tables.map((table) => names[table]).join(', ')}. Se conservaron los datos locales.`;
+    }
+    case 'sync/reconcile-failed':
+      return `No se pudo actualizar el catálogo local (${failure.meta.message}).`;
     case 'connection/sync-busy':
       return 'Hay una sincronización en curso que todavía no terminó. Esperá unos segundos y probá de nuevo.';
     case 'connection/apply-failed':
