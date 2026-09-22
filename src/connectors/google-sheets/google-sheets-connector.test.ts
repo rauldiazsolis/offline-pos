@@ -121,7 +121,9 @@ describe('pullBatch', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: expect.objectContaining({ lots: { 'lot-1': { status: 'ok' }, 'lot-2': { status: 'ok' } } }),
+      value: expect.objectContaining({
+        lots: { 'lot-1': { status: 'ok' }, 'lot-2': { status: 'ok' } },
+      }) as unknown,
     });
   });
 

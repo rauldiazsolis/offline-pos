@@ -482,7 +482,9 @@ describe('runPushCycle', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const first = runPushCycle();
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
 
     await runPushCycle();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -513,7 +515,7 @@ describe('runPullCycleNow', () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     const bodies: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
-      bodies.push(JSON.parse((init?.body as string) ?? '{}'));
+      bodies.push(JSON.parse(init?.body as string));
       return Promise.resolve({
         ok: true, status: 200, statusText: 'OK',
         json: () => Promise.resolve({ products: { items: [], nextCursor: 'cur-p' }, customers: { items: [], nextCursor: 'cur-c' }, stock: [], lots: {} }),
@@ -530,7 +532,7 @@ describe('runPullCycleNow', () => {
     resetFullRefreshSession();
     const bodies: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
-      const body = JSON.parse((init?.body as string) ?? '{}') as { cursors: Record<string, string> };
+      const body = JSON.parse(init?.body as string) as { cursors: Record<string, string> };
       bodies.push(body);
       const hasCursor = Object.keys(body.cursors).length > 0;
       return Promise.resolve({

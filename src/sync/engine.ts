@@ -367,7 +367,7 @@ export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): P
     if (summary.attempted > 0 && !summary.failed) {
       schedulePullSoon(PULL_DELAY_AFTER_PUSH_MS);
     }
-    await scheduleNextPushRetry();
+    scheduleNextPushRetry();
   });
 }
 
@@ -465,7 +465,7 @@ export function cancelScheduledPull(): void {
 }
 
 /** Agenda un push para cuando venza el backoff del lote en curso, si hay uno fallido. */
-async function scheduleNextPushRetry(): Promise<void> {
+function scheduleNextPushRetry(): void {
   const lot = getCurrentPushLot();
   if (lot === undefined) {
     return;

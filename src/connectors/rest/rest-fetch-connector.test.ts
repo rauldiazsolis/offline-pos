@@ -140,7 +140,9 @@ describe('pullBatch', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: expect.objectContaining({ lots: { 'lot-1': { status: 'issues', issues: ['stock insuficiente'] } } }),
+      value: expect.objectContaining({
+        lots: { 'lot-1': { status: 'issues', issues: ['stock insuficiente'] } },
+      }) as unknown,
     });
   });
 
