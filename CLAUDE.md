@@ -132,10 +132,18 @@ ya está cerrada y operativa localmente sin importar el resultado del sync.
 `sync/engine.ts::syncOnce` recorre `outbox` pendiente en orden (`createdAt`), filtrado por
 `isDue` (ventana de backoff), y hace `push*` al `Connector` con `Idempotency-Key` = `id` del evento.
 Confirmado → `synced`. Falla → `markFailed` (backoff exponencial con techo, `domain/outbox.ts`),
-sigue `pending`. `runSyncCycle` (arma el `Connector` real desde la config guardada) corre en loop
-mientras la pestaña está abierta (`setInterval` + evento `online`, `sync/engine.ts::startSyncEngine`)
-— **no** es la Background Sync API de Service Worker, eso es explícitamente Fase 7. Nunca bloquea
-la UI: sincronizar es efecto secundario, no condición para operar.
+sigue `pending`. `runSyncCycle` (arma el `Connector` real desde la config guardada) corre mientras la
+pestaña está abierta (`sync/engine.ts::startSyncEngine`) — **no** es la Background Sync API de Service
+Worker, eso es explícitamente Fase 7. Nunca bloquea la UI: sincronizar es efecto secundario, no
+condición para operar. Tres disparadores, a propósito **no** un loop rápido (un ciclo cada 15 s eran
+~11.500 ejecuciones por día por terminal contra el puente de Sheets, cerca de las cuotas de Apps
+Script): un ciclo **completo** (envío + pull) al arrancar, al volver la red, con `/SINCRONIZAR` y cada
+5 minutos como red de seguridad; un ciclo de **solo envío** (`pushOnce`, un request) por cada evento
+nuevo en `outbox` — un hook `creating` de Dexie sobre la tabla cubre venta, anulación, cliente, cierre
+de caja y fiado sin que cada controlador tenga que acordarse; y un ciclo de solo envío agendado al
+vencer el backoff del evento fallido (`scheduleNextRetry`: con ticks de 5 minutos, los reintentos de 2,
+4, 8… segundos no pueden depender del intervalo). `requestPushSoon` agrupa los pedidos seguidos (2 s) y
+conserva siempre el vencimiento más cercano, así un evento nunca demora un reintento.
 
 El catálogo es al revés (pull por delta con `since`/cursor, `sync/cursor.ts`): `syncOnce` hace
 `bulkPut` de lo que llega y **reconstruye el `CatalogRepository`** (Fase 1 lo armaba una sola vez
