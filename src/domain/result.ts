@@ -52,6 +52,10 @@ export type ErrorMeta = {
   // sync/config.ts, sync/engine.ts, connectors/rest/rest-fetch-connector.ts
   'sync/invalid-payload': { issues: { path: string; message: string }[] };
   'sync/request-failed': { status?: number; message: string };
+  // sync/engine.ts (pull batch, #87): un lote de push que nos interesa sigue sin resolverse
+  'sync/pending-lot': undefined;
+  // sync/engine.ts: el backend reportó problemas en un lote ya resuelto — informativo, no bloquea
+  'sync/push-issues': { issues: string[] };
   'sync/config-missing': undefined;
   'sync/config-invalid': { issues: { path: string; message: string }[] };
   // sync/connection.ts (prueba de conexión) y connectors/google-sheets/bridge-client.ts
