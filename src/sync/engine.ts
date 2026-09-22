@@ -1,15 +1,11 @@
 import { splitConnectorCustomers } from '../domain/customer.ts';
-import {
-  isDue,
-  isSyncStruggling,
-  markFailed,
-  markSynced,
-  type OutboxEvent,
-} from '../domain/outbox.ts';
+import { markSynced, type OutboxEvent } from '../domain/outbox.ts';
+import { buildPushLot, isLotDue, isPushStruggling, markLotFailed, type PushLot } from '../domain/push-lot.ts';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
+import { newId } from '../storage/ids.ts';
 import { countLocalCatalog } from '../storage/local-data.ts';
 import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
@@ -20,11 +16,12 @@ import {
   setLastSyncedAt,
   setLocalCatalogCounts,
   setPendingOutboxCount,
+  setPushLotIssues,
   setSyncConfigured,
   setSyncStatus,
   syncPausedSignal,
 } from '../ui/state/sync.ts';
-import type { Connector } from './connector.ts';
+import type { Connector, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
 import {
@@ -36,34 +33,39 @@ import {
   setProductsCursor,
 } from './cursor.ts';
 import { isFullRefreshDue } from './full-refresh.ts';
-import { pullEverything, withTimeout } from './pull-snapshot.ts';
+import { toProbeSnapshot, withTimeout } from './pull-snapshot.ts';
+import {
+  addAwaitingLot,
+  clearCurrentPushLot,
+  getAwaitingLots,
+  getCurrentPushLot,
+  resolveAwaitingLots,
+  setCurrentPushLot,
+} from './push-lot.ts';
 
-function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>> {
+/** Convierte un evento del outbox a su forma de red — sin `status`/`createdAt`, bookkeeping local. */
+export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
   switch (event.type) {
     case 'sale':
-      return connector.pushSale(event.sale, event.id);
+      return { type: 'sale', id: event.id, sale: event.sale };
     case 'stock-movement':
-      return connector.pushStockMovement(event.movement, event.id);
+      return { type: 'stock-movement', id: event.id, movement: event.movement };
     case 'sale-void':
-      return connector.pushSaleVoid(
-        {
-          saleId: event.saleId,
-          voidedAt: event.voidedAt,
-          ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
-        },
-        event.id,
-      );
+      return {
+        type: 'sale-void',
+        id: event.id,
+        saleId: event.saleId,
+        voidedAt: event.voidedAt,
+        ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
+      };
     case 'customer':
-      return connector.pushCustomer(event.customer, event.id);
+      return { type: 'customer', id: event.id, customer: event.customer };
     case 'account-hold-confirm':
-      return connector.pushAccountHoldConfirm(
-        { holdId: event.holdId, saleId: event.saleId },
-        event.id,
-      );
+      return { type: 'account-hold-confirm', id: event.id, holdId: event.holdId, saleId: event.saleId };
     case 'account-hold-release':
-      return connector.releaseAccountHold({ holdId: event.holdId }, event.id);
+      return { type: 'account-hold-release', id: event.id, holdId: event.holdId };
     case 'cash-session':
-      return connector.pushCashSession(event.session, event.id);
+      return { type: 'cash-session', id: event.id, session: event.session };
     default: {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
@@ -71,37 +73,66 @@ function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>
   }
 }
 
-export type PushSummary = { attempted: number; failed: number };
+/**
+ * Retoma el lote en curso (mismo id, mismo conjunto de eventos — nunca se
+ * recalcula en un reintento) o arma uno nuevo con todo lo pendiente del
+ * outbox, en orden `createdAt`. `undefined` si no hay nada que enviar.
+ */
+async function buildOrResumeLot(now: string): Promise<{ lot: PushLot; events: OutboxEvent[] } | undefined> {
+  const existing = getCurrentPushLot();
+  if (existing !== undefined) {
+    const events = (await db.outbox.bulkGet(existing.eventIds)).filter(
+      (event): event is OutboxEvent => event !== undefined && event.status === 'pending',
+    );
+    if (events.length > 0) {
+      return { lot: existing, events };
+    }
+    // Ya no queda nada pendiente de ese lote (p.ej. lo limpió /DEMO_RESET) — se descarta.
+    clearCurrentPushLot();
+  }
+
+  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
+  if (pending.length === 0) {
+    return undefined;
+  }
+  const lot = buildPushLot(pending.map((event) => event.id), { id: newId(), now });
+  setCurrentPushLot(lot);
+  return { lot, events: pending };
+}
+
+export type PushSummary = { attempted: number; failed: boolean };
 
 /**
- * Empuja el outbox pendiente en orden. `ignoreBackoff` saltea la ventana de
- * reintento (`isDue`): lo usa el envío final antes de borrar los datos al
- * cambiar de conexión (`sync/apply-connection.ts::flushPendingBeforeWipe`);
- * `now` sigue siendo la hora real, así un fallo calcula bien su próximo intento.
+ * Un ciclo de **push**: manda todo el outbox pendiente en un solo lote
+ * (#87) — reemplaza el `pushOnce`/`pushPendingEvents` por-evento de antes.
+ * `ignoreBackoff` saltea la ventana de reintento del lote: lo usa el envío
+ * final antes de borrar los datos al cambiar de conexión
+ * (`sync/apply-connection.ts::flushPendingBeforeWipe`) y `/SINCRONIZAR`.
  */
-export async function pushPendingEvents(
+export async function pushPendingLot(
   connector: Connector,
   now: string,
   options: { ignoreBackoff?: boolean } = {},
 ): Promise<PushSummary> {
-  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
-  let attempted = 0;
-  let failed = 0;
-
-  for (const event of pending) {
-    if (options.ignoreBackoff !== true && !isDue(event, now)) {
-      continue;
-    }
-    attempted += 1;
-    const result = await pushOne(connector, event);
-    if (!result.ok) {
-      failed += 1;
-    }
-    await db.outbox.put(
-      result.ok ? markSynced(event) : markFailed(event, { now, error: result.error }),
-    );
+  const resumed = await buildOrResumeLot(now);
+  if (resumed === undefined) {
+    return { attempted: 0, failed: false };
   }
-  return { attempted, failed };
+  const { lot, events } = resumed;
+  if (options.ignoreBackoff !== true && !isLotDue(lot, now)) {
+    return { attempted: 0, failed: false };
+  }
+
+  const result = await connector.pushBatch(events.map(toBatchItem), lot.id);
+  if (result.ok) {
+    await db.outbox.bulkPut(events.map(markSynced));
+    clearCurrentPushLot();
+    addAwaitingLot({ id: lot.id, sentAt: now });
+    return { attempted: events.length, failed: false };
+  }
+
+  setCurrentPushLot(markLotFailed(lot, { now, error: result.error }));
+  return { attempted: events.length, failed: true };
 }
 
 async function pullCatalog(

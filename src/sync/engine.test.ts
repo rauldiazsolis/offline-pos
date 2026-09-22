@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../domain/result.ts';
+import { markLotFailed as markLotFailedForTest, buildPushLot } from '../domain/push-lot.ts';
 import { db } from '../storage/db.ts';
+import { fakeConnector } from '../test/fake-connector.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
   lastSyncFailureSignal,
@@ -12,7 +14,6 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
-import type { AccountHoldResult, Connector, ConnectorCustomer, ConnectorPullResult } from './connector.ts';
 import { saveSyncConfig } from './config.ts';
 import {
   getCustomersCursor,
@@ -23,39 +24,23 @@ import {
 import {
   acquireSyncLockWaiting,
   cancelScheduledPush,
-  pushOnce,
-  pushPendingEvents,
+  pushPendingLot,
   requestPushSoon,
   resetFullRefreshSession,
   runSyncCycle,
   startSyncEngine,
+  syncFull,
   syncOnce,
+  toBatchItem,
   tryAcquireSyncLock,
 } from './engine.ts';
+import { getAwaitingLots, getCurrentPushLot, setCurrentPushLot } from './push-lot.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
 
 function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
-}
-
-function fakeConnector(overrides: Partial<Connector> = {}): Connector {
-  return {
-    pullProducts: () => Promise.resolve(ok<ConnectorPullResult<Product>>({ items: [] })),
-    pullStock: () => Promise.resolve(ok<StockItem[]>([])),
-    pullCustomers: () => Promise.resolve(ok<ConnectorPullResult<ConnectorCustomer>>({ items: [] })),
-    pushSale: () => Promise.resolve(ok(undefined)),
-    pushStockMovement: () => Promise.resolve(ok(undefined)),
-    pushSaleVoid: () => Promise.resolve(ok(undefined)),
-    pushCustomer: () => Promise.resolve(ok(undefined)),
-    requestAccountHold: () =>
-      Promise.resolve(ok<AccountHoldResult>({ approved: true, holdId: 'hold-1' })),
-    pushAccountHoldConfirm: () => Promise.resolve(ok(undefined)),
-    releaseAccountHold: () => Promise.resolve(ok(undefined)),
-    pushCashSession: () => Promise.resolve(ok(undefined)),
-    ...overrides,
-  };
 }
 
 const now = '2026-01-01T00:00:00.000Z';
@@ -88,140 +73,134 @@ const sale: Sale = {
   createdAt: now,
 };
 
-describe('syncOnce — push', () => {
-  it('empuja los eventos pendientes en orden y los marca synced', async () => {
+describe('pushPendingLot', () => {
+  it('sin eventos pendientes no llama a pushBatch', async () => {
+    const pushBatch = vi.fn();
+    const summary = await pushPendingLot(fakeConnector({ pushBatch }), now);
+    expect(summary).toEqual({ attempted: 0, failed: false });
+    expect(pushBatch).not.toHaveBeenCalled();
+  });
+
+  it('manda todos los eventos pendientes en un solo lote, en orden por createdAt', async () => {
     await db.outbox.bulkAdd([
+      { type: 'sale', sale: { ...sale, id: 'second' }, id: 'second', status: 'pending', createdAt: '2026-01-01T00:00:02.000Z' },
+      { type: 'sale', sale: { ...sale, id: 'first' }, id: 'first', status: 'pending', createdAt: '2026-01-01T00:00:01.000Z' },
+    ]);
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
+
+    const summary = await pushPendingLot(fakeConnector({ pushBatch }), now);
+
+    expect(summary).toEqual({ attempted: 2, failed: false });
+    expect(pushBatch).toHaveBeenCalledTimes(1);
+    const [items] = pushBatch.mock.calls[0] as [unknown[], string];
+    expect(items.map((item) => (item as { id: string }).id)).toEqual(['first', 'second']);
+  });
+
+  it('marca todos los eventos del lote como synced tras un ack exitoso, y limpia el lote en curso', async () => {
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+
+    await pushPendingLot(fakeConnector({ pushBatch: () => Promise.resolve(ok(undefined)) }), now);
+
+    expect((await db.outbox.get('sale-1'))?.status).toBe('synced');
+    expect(getCurrentPushLot()).toBeUndefined();
+  });
+
+  it('tras el ack, agrega el lote a la lista de espera de resolución', async () => {
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+
+    await pushPendingLot(fakeConnector({ pushBatch: () => Promise.resolve(ok(undefined)) }), now);
+
+    expect(getAwaitingLots()).toHaveLength(1);
+  });
+
+  it('un fallo de red deja los eventos pending y guarda el lote con backoff, sin agregarlo a la espera', async () => {
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+    const pushBatch = vi.fn().mockResolvedValue(err('sync/request-failed', { message: 'boom' }));
+
+    const summary = await pushPendingLot(fakeConnector({ pushBatch }), now);
+
+    expect(summary).toEqual({ attempted: 1, failed: true });
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+    expect(getCurrentPushLot()?.retries).toBe(1);
+    expect(getAwaitingLots()).toEqual([]);
+  });
+
+  it('respeta el backoff del lote: no reintenta antes de tiempo salvo ignoreBackoff', async () => {
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+    setCurrentPushLot(
+      markLotFailedForTest(buildPushLot(['sale-1'], { id: 'lot-1', now }), { now, error: 'x' }),
+    );
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
+
+    const withoutFlag = await pushPendingLot(fakeConnector({ pushBatch }), now);
+    expect(withoutFlag).toEqual({ attempted: 0, failed: false });
+    expect(pushBatch).not.toHaveBeenCalled();
+
+    const withFlag = await pushPendingLot(fakeConnector({ pushBatch }), now, { ignoreBackoff: true });
+    expect(withFlag).toEqual({ attempted: 1, failed: false });
+  });
+
+  it('un reintento del mismo lote reusa el mismo idempotencyId y el mismo conjunto de eventos, aunque haya eventos nuevos en el outbox', async () => {
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+    const pushBatch = vi.fn().mockResolvedValueOnce(err('sync/request-failed', { message: 'boom' }));
+    await pushPendingLot(fakeConnector({ pushBatch }), now, { ignoreBackoff: true });
+    const lotIdAfterFailure = getCurrentPushLot()?.id;
+
+    // Llega un evento nuevo mientras el lote sigue en vuelo (todavía no se reintentó).
+    await db.outbox.add({ type: 'sale', sale: { ...sale, id: 'sale-2' }, id: 'sale-2', status: 'pending', createdAt: now });
+    const pushBatchRetry = vi.fn().mockResolvedValue(ok(undefined));
+
+    await pushPendingLot(fakeConnector({ pushBatch: pushBatchRetry }), now, { ignoreBackoff: true });
+
+    const [items, idempotencyId] = pushBatchRetry.mock.calls[0] as [unknown[], string];
+    expect(idempotencyId).toBe(lotIdAfterFailure); // mismo id congelado, no uno nuevo
+    expect(items.map((item) => (item as { id: string }).id)).toEqual(['sale-1']); // sale-2 queda para el próximo lote
+  });
+});
+
+// pushOne por tipo de evento: cubierto ahora por toBatchItem — un test por variante, directo.
+describe('toBatchItem', () => {
+  it.each([
+    [
+      { type: 'sale' as const, sale, id: 'sale-1', status: 'pending' as const, createdAt: now },
+      { type: 'sale', sale, id: 'sale-1' },
+    ],
+    [
       {
-        type: 'sale',
-        sale,
-        id: 'sale-1',
-        status: 'pending',
-        retries: 0,
+        type: 'stock-movement' as const,
+        movement: { id: 'm1', productId: 'p1', delta: -1, reason: 'sale' as const, saleId: 'sale-1', createdAt: now },
+        id: 'm1',
+        status: 'pending' as const,
         createdAt: now,
-        nextAttemptAt: now,
-      },
-    ]);
-    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushSale }), now);
-
-    expect(pushSale).toHaveBeenCalledWith(sale, 'sale-1');
-    const event = await db.outbox.get('sale-1');
-    expect(event?.status).toBe('synced');
-  });
-
-  it('respeta el orden por createdAt', async () => {
-    await db.outbox.bulkAdd([
-      {
-        type: 'sale',
-        sale,
-        id: 'second',
-        status: 'pending',
-        retries: 0,
-        createdAt: '2026-01-01T00:00:02.000Z',
-        nextAttemptAt: now,
       },
       {
-        type: 'sale',
-        sale,
-        id: 'first',
-        status: 'pending',
-        retries: 0,
-        createdAt: '2026-01-01T00:00:01.000Z',
-        nextAttemptAt: now,
+        type: 'stock-movement',
+        movement: { id: 'm1', productId: 'p1', delta: -1, reason: 'sale', saleId: 'sale-1', createdAt: now },
+        id: 'm1',
       },
-    ]);
-    const order: string[] = [];
-    const pushSale = vi.fn().mockImplementation((_s: Sale, key: string) => {
-      order.push(key);
-      return Promise.resolve(ok(undefined));
-    });
-
-    await syncOnce(fakeConnector({ pushSale }), now);
-
-    expect(order).toEqual(['first', 'second']);
-  });
-
-  it('no empuja eventos cuyo nextAttemptAt todavía no llegó', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 1,
-      createdAt: now,
-      nextAttemptAt: '2026-01-01T01:00:00.000Z', // futuro
-    });
-    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushSale }), now);
-
-    expect(pushSale).not.toHaveBeenCalled();
-    const event = await db.outbox.get('sale-1');
-    expect(event?.status).toBe('pending');
-  });
-
-  it('marca failed y calcula el próximo intento cuando el push falla', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushSale = vi.fn().mockResolvedValue(err('sync/request-failed', { message: 'boom' }));
-
-    await syncOnce(fakeConnector({ pushSale }), now);
-
-    const event = await db.outbox.get('sale-1');
-    expect(event?.status).toBe('pending');
-    expect(event?.retries).toBe(1);
-    expect(event?.lastError).toBe('sync/request-failed');
-  });
-
-  it('actualiza pendingOutboxCountSignal', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-
-    await syncOnce(
-      fakeConnector({
-        pushSale: () => Promise.resolve(err('sync/request-failed', { message: 'x' })),
-      }),
-      now,
-    );
-
-    expect(pendingOutboxCountSignal.value).toBe(1);
-    expect(syncStatusSignal.value).toBe('online-idle');
-  });
-
-  it('pasa a sync-error cuando un evento pendiente supera el umbral de reintentos', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 5,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-
-    await syncOnce(
-      fakeConnector({
-        pushSale: () => Promise.resolve(err('sync/request-failed', { message: 'x' })),
-      }),
-      now,
-    );
-
-    expect(syncStatusSignal.value).toBe('sync-error');
+    ],
+    [
+      { type: 'sale-void' as const, saleId: 'sale-1', voidedAt: now, voidReason: 'error', id: 'void-1', status: 'pending' as const, createdAt: now },
+      { type: 'sale-void', saleId: 'sale-1', voidedAt: now, voidReason: 'error', id: 'void-1' },
+    ],
+    [
+      { type: 'customer' as const, customer: { id: 'c1', name: 'Juan Pérez', createdAt: now }, id: 'c1', status: 'pending' as const, createdAt: now },
+      { type: 'customer', customer: { id: 'c1', name: 'Juan Pérez', createdAt: now }, id: 'c1' },
+    ],
+    [
+      { type: 'account-hold-confirm' as const, holdId: 'hold-1', saleId: 'sale-1', id: 'confirm-1', status: 'pending' as const, createdAt: now },
+      { type: 'account-hold-confirm', holdId: 'hold-1', saleId: 'sale-1', id: 'confirm-1' },
+    ],
+    [
+      { type: 'account-hold-release' as const, holdId: 'hold-1', id: 'release-1', status: 'pending' as const, createdAt: now },
+      { type: 'account-hold-release', holdId: 'hold-1', id: 'release-1' },
+    ],
+    [
+      { type: 'cash-session' as const, session: { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] }, id: 'cs1', status: 'pending' as const, createdAt: now },
+      { type: 'cash-session', session: { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] }, id: 'cs1' },
+    ],
+  ])('convierte %o a %o, sin status ni createdAt', (event, expected) => {
+    expect(toBatchItem(event)).toEqual(expected);
   });
 });
 
@@ -352,128 +331,6 @@ describe('syncOnce — pull de clientes', () => {
     await syncOnce(fakeConnector({ pullCustomers }), now);
 
     expect(await db.customerAccounts.get('c2')).toBeUndefined();
-  });
-});
-
-describe('pushOne por tipo de evento', () => {
-  it('llama pushStockMovement para un evento stock-movement', async () => {
-    const movement: StockMovement = {
-      id: 'm1',
-      productId: 'p1',
-      delta: -1,
-      reason: 'sale',
-      saleId: 'sale-1',
-      createdAt: now,
-    };
-    await db.outbox.add({
-      type: 'stock-movement',
-      movement,
-      id: 'm1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushStockMovement = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushStockMovement }), now);
-
-    expect(pushStockMovement).toHaveBeenCalledWith(movement, 'm1');
-  });
-
-  it('llama pushSaleVoid para un evento sale-void', async () => {
-    await db.outbox.add({
-      type: 'sale-void',
-      saleId: 'sale-1',
-      voidedAt: now,
-      voidReason: 'error',
-      id: 'void-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushSaleVoid = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushSaleVoid }), now);
-
-    expect(pushSaleVoid).toHaveBeenCalledWith(
-      { saleId: 'sale-1', voidedAt: now, voidReason: 'error' },
-      'void-1',
-    );
-  });
-
-  it('llama pushCustomer para un evento customer', async () => {
-    await db.outbox.add({
-      type: 'customer',
-      customer: { id: 'c1', name: 'Juan Pérez', createdAt: now },
-      id: 'c1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushCustomer = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushCustomer }), now);
-
-    expect(pushCustomer).toHaveBeenCalledWith({ id: 'c1', name: 'Juan Pérez', createdAt: now }, 'c1');
-  });
-
-  it('llama pushAccountHoldConfirm para un evento account-hold-confirm', async () => {
-    await db.outbox.add({
-      type: 'account-hold-confirm',
-      holdId: 'hold-1',
-      saleId: 'sale-1',
-      id: 'confirm-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushAccountHoldConfirm = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushAccountHoldConfirm }), now);
-
-    expect(pushAccountHoldConfirm).toHaveBeenCalledWith(
-      { holdId: 'hold-1', saleId: 'sale-1' },
-      'confirm-1',
-    );
-  });
-
-  it('llama releaseAccountHold para un evento account-hold-release', async () => {
-    await db.outbox.add({
-      type: 'account-hold-release',
-      holdId: 'hold-1',
-      id: 'release-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const releaseAccountHold = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ releaseAccountHold }), now);
-
-    expect(releaseAccountHold).toHaveBeenCalledWith({ holdId: 'hold-1' }, 'release-1');
-  });
-
-  it('llama pushCashSession para un evento cash-session', async () => {
-    const session = { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] };
-    await db.outbox.add({
-      type: 'cash-session',
-      session,
-      id: 'cs1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-    const pushCashSession = vi.fn().mockResolvedValue(ok(undefined));
-
-    await syncOnce(fakeConnector({ pushCashSession }), now);
-
-    expect(pushCashSession).toHaveBeenCalledWith(session, 'cs1');
   });
 });
 
@@ -617,51 +474,6 @@ describe('runSyncCycle', () => {
     const callsAfterFirst = fetchMock.mock.calls.length;
     await runSyncCycle();
     expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
-  });
-});
-
-describe('pushPendingEvents', () => {
-  it('con ignoreBackoff empuja también los eventos cuyo nextAttemptAt todavía no llegó', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 1,
-      createdAt: now,
-      nextAttemptAt: '2026-01-01T01:00:00.000Z', // futuro
-    });
-    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
-
-    const withoutFlag = await pushPendingEvents(fakeConnector({ pushSale }), now);
-    expect(withoutFlag).toEqual({ attempted: 0, failed: 0 });
-
-    const withFlag = await pushPendingEvents(fakeConnector({ pushSale }), now, {
-      ignoreBackoff: true,
-    });
-    expect(withFlag).toEqual({ attempted: 1, failed: 0 });
-    expect(pushSale).toHaveBeenCalledTimes(1);
-  });
-
-  it('cuenta los fallos', async () => {
-    await db.outbox.add({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: now,
-      nextAttemptAt: now,
-    });
-
-    const summary = await pushPendingEvents(
-      fakeConnector({
-        pushSale: () => Promise.resolve(err('sync/request-failed', { message: 'x' })),
-      }),
-      now,
-    );
-
-    expect(summary).toEqual({ attempted: 1, failed: 1 });
   });
 });
 
