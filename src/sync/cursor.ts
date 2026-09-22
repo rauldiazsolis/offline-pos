@@ -10,6 +10,7 @@
  */
 const PRODUCTS_CURSOR_KEY = 'offline-pos:sync-cursor:products';
 const CUSTOMERS_CURSOR_KEY = 'offline-pos:sync-cursor:customers';
+const LAST_FULL_SYNC_KEY = 'offline-pos:sync:last-full';
 
 export function getProductsCursor(): string | undefined {
   try {
@@ -44,6 +45,26 @@ export function setCustomersCursor(cursor: string): void {
 }
 
 /**
+ * Cuándo se hizo la última foto completa del catálogo (`sync/full-refresh.ts`). Mismo criterio
+ * best-effort que los cursores: si se pierde, la próxima vez toca una foto completa.
+ */
+export function getLastFullSyncAt(): string | undefined {
+  try {
+    return localStorage.getItem(LAST_FULL_SYNC_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function setLastFullSyncAt(iso: string): void {
+  try {
+    localStorage.setItem(LAST_FULL_SYNC_KEY, iso);
+  } catch {
+    /* best-effort, ver comentario de arriba */
+  }
+}
+
+/**
  * Usado por `/DEMO_RESET` (Ciclo 8, `storage/demo-reset.ts`): sin esto, el
  * próximo pull solo traería deltas desde el cursor viejo y nunca repondría
  * el catálogo/clientes que el reset acaba de borrar localmente. Best-effort,
@@ -53,6 +74,7 @@ export function clearSyncCursors(): void {
   try {
     localStorage.removeItem(PRODUCTS_CURSOR_KEY);
     localStorage.removeItem(CUSTOMERS_CURSOR_KEY);
+    localStorage.removeItem(LAST_FULL_SYNC_KEY);
   } catch {
     /* best-effort, ver comentario de arriba */
   }
