@@ -162,6 +162,12 @@ paths:
         `CustomerAccount` (§4 del doc de diseño) es una decisión de
         organización del dominio del POS, no algo que el integrador deba
         replicar.
+
+        `unrestricted: true` (Etapa 3, #69) declara, para ese cliente
+        puntual, que el fiado no tiene bloqueo de crédito — el POS lo aprueba
+        sin evaluar `creditLimit`/`margin`/`balance`, que quedan sin usar si
+        no vienen. Es una capacidad por cliente, no algo que el POS infiera
+        de qué backend está conectado: cualquier integrador puede declararla.
       parameters:
         - name: since
           in: query
@@ -427,6 +433,12 @@ components:
         margin: { type: number }
         balance: { type: number }
         updatedAt: { type: string, format: date-time }
+        unrestricted:
+          type: boolean
+          description: |
+            Fiado sin bloqueo de crédito para este cliente (Etapa 3, #69) —
+            aprueba sin evaluar `creditLimit`/`margin`/`balance`, que pueden
+            omitirse.
 
     CustomersPullResponse:
       type: object

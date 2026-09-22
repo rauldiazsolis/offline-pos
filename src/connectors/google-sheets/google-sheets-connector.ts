@@ -36,8 +36,10 @@ const emptyDataSchema = z.object({});
  *   movimientos para productos que trackean stock, así que
  *   `pushStockMovement` en la práctica nunca se invoca.
  *
- * `unrestricted: true` en `pullCustomers` lo agrega la Etapa 3 (#69) junto
- * con el campo en `ConnectorCustomer` — la Etapa 1 no toca `sync/`.
+ * `pullCustomers` fija `unrestricted: true` en cada cliente (Etapa 3, #69):
+ * el fiado contra Sheets es sin bloqueo ni `creditLimit`/`margin` reales que
+ * declarar, así que esta es la única forma de decir "sin restricción" sin
+ * fabricar esos números.
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
   async function push(
@@ -75,7 +77,7 @@ export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connect
       if (!result.ok) {
         return result;
       }
-      return ok({ items: result.value.items });
+      return ok({ items: result.value.items.map((item) => ({ ...item, unrestricted: true })) });
     },
 
     pushSale(sale, idempotencyKey) {
