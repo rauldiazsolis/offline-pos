@@ -79,3 +79,15 @@ export const localCatalogCountsSignal = signal<LocalCatalogCounts | null>(null);
 export function setLocalCatalogCounts(counts: LocalCatalogCounts | null): void {
   localCatalogCountsSignal.value = counts;
 }
+
+/**
+ * Issues que el backend reportó sobre un lote de push ya resuelto (#87) —
+ * puramente informativo: el POS nunca se autobloquea por esto, solo se lo
+ * muestra al humano (ver spec, "el backend nunca rechaza"). `null` = nada
+ * que avisar. Se limpia solo cuando un pull posterior no trae issues nuevos.
+ */
+export const pushLotIssuesSignal = signal<string[] | null>(null);
+
+export function setPushLotIssues(issues: string[] | null): void {
+  pushLotIssuesSignal.value = issues;
+}

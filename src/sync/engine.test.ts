@@ -10,6 +10,7 @@ import {
   lastSyncedAtSignal,
   localCatalogCountsSignal,
   pendingOutboxCountSignal,
+  pushLotIssuesSignal,
   setSyncPaused,
   syncConfiguredSignal,
   syncStatusSignal,
@@ -27,14 +28,13 @@ import {
   pushPendingLot,
   requestPushSoon,
   resetFullRefreshSession,
+  runPullCycle,
   runSyncCycle,
   startSyncEngine,
-  syncFull,
-  syncOnce,
   toBatchItem,
   tryAcquireSyncLock,
 } from './engine.ts';
-import { getAwaitingLots, getCurrentPushLot, setCurrentPushLot } from './push-lot.ts';
+import { addAwaitingLot, getAwaitingLots, getCurrentPushLot, setCurrentPushLot } from './push-lot.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
@@ -204,133 +204,204 @@ describe('toBatchItem', () => {
   });
 });
 
-describe('syncOnce — pull', () => {
+describe('runPullCycle — delta', () => {
   const product: Product = {
-    id: 'p1',
-    sku: 'SKU-1',
-    barcodes: [],
-    name: 'Arroz 1kg',
-    price: 100,
-    taxRate: 0.21,
-    category: 'almacen',
-    tracksStock: true,
+    id: 'p1', sku: 'SKU-1', barcodes: [], name: 'Arroz 1kg', price: 100, taxRate: 0.21,
+    category: 'almacen', tracksStock: true,
   };
 
   it('guarda los productos nuevos y avanza el cursor', async () => {
-    const pullProducts = vi
-      .fn<Connector['pullProducts']>()
-      .mockResolvedValue(ok({ items: [product], nextCursor: 'cursor-2' }));
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [product], nextCursor: 'cursor-2' }, customers: { items: [] }, stock: [], lots: {} }),
+    );
 
-    await syncOnce(fakeConnector({ pullProducts }), now);
+    await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    const stored = await db.products.get('p1');
-    expect(stored?.name).toBe('Arroz 1kg');
+    expect((await db.products.get('p1'))?.name).toBe('Arroz 1kg');
     expect(getProductsCursor()).toBe('cursor-2');
   });
 
-  it('manda el cursor guardado como since en el próximo ciclo', async () => {
-    const pullProducts = vi
-      .fn<Connector['pullProducts']>()
-      .mockResolvedValue(ok({ items: [product], nextCursor: 'cursor-2' }));
-    await syncOnce(fakeConnector({ pullProducts }), now);
+  it('manda el cursor guardado como parte de cursors en el próximo ciclo', async () => {
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [product], nextCursor: 'cursor-2' }, customers: { items: [] }, stock: [], lots: {} }),
+    );
+    await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    await syncOnce(fakeConnector({ pullProducts }), now);
+    await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    expect(pullProducts).toHaveBeenLastCalledWith({ since: 'cursor-2' });
+    expect(pullBatch).toHaveBeenLastCalledWith({ cursors: { products: 'cursor-2' }, pendingLotIds: [] });
   });
 
   it('actualiza el stock recibido', async () => {
     const stockItem: StockItem = { productId: 'p1', quantity: 7, updatedAt: now };
-    const pullStock = vi.fn<Connector['pullStock']>().mockResolvedValue(ok([stockItem]));
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [stockItem], lots: {} }),
+    );
 
-    await syncOnce(fakeConnector({ pullStock }), now);
+    await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    const stored = await db.stock.get('p1');
-    expect(stored?.quantity).toBe(7);
+    expect((await db.stock.get('p1'))?.quantity).toBe(7);
   });
 
-  it('si un pull falla: no rompe el ciclo, pasa a sync-error, guarda el motivo y no marca la sync como exitosa', async () => {
+  it('si el pull falla: pasa a sync-error, guarda el motivo y no marca la sync como exitosa', async () => {
     lastSyncedAtSignal.value = null;
     const failure = err('sync/request-failed', { status: 401, message: 'x' });
-    const pullProducts = vi.fn<Connector['pullProducts']>().mockResolvedValue(failure);
+    const pullBatch = vi.fn().mockResolvedValue(failure);
 
-    const report = await syncOnce(fakeConnector({ pullProducts }), now);
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    expect(report.pulls.products.ok).toBe(false);
+    expect(report.ok).toBe(false);
     expect(syncStatusSignal.value).toBe('sync-error');
     expect(lastSyncFailureSignal.value).toEqual(failure);
     expect(lastSyncedAtSignal.value).toBeNull();
   });
 
-  it.each([
-    [
-      'stock',
-      { pullStock: () => Promise.resolve(err('sync/request-failed', { message: 'down' })) },
-    ],
-    [
-      'clientes',
-      { pullCustomers: () => Promise.resolve(err('sync/request-failed', { message: 'down' })) },
-    ],
-  ] as const)('un pull de %s fallido también es sync-error', async (_name, overrides) => {
-    await syncOnce(fakeConnector(overrides), now);
+  it('guarda customer y customerAccount, y avanza el cursor de clientes', async () => {
+    const rawCustomer = { id: 'c1', name: 'Juan Pérez', creditLimit: 1000, margin: 0, balance: 100 };
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [rawCustomer], nextCursor: 'cur-c' }, stock: [], lots: {} }),
+    );
 
-    expect(syncStatusSignal.value).toBe('sync-error');
-    expect(lastSyncFailureSignal.value).not.toBeNull();
+    await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect((await db.customers.get('c1'))?.name).toBe('Juan Pérez');
+    expect((await db.customerAccounts.get('c1'))?.balance).toBe(100);
+    expect(getCustomersCursor()).toBe('cur-c');
+  });
+
+  it('un cliente sin datos de cuenta no crea fila en customerAccounts', async () => {
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [{ id: 'c2', name: 'Sin cuenta' }] }, stock: [], lots: {} }),
+    );
+
+    await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(await db.customerAccounts.get('c2')).toBeUndefined();
   });
 
   it('tras un ciclo exitoso limpia el motivo del fallo y guarda lo que hay en la base local', async () => {
     await db.products.put({
-      id: 'p1',
-      sku: 'S1',
-      barcodes: [],
-      name: 'Arroz',
-      price: 100,
-      taxRate: 0.21,
-      category: 'x',
-      tracksStock: false,
+      id: 'p1', sku: 'S1', barcodes: [], name: 'Arroz', price: 100, taxRate: 0.21, category: 'x', tracksStock: false,
     });
-    await syncOnce(
-      fakeConnector({
-        pullProducts: () => Promise.resolve(err('sync/request-failed', { message: 'down' })),
-      }),
+    await runPullCycle(
+      fakeConnector({ pullBatch: () => Promise.resolve(err('sync/request-failed', { message: 'down' })) }),
       now,
     );
     expect(lastSyncFailureSignal.value).not.toBeNull();
 
-    const report = await syncOnce(fakeConnector(), now);
+    const report = await runPullCycle(fakeConnector(), now);
 
-    expect(report.pulls.products.ok).toBe(true);
+    expect(report.ok).toBe(true);
     expect(lastSyncFailureSignal.value).toBeNull();
     expect(localCatalogCountsSignal.value).toEqual({ products: 1, customers: 0 });
     expect(lastSyncedAtSignal.value).toBe(now);
   });
 });
 
-describe('syncOnce — pull de clientes', () => {
-  const rawCustomer = { id: 'c1', name: 'Juan Pérez', creditLimit: 1000, margin: 0, balance: 100 };
+describe('runPullCycle — gateado por lotes de push pendientes', () => {
+  it('si un lote que nos interesa sigue pending, no aplica el pull y no toca el catálogo local', async () => {
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    await db.products.put({
+      id: 'p1', sku: 'S1', barcodes: [], name: 'Viejo', price: 1, taxRate: 0, category: 'x', tracksStock: false,
+    });
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({
+        products: { items: [{ id: 'p1', sku: 'S1', barcodes: [], name: 'Nuevo', price: 999, taxRate: 0, category: 'x', tracksStock: false }] },
+        customers: { items: [] },
+        stock: [],
+        lots: { 'lot-1': { status: 'pending' } },
+      }),
+    );
 
-  it('guarda customer y customerAccount, y avanza el cursor', async () => {
-    const pullCustomers = vi
-      .fn<Connector['pullCustomers']>()
-      .mockResolvedValue(ok({ items: [rawCustomer], nextCursor: 'cursor-2' }));
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    await syncOnce(fakeConnector({ pullCustomers }), now);
-
-    const storedCustomer = await db.customers.get('c1');
-    expect(storedCustomer?.name).toBe('Juan Pérez');
-    const storedAccount = await db.customerAccounts.get('c1');
-    expect(storedAccount?.balance).toBe(100);
-    expect(getCustomersCursor()).toBe('cursor-2');
+    expect(report).toEqual({ ok: false, error: 'sync/pending-lot', meta: undefined });
+    expect((await db.products.get('p1'))?.name).toBe('Viejo'); // no se aplicó nada
+    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]); // sigue esperando
   });
 
-  it('un cliente sin datos de cuenta no crea fila en customerAccounts', async () => {
-    const pullCustomers = vi
-      .fn<Connector['pullCustomers']>()
-      .mockResolvedValue(ok({ items: [{ id: 'c2', name: 'Sin cuenta' }] }));
+  it('si el backend no informa nada sobre un lote que esperamos, se trata como todavía pending', async () => {
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
 
-    await syncOnce(fakeConnector({ pullCustomers }), now);
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    expect(await db.customerAccounts.get('c2')).toBeUndefined();
+    expect(report.ok).toBe(false);
+    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]);
+  });
+
+  it('un lote resuelto ok se saca de la lista de espera y el pull se aplica normalmente', async () => {
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: { 'lot-1': { status: 'ok' } } }),
+    );
+
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(report.ok).toBe(true);
+    expect(getAwaitingLots()).toEqual([]);
+  });
+
+  it('un lote resuelto con issues se saca de la espera, el pull igual se aplica, y se avisa vía pushLotIssuesSignal', async () => {
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({
+        products: { items: [] },
+        customers: { items: [] },
+        stock: [],
+        lots: { 'lot-1': { status: 'issues', issues: ['stock insuficiente en p1'] } },
+      }),
+    );
+
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(report.ok).toBe(true);
+    expect(getAwaitingLots()).toEqual([]);
+    expect(pushLotIssuesSignal.value).toEqual(['stock insuficiente en p1']);
+  });
+
+  it('sin lotes en espera, pullBatch se llama con pendingLotIds vacío y el pull se aplica directo', async () => {
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
+
+    await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
+  });
+});
+
+describe('runPullCycle — foto completa y reconciliación de bajas', () => {
+  function catalogProduct(id: string): Product {
+    return { id, sku: `SKU-${id}`, barcodes: [], name: `Producto ${id}`, price: 100, taxRate: 0.21, category: 'x', tracksStock: false };
+  }
+
+  it('con full:true no manda cursores y reconcilia bajas', async () => {
+    await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [catalogProduct('p1')], nextCursor: 'cur-p' }, customers: { items: [], nextCursor: 'cur-c' }, stock: [], lots: {} }),
+    );
+
+    await runPullCycle(fakeConnector({ pullBatch }), now, { full: true });
+
+    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
+    expect(getProductsCursor()).toBe('cur-p');
+    expect(getCustomersCursor()).toBe('cur-c');
+  });
+
+  it('si una parte llega vacía habiendo datos locales, no se borra nada y avisa sync/empty-snapshot', async () => {
+    await db.products.bulkPut([catalogProduct('p1')]);
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
+
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now, { full: true });
+
+    expect(report).toMatchObject({ ok: false, error: 'sync/empty-snapshot' });
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
   });
 });
 

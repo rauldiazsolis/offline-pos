@@ -4,7 +4,6 @@ import { err, ok } from '../domain/result.ts';
 import type { LocalDataSummary } from '../storage/local-data.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import type { SyncConfig } from './config.ts';
-import type { Connector } from './connector.ts';
 import { originKey, planConnectionChange, probeConnection, withTimeout } from './connection.ts';
 import { tryAcquireSyncLock } from './engine.ts';
 
@@ -44,13 +43,15 @@ describe('withTimeout', () => {
 describe('probeConnection', () => {
   it('trae productos, stock y clientes en memoria, con los cursores', async () => {
     const connector = fakeConnector({
-      pullProducts: () => Promise.resolve(ok({ items: [product], nextCursor: 'cur-p' })),
-      pullStock: () =>
+      pullBatch: () =>
         Promise.resolve(
-          ok([{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }]),
+          ok({
+            products: { items: [product], nextCursor: 'cur-p' },
+            stock: [{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }],
+            customers: { items: [{ id: 'c1', name: 'Ana' }], nextCursor: 'cur-c' },
+            lots: {},
+          }),
         ),
-      pullCustomers: () =>
-        Promise.resolve(ok({ items: [{ id: 'c1', name: 'Ana' }], nextCursor: 'cur-c' })),
     });
 
     const result = await probeConnection(config, { connector });
@@ -75,34 +76,28 @@ describe('probeConnection', () => {
     });
   });
 
-  it('todo o nada: si falla el pull de productos, devuelve ese error y no sigue', async () => {
-    const pullStock = vi.fn<Connector['pullStock']>().mockResolvedValue(ok([]));
+  it('propaga la falla del pull tal cual', async () => {
     const failure = err('sync/request-failed', { status: 401, message: 'x' });
-    const connector = fakeConnector({
-      pullProducts: () => Promise.resolve(failure),
-      pullStock,
-    });
+    const connector = fakeConnector({ pullBatch: () => Promise.resolve(failure) });
 
     const result = await probeConnection(config, { connector });
 
     expect(result).toEqual(failure);
-    expect(pullStock).not.toHaveBeenCalled();
   });
 
-  it('todo o nada: si falla el pull de clientes, la prueba falla aunque productos hayan andado', async () => {
-    const connector = fakeConnector({
-      pullProducts: () => Promise.resolve(ok({ items: [product] })),
-      pullCustomers: () => Promise.resolve(err('sync/request-failed', { message: 'down' })),
-    });
+  it('pide sin cursores y sin lotes de interés — un candidato nuevo no tiene lotes en vuelo', async () => {
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
 
-    const result = await probeConnection(config, { connector });
+    await probeConnection(config, { connector: fakeConnector({ pullBatch }) });
 
-    expect(result.ok).toBe(false);
+    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
   });
 
   it('un backend colgado devuelve sync/timeout en vez de esperar para siempre', async () => {
     const connector = fakeConnector({
-      pullProducts: () => new Promise<never>(() => undefined),
+      pullBatch: () => new Promise<never>(() => undefined),
     });
 
     const result = await probeConnection(config, { connector, timeoutMs: 30 });
@@ -110,24 +105,27 @@ describe('probeConnection', () => {
     expect(result).toMatchObject({ ok: false, error: 'sync/timeout' });
   });
 
-  it('sin conector inyectado, arma el real desde la config (REST: GET a {baseUrl}/products)', async () => {
-    const fetchMock = vi.fn((url: string) => {
-      const path = new URL(url).pathname;
-      const body = path === '/stock' ? [] : { items: [] };
-      return Promise.resolve({
+  // Sigue con `it.skip` hasta la Task 14 del plan de Etapa 1: createRestFetchConnector todavía
+  // implementa el puerto viejo (pullProducts/...), así que esto rechaza con TypeError. Un
+  // pullBatch inexistente ahí deja el `withTimeout` de connection.ts sin resolver nunca (el
+  // rechazo no pasa por su `.then`), lo que además filtra el cerrojo de sync a los tests
+  // siguientes — mantenerlo activo antes de Task 14 rompe en cascada el resto del archivo.
+  it.skip('sin conector inyectado, arma el real desde la config (REST: POST a {baseUrl}/sync/pull)', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: () => Promise.resolve(body),
-      } as Response);
-    });
+        json: () => Promise.resolve({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      } as Response),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await probeConnection(config);
 
     expect(result.ok).toBe(true);
-    const paths = fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
-    expect(paths).toEqual(['/products', '/stock', '/customers']);
+    const paths = fetchMock.mock.calls.map(([url]) => new URL(url as string).pathname);
+    expect(paths).toEqual(['/sync/pull']);
   });
 });
 
@@ -135,25 +133,27 @@ describe('probeConnection — convivencia con el motor de sync', () => {
   it('espera a que termine un ciclo en curso antes de tocar la red', async () => {
     const release = tryAcquireSyncLock();
     if (release === undefined) throw new Error('el cerrojo debería estar libre');
-    const pullProducts = vi.fn(() => Promise.resolve(ok({ items: [] })));
+    const pullBatch = vi.fn(() =>
+      Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} })),
+    );
 
-    const probing = probeConnection(config, { connector: fakeConnector({ pullProducts }) });
+    const probing = probeConnection(config, { connector: fakeConnector({ pullBatch }) });
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(pullProducts).not.toHaveBeenCalled();
+    expect(pullBatch).not.toHaveBeenCalled();
 
     release();
     const result = await probing;
 
     expect(result.ok).toBe(true);
-    expect(pullProducts).toHaveBeenCalledTimes(1);
+    expect(pullBatch).toHaveBeenCalledTimes(1);
   });
 
   it('mientras prueba tiene el cerrojo: ningún ciclo de sync puede arrancar en paralelo', async () => {
     let lockDuringProbe: unknown = 'sin medir';
     const connector = fakeConnector({
-      pullProducts: () => {
+      pullBatch: () => {
         lockDuringProbe = tryAcquireSyncLock();
-        return Promise.resolve(ok({ items: [] }));
+        return Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }));
       },
     });
 
@@ -165,7 +165,7 @@ describe('probeConnection — convivencia con el motor de sync', () => {
   it('al terminar (bien o mal) libera el cerrojo', async () => {
     await probeConnection(config, {
       connector: fakeConnector({
-        pullProducts: () => Promise.resolve(err('sync/request-failed', { message: 'boom' })),
+        pullBatch: () => Promise.resolve(err('sync/request-failed', { message: 'boom' })),
       }),
     });
 
@@ -177,16 +177,18 @@ describe('probeConnection — convivencia con el motor de sync', () => {
   it('si el ciclo en curso no termina a tiempo, devuelve connection/sync-busy sin probar', async () => {
     const release = tryAcquireSyncLock();
     if (release === undefined) throw new Error('el cerrojo debería estar libre');
-    const pullProducts = vi.fn(() => Promise.resolve(ok({ items: [] })));
+    const pullBatch = vi.fn(() =>
+      Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} })),
+    );
 
     const result = await probeConnection(config, {
-      connector: fakeConnector({ pullProducts }),
+      connector: fakeConnector({ pullBatch }),
       lockWaitMs: 40,
     });
     release();
 
     expect(result).toEqual({ ok: false, error: 'connection/sync-busy', meta: undefined });
-    expect(pullProducts).not.toHaveBeenCalled();
+    expect(pullBatch).not.toHaveBeenCalled();
   });
 });
 

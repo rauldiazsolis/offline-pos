@@ -1,9 +1,9 @@
 import type { Product } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import type { StockItem } from '../domain/stock.ts';
-import type { Connector, ConnectorCustomer } from './connector.ts';
+import type { Connector, ConnectorCustomer, PullBatchResult } from './connector.ts';
 
-/** Lo que trae una foto completa (la prueba de conexión y el refresco periódico): todo en memoria, nada tocó IndexedDB todavía. */
+/** Lo que trae un pull completo (la prueba de conexión y el refresco periódico): todo en memoria, nada tocó IndexedDB todavía. */
 export type ProbeSnapshot = {
   products: Product[];
   stock: StockItem[];
@@ -14,8 +14,7 @@ export type ProbeSnapshot = {
 /**
  * Carrera contra un tiempo máximo, sin cambiar el puerto `Connector`: si
  * vence, devuelve `sync/timeout` y el trabajo en vuelo se ignora (no se
- * cancela el `fetch`, solo se descarta su resultado). Un backend colgado no
- * puede dejar "Probando conexión…" para siempre.
+ * cancela el `fetch`, solo se descarta su resultado).
  */
 export function withTimeout<T>(promise: Promise<Result<T>>, ms: number): Promise<Result<T>> {
   return new Promise((resolve) => {
@@ -29,33 +28,27 @@ export function withTimeout<T>(promise: Promise<Result<T>>, ms: number): Promise
   });
 }
 
+/** Normaliza la respuesta de `pullBatch` (#87) a la forma que `storage/reconcile.ts` espera. */
+export function toProbeSnapshot(result: PullBatchResult): ProbeSnapshot {
+  return {
+    products: result.products.items,
+    stock: result.stock,
+    customers: result.customers.items,
+    cursors: {
+      ...(result.products.nextCursor !== undefined ? { products: result.products.nextCursor } : {}),
+      ...(result.customers.nextCursor !== undefined ? { customers: result.customers.nextCursor } : {}),
+    },
+  };
+}
+
 /**
- * El catálogo completo (productos, stock y clientes) en memoria, **todo o nada**: si una parte
- * falla, devuelve ese fallo y nada se aplicó. Sin `since`: es la fuente de verdad de lo que existe.
- * Vive acá (y no en `connection.ts`) para que el motor de sync la use sin un ciclo de imports.
+ * Pull completo para la prueba de conexión (`sync/connection.ts::probeConnection`): sin cursores,
+ * sin lotes de interés — un candidato nuevo nunca tiene lotes de push en vuelo contra él.
  */
 export async function pullEverything(connector: Connector): Promise<Result<ProbeSnapshot>> {
-  const products = await connector.pullProducts({});
-  if (!products.ok) {
-    return products;
+  const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
+  if (!result.ok) {
+    return result;
   }
-  const stock = await connector.pullStock();
-  if (!stock.ok) {
-    return stock;
-  }
-  const customers = await connector.pullCustomers({});
-  if (!customers.ok) {
-    return customers;
-  }
-  return ok({
-    products: products.value.items,
-    stock: stock.value,
-    customers: customers.value.items,
-    cursors: {
-      ...(products.value.nextCursor !== undefined ? { products: products.value.nextCursor } : {}),
-      ...(customers.value.nextCursor !== undefined
-        ? { customers: customers.value.nextCursor }
-        : {}),
-    },
-  });
+  return ok(toProbeSnapshot(result.value));
 }
