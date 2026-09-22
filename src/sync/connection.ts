@@ -5,6 +5,7 @@ import { hasUserData, type LocalDataSummary } from '../storage/local-data.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector, ConnectorCustomer } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
+import { acquireSyncLockWaiting } from './engine.ts';
 
 /** Lo que trae una prueba de conexión: todo en memoria, nada tocó IndexedDB todavía. */
 export type ProbeSnapshot = {
@@ -15,6 +16,8 @@ export type ProbeSnapshot = {
 };
 
 export const PROBE_TIMEOUT_MS = 20_000;
+/** Cuánto espera la prueba a que termine un ciclo de sync en curso antes de rendirse. */
+export const PROBE_LOCK_WAIT_MS = 30_000;
 
 /**
  * Carrera contra un tiempo máximo, sin cambiar el puerto `Connector`: si
@@ -64,14 +67,26 @@ async function pullEverything(connector: Connector): Promise<Result<ProbeSnapsho
  * Prueba una conexión candidata (Etapa 2b, #76): el pull completo de
  * productos, stock y clientes, **todo o nada**, en memoria. No toca IndexedDB,
  * ni los cursores, ni la config guardada — recién `applyConnection` lo hace,
- * y solo si esto salió bien. `options.connector` existe para testear sin red.
+ * y solo si esto salió bien. Toma el cerrojo de sync mientras dura. `options.connector` existe para testear sin red.
  */
-export function probeConnection(
+export async function probeConnection(
   config: SyncConfig,
-  options: { timeoutMs?: number; connector?: Connector } = {},
+  options: { timeoutMs?: number; lockWaitMs?: number; connector?: Connector } = {},
 ): Promise<Result<ProbeSnapshot>> {
-  const connector = options.connector ?? createConnector(config);
-  return withTimeout(pullEverything(connector), options.timeoutMs ?? PROBE_TIMEOUT_MS);
+  // Toma el cerrojo del motor de sync mientras prueba: nunca en paralelo con un
+  // ciclo del conector actual (un backend de a un request por vez, como el puente
+  // de Sheets, se traba con dos flujos a la vez) — y, si el usuario cancela y
+  // reintenta, la prueba nueva espera a que termine la anterior en vez de apilarse.
+  const release = await acquireSyncLockWaiting(options.lockWaitMs ?? PROBE_LOCK_WAIT_MS);
+  if (release === undefined) {
+    return err('connection/sync-busy', undefined);
+  }
+  try {
+    const connector = options.connector ?? createConnector(config);
+    return await withTimeout(pullEverything(connector), options.timeoutMs ?? PROBE_TIMEOUT_MS);
+  } finally {
+    release();
+  }
 }
 
 function normalizeEndpoint(raw: string): string {

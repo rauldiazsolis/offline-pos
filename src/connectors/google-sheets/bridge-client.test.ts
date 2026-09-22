@@ -116,7 +116,7 @@ describe('callBridge — response', () => {
     }
   });
 
-  it('devuelve sync/invalid-payload si el body no es JSON', async () => {
+  it('si el body no es JSON, devuelve sync/remote-error con una pista de qué revisar', async () => {
     const badJson = {
       ok: true,
       status: 200,
@@ -129,7 +129,10 @@ describe('callBridge — response', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sync/invalid-payload');
+      expect(result.error).toBe('sync/remote-error');
+      expect(result.meta).toMatchObject({
+        message: expect.stringContaining('Cualquier persona') as unknown,
+      });
     }
   });
 

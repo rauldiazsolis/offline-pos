@@ -72,6 +72,8 @@ export function describeError(failure: Failure): string {
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
     case 'sync/remote-error':
       return `El sistema externo respondió con un error: ${failure.meta.message}`;
+    case 'connection/sync-busy':
+      return 'Hay una sincronización en curso que todavía no terminó. Esperá unos segundos y probá de nuevo.';
     case 'connection/apply-failed':
       return `No se pudo aplicar la conexión (${failure.meta.message}).`;
     case 'sync/config-missing':

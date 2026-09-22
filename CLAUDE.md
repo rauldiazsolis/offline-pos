@@ -253,6 +253,20 @@ Ctrl+Enter en `/CONFIG` recorre cuatro fases (`configPhaseSignal`):
 Un solo lugar borra lo local: `clearAllTables` (`db.tables`, así una tabla futura queda incluida sola),
 compartido con `/DEMO_RESET`.
 
+**Sin sincronización de fondo mientras `/CONFIG` está abierto**: un backend lento y de a un request por
+vez (el puente de Sheets: cada request toma el lock del script y tarda segundos, con un 302 a
+`script.googleusercontent.com` por el medio) no aguanta dos flujos a la vez. Antes, el ciclo del
+conector **actual** seguía corriendo cada 15 s mientras se probaba el **nuevo** — timeouts, "Planilla
+ocupada" y una barra de estado que mezclaba los dos. Ahora `enterConfigScreen` pone
+`syncPausedSignal` (`ui/state/sync.ts`) en `true` — `runSyncCycle` no arranca ciclos — y se reanuda al
+cancelar o al aplicar la conexión nueva; y `probeConnection` toma el cerrojo de sync mientras prueba
+(espera a un ciclo en curso, hasta `PROBE_LOCK_WAIT_MS`; si no termina, `connection/sync-busy`). Una
+prueba cancelada con Esc sigue en vuelo hasta su timeout (el puerto `Connector` no se puede abortar),
+así que el cerrojo hace que un reintento espere en vez de apilar requests. El 302 de Apps Script es
+normal (POST `/exec` → 302 → GET del resultado): el navegador lo sigue solo y `callBridge` ya lo
+maneja; lo que sí es un error real es una respuesta que no es JSON (página de login o de cuota), que
+ahora dice qué revisar.
+
 ## UX keyboard-first
 
 Principio central: **un único input siempre enfocado** (la barra de comandos) — se elimina el
