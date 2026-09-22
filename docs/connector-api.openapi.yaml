@@ -36,7 +36,12 @@ paths:
           required: false
           schema:
             type: string
-          description: Cursor devuelto por una respuesta anterior. Sin este parámetro, trae el catálogo completo.
+          description: |
+            Cursor devuelto por una respuesta anterior. Sin este parámetro, trae el catálogo completo.
+
+            **Un pull sin `since` es la fuente de verdad de lo que existe**: el POS lo usa (al arrancar,
+            cada hora y a pedido) para dar de baja lo que ya no vuelve en él. Por eso esa respuesta tiene
+            que ser el conjunto completo — no paginada ni truncada — y un `since` nunca informa las bajas.
       responses:
         '200':
           description: Página de productos.
@@ -163,7 +168,12 @@ paths:
           required: false
           schema:
             type: string
-          description: Cursor devuelto por una respuesta anterior. Sin este parámetro, trae todos los clientes.
+          description: |
+            Cursor devuelto por una respuesta anterior. Sin este parámetro, trae todos los clientes.
+
+            **Un pull sin `since` es la fuente de verdad de lo que existe**: el POS lo usa (al arrancar,
+            cada hora y a pedido) para dar de baja lo que ya no vuelve en él. Por eso esa respuesta tiene
+            que ser el conjunto completo — no paginada ni truncada — y un `since` nunca informa las bajas.
       responses:
         '200':
           description: Página de clientes.

@@ -145,6 +145,24 @@ vencer el backoff del evento fallido (`scheduleNextRetry`: con ticks de 5 minuto
 4, 8… segundos no pueden depender del intervalo). `requestPushSoon` agrupa los pedidos seguidos (2 s) y
 conserva siempre el vencimiento más cercano, así un evento nunca demora un reintento.
 
+**Foto completa y bajas**: los pulls solo hacen `bulkPut` y un delta (`since`) nunca informa qué se dio de
+baja — sin más, un producto o cliente borrado en el origen sobreviviría para siempre en la terminal.
+Por eso un pull **sin `since`** es la fuente de verdad: `sync/engine.ts::syncFull` trae productos, stock
+y clientes en memoria (`sync/pull-snapshot.ts::pullEverything`, el mismo de la prueba de conexión),
+**todo o nada**, y recién con las tres partes aplica `storage/reconcile.ts::reconcileSnapshot` en una
+transacción: actualiza lo que llegó y borra lo local ausente (con sus cuentas), sin tocar jamás ventas,
+turnos, movimientos, outbox ni la venta en curso. Cada conector declara su `pullMode`
+(`connector-registry.ts`): `snapshot` (Sheets, sin delta: **todo** pull es completo) o `delta` (REST:
+deltas por `since` y foto completa al arrancar cada sesión, cada 1 hora — `FULL_REFRESH_INTERVAL_MS` — y
+a pedido con `/SINCRONIZAR`; `sync/full-refresh.ts::isFullRefreshDue`). Salvaguardas: un cliente creado
+acá con alta pendiente en el outbox se conserva; una tabla que llega **vacía** teniendo algo que borrar
+no se borra, la barra avisa (`sync/empty-snapshot`) y la foto no se da por hecha, así el próximo ciclo la
+reintenta. El contrato lo exige (`docs/connector-api.openapi.yaml`): esa respuesta sin `since` tiene que
+ser el conjunto completo, no paginado ni truncado. Aceptado y raro: una venta en curso (`draftCart`)
+puede referir un producto o cliente que la foto acaba de dar de baja; la línea conserva su precio y la
+venta cierra igual. Pendiente para el backlog: bajas explícitas en el contrato (`active: false` /
+`deletedIds`) para backends con delta exacto.
+
 El catálogo es al revés (pull por delta con `since`/cursor, `sync/cursor.ts`): `syncOnce` hace
 `bulkPut` de lo que llega y **reconstruye el `CatalogRepository`** (Fase 1 lo armaba una sola vez
 asumiendo catálogo estático; Fase 2 rompe esa asunción a propósito). Las ventas son append-only (sin
