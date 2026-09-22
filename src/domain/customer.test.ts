@@ -60,6 +60,19 @@ describe('canChargeOffline', () => {
   it('false si el monto supera el crédito disponible', () => {
     expect(canChargeOffline(account, 901)).toBe(false);
   });
+
+  it('true si la cuenta es unrestricted, sin evaluar el crédito disponible (Etapa 3, #69)', () => {
+    const unrestrictedAccount: CustomerAccount = {
+      customerId: 'c1',
+      creditLimit: 0,
+      margin: 0,
+      balance: 500,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      unrestricted: true,
+    };
+
+    expect(canChargeOffline(unrestrictedAccount, 999999)).toBe(true);
+  });
 });
 
 describe('buildAccountMovementForSale', () => {
@@ -138,6 +151,31 @@ describe('splitConnectorCustomer', () => {
   it('con datos de cuenta parciales, no arma un account (todo o nada)', () => {
     const { account } = splitConnectorCustomer(
       { id: 'c1', name: 'Juan Pérez', creditLimit: 1000 },
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(account).toBeUndefined();
+  });
+
+  it('con unrestricted true, arma un account aunque falten los tres campos de crédito (Etapa 3, #69)', () => {
+    const { account } = splitConnectorCustomer(
+      { id: 'c1', name: 'Juan Pérez', unrestricted: true },
+      { now: '2026-01-01T00:00:00.000Z' },
+    );
+
+    expect(account).toEqual({
+      customerId: 'c1',
+      creditLimit: 0,
+      margin: 0,
+      balance: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      unrestricted: true,
+    });
+  });
+
+  it('con unrestricted false y datos parciales, no arma un account (false no es lo mismo que true)', () => {
+    const { account } = splitConnectorCustomer(
+      { id: 'c1', name: 'Juan Pérez', unrestricted: false, creditLimit: 1000 },
       { now: '2026-01-01T00:00:00.000Z' },
     );
 

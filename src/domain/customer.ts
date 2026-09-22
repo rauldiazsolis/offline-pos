@@ -15,7 +15,13 @@ export type Customer = {
  * Cuenta corriente de un cliente. `balance` es lo que el cliente ya debe
  * (cacheado, puede estar desactualizado offline); `margin` es el colchón que
  * el comercio le da a ESE cliente en particular, definido del lado del
- * backend (llega en el pull) — no es una config local del POS.
+ * backend (llega en el pull) — no es una config local del POS. `unrestricted`
+ * (Etapa 3, #69) es una capacidad declarada por el backend/conector para ESE
+ * cliente puntual — no algo que el POS infiera de qué conector está activo:
+ * `canChargeOffline` la usa para aprobar sin evaluar `creditLimit`/`margin`/
+ * `balance` en absoluto, que en ese caso quedan sin usar (nunca inventados
+ * con un valor real, ver "No inventar datos que no llegaron del backend" en
+ * CLAUDE.md).
  */
 export type CustomerAccount = {
   customerId: string;
@@ -23,6 +29,7 @@ export type CustomerAccount = {
   margin: number;
   balance: number;
   updatedAt: string; // ISO 8601
+  unrestricted?: boolean;
 };
 
 /**
@@ -70,8 +77,15 @@ export function availableCredit(account: CustomerAccount): number {
   return account.creditLimit + account.margin - account.balance;
 }
 
-/** RF-18: sin red, se permite la venta a cuenta si entra en el crédito disponible. */
+/**
+ * RF-18: sin red, se permite la venta a cuenta si entra en el crédito
+ * disponible — salvo que la cuenta sea `unrestricted` (Etapa 3, #69), en cuyo
+ * caso se aprueba sin evaluar `availableCredit` en absoluto.
+ */
 export function canChargeOffline(account: CustomerAccount, amount: number): boolean {
+  if (account.unrestricted) {
+    return true;
+  }
   return amount <= availableCredit(account);
 }
 
@@ -82,7 +96,10 @@ export function canChargeOffline(account: CustomerAccount, amount: number): bool
  * dominio no depende de vocabulario de red) — `sync/engine.ts` le pasa un
  * `ConnectorCustomer`, que calza estructuralmente. Sin `creditLimit`,
  * `margin` y `balance` los tres a la vez, el backend no maneja cuenta
- * corriente para ese cliente y no hay `CustomerAccount` que crear (§6).
+ * corriente para ese cliente y no hay `CustomerAccount` que crear (§6) —
+ * salvo que declare `unrestricted: true` (Etapa 3, #69): ahí sí se arma la
+ * cuenta, completando en `0` lo que falte (valores que quedan sin usar, no
+ * es "inventar crédito" — es declarar que esos números no aplican).
  */
 export function splitConnectorCustomer(
   raw: {
@@ -97,6 +114,7 @@ export function splitConnectorCustomer(
     margin?: number | undefined;
     balance?: number | undefined;
     updatedAt?: string | undefined;
+    unrestricted?: boolean | undefined;
   },
   params: { now: string },
 ): { customer: Customer; account?: CustomerAccount } {
@@ -108,7 +126,10 @@ export function splitConnectorCustomer(
     createdAt: params.now,
   };
 
-  if (raw.creditLimit === undefined || raw.margin === undefined || raw.balance === undefined) {
+  const hasFullCreditData =
+    raw.creditLimit !== undefined && raw.margin !== undefined && raw.balance !== undefined;
+
+  if (!hasFullCreditData && raw.unrestricted !== true) {
     return { customer };
   }
 
@@ -116,10 +137,11 @@ export function splitConnectorCustomer(
     customer,
     account: {
       customerId: raw.id,
-      creditLimit: raw.creditLimit,
-      margin: raw.margin,
-      balance: raw.balance,
+      creditLimit: raw.creditLimit ?? 0,
+      margin: raw.margin ?? 0,
+      balance: raw.balance ?? 0,
       updatedAt: raw.updatedAt ?? params.now,
+      ...(raw.unrestricted === true ? { unrestricted: true } : {}),
     },
   };
 }

@@ -143,7 +143,7 @@ describe('pullProducts', () => {
 });
 
 describe('pullCustomers', () => {
-  it('llama a la acción pullCustomers y devuelve los clientes tal cual (sin unrestricted, eso es Etapa 3)', async () => {
+  it('llama a la acción pullCustomers y devuelve los clientes con unrestricted: true (Etapa 3, #69)', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(bridgeOk({ items: [{ id: 'c1', name: 'Ana', phone: '1155' }] }));
@@ -155,7 +155,7 @@ describe('pullCustomers', () => {
     expect(sentEnvelope(fetchMock)).toEqual({ action: 'pullCustomers', payload: {} });
     expect(result).toEqual({
       ok: true,
-      value: { items: [{ id: 'c1', name: 'Ana', phone: '1155' }] },
+      value: { items: [{ id: 'c1', name: 'Ana', phone: '1155', unrestricted: true }] },
     });
   });
 

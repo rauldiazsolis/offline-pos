@@ -24,6 +24,9 @@ export const connectorCustomerSchema = z.object({
   margin: z.number().optional(),
   balance: z.number().optional(),
   updatedAt: z.string().optional(),
+  // Capacidad declarada por el backend/conector para ESE cliente (Etapa 3,
+  // #69) — ver `domain/customer.ts::splitConnectorCustomer`/`canChargeOffline`.
+  unrestricted: z.boolean().optional(),
 });
 
 export type ConnectorCustomer = z.infer<typeof connectorCustomerSchema>;

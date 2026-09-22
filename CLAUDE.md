@@ -1054,7 +1054,18 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   conector". Etapa 2d (#80): planilla de Sheets toda en español con acceso por encabezado, pestañas de
   tamaño exacto con fila plantilla y formato por columna, fechas reales; permisos mínimos
   (`@OnlyCurrentDoc`) a propósito — un spike mostró que las tablas nativas exigen un scope más amplio y
-  se descartaron. Pendiente: Etapa 3 (#69, crédito ilimitado explícito en cuenta corriente).
+  se descartaron. Etapa 3 (#69) cierra el epic: crédito ilimitado explícito en cuenta corriente — la
+  única pieza de todo el trabajo que toca dominio compartido, no algo aislado en `connectors/`.
+  `ConnectorCustomer` (`sync/connector.ts`) y `CustomerAccount` (`domain/customer.ts`) suman
+  `unrestricted?: boolean`: una capacidad declarada por el backend/conector para ESE cliente puntual,
+  no algo que el POS infiera de qué conector está activo. `splitConnectorCustomer` arma la cuenta
+  cuando `unrestricted === true` aunque falten `creditLimit`/`margin`/`balance` (se completan en `0`,
+  valores que quedan sin usar — no es "inventar crédito", ver "No inventar datos que no llegaron del
+  backend"); `canChargeOffline` aprueba sin evaluar `availableCredit` si la cuenta es `unrestricted`,
+  y sin cuenta cacheada sigue rechazando igual que siempre (`unrestricted` nunca fabrica una cuenta
+  desde cero, solo cambia qué pasa una vez que ya hay una). El conector de Sheets (Etapa 1) puebla
+  `unrestricted: true` en cada cliente de `pullCustomers` — es el único conector que lo hace hoy; REST
+  también puede declararlo por cliente si el backend lo manda, sin cambios de código.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
