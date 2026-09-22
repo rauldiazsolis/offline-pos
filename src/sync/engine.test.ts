@@ -17,9 +17,12 @@ import { saveSyncConfig } from './config.ts';
 import { getCustomersCursor, getProductsCursor } from './cursor.ts';
 import {
   acquireSyncLockWaiting,
+  cancelScheduledPush,
   pushOnce,
   pushPendingEvents,
+  requestPushSoon,
   runSyncCycle,
+  startSyncEngine,
   syncOnce,
   tryAcquireSyncLock,
 } from './engine.ts';
@@ -62,6 +65,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  cancelScheduledPush(); // un reintento agendado no puede sobrevivir a la base del test
   db.close();
   await db.delete();
   localStorage.clear();
@@ -779,5 +783,194 @@ describe('runSyncCycle({ pull: false })', () => {
     expect(calls.map(([url, init]) => `${init?.method ?? 'GET'} ${new URL(url).pathname}`)).toEqual([
       'POST /sales',
     ]);
+  });
+});
+
+/** Espera a que termine el ciclo en vuelo (suelta el cerrojo): si no, el test cierra la base con un ciclo a medias. */
+async function settled(): Promise<void> {
+  await vi.waitFor(() => {
+    const release = tryAcquireSyncLock();
+    expect(release).not.toBeUndefined();
+    release?.();
+  });
+}
+
+/**
+ * fetch de mentira contra un backend REST: registra "MÉTODO /ruta" y responde cada ruta con su forma
+ * real; `failures` = cuántos POST fallan (500) antes de andar.
+ */
+function stubRestFetch(failures = 0): string[] {
+  let remaining = failures;
+  const calls: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      const method = init?.method ?? 'GET';
+      calls.push(`${method} ${path}`);
+      const fail = method === 'POST' && remaining > 0;
+      if (fail) remaining -= 1;
+      const body = path === '/stock' ? [] : method === 'GET' ? { items: [] } : {};
+      return Promise.resolve({
+        ok: !fail,
+        status: fail ? 500 : 200,
+        statusText: fail ? 'Server Error' : 'OK',
+        json: () => Promise.resolve(body),
+      } as Response);
+    }),
+  );
+  return calls;
+}
+
+describe('requestPushSoon y reintentos agendados', () => {
+  beforeEach(() => {
+    // Solo timeouts y reloj: fake-indexeddb sigue con su scheduler real.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  afterEach(() => {
+    cancelScheduledPush();
+    vi.useRealTimers();
+  });
+
+  it('agrupa pedidos seguidos en un solo envío a los 2 s', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch();
+
+    requestPushSoon();
+    requestPushSoon();
+    requestPushSoon();
+    await vi.advanceTimersByTimeAsync(1900);
+    expect(calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(300);
+    await settled();
+
+    expect(calls).toEqual(['POST /sales']);
+  });
+
+  it('un pedido más cercano adelanta al agendado', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch();
+
+    requestPushSoon(5000);
+    requestPushSoon(1000);
+    await vi.advanceTimersByTimeAsync(1200);
+    await settled();
+
+    expect(calls).toEqual(['POST /sales']);
+  });
+
+  it('un pedido más lejano nunca posterga al agendado (un reintento no se demora por un evento)', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch();
+
+    requestPushSoon(1000);
+    requestPushSoon(5000);
+    await vi.advanceTimersByTimeAsync(1200);
+    await settled();
+
+    expect(calls).toEqual(['POST /sales']);
+  });
+
+  it('tras un envío fallido, reintenta solo cuando vence el backoff y el evento queda synced', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch(1);
+
+    await runSyncCycle({ pull: false });
+    expect(calls).toEqual(['POST /sales']);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+
+    await vi.advanceTimersByTimeAsync(1500); // el backoff del primer reintento es de 2 s
+    expect(calls).toEqual(['POST /sales']);
+    await vi.advanceTimersByTimeAsync(1000);
+    await settled();
+
+    expect(calls).toEqual(['POST /sales', 'POST /sales']);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('synced');
+  });
+});
+
+describe('startSyncEngine', () => {
+  let stop: (() => void) | undefined;
+
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'],
+    });
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
+  afterEach(() => {
+    stop?.();
+    stop = undefined;
+    cancelScheduledPush();
+    vi.useRealTimers();
+  });
+
+  it('corre un ciclo completo al arrancar y después uno cada 5 minutos, no antes', async () => {
+    const calls = stubRestFetch();
+
+    stop = startSyncEngine();
+    await settled();
+    expect(calls).toContain('GET /products');
+    calls.length = 0;
+
+    await vi.advanceTimersByTimeAsync(4 * 60 * 1000);
+    expect(calls).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(61 * 1000);
+    await settled();
+    expect(calls).toContain('GET /products');
+  });
+
+  it('un evento nuevo en el outbox dispara un envío a los ~2 s, sin traer catálogo', async () => {
+    const calls = stubRestFetch();
+    stop = startSyncEngine();
+    await settled();
+    calls.length = 0;
+
+    await db.outbox.add(pendingSaleEvent());
+    await vi.advanceTimersByTimeAsync(1900);
+    expect(calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(300);
+    await settled();
+
+    expect(calls).toEqual(['POST /sales']);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('synced');
+  });
+
+  it('actualizar un evento existente (marcarlo synced, reintentarlo) no dispara otro envío', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch();
+    stop = startSyncEngine();
+    await settled();
+    calls.length = 0;
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(calls).toEqual([]);
+  });
+
+  it('la función devuelta detiene el intervalo y el disparo por eventos', async () => {
+    const calls = stubRestFetch();
+    stop = startSyncEngine();
+    await settled();
+    calls.length = 0;
+
+    stop();
+    stop = undefined;
+    await db.outbox.add(pendingSaleEvent());
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
+
+    expect(calls).toEqual([]);
   });
 });

@@ -305,24 +305,93 @@ export async function runSyncCycle(options: { pull?: boolean } = {}): Promise<vo
     } else {
       await syncOnce(connector, now);
     }
+    await scheduleNextRetry();
   } finally {
     release();
   }
 }
 
-const SYNC_INTERVAL_MS = 15_000;
+/** Ciclo completo (envío + pull) de red de seguridad: el resto lo disparan los eventos. */
+export const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+/** Espera antes de un envío disparado por un evento: agrupa los que llegan seguidos. */
+export const SYNC_DEBOUNCE_MS = 2_000;
+const MIN_RETRY_TIMER_MS = 1_000;
+const MAX_RETRY_TIMER_MS = 5 * 60 * 1000;
+
+let pushTimer: ReturnType<typeof setTimeout> | undefined;
+let pushDueAt = 0;
 
 /**
- * Loop de sync mientras la pestaña está abierta (`setInterval` + evento
- * `online`) — NO la Background Sync API de Service Worker, eso es
- * explícitamente Fase 7 (PWA). Se llama una sola vez desde `ui/bootstrap.ts`.
+ * Agenda un ciclo de solo envío. Si ya hay uno agendado más cerca, lo conserva
+ * (varios eventos seguidos comparten un envío, y un evento nunca demora un
+ * reintento); si el nuevo es más cercano, lo adelanta.
  */
-export function startSyncEngine(): void {
+export function requestPushSoon(delayMs: number = SYNC_DEBOUNCE_MS): void {
+  const dueAt = Date.now() + delayMs;
+  if (pushTimer !== undefined) {
+    if (pushDueAt <= dueAt) {
+      return;
+    }
+    clearTimeout(pushTimer);
+  }
+  pushDueAt = dueAt;
+  pushTimer = setTimeout(() => {
+    pushTimer = undefined;
+    void runSyncCycle({ pull: false });
+  }, delayMs);
+}
+
+/** Cancela el envío agendado (al detener el motor y en los tests). */
+export function cancelScheduledPush(): void {
+  if (pushTimer !== undefined) {
+    clearTimeout(pushTimer);
+    pushTimer = undefined;
+  }
+}
+
+/**
+ * Agenda un envío para cuando venza el backoff del evento pendiente más próximo:
+ * con un ciclo completo cada 5 minutos, los reintentos de 2, 4, 8… segundos no
+ * pueden depender del tick del intervalo.
+ */
+async function scheduleNextRetry(): Promise<void> {
+  const pending = await db.outbox.where('status').equals('pending').toArray();
+  if (pending.length === 0) {
+    return;
+  }
+  const soonest = Math.min(...pending.map((event) => new Date(event.nextAttemptAt).getTime()));
+  requestPushSoon(Math.min(Math.max(soonest - Date.now(), MIN_RETRY_TIMER_MS), MAX_RETRY_TIMER_MS));
+}
+
+/**
+ * Motor de sync mientras la pestaña está abierta — NO la Background Sync API de
+ * Service Worker, eso es explícitamente Fase 7 (PWA). Se llama una sola vez desde
+ * `ui/bootstrap.ts`. Tres disparadores:
+ * - un ciclo **completo** al arrancar, al volver la red y cada `SYNC_INTERVAL_MS`;
+ * - un ciclo de **solo envío** por cada evento nuevo en `outbox` (venta, anulación,
+ *   cliente, cierre de caja, fiado) — el hook de Dexie cubre todos los caminos que
+ *   encolan sin que cada controlador tenga que acordarse;
+ * - un ciclo de solo envío al vencer el backoff de un evento fallido.
+ * Devuelve la función que lo detiene (tests).
+ */
+export function startSyncEngine(): () => void {
   void runSyncCycle();
-  setInterval(() => {
+  const interval = setInterval(() => {
     void runSyncCycle();
   }, SYNC_INTERVAL_MS);
-  window.addEventListener('online', () => {
+  const onOnline = (): void => {
     void runSyncCycle();
-  });
+  };
+  window.addEventListener('online', onOnline);
+  const onOutboxEvent = (): void => {
+    requestPushSoon();
+  };
+  db.outbox.hook('creating', onOutboxEvent);
+
+  return () => {
+    clearInterval(interval);
+    window.removeEventListener('online', onOnline);
+    db.outbox.hook('creating').unsubscribe(onOutboxEvent);
+    cancelScheduledPush();
+  };
 }
