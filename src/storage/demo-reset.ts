@@ -3,7 +3,8 @@ import { loadSyncConfig } from '../sync/config.ts';
 import { connectorLabel, type ConnectorType } from '../sync/connector-registry.ts';
 import { clearSyncCursors } from '../sync/cursor.ts';
 import { resetDemoBackend } from '../sync/demo-backend-reset.ts';
-import { runSyncCycle } from '../sync/engine.ts';
+import { runPullCycleNow, runPushCycle } from '../sync/engine.ts';
+import { clearPushLotState } from '../sync/push-lot.ts';
 import { db } from './db.ts';
 import { clearAllTables } from './local-data.ts';
 
@@ -64,9 +65,11 @@ export async function demoReset(): Promise<Result<void>> {
   }
 
   clearSyncCursors();
+  clearPushLotState();
 
   if (configResult.ok) {
-    await runSyncCycle();
+    await runPushCycle();
+    await runPullCycleNow({ full: true });
   }
 
   return ok(undefined);

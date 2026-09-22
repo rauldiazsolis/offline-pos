@@ -9,7 +9,6 @@ import {
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
-  pendingOutboxCountSignal,
   pushLotIssuesSignal,
   setSyncPaused,
   syncConfiguredSignal,
@@ -42,7 +41,7 @@ import {
 import { addAwaitingLot, getAwaitingLots, getCurrentPushLot, setCurrentPushLot } from './push-lot.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
-import type { StockItem, StockMovement } from '../domain/stock.ts';
+import type { StockItem } from '../domain/stock.ts';
 
 function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
@@ -826,7 +825,6 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
       vi.fn((url: string, init?: RequestInit) => {
         const target = new URL(url);
         calls.push(`${init?.method ?? 'GET'} ${target.pathname}`);
-        const body = JSON.parse((init?.body as string) ?? '{}') as { cursors?: Record<string, string> };
         const failing = state.failCustomers === true;
         const response = {
           products: { items: state.products, nextCursor: 'cur-p' },

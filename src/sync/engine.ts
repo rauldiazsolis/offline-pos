@@ -162,11 +162,13 @@ async function pullAndApply(
   options: { full: boolean },
 ): Promise<PullOutcome> {
   const awaiting = getAwaitingLots();
+  const productsCursor = getProductsCursor();
+  const customersCursor = getCustomersCursor();
   const cursors = options.full
     ? {}
     : {
-        ...(getProductsCursor() !== undefined ? { products: getProductsCursor() } : {}),
-        ...(getCustomersCursor() !== undefined ? { customers: getCustomersCursor() } : {}),
+        ...(productsCursor !== undefined ? { products: productsCursor } : {}),
+        ...(customersCursor !== undefined ? { customers: customersCursor } : {}),
       };
 
   const pullPromise = connector.pullBatch({ cursors, pendingLotIds: awaiting.map((lot) => lot.id) });

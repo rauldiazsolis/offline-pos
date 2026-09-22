@@ -71,9 +71,7 @@ describe('PosDatabase', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
       status: 'pending',
-      retries: 0,
       createdAt: '2026-01-01T00:00:00.000Z',
-      nextAttemptAt: '2026-01-01T00:00:00.000Z',
     });
 
     const found = await db.outbox.get('sale-1');
@@ -87,9 +85,7 @@ describe('PosDatabase', () => {
       saleId: 'sale-1',
       voidedAt: '2026-01-02T00:00:00.000Z',
       status: 'pending',
-      retries: 0,
       createdAt: '2026-01-02T00:00:00.000Z',
-      nextAttemptAt: '2026-01-02T00:00:00.000Z',
     });
 
     const pending = await db.outbox.where('status').equals('pending').toArray();

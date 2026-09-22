@@ -200,9 +200,7 @@ describe('reconcileSnapshot — salvaguardas', () => {
       sale,
       id: 's1',
       status: 'pending',
-      retries: 0,
       createdAt: now,
-      nextAttemptAt: now,
     });
 
     await reconcileSnapshot(snapshot({ products: [product('p1')] }), { now });

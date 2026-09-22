@@ -111,7 +111,7 @@ describe('probeConnection', () => {
   // rechazo no pasa por su `.then`), lo que además filtra el cerrojo de sync a los tests
   // siguientes — mantenerlo activo antes de Task 14 rompe en cascada el resto del archivo.
   it.skip('sin conector inyectado, arma el real desde la config (REST: POST a {baseUrl}/sync/pull)', async () => {
-    const fetchMock = vi.fn(() =>
+    const fetchMock = vi.fn((_url: string) =>
       Promise.resolve({
         ok: true,
         status: 200,
@@ -124,7 +124,7 @@ describe('probeConnection', () => {
     const result = await probeConnection(config);
 
     expect(result.ok).toBe(true);
-    const paths = fetchMock.mock.calls.map(([url]) => new URL(url as string).pathname);
+    const paths = fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
     expect(paths).toEqual(['/sync/pull']);
   });
 });
