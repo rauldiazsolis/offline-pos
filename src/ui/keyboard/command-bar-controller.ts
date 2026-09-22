@@ -292,7 +292,8 @@ function runCommand(name: string, _args: string[]): void {
       clearBuffer();
       return;
     case 'SINCRONIZAR':
-      void runSyncCycle();
+      // A pedido = foto completa: es la forma de enterarse ya de lo que se dio de baja en el origen.
+      void runSyncCycle({ full: true });
       clearBuffer();
       return;
     default: {

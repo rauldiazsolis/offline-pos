@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { commandBarBufferSignal, commandBarErrorSignal } from '../state/command-bar.ts';
@@ -9,7 +9,14 @@ import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { submitCommandBar, triggerCheckout } from './command-bar-controller.ts';
+import { runSyncCycle } from '../../sync/engine.ts';
 import { availableCommands } from './commands.ts';
+
+// /SINCRONIZAR dispara un ciclo real en background: se neutraliza para no dejarlo corriendo tras cerrar la base.
+vi.mock('../../sync/engine.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  runSyncCycle: vi.fn(() => Promise.resolve()),
+}));
 
 beforeEach(async () => {
   await db.open();
@@ -38,6 +45,16 @@ describe('triggerCheckout (Fase 6: gate de turno de caja)', () => {
 
     expect(activeScreenSignal.value).toBe('checkout');
     expect(commandBarErrorSignal.value).toBeNull();
+  });
+});
+
+describe('/SINCRONIZAR', () => {
+  it('pide una foto completa: a pedido es la forma de enterarse ya de las bajas del origen', () => {
+    commandBarBufferSignal.value = '/SINCRONIZAR';
+
+    submitCommandBar();
+
+    expect(runSyncCycle).toHaveBeenCalledWith({ full: true });
   });
 });
 
