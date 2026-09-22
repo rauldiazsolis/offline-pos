@@ -12,6 +12,7 @@ import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
   lastSyncFailureSignal,
+  pushLotIssuesSignal,
   setLastSyncFailure,
   setLastSyncedAt,
   setLocalCatalogCounts,
@@ -22,7 +23,7 @@ import {
   syncPausedSignal,
 } from '../ui/state/sync.ts';
 import type { Connector, OutboxBatchItem } from './connector.ts';
-import { loadSyncConfig } from './config.ts';
+import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
 import {
   getCustomersCursor,
@@ -280,15 +281,17 @@ export async function runPullCycle(
 }
 
 /**
- * Es responsabilidad de la app no saturar a la API: si un push tarda más
+ * Es responsabilidad de la app no saturar a la API: si un ciclo tarda más
  * que el intervalo del loop (una API lenta de verdad), el próximo disparo
  * (`setInterval`, evento `online`, o `/SINCRONIZAR`) no debe arrancar un
  * segundo ciclo en paralelo — ver issue #1. La bandera se lee/escribe de
- * forma síncrona (`tryAcquireSyncLock`, primera línea de `runSyncCycle`),
- * antes de cualquier `await`, así una llamada reentrante la ve actualizada
- * sin importar en qué punto del ciclo anterior ocurra. Desde la Etapa 2b es
- * también el cerrojo de `sync/apply-connection.ts`: aplicar una conexión no
- * puede intercalarse con un ciclo.
+ * forma síncrona (`tryAcquireSyncLock`), antes de cualquier `await`, así
+ * una llamada reentrante la ve actualizada sin importar en qué punto del
+ * ciclo anterior ocurra. Desde la Etapa 2b es también el cerrojo de
+ * `sync/apply-connection.ts`: aplicar una conexión no puede intercalarse
+ * con un ciclo. Con push y pull ahora independientes (#87), cada request
+ * individual lo toma y lo suelta alrededor de sí mismo — nunca durante todo
+ * el intervalo entre ciclos.
  */
 let syncInProgress = false;
 
@@ -315,16 +318,15 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
 }
 
 /**
- * Arma el `Connector` real desde la config guardada y corre un ciclo. Acá
- * viven los chequeos de entorno (¿hay red? ¿hay una conexión activa?) que
- * `syncOnce` no conoce a propósito — así queda testeable de forma aislada.
- * Una config sin probar (`verifiedAt` ausente) no sincroniza: la app pide
- * probarla antes de operar (Etapa 2b).
+ * Preámbulo común a cualquier ciclo (push o pull, #87): toma el cerrojo
+ * **solo mientras dura este request** (nunca durante todo el intervalo entre
+ * ciclos), respeta `/CONFIG` abierto, chequea red y config activa. `run`
+ * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
+ * ni `runPullCycle` necesitan saber de dónde salió.
  */
-export async function runSyncCycle(
-  options: { pull?: boolean; full?: boolean } = {},
+async function withConnectorCycle(
+  run: (connector: Connector, now: string, config: SyncConfig) => Promise<void>,
 ): Promise<void> {
-  // `/CONFIG` abierto: no arrancar ciclos (ver `syncPausedSignal`).
   if (syncPausedSignal.value) {
     return;
   }
@@ -332,59 +334,88 @@ export async function runSyncCycle(
   if (release === undefined) {
     return;
   }
-
   try {
     if (!navigator.onLine) {
       setSyncStatus('offline');
       return;
     }
-
     const configResult = loadSyncConfig();
     if (!configResult.ok || configResult.value.verifiedAt === undefined) {
       setSyncConfigured(false);
       return;
     }
     setSyncConfigured(true);
-
     const connector = createConnector(configResult.value);
-    const now = new Date().toISOString();
-    if (options.pull === false) {
-      await pushOnce(connector, now);
-    } else if (
-      isFullRefreshDue({
-        mode: connectorPullMode(configResult.value.type),
-        lastFullAt: getLastFullSyncAt(),
-        now,
-        doneThisSession: fullRefreshDoneThisSession,
-        forced: options.full === true,
-      })
-    ) {
-      await syncFull(connector, now);
-    } else {
-      await syncOnce(connector, now);
-    }
-    await scheduleNextRetry();
+    await run(connector, new Date().toISOString(), configResult.value);
   } finally {
     release();
   }
 }
 
-/** Ciclo completo (envío + pull) de red de seguridad: el resto lo disparan los eventos. */
-export const SYNC_INTERVAL_MS = 5 * 60 * 1000;
-/** Espera antes de un envío disparado por un evento: agrupa los que llegan seguidos. */
-export const SYNC_DEBOUNCE_MS = 2_000;
+/** Ciclo de **push**: reemplaza el `pull:false` de `runSyncCycle` de antes de #87. */
+export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): Promise<void> {
+  await withConnectorCycle(async (connector, now) => {
+    const summary = await pushPendingLot(connector, now, options);
+    setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
+    setSyncStatus(
+      lastSyncFailureSignal.value !== null || isPushStruggling(getCurrentPushLot())
+        ? 'sync-error'
+        : 'online-idle',
+    );
+    if (summary.attempted > 0 && !summary.failed) {
+      schedulePullSoon(PULL_DELAY_AFTER_PUSH_MS);
+    }
+    await scheduleNextPushRetry();
+  });
+}
+
+/**
+ * Ciclo de **pull**: decide foto completa vs. delta y corre `runPullCycle`. Si un delta resuelve
+ * un lote con `issues`, encadena una foto completa ya mismo, sin esperar a la cadencia de 2h —
+ * mismo criterio de la tabla de cadencias del spec ("pull completo ... o si un pull delta avisa
+ * issues graves en algún lote"): acá se trata cualquier `issues` como grave, ya que
+ * `BatchLotStatus` no distingue severidad — más conservador, nunca se autobloquea, solo adelanta
+ * la reconciliación completa.
+ */
+export async function runPullCycleNow(options: { full?: boolean } = {}): Promise<void> {
+  await withConnectorCycle(async (connector, now, config) => {
+    const full =
+      options.full === true ||
+      isFullRefreshDue({
+        mode: connectorPullMode(config.type),
+        lastFullAt: getLastFullSyncAt(),
+        now,
+        doneThisSession: fullRefreshDoneThisSession,
+      });
+    await runPullCycle(connector, now, { full });
+    if (!full && pushLotIssuesSignal.value !== null) {
+      await runPullCycle(connector, now, { full: true });
+    }
+  });
+}
+
+/** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
+export async function syncNow(): Promise<void> {
+  await runPushCycle({ ignoreBackoff: true });
+  await runPullCycleNow({ full: true });
+}
+
+/** Ciclo completo al arrancar/red de seguridad de push (10-15 min — #87 separa esto del pull). */
+export const PUSH_INTERVAL_MS = 12 * 60 * 1000;
+/** Red de seguridad de pull, independiente de que haya habido push (#87: cadencias propias). */
+export const PULL_SAFETY_NET_INTERVAL_MS = 15 * 60 * 1000;
+/** "Un rato después" de un push exitoso, antes de pedir el delta correspondiente (#87). */
+export const PULL_DELAY_AFTER_PUSH_MS = 2 * 60 * 1000;
+/** Agrupa pedidos de push seguidos (varios eventos del outbox casi juntos). */
+export const PUSH_DEBOUNCE_MS = 2_000;
 const MIN_RETRY_TIMER_MS = 1_000;
 const MAX_RETRY_TIMER_MS = 5 * 60 * 1000;
 
 let pushTimer: ReturnType<typeof setTimeout> | undefined;
 let pushDueAt = 0;
 
-/**
- * Agenda un ciclo de solo envío. Si ya hay uno agendado más cerca, lo conserva
- * (varios eventos seguidos comparten un envío, y un evento nunca demora un
- * reintento); si el nuevo es más cercano, lo adelanta.
- */
-export function requestPushSoon(delayMs: number = SYNC_DEBOUNCE_MS): void {
+/** Agenda un push. Si ya hay uno agendado más cerca, lo conserva; si el nuevo es más cercano, lo adelanta. */
+export function requestPushSoon(delayMs: number = PUSH_DEBOUNCE_MS): void {
   const dueAt = Date.now() + delayMs;
   if (pushTimer !== undefined) {
     if (pushDueAt <= dueAt) {
@@ -395,11 +426,10 @@ export function requestPushSoon(delayMs: number = SYNC_DEBOUNCE_MS): void {
   pushDueAt = dueAt;
   pushTimer = setTimeout(() => {
     pushTimer = undefined;
-    void runSyncCycle({ pull: false });
+    void runPushCycle();
   }, delayMs);
 }
 
-/** Cancela el envío agendado (al detener el motor y en los tests). */
 export function cancelScheduledPush(): void {
   if (pushTimer !== undefined) {
     clearTimeout(pushTimer);
@@ -407,39 +437,62 @@ export function cancelScheduledPush(): void {
   }
 }
 
-/**
- * Agenda un envío para cuando venza el backoff del evento pendiente más próximo:
- * con un ciclo completo cada 5 minutos, los reintentos de 2, 4, 8… segundos no
- * pueden depender del tick del intervalo.
- */
-async function scheduleNextRetry(): Promise<void> {
-  const pending = await db.outbox.where('status').equals('pending').toArray();
-  if (pending.length === 0) {
+let pullTimer: ReturnType<typeof setTimeout> | undefined;
+let pullDueAt = 0;
+
+function schedulePullSoon(delayMs: number): void {
+  const dueAt = Date.now() + delayMs;
+  if (pullTimer !== undefined) {
+    if (pullDueAt <= dueAt) {
+      return;
+    }
+    clearTimeout(pullTimer);
+  }
+  pullDueAt = dueAt;
+  pullTimer = setTimeout(() => {
+    pullTimer = undefined;
+    void runPullCycleNow();
+  }, delayMs);
+}
+
+export function cancelScheduledPull(): void {
+  if (pullTimer !== undefined) {
+    clearTimeout(pullTimer);
+    pullTimer = undefined;
+  }
+}
+
+/** Agenda un push para cuando venza el backoff del lote en curso, si hay uno fallido. */
+async function scheduleNextPushRetry(): Promise<void> {
+  const lot = getCurrentPushLot();
+  if (lot === undefined) {
     return;
   }
-  const soonest = Math.min(...pending.map((event) => new Date(event.nextAttemptAt).getTime()));
-  requestPushSoon(Math.min(Math.max(soonest - Date.now(), MIN_RETRY_TIMER_MS), MAX_RETRY_TIMER_MS));
+  const delay = Math.min(
+    Math.max(new Date(lot.nextAttemptAt).getTime() - Date.now(), MIN_RETRY_TIMER_MS),
+    MAX_RETRY_TIMER_MS,
+  );
+  requestPushSoon(delay);
 }
 
 /**
- * Motor de sync mientras la pestaña está abierta — NO la Background Sync API de
- * Service Worker, eso es explícitamente Fase 7 (PWA). Se llama una sola vez desde
- * `ui/bootstrap.ts`. Tres disparadores:
- * - un ciclo **completo** al arrancar, al volver la red y cada `SYNC_INTERVAL_MS`;
- * - un ciclo de **solo envío** por cada evento nuevo en `outbox` (venta, anulación,
- *   cliente, cierre de caja, fiado) — el hook de Dexie cubre todos los caminos que
- *   encolan sin que cada controlador tenga que acordarse;
- * - un ciclo de solo envío al vencer el backoff de un evento fallido.
- * Devuelve la función que lo detiene (tests).
+ * Motor de sync mientras la pestaña está abierta (Fase 2; Background Sync de
+ * Service Worker sigue siendo Fase 7). Push y pull corren en dos cadencias
+ * independientes (#87): push al arrancar + cada `PUSH_INTERVAL_MS` + por
+ * cada evento nuevo del outbox (debounced) + al vencer su backoff; pull al
+ * arrancar + cada `PULL_SAFETY_NET_INTERVAL_MS` + un rato después de cada
+ * push exitoso. El evento `online` dispara los dos. Devuelve la función que
+ * lo detiene (tests).
  */
 export function startSyncEngine(): () => void {
   resetFullRefreshSession();
-  void runSyncCycle();
-  const interval = setInterval(() => {
-    void runSyncCycle();
-  }, SYNC_INTERVAL_MS);
+  void runPushCycle();
+  void runPullCycleNow();
+  const pushInterval = setInterval(() => void runPushCycle(), PUSH_INTERVAL_MS);
+  const pullInterval = setInterval(() => void runPullCycleNow(), PULL_SAFETY_NET_INTERVAL_MS);
   const onOnline = (): void => {
-    void runSyncCycle();
+    void runPushCycle();
+    void runPullCycleNow();
   };
   window.addEventListener('online', onOnline);
   const onOutboxEvent = (): void => {
@@ -448,9 +501,11 @@ export function startSyncEngine(): () => void {
   db.outbox.hook('creating', onOutboxEvent);
 
   return () => {
-    clearInterval(interval);
+    clearInterval(pushInterval);
+    clearInterval(pullInterval);
     window.removeEventListener('online', onOnline);
     db.outbox.hook('creating').unsubscribe(onOutboxEvent);
     cancelScheduledPush();
+    cancelScheduledPull();
   };
 }

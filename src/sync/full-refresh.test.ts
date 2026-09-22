@@ -8,8 +8,8 @@ const minutesAgo = (minutes: number): string =>
 const base = { mode: 'delta' as const, lastFullAt: minutesAgo(5), now: NOW, doneThisSession: true };
 
 describe('isFullRefreshDue', () => {
-  it('el intervalo es de 1 hora', () => {
-    expect(FULL_REFRESH_INTERVAL_MS).toBe(60 * 60 * 1000);
+  it('el intervalo es de 2 horas', () => {
+    expect(FULL_REFRESH_INTERVAL_MS).toBe(2 * 60 * 60 * 1000);
   });
 
   it('con un conector snapshot todo pull es completo', () => {
@@ -28,10 +28,10 @@ describe('isFullRefreshDue', () => {
     expect(isFullRefreshDue({ ...base, forced: true })).toBe(true);
   });
 
-  it('delta: pasó 1 hora o más toca; menos, no', () => {
-    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(59) })).toBe(false);
-    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(60) })).toBe(true);
-    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(180) })).toBe(true);
+  it('delta: pasaron 2 horas o más toca; menos, no', () => {
+    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(119) })).toBe(false);
+    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(120) })).toBe(true);
+    expect(isFullRefreshDue({ ...base, lastFullAt: minutesAgo(240) })).toBe(true);
   });
 
   it('delta: reciente, misma sesión y sin pedido → delta', () => {

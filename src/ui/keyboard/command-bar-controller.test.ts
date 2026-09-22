@@ -9,13 +9,13 @@ import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { submitCommandBar, triggerCheckout } from './command-bar-controller.ts';
-import { runSyncCycle } from '../../sync/engine.ts';
+import { syncNow } from '../../sync/engine.ts';
 import { availableCommands } from './commands.ts';
 
 // /SINCRONIZAR dispara un ciclo real en background: se neutraliza para no dejarlo corriendo tras cerrar la base.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  runSyncCycle: vi.fn(() => Promise.resolve()),
+  syncNow: vi.fn(() => Promise.resolve()),
 }));
 
 beforeEach(async () => {
@@ -49,12 +49,12 @@ describe('triggerCheckout (Fase 6: gate de turno de caja)', () => {
 });
 
 describe('/SINCRONIZAR', () => {
-  it('pide una foto completa: a pedido es la forma de enterarse ya de las bajas del origen', () => {
+  it('fuerza el push del lote pendiente y un pull completo, ya (#87)', () => {
     commandBarBufferSignal.value = '/SINCRONIZAR';
 
     submitCommandBar();
 
-    expect(runSyncCycle).toHaveBeenCalledWith({ full: true });
+    expect(syncNow).toHaveBeenCalled();
   });
 });
 
