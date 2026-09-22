@@ -1,19 +1,26 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '1.0.0'
+  version: '2.0.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
-    diseño (`pos-web-diseno-arquitectura.md`) y la sección "Connector API" de
-    `CLAUDE.md`. El POS no tiene lógica de ningún backend particular, solo de
-    este contrato.
+    diseño (`pos-web-diseno-arquitectura.md`), la sección "Connector API" de
+    `CLAUDE.md` y el spec de rediseño
+    (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87).
 
-    Cada recurso está marcado con una extensión `x-pos-status`:
-      - `implemented-phase-2`: el POS ya lo consume (motor de sync, Fase 2).
-      - `implemented-phase-3`: el POS ya lo consume (clientes y cuenta
-        corriente, Fase 3).
-      - `implemented-phase-6`: el POS ya lo consume (turnos de caja, Fase 6).
+    **v2 reemplaza por completo la v1** (10 endpoints por recurso/evento) por
+    dos operaciones batch más dos excepciones síncronas. Principio central:
+    **el backend nunca valida ni rechaza el contenido de lo que el POS
+    manda** — solo registra y audita. Puede dejar de aceptar lotes de una
+    terminal por motivos propios (cuota, contrato), pero eso nunca lo hace
+    devolviendo un error de negocio a un push: se resuelve puertas adentro
+    o se informa como `issues` en un pull posterior, nunca como un
+    "rechazo" síncrono.
+
+    Cada operación está marcada con una extensión `x-pos-status`:
+      - `implemented-etapa-1`: el POS ya la consume (rediseño de sync, Etapa 1, #87).
+      - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
     Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
     la app) — desacoplada del contrato en sí, cada integración define cómo
@@ -25,202 +32,84 @@ security:
   - bearerAuth: []
 
 paths:
-  /products:
-    get:
-      operationId: getProducts
-      summary: Pull de catálogo (delta por cursor)
-      x-pos-status: implemented-phase-2
-      parameters:
-        - name: since
-          in: query
-          required: false
-          schema:
-            type: string
-          description: |
-            Cursor devuelto por una respuesta anterior. Sin este parámetro, trae el catálogo completo.
+  /sync/push:
+    post:
+      operationId: pushBatch
+      summary: Envía toda la cola pendiente del outbox en un solo lote
+      x-pos-status: implemented-etapa-1
+      description: |
+        Un solo `idempotency_id` para el lote entero (no uno por evento) —
+        reintentar el mismo lote (mismo id, mismo conjunto de eventos) nunca
+        debe duplicar su efecto. La respuesta es un ack de **recepción**, no
+        de procesamiento: el backend puede seguir procesando el lote después
+        de responder 200. El estado real de procesamiento (`ok`/`issues`) se
+        consulta después, vía `/sync/pull` (ver `PullBatchResponse.lots`).
 
-            **Un pull sin `since` es la fuente de verdad de lo que existe**: el POS lo usa (al arrancar,
-            cada hora y a pedido) para dar de baja lo que ya no vuelve en él. Por eso esa respuesta tiene
-            que ser el conjunto completo — no paginada ni truncada — y un `since` nunca informa las bajas.
+        El backend nunca devuelve un error de negocio acá — solo errores de
+        transporte reales (auth, payload no parseable). Cualquier
+        inconsistencia de negocio (stock, cuenta corriente) se resuelve del
+        lado del backend y se informa como `issues`, nunca como un 4xx.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushBatchRequest'
       responses:
         '200':
-          description: Página de productos.
+          description: Lote recibido (o ya recibido antes, si el idempotency_id se repite).
+
+  /sync/pull:
+    post:
+      operationId: pullBatch
+      summary: Trae productos, stock y clientes en una sola llamada, más el estado de lotes de push
+      x-pos-status: implemented-etapa-1
+      description: |
+        Un `POST` (no `GET`) porque los parámetros son estructurados
+        (cursores por recurso, lista de ids de lotes) — no una query string
+        plana.
+
+        Cada recurso trae su propio cursor `since` opcional en el request:
+        **ausente pide la foto completa de ese recurso**, que tiene que ser
+        el conjunto entero, no paginado ni truncado (el POS la usa para
+        darse cuenta de las bajas — un delta nunca las informa). `stock`
+        nunca tiene cursor: siempre viaja completo, es liviano.
+
+        `lots` en la respuesta solo trae estado para los ids de
+        `pendingLotIds` que el backend todavía reconoce — un id ausente en
+        la respuesta se trata, del lado del POS, igual que `pending` (más
+        conservador: nunca aplicar datos si no se puede confirmar que un
+        lote de interés ya se resolvió).
+
+        **Regla de aplicación (la más importante de este endpoint)**: si
+        algún lote de `pendingLotIds` sigue `pending` (o no viene informado),
+        el POS descarta el resto de esta respuesta entera — ni el delta ni
+        la foto completa se aplican — y reintenta más tarde.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PullBatchRequest'
+      responses:
+        '200':
+          description: Datos pedidos, más el estado de los lotes de interés.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductsPullResponse'
-
-  /stock:
-    get:
-      operationId: getStock
-      summary: Pull de stock por producto
-      x-pos-status: implemented-phase-2
-      responses:
-        '200':
-          description: Stock actual de todos los productos.
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/StockItem'
-
-  /sales:
-    post:
-      operationId: postSale
-      summary: Push de una venta cerrada
-      x-pos-status: implemented-phase-2
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Sale'
-      responses:
-        '200':
-          description: Venta aceptada (o ya existente, si la Idempotency-Key se repite).
-        '4XX':
-          description: Rechazada — el POS la deja pendiente en su outbox y reintenta con backoff.
-
-  /stock-movements:
-    post:
-      operationId: postStockMovement
-      summary: Push de un ajuste de stock
-      x-pos-status: implemented-phase-2
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StockMovement'
-      responses:
-        '200':
-          description: Movimiento aceptado.
-
-  /sales/{saleId}/void:
-    post:
-      operationId: postSaleVoid
-      summary: Push de una anulación de venta
-      x-pos-status: implemented-phase-2
-      description: |
-        Recurso nuevo, no contemplado en la versión original de §6: la
-        anulación de venta (RF-06) se agregó en Fase 1 sin que el diseño
-        original la tuviera prevista. Es un evento propio (RNF-07: nunca se
-        edita una venta ya enviada) — la `Idempotency-Key` de este POST es
-        distinta de la que se usó para el `POST /sales` original de la misma
-        venta, porque es una operación diferente sobre el mismo recurso.
-      parameters:
-        - name: saleId
-          in: path
-          required: true
-          schema:
-            type: string
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SaleVoidRequest'
-      responses:
-        '200':
-          description: Anulación aceptada.
-
-  /cash-sessions:
-    post:
-      operationId: postCashSession
-      summary: Push de un turno de caja cerrado
-      x-pos-status: implemented-phase-6
-      description: |
-        Fase 6 del roadmap — se envía una sola vez, cuando el turno ya cerró
-        (`closedAt`/`closingAmount`/`sales[]` finales), nunca mientras está
-        abierto. Mismo criterio que `/sales`: la entidad ES el evento, `id`
-        es la Idempotency-Key.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CashSession'
-      responses:
-        '200':
-          description: Turno de caja aceptado.
-
-  /customers:
-    get:
-      operationId: getCustomers
-      summary: Pull de clientes (delta por cursor)
-      x-pos-status: implemented-phase-3
-      description: |
-        Recurso simple a propósito: si un backend no maneja cuenta corriente,
-        simplemente no manda `creditLimit`/`margin`/`balance` y no tiene que
-        implementar nada más — la separación interna entre `Customer` y
-        `CustomerAccount` (§4 del doc de diseño) es una decisión de
-        organización del dominio del POS, no algo que el integrador deba
-        replicar.
-
-        `unrestricted: true` (Etapa 3, #69) declara, para ese cliente
-        puntual, que el fiado no tiene bloqueo de crédito — el POS lo aprueba
-        sin evaluar `creditLimit`/`margin`/`balance`, que quedan sin usar si
-        no vienen. Es una capacidad por cliente, no algo que el POS infiera
-        de qué backend está conectado: cualquier integrador puede declararla.
-      parameters:
-        - name: since
-          in: query
-          required: false
-          schema:
-            type: string
-          description: |
-            Cursor devuelto por una respuesta anterior. Sin este parámetro, trae todos los clientes.
-
-            **Un pull sin `since` es la fuente de verdad de lo que existe**: el POS lo usa (al arrancar,
-            cada hora y a pedido) para dar de baja lo que ya no vuelve en él. Por eso esa respuesta tiene
-            que ser el conjunto completo — no paginada ni truncada — y un `since` nunca informa las bajas.
-      responses:
-        '200':
-          description: Página de clientes.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CustomersPullResponse'
-    post:
-      operationId: postCustomer
-      summary: Alta de un cliente creado localmente en el POS
-      x-pos-status: implemented-phase-3
-      description: |
-        Recurso nuevo, no contemplado en la versión original de §6 — RF-16
-        permite identificar (y dar de alta) un cliente durante la venta sin
-        que eso implique cuenta corriente, pero el contrato original solo
-        tenía el pull. Mismo criterio que `/sales`: idempotente por
-        `Idempotency-Key` = `Customer.id` (la entidad ES el evento). Un
-        cliente dado de alta así solo tiene cuenta corriente una vez que el
-        backend lo registra y lo devuelve con datos de cuenta en un pull
-        posterior.
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Customer'
-      responses:
-        '200':
-          description: Cliente aceptado (o ya existente, si la Idempotency-Key se repite).
+                $ref: '#/components/schemas/PullBatchResponse'
 
   /account-holds:
     post:
       operationId: postAccountHold
       summary: Bloqueo síncrono de crédito antes de cerrar una venta a cuenta corriente
-      x-pos-status: implemented-phase-3
+      x-pos-status: implemented-etapa-1
       description: |
-        Único endpoint del contrato pensado para llamarse de forma síncrona
+        Única operación del contrato pensada para llamarse de forma síncrona
         durante el cobro (§5 del doc de diseño) — nunca pasa por el outbox ni
-        se reintenta con backoff.
+        por `/sync/push`. Sin cambios respecto de la v1 del contrato.
       requestBody:
         required: true
         content:
@@ -235,59 +124,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountHoldResponse'
 
-  /account-holds/{holdId}/confirm:
-    post:
-      operationId: confirmAccountHold
-      summary: Confirma que un hold ya aprobado se usó en una venta
-      x-pos-status: implemented-phase-3
+  /account-balance/{customerId}:
+    get:
+      operationId: getAccountBalance
+      summary: Consulta síncrona del saldo cacheado de un cliente (futura cobranza de cuenta corriente)
+      x-pos-status: documented-not-implemented
       description: |
-        Recurso nuevo, no contemplado en la versión original de §6: el
-        diseño decía que la confirmación de un hold "viaja en el outbox como
-        cualquier evento" (§5) pero el contrato nunca definió el endpoint
-        para eso — mismo tipo de gap que `/sales/{saleId}/void` en Fase 2. Se
-        encola en la misma transacción que la venta que consumió el hold
-        (RF-19: tolerante a que la red se corte justo después de aprobado),
-        con su propia `Idempotency-Key` (no reutiliza la del `POST /sales`).
+        Todavía no implementada del lado del POS (backlog #51/#59) — se deja
+        documentada para que agregar cobranza de cuenta corriente más
+        adelante sea sumar un consumidor a un endpoint ya definido, no
+        rediseñar el contrato. Síncrona por el mismo motivo que
+        `/account-holds`: la pantalla de cobranza necesita el saldo ya para
+        decidir cuánto ofrecer cobrar.
       parameters:
-        - name: holdId
+        - name: customerId
           in: path
           required: true
           schema:
             type: string
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [saleId]
-              properties:
-                saleId: { type: string }
       responses:
         '200':
-          description: Confirmación aceptada.
-
-  /account-holds/{id}:
-    delete:
-      operationId: deleteAccountHold
-      summary: Liberación best-effort de un hold no usado
-      x-pos-status: implemented-phase-3
-      description: |
-        Es solo una optimización para liberar antes si se puede — el
-        vencimiento de un hold no confirmado es responsabilidad del backend
-        (timeout propio); si este DELETE nunca llega a sincronizarse, el
-        hold expira solo del lado del backend.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Hold liberado (o ya no existía).
+          description: Saldo actual cacheado del backend para ese cliente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [balance]
+                properties:
+                  balance: { type: number }
 
 components:
   securitySchemes:
@@ -303,10 +167,9 @@ components:
       required: true
       schema:
         type: string
-      description: ULID de la entidad que se está enviando — repetir el mismo valor nunca debe duplicar el efecto.
+      description: ULID del lote (o de la operación síncrona) — repetir el mismo valor nunca debe duplicar el efecto.
 
   schemas:
-    # --- Implementados (Fase 2) ---
     Product:
       type: object
       required: [id, sku, barcodes, name, price, taxRate, category, tracksStock]
@@ -320,18 +183,6 @@ components:
         category: { type: string }
         tracksStock: { type: boolean }
 
-    ProductsPullResponse:
-      type: object
-      required: [items]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Product'
-        nextCursor:
-          type: string
-          description: Pasar como `since` en el próximo pull. Ausente cuando no hay más páginas.
-
     StockItem:
       type: object
       required: [productId, quantity, updatedAt]
@@ -339,6 +190,24 @@ components:
         productId: { type: string }
         quantity: { type: number }
         updatedAt: { type: string, format: date-time }
+
+    Customer:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        document: { type: string }
+        phone: { type: string }
+        creditLimit: { type: number, description: Cuenta corriente, opcional — ver §6 del doc de diseño. }
+        margin: { type: number }
+        balance: { type: number }
+        updatedAt: { type: string, format: date-time }
+        unrestricted:
+          type: boolean
+          description: |
+            Fiado sin bloqueo de crédito para este cliente (Etapa 3, #69) —
+            aprueba sin evaluar creditLimit/margin/balance, que pueden omitirse.
 
     Discount:
       type: object
@@ -378,9 +247,7 @@ components:
       properties:
         method: { type: string, enum: [cash, debit, credit, transfer, qr, account] }
         amount: { type: number }
-        reference:
-          type: string
-          description: Para method=account con red, el holdId del bloqueo aprobado (§5, Fase 3).
+        reference: { type: string, description: Para method=account con red, el holdId del bloqueo aprobado (§5). }
 
     Sale:
       type: object
@@ -395,9 +262,7 @@ components:
         syncedAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time }
         voidReason: { type: string }
-        customerId:
-          type: string
-          description: Cliente identificado para la venta (RF-16, Fase 3) — independiente de cómo se pagó.
+        customerId: { type: string }
 
     StockMovement:
       type: object
@@ -410,47 +275,156 @@ components:
         saleId: { type: string }
         createdAt: { type: string, format: date-time }
 
-    SaleVoidRequest:
+    CashSession:
       type: object
-      required: [saleId, voidedAt]
+      required: [id, openedAt, openingAmount, sales]
       properties:
+        id: { type: string }
+        openedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        openingAmount: { type: number }
+        closingAmount: { type: number }
+        sales: { type: array, items: { type: string } }
+
+    OutboxBatchItem:
+      description: |
+        Un evento del outbox tal como viaja dentro de un lote de push —
+        discriminado por `type`. Los 7 tipos son exactamente los mismos que
+        ya existían por separado en la v1 del contrato; acá viajan todos
+        juntos en `PushBatchRequest.events`.
+      oneOf:
+        - $ref: '#/components/schemas/SaleEvent'
+        - $ref: '#/components/schemas/StockMovementEvent'
+        - $ref: '#/components/schemas/SaleVoidEvent'
+        - $ref: '#/components/schemas/CustomerEvent'
+        - $ref: '#/components/schemas/AccountHoldConfirmEvent'
+        - $ref: '#/components/schemas/AccountHoldReleaseEvent'
+        - $ref: '#/components/schemas/CashSessionEvent'
+
+    SaleEvent:
+      type: object
+      required: [type, id, sale]
+      properties:
+        type: { type: string, enum: [sale] }
+        id: { type: string }
+        sale: { $ref: '#/components/schemas/Sale' }
+
+    StockMovementEvent:
+      type: object
+      required: [type, id, movement]
+      properties:
+        type: { type: string, enum: [stock-movement] }
+        id: { type: string }
+        movement: { $ref: '#/components/schemas/StockMovement' }
+
+    SaleVoidEvent:
+      type: object
+      required: [type, id, saleId, voidedAt]
+      properties:
+        type: { type: string, enum: [sale-void] }
+        id: { type: string }
         saleId: { type: string }
         voidedAt: { type: string, format: date-time }
         voidReason: { type: string }
 
-    # --- Implementados (Fase 3) ---
-    Customer:
+    CustomerEvent:
       type: object
-      required: [id, name]
+      required: [type, id, customer]
       properties:
+        type: { type: string, enum: [customer] }
         id: { type: string }
-        name: { type: string }
-        document: { type: string }
-        phone: { type: string }
-        creditLimit:
-          type: number
-          description: Cuenta corriente, opcional — ver §6 del doc de diseño.
-        margin: { type: number }
-        balance: { type: number }
-        updatedAt: { type: string, format: date-time }
-        unrestricted:
-          type: boolean
-          description: |
-            Fiado sin bloqueo de crédito para este cliente (Etapa 3, #69) —
-            aprueba sin evaluar `creditLimit`/`margin`/`balance`, que pueden
-            omitirse.
+        customer: { $ref: '#/components/schemas/Customer' }
 
-    CustomersPullResponse:
+    AccountHoldConfirmEvent:
+      type: object
+      required: [type, id, holdId, saleId]
+      properties:
+        type: { type: string, enum: [account-hold-confirm] }
+        id: { type: string }
+        holdId: { type: string }
+        saleId: { type: string }
+
+    AccountHoldReleaseEvent:
+      type: object
+      required: [type, id, holdId]
+      properties:
+        type: { type: string, enum: [account-hold-release] }
+        id: { type: string }
+        holdId: { type: string }
+
+    CashSessionEvent:
+      type: object
+      required: [type, id, session]
+      properties:
+        type: { type: string, enum: [cash-session] }
+        id: { type: string }
+        session: { $ref: '#/components/schemas/CashSession' }
+
+    PushBatchRequest:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/OutboxBatchItem' }
+
+    PullBatchRequest:
+      type: object
+      required: [cursors, pendingLotIds]
+      properties:
+        cursors:
+          type: object
+          description: Cursor por recurso; ausente pide la foto completa de ese recurso.
+          properties:
+            products: { type: string }
+            customers: { type: string }
+        pendingLotIds:
+          type: array
+          items: { type: string }
+          description: idempotency_id de lotes de push que el POS mandó y todavía no confirmó ok/issues.
+
+    ProductsPullResult:
       type: object
       required: [items]
       properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Customer'
-        nextCursor:
-          type: string
-          description: Pasar como `since` en el próximo pull. Ausente cuando no hay más páginas.
+        items: { type: array, items: { $ref: '#/components/schemas/Product' } }
+        nextCursor: { type: string, description: Pasar como cursors.products en el próximo pull. }
+
+    CustomersPullResult:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Customer' } }
+        nextCursor: { type: string, description: Pasar como cursors.customers en el próximo pull. }
+
+    BatchLotStatus:
+      description: |
+        `pending` es un valor propio, no la ausencia de ok/issues: mientras
+        un lote está pending no se sabe todavía si va a tener problemas.
+      oneOf:
+        - type: object
+          required: [status]
+          properties: { status: { type: string, enum: [pending] } }
+        - type: object
+          required: [status]
+          properties: { status: { type: string, enum: [ok] } }
+        - type: object
+          required: [status, issues]
+          properties:
+            status: { type: string, enum: [issues] }
+            issues: { type: array, items: { type: string } }
+
+    PullBatchResponse:
+      type: object
+      required: [products, customers, stock, lots]
+      properties:
+        products: { $ref: '#/components/schemas/ProductsPullResult' }
+        customers: { $ref: '#/components/schemas/CustomersPullResult' }
+        stock: { type: array, items: { $ref: '#/components/schemas/StockItem' } }
+        lots:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/BatchLotStatus' }
+          description: Una entrada por cada id de pendingLotIds que el backend todavía reconoce.
 
     AccountHoldRequest:
       type: object
@@ -471,18 +445,3 @@ components:
           properties:
             approved: { type: boolean, enum: [false] }
             reasonCode: { type: string }
-
-    CashSession:
-      type: object
-      required: [id, openedAt, openingAmount, sales]
-      properties:
-        id: { type: string }
-        openedAt: { type: string, format: date-time }
-        closedAt: { type: string, format: date-time }
-        openingAmount: { type: number }
-        closingAmount: { type: number }
-        sales:
-          type: array
-          items: { type: string }
-          description: IDs de Sale incluidas en el turno.
-
