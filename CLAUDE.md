@@ -122,52 +122,52 @@ Dos categorías de dato, porque cambian la estrategia de sync:
   offline es operar sobre una foto que puede estar desactualizada. Se resuelven con margen
   configurable (mismo patrón para stock multi-terminal y para cuenta corriente).
 
-## Patrón outbox (offline-first) — implementado en Fase 2, cuenta corriente en Fase 3
+## Patrón outbox (offline-first) — implementado en Fase 2, rediseñado a lotes en la Etapa 1 de #87
 
 Toda mutación relevante (`closeSaleAndPersist`, `voidSaleAndPersist`) escribe **primero** en la
 tabla local `outbox` (`domain/outbox.ts::OutboxEvent`, unión discriminada por `type` — nunca
 `payload: unknown`), en la misma transacción Dexie que el registro de negocio. La venta/anulación
 ya está cerrada y operativa localmente sin importar el resultado del sync.
 
-`sync/engine.ts::syncOnce` recorre `outbox` pendiente en orden (`createdAt`), filtrado por
-`isDue` (ventana de backoff), y hace `push*` al `Connector` con `Idempotency-Key` = `id` del evento.
-Confirmado → `synced`. Falla → `markFailed` (backoff exponencial con techo, `domain/outbox.ts`),
-sigue `pending`. `runSyncCycle` (arma el `Connector` real desde la config guardada) corre mientras la
-pestaña está abierta (`sync/engine.ts::startSyncEngine`) — **no** es la Background Sync API de Service
-Worker, eso es explícitamente Fase 7. Nunca bloquea la UI: sincronizar es efecto secundario, no
-condición para operar. Tres disparadores, a propósito **no** un loop rápido (un ciclo cada 15 s eran
-~11.500 ejecuciones por día por terminal contra el puente de Sheets, cerca de las cuotas de Apps
-Script): un ciclo **completo** (envío + pull) al arrancar, al volver la red, con `/SINCRONIZAR` y cada
-5 minutos como red de seguridad; un ciclo de **solo envío** (`pushOnce`, un request) por cada evento
-nuevo en `outbox` — un hook `creating` de Dexie sobre la tabla cubre venta, anulación, cliente, cierre
-de caja y fiado sin que cada controlador tenga que acordarse; y un ciclo de solo envío agendado al
-vencer el backoff del evento fallido (`scheduleNextRetry`: con ticks de 5 minutos, los reintentos de 2,
-4, 8… segundos no pueden depender del intervalo). `requestPushSoon` agrupa los pedidos seguidos (2 s) y
-conserva siempre el vencimiento más cercano, así un evento nunca demora un reintento.
+**Push: un solo lote, un solo ack (#87)**. `sync/engine.ts::pushPendingLot` manda **toda** la cola
+`pending` del outbox de una vez, con un `idempotency_id` (ULID) generado al armar el lote y
+**congelado** junto con el conjunto exacto de eventos incluidos: un reintento del mismo lote (fallo
+de red) reenvía siempre el mismo id y los mismos eventos, nunca recalcula agregando lo que haya
+entrado al outbox mientras tanto — eso evita duplicar un lote que sí llegó pero cuyo ack se perdió.
+El backend nunca rechaza el contenido de un lote (ver "Connector API" más abajo); el ack confirma
+solo que lo recibió, no que ya terminó de procesarlo. `domain/push-lot.ts` tiene el backoff
+exponencial (mismo esquema que antes, ahora por lote en vez de por evento);
+`sync/push-lot.ts` lo persiste en `localStorage` (mismo criterio best-effort que
+`sync/cursor.ts`) junto con la lista de lotes ya enviados que todavía no confirmaron `ok`/`issues`.
 
-**Foto completa y bajas**: los pulls solo hacen `bulkPut` y un delta (`since`) nunca informa qué se dio de
-baja — sin más, un producto o cliente borrado en el origen sobreviviría para siempre en la terminal.
-Por eso un pull **sin `since`** es la fuente de verdad: `sync/engine.ts::syncFull` trae productos, stock
-y clientes en memoria (`sync/pull-snapshot.ts::pullEverything`, el mismo de la prueba de conexión),
-**todo o nada**, y recién con las tres partes aplica `storage/reconcile.ts::reconcileSnapshot` en una
-transacción: actualiza lo que llegó y borra lo local ausente (con sus cuentas), sin tocar jamás ventas,
-turnos, movimientos, outbox ni la venta en curso. Cada conector declara su `pullMode`
-(`connector-registry.ts`): `snapshot` (Sheets, sin delta: **todo** pull es completo) o `delta` (REST:
-deltas por `since` y foto completa al arrancar cada sesión, cada 1 hora — `FULL_REFRESH_INTERVAL_MS` — y
-a pedido con `/SINCRONIZAR`; `sync/full-refresh.ts::isFullRefreshDue`). Salvaguardas: un cliente creado
-acá con alta pendiente en el outbox se conserva; una tabla que llega **vacía** teniendo algo que borrar
-no se borra, la barra avisa (`sync/empty-snapshot`) y la foto no se da por hecha, así el próximo ciclo la
-reintenta. El contrato lo exige (`docs/connector-api.openapi.yaml`): esa respuesta sin `since` tiene que
-ser el conjunto completo, no paginado ni truncado. Aceptado y raro: una venta en curso (`draftCart`)
-puede referir un producto o cliente que la foto acaba de dar de baja; la línea conserva su precio y la
-venta cierra igual. Pendiente para el backlog: bajas explícitas en el contrato (`active: false` /
-`deletedIds`) para backends con delta exacto.
+**Pull: un solo lote, gateado por el estado de los lotes de push (#87)**.
+`sync/engine.ts::runPullCycle` pide productos/clientes (con cursor `since` opcional por recurso, o
+sin él para pedir la foto completa de ese recurso) y stock (siempre completo) en una sola llamada,
+más el estado (`pending`/`ok`/`issues`) de los lotes de push que el POS todavía espera confirmar.
+**Si alguno de esos lotes sigue `pending` (o el backend no lo informa), el pull entero se descarta**
+— ni el delta ni la foto completa se aplican — porque aplicar sin saber si el último push ya se
+procesó podría reconciliar contra un estado que ese push todavía no reflejó. Un lote que se resuelve
+con `issues` no bloquea nada (el POS nunca se autobloquea) — solo se muestra al humano vía
+`pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`).
 
-El catálogo es al revés (pull por delta con `since`/cursor, `sync/cursor.ts`): `syncOnce` hace
-`bulkPut` de lo que llega y **reconstruye el `CatalogRepository`** (Fase 1 lo armaba una sola vez
-asumiendo catálogo estático; Fase 2 rompe esa asunción a propósito). Las ventas son append-only (sin
-conflicto real); el catálogo/precios sí cambian del lado externo — ahí el cliente siempre es lector,
-el sistema externo manda.
+**Cadencias independientes (#87)**: push cada `PUSH_INTERVAL_MS` (10-15 min) + al arrancar + por
+cada evento nuevo del outbox (debounced 2 s) + al vencer el backoff del lote fallido; pull cada
+`PULL_SAFETY_NET_INTERVAL_MS` (15 min) + al arrancar + un rato (`PULL_DELAY_AFTER_PUSH_MS`, 2 min)
+después de cada push exitoso — a propósito **no combinados** en un solo roundtrip (responsabilidades
+distintas, cadencias distintas). `/SINCRONIZAR` (`sync/engine.ts::syncNow`) fuerza las dos ya: push
+ignorando su backoff, después un pull completo ignorando la cadencia de 2 h.
+`tryAcquireSyncLock`/`acquireSyncLockWaiting` (sin cambios) siguen siendo el único cerrojo — cada
+request individual (un push, un pull) lo toma y lo suelta alrededor de sí mismo, nunca durante todo
+el intervalo entre ciclos. Push y pull nunca se disparan en simultáneo desde el mismo punto
+(`sync/engine.ts::runPushThenPull`, usado al arrancar y al volver la red): como comparten el mismo
+cerrojo sin espera, el que se llama primero siempre gana la carrera — un bug real encontrado
+recién al escribir los tests de esta etapa.
+
+**Foto completa y bajas**: sin cambios de fondo respecto de antes de #87 — un pull sin cursor de un
+recurso es la fuente de verdad de ese recurso (`storage/reconcile.ts::reconcileSnapshot`, todo o
+nada, nunca toca ventas/turnos/movimientos/outbox/venta en curso), cada conector declara su
+`pullMode` (`connector-registry.ts`), la foto completa de un conector `delta` se repite cada 2 h
+(`sync/full-refresh.ts::FULL_REFRESH_INTERVAL_MS`, antes 1 h) además de al arrancar y a pedido.
 
 Cuenta corriente (Fase 3) es el único flujo que a propósito puede requerir red síncrona: `/CUENTA`
 en el cobro (`ui/keyboard/checkout-controller.ts`) llama `sync/account-hold.ts::requestAccountHoldNow`
@@ -178,8 +178,9 @@ en la **misma transacción** que la venta (`storage/sale-repository.ts`) — as�
 se corte justo después de aprobado (RF-19). Sin red, se evalúa `balance` cacheado + `creditLimit` +
 `margin` (dato del backend por cliente, no config local — `domain/customer.ts::canChargeOffline`);
 si no hay `CustomerAccount` cacheada todavía, se rechaza sin inventar una con crédito en cero. Un
-hold aprobado que termina sin usarse (cobro cancelado) se libera con `'account-hold-release'`,
-best-effort, igual que documenta §6 para el vencimiento del lado del backend.
+hold aprobado que termina sin usarse (cobro cancelado) se libera con `'account-hold-release'` —
+antes de #87 se trataba aparte como "best-effort"; con push por lote deja de necesitar ese trato
+especial, es un evento más del lote, igual que documenta §6 para el vencimiento del lado del backend.
 
 **Distinto de la venta en curso (ciclo de mejoras post-Fase 4)**: `outbox` es para eventos ya
 cerrados que necesitan viajar a un backend — la venta en curso, mientras se está armando, no es
@@ -190,29 +191,29 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`). El contrato completo tiene 10 recursos (por
-path), y desde Fase 6 el código ya implementa los 10: `GET /products`, `GET /stock`, `POST /sales`,
-`POST /stock-movements`, `POST /sales/{saleId}/void`, `GET`/`POST /customers`,
-`POST /account-holds`, `POST /account-holds/{holdId}/confirm`, `DELETE /account-holds/{id}` y
-`POST /cash-sessions` (Fase 6 — turnos de caja, ver más abajo). Cada operación del spec lleva
-`x-pos-status` marcando en qué fase se implementó.
+documentado en `docs/connector-api.openapi.yaml`). **Desde la Etapa 1 del rediseño de sync (#87,
+"el backend nunca rechaza") el contrato pasó de 10 endpoints por recurso/evento a dos operaciones
+batch** (`POST /sync/push`, `POST /sync/pull`) más dos excepciones síncronas: la reserva de crédito
+existente (`POST /account-holds`, sin cambios) y una futura consulta de saldo
+(`GET /account-balance/{customerId}`, documentada pero `x-pos-status: documented-not-implemented`
+— backlog #51/#59). `sync/connector.ts::Connector` tiene, en consecuencia, solo tres métodos:
+`pushBatch`, `pullBatch` y `requestAccountHold`. Principio central del contrato: **el backend nunca
+evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
+movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
+y audita, y cualquier inconsistencia se resuelve de su lado o a mano. Esto cierra el punto que
+`CLAUDE.md` tenía anotado como backlog (issue #13): "que el Connector API no debería poder
+'rechazar' una venta ya cerrada de forma síncrona". El backend sí puede, por motivos propios (cuota,
+contrato), dejar de aceptar lotes de una terminal — el POS nunca hace cumplir eso por su cuenta, solo
+se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arriba).
 
-`POST /sales/{saleId}/void` es un recurso que §6 del doc de diseño **no** contemplaba — se agregó en
-Fase 2 al descubrir el gap (RF-06 se había adelantado en Fase 1 sin que el contrato original la
-tuviera prevista). Usa su **propia** `Idempotency-Key` (nunca el `id` de la venta): es una operación
-distinta sobre un recurso ya enviado, no una edición (RNF-07). Fase 3 encontró dos gaps del mismo
-tipo: `POST /customers` (§6 solo tenía el pull; RF-16 permite dar de alta un cliente local sin forma
-de avisarle al backend) y `POST /account-holds/{holdId}/confirm` (§5 decía que la confirmación de un
-hold "viaja en el outbox" pero el contrato nunca definió ese endpoint). Mismo criterio en los tres
-casos: se agrega el recurso al contrato con su propia `Idempotency-Key`, documentado igual de
-completo que el resto.
-
-`POST /cash-sessions` (Fase 6) es distinto de los tres anteriores: **no** es un gap encontrado
-sobre la marcha — ya estaba documentado desde que se armó el contrato completo (§6 del diseño), con
-`x-pos-status: documented-not-implemented` hasta que el POS tuvo el modelo de dominio
-correspondiente. Se envía una sola vez, cuando el turno ya cerró (nunca mientras está abierto,
-mismo criterio que `Sale`) — `id` del turno como Idempotency-Key, la entidad ES el evento, igual
-que `POST /sales`.
+Los tres gaps que la v1 del contrato fue encontrando sobre la marcha (`sale-void` — RF-06 adelantada
+en Fase 1 sin que §6 la tuviera prevista, con su propia Idempotency-Key por ser una operación
+distinta sobre un recurso ya enviado, RNF-07 —; `customer` — RF-16, alta de un cliente local sin
+forma de avisarle al backend —; `account-hold-confirm` — §5 decía que "viaja en el outbox" pero el
+contrato nunca había definido ese endpoint) y el turno de caja cerrado (`cash-session`, Fase 6, el
+único de los cuatro que ya estaba documentado desde el diseño original) viajan hoy como eventos del
+lote de `/sync/push` (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya
+no son endpoints HTTP propios.
 
 `sync/connector.ts` define el puerto `Connector` — vive en `sync/`, no en `domain/`, porque habla en
 términos de red (cursores, Idempotency-Key, tipos como `ConnectorCustomer`/`AccountHoldResult`) que
@@ -229,8 +230,9 @@ encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se p
 una planilla falsa (`src/test/fake-spreadsheet.ts`). Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
-implementación (`sync/engine.ts::runSyncCycle` y `sync/account-hold.ts::requestAccountHoldNow` ya no
-instancian ninguno directo). "Plugin" acá significa un registro cerrado de conectores compilados, no
+implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y
+`sync/account-hold.ts::requestAccountHoldNow` ya no instancian ninguno directo). "Plugin" acá
+significa un registro cerrado de conectores compilados, no
 carga de código de terceros en runtime (descartada: ejecución de código arbitrario en una app que
 maneja ventas y pagos) — un conector nuevo es un PR al repo. Todo `POST` de eventos de negocio es
 idempotente vía `Idempotency-Key`. La conexión se configura por terminal vía `/CONFIG` (runtime,
@@ -247,7 +249,7 @@ Una conexión (conector + config) solo se activa después de **probarla**. `Sync
 `verifiedAt` (fecha de la última prueba exitosa); `sync/connection-state.ts::connectionState` deriva
 `unconfigured` (sin config), `unverified` (config sin `verifiedAt`, incluidas las guardadas antes de
 2b) o `active`. Si no es `active`, `ui/app.tsx` muestra **solo** `/CONFIG` en **modo requerido** — ni
-venta ni barra de comandos, sin "Cancelar", Esc no sale — y `runSyncCycle` no corre. El bloqueo
+venta ni barra de comandos, sin "Cancelar", Esc no sale — y ningún ciclo de sync corre. El bloqueo
 depende únicamente de lo guardado, nunca de la conectividad: una terminal `active` abre y opera
 offline como siempre; solo el primer arranque y el cambio de conector necesitan red, porque probar es
 hacer un pull. Las terminales configuradas antes de 2b pasan **una vez** por `/CONFIG` (precargada,
@@ -284,7 +286,7 @@ vez (el puente de Sheets: cada request toma el lock del script y tarda segundos,
 `script.googleusercontent.com` por el medio) no aguanta dos flujos a la vez. Antes, el ciclo del
 conector **actual** seguía corriendo cada 15 s mientras se probaba el **nuevo** — timeouts, "Planilla
 ocupada" y una barra de estado que mezclaba los dos. Ahora `enterConfigScreen` pone
-`syncPausedSignal` (`ui/state/sync.ts`) en `true` — `runSyncCycle` no arranca ciclos — y se reanuda al
+`syncPausedSignal` (`ui/state/sync.ts`) en `true` — ningún ciclo arranca — y se reanuda al
 cancelar o al aplicar la conexión nueva; y `probeConnection` toma el cerrojo de sync mientras prueba
 (espera a un ciclo en curso, hasta `PROBE_LOCK_WAIT_MS`; si no termina, `connection/sync-busy`). Una
 prueba cancelada con Esc sigue en vuelo hasta su timeout (el puerto `Connector` no se puede abortar),
@@ -445,8 +447,8 @@ afectado enfocado y seleccionado; abre precargado con la config guardada, o vac�
 si no hay ninguna — no hay valores por omisión; Ctrl+Enter no solo valida sino que **prueba la
 conexión** (pull completo en memoria) y, si cambia el origen y hay datos del usuario, pide confirmar
 el borrado de lo local antes de aplicar, ver "Ciclo de vida de la conexión" — Etapas 2 y 2b del epic
-#66, cierra #56), `/SINCRONIZAR` (fuerza un
-ciclo de sync ahora mismo, RF-12 "bajo demanda" — no cambia de pantalla, el feedback es la barra de
+#66, cierra #56), `/SINCRONIZAR` (fuerza push y pull ya, RF-12 "bajo demanda" — ver "Patrón outbox"
+más arriba; no cambia de pantalla, el feedback es la barra de
 estado) y `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
 abajo). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de
 comandos principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente
@@ -483,8 +485,9 @@ viven en un fixture local sino en el minibackend, así que `storage/demo-reset.t
 terminal vacía sin poder repoblarla sería peor que no resetear nada); recién después borra todo lo
 local (catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos de
 caja, la venta en curso `draftCart` y el outbox pendiente) y limpia los cursores de pull
-(`sync/cursor.ts::clearSyncCursors`); si había `/CONFIG`, recién ahí dispara un resync completo
-(`runSyncCycle`) para repoblar desde el backend ya reseteado, reusando el motor de sync existente en
+(`sync/cursor.ts::clearSyncCursors`) y el estado de lotes de push (`sync/push-lot.ts::clearPushLotState`);
+si había `/CONFIG`, recién ahí dispara un push y un pull completo (`sync/engine.ts::runPushCycle`/
+`runPullCycleNow`) para repoblar desde el backend ya reseteado, reusando el motor de sync existente en
 vez de duplicar su lógica de pull. Sin `/CONFIG` configurado, los pasos de red se saltan y la
 terminal queda **vacía**, no operable de inmediato — mismo criterio que un arranque nuevo:
 `ui/bootstrap.ts` tampoco siembra nada localmente desde Fase 7 (los fixtures y
@@ -520,13 +523,15 @@ hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 
 Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
-(+ conteo), `sync-error` (varios reintentos fallidos seguidos, ver `isSyncStruggling` en
-`domain/outbox.ts`, **o cualquier pull que falle**, #53) — más un quinto, "sin configurar", con
-precedencia sobre todo salvo estar offline. En `sync-error` muestra el motivo traducido
-(`lastSyncFailureSignal` + `describeError`) y la hora de la última sync exitosa; en `online-idle`, lo
-que hay en la base local (`localCatalogCountsSignal`, contado — un pull por delta trae solo cambios).
-`syncOnce` devuelve un `SyncReport` con el resultado de cada parte y `lastSyncedAt` solo se actualiza
-en un ciclo completamente exitoso. Lee los signals de `ui/state/sync.ts`; no toca `navigator.onLine`
+(+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
+`isPushStruggling` en `domain/push-lot.ts`, **o cualquier pull que falle**, #53) — más un quinto,
+"sin configurar", con precedencia sobre todo salvo estar offline. En `sync-error` muestra el motivo
+traducido (`lastSyncFailureSignal` + `describeError`) y la hora de la última sync exitosa; en
+`online-idle`, lo que hay en la base local (`localCatalogCountsSignal`, contado — un pull por delta
+trae solo cambios). Un lote de push con `issues` (#87) no dispara `sync-error` — es informativo,
+`pushLotIssuesSignal` — pero sí actualiza el texto de la barra. `runPullCycle` devuelve un
+`Result<void>` y `lastSyncedAt` solo se actualiza en un ciclo completamente exitoso. Lee los signals
+de `ui/state/sync.ts`; no toca `navigator.onLine`
 directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un solo lugar
 (`ui/errors.ts`): conectividad (`Failed to fetch` y equivalentes), 401/403, 404, timeout
 (`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
@@ -749,8 +754,8 @@ código interno.
 
 El motor de sync y el conector REST se testean sin backend real ni librería de mocking HTTP nueva:
 `vi.stubGlobal('fetch', vi.fn())` para el conector, y un `Connector` fake hecho a mano (objeto
-literal con los métodos del puerto) para `sync/engine.ts` — así `syncOnce` se testea contra el
-puerto, no contra HTTP.
+literal con los métodos del puerto) para `sync/engine.ts` — así `pushPendingLot`/`runPullCycle` se
+testean contra el puerto, no contra HTTP.
 
 `e2e/keyboard-only.spec.ts` (Fase 4) es la "auditoría de accesibilidad por teclado" del roadmap
 hecha verificable en CI: un test por pantalla popup, navegando solo con teclado, que confirma
@@ -1066,6 +1071,21 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   desde cero, solo cambia qué pasa una vez que ya hay una). El conector de Sheets (Etapa 1) puebla
   `unrestricted: true` en cada cliente de `pullCustomers` — es el único conector que lo hace hoy; REST
   también puede declararlo por cliente si el backend lo manda, sin cambios de código.
+
+- Rediseño de sincronización por lotes (issue #87, spec
+  `docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, sesión de brainstorming 2026-09-22):
+  "el POS vende... y el backend es responsable de aceptar cualquier cosa" — el contrato pasa de
+  10 endpoints por recurso/evento a dos operaciones batch (`pushBatch`/`pullBatch`) con cadencias
+  propias, gateadas entre sí (un pull nunca aplica datos mientras un lote de push que le interesa
+  siga sin resolverse). Dividido en dos etapas como el epic #66: **Etapa 1** (este commit) —
+  contrato nuevo, motor de sync, `demo-backend` y `connectors/rest/` de punta a punta;
+  `connectors/google-sheets/` recibe un adaptador mecánico (mismos endpoints de `bridge.gs` de
+  siempre, sin tocar el puente). **Etapa 2** (pendiente) — batch real en `bridge.gs`, resolviendo el
+  lock del script puertas adentro en vez de exponerlo como error al POS. Reemplaza la cadencia que
+  se acababa de construir en los PR #83/#84 horas antes de esta sesión de brainstorming. Cierra
+  parcialmente el issue #13 (ver "Connector API" más arriba) — la mitad de esa issue sobre
+  notificación asíncrona de discrepancias de negocio (ej. descuadre de stock) sigue sin diseñarse,
+  se re-scopeó ahí mismo.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
