@@ -5,13 +5,16 @@ import { DatabaseSync } from 'node:sqlite';
 /**
  * Tablas espejo de los recursos del Connector API, más `idempotency_keys`
  * (dedup de cualquier POST de evento — RNF-07), `account_hold_attempts`
- * (log de todo intento de cuenta corriente, aprobado o no, para el panel) y
+ * (log de todo intento de cuenta corriente, aprobado o no, para el panel),
  * `account_holds` (el estado real de cada hold — `pending`/`confirmed`/
  * `released` — usado para calcular el crédito disponible de un cliente
- * restando los holds `pending` de otros cobros en curso). El payload de cada
- * recurso se guarda como JSON crudo (`payload TEXT`) en vez de columnas por
- * campo — este es un backend de demostración, no necesita un mapeo
- * relacional completo para cumplir el contrato.
+ * restando los holds `pending` de otros cobros en curso) y `push_lots`
+ * (estado de cada lote de `/sync/push` — #87, contrato v2: este backend de
+ * demo resuelve cada lote al toque, siempre `ok`, pero la tabla existe para
+ * que `/sync/pull` pueda informarlo tal como pide el contrato). El payload
+ * de cada recurso se guarda como JSON crudo (`payload TEXT`) en vez de
+ * columnas por campo — este es un backend de demostración, no necesita un
+ * mapeo relacional completo para cumplir el contrato.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS products (
@@ -70,6 +73,12 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
   key TEXT PRIMARY KEY,
   status INTEGER NOT NULL,
   body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS push_lots (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  issues TEXT,
   created_at TEXT NOT NULL
 );
 `;

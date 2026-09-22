@@ -12,14 +12,12 @@ type CustomerAccountPayload = {
   balance?: number;
 };
 
-type StoredHold = { customer_id: string; amount: number; status: string };
-
-function logAttempt(db: DatabaseSync, kind: 'request' | 'confirm' | 'release', payload: unknown): void {
+function logAttempt(db: DatabaseSync, payload: unknown): void {
   const now = new Date().toISOString();
-  const id = `${kind}-${now}-${Math.random().toString(36).slice(2, 10)}`;
+  const id = `request-${now}-${Math.random().toString(36).slice(2, 10)}`;
   db.prepare(
     'INSERT INTO account_hold_attempts (id, kind, payload, created_at) VALUES (?, ?, ?, ?)',
-  ).run(id, kind, JSON.stringify(payload), now);
+  ).run(id, 'request', JSON.stringify(payload), now);
 }
 
 function getCustomer(db: DatabaseSync, customerId: string): CustomerAccountPayload | undefined {
@@ -40,11 +38,13 @@ function pendingHeldFor(db: DatabaseSync, customerId: string): number {
 }
 
 /**
- * Cuenta corriente (issue #55, sesión de brainstorming 2026-09-16 — hasta acá
- * el minibackend solo logueaba el intento y respondía 501). Sin TTL: un hold
- * `pending` queda así hasta que el POS lo confirma (`/confirm`) o lo libera
- * (`DELETE`) — decisión explícita para el demo, ver panel para liberarlos a
- * mano si queda alguno colgado.
+ * Cuenta corriente (issue #55): la reserva síncrona sigue siendo la única
+ * operación del contrato con respuesta inmediata (§5, #87) — su confirmación
+ * y liberación pasaron a viajar dentro del lote de `/sync/push`
+ * (`routes/sync.ts::applyBatchEvent`, ver CLAUDE.md "Connector API").
+ * Sin TTL: un hold `pending` queda así hasta que el POS lo confirma o lo
+ * libera (vía el lote) — decisión explícita para el demo, ver panel para
+ * liberarlos a mano si queda alguno colgado.
  */
 export const accountHoldRoutes: RouteDef[] = [
   {
@@ -58,7 +58,7 @@ export const accountHoldRoutes: RouteDef[] = [
         return;
       }
       const body = (await readJsonBody(req)) as { customerId: string; amount: number };
-      logAttempt(ctx.db, 'request', body);
+      logAttempt(ctx.db, body);
 
       const result = await withIdempotency(ctx.db, idempotencyKey, () => {
         const customer = getCustomer(ctx.db, body.customerId);
@@ -86,62 +86,6 @@ export const accountHoldRoutes: RouteDef[] = [
         return { status: 200, body: { approved: true, holdId } };
       });
       sendJson(res, result.status, result.body);
-    },
-  },
-  {
-    method: 'POST',
-    pattern: /^\/account-holds\/(?<holdId>[^/]+)\/confirm$/,
-    requiresAuth: true,
-    handler: async (req, res, ctx) => {
-      const idempotencyKey = req.headers['idempotency-key'];
-      if (typeof idempotencyKey !== 'string') {
-        sendJson(res, 400, { error: 'Falta el header Idempotency-Key' });
-        return;
-      }
-      const holdId = ctx.params.holdId ?? '';
-      const body = await readJsonBody(req);
-      logAttempt(ctx.db, 'confirm', { ...(body as object), holdId });
-
-      const result = await withIdempotency(ctx.db, idempotencyKey, () => {
-        const hold = ctx.db
-          .prepare('SELECT customer_id, amount, status FROM account_holds WHERE id = ?')
-          .get(holdId) as StoredHold | undefined;
-        if (hold === undefined) {
-          return { status: 404, body: { error: 'Hold no encontrado' } };
-        }
-        if (hold.status === 'pending') {
-          const customer = getCustomer(ctx.db, hold.customer_id);
-          if (customer !== undefined && customer.balance !== undefined) {
-            ctx.db
-              .prepare('UPDATE customers SET payload = ?, updated_at = ? WHERE id = ?')
-              .run(
-                JSON.stringify({ ...customer, balance: customer.balance + hold.amount }),
-                new Date().toISOString(),
-                hold.customer_id,
-              );
-          }
-          ctx.db
-            .prepare("UPDATE account_holds SET status = 'confirmed', confirmed_at = ? WHERE id = ?")
-            .run(new Date().toISOString(), holdId);
-        }
-        return { status: 200, body: {} };
-      });
-      sendJson(res, result.status, result.body);
-    },
-  },
-  {
-    method: 'DELETE',
-    pattern: /^\/account-holds\/(?<holdId>[^/]+)$/,
-    requiresAuth: true,
-    handler: (_req, res, ctx) => {
-      const holdId = ctx.params.holdId ?? '';
-      logAttempt(ctx.db, 'release', { holdId });
-      ctx.db
-        .prepare(
-          "UPDATE account_holds SET status = 'released', released_at = ? WHERE id = ? AND status = 'pending'",
-        )
-        .run(new Date().toISOString(), holdId);
-      sendJson(res, 200, {});
     },
   },
 ];
