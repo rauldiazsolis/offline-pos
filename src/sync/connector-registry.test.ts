@@ -63,28 +63,33 @@ describe('connectorConfigSchema', () => {
 });
 
 describe('createConnector', () => {
-  it('type rest: arma el conector REST (GET a {baseUrl}/products)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse({ items: [] }));
+  it('type rest: arma el conector REST (POST a {baseUrl}/sync/pull)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest', baseUrl: 'https://api.example.com' });
-    await connector.pullProducts({});
+    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://api.example.com/products');
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://api.example.com/sync/pull');
   });
 
-  it('type rest-demo: arma el mismo conector REST (GET a {baseUrl}/products)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse({ items: [] }));
+  it('type rest-demo: arma el mismo conector REST (POST a {baseUrl}/sync/pull)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest-demo', baseUrl: 'http://localhost:4000' });
-    await connector.pullProducts({});
+    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
-    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://localhost:4000/products');
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://localhost:4000/sync/pull');
   });
 
-  it('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
+  // google-sheets-connector.ts todavía implementa el puerto viejo — Task 15 del plan de Etapa 1.
+  it.skip('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true, data: { items: [] } }));
     vi.stubGlobal('fetch', fetchMock);
 

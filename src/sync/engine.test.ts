@@ -455,7 +455,7 @@ describe('runPushCycle', () => {
   // Los siguientes dos tests arman el conector real desde la config guardada — dependen de que
   // `connectors/rest/rest-fetch-connector.ts` ya hable el contrato batch (Task 14 del plan de
   // Etapa 1). Quedan en `it.skip` hasta esa tarea, donde se verifican y se sacan del skip.
-  it.skip('con eventos pendientes, manda un solo POST batch', async () => {
+  it('con eventos pendientes, manda un solo POST batch', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch();
@@ -465,7 +465,7 @@ describe('runPushCycle', () => {
     expect(calls).toEqual(['POST /sync/push']);
   });
 
-  it.skip('no arranca un segundo push si el anterior sigue en curso', async () => {
+  it('no arranca un segundo push si el anterior sigue en curso', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     await db.outbox.add(pendingSaleEvent());
     let callCount = 0;
@@ -494,7 +494,7 @@ describe('runPushCycle', () => {
 
 describe('runPullCycleNow', () => {
   // Dependen del conector REST real (Task 14) — ver nota en `describe('runPushCycle', ...)`.
-  it.skip('con config guardada, arma el conector real y corre un pull', async () => {
+  it('con config guardada, arma el conector real y corre un pull', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     vi.stubGlobal('fetch', vi.fn(() =>
       Promise.resolve({
@@ -509,7 +509,7 @@ describe('runPullCycleNow', () => {
     expect(syncStatusSignal.value).toBe('online-idle');
   });
 
-  it.skip('la primera vez de la sesión es una foto completa: sin cursores en el body', async () => {
+  it('la primera vez de la sesión es una foto completa: sin cursores en el body', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     const bodies: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
@@ -525,11 +525,9 @@ describe('runPullCycleNow', () => {
     expect(bodies).toEqual([{ cursors: {}, pendingLotIds: [] }]);
   });
 
-  it.skip('si un delta resuelve un lote con issues, encadena una foto completa ya (cadencia de #87)', async () => {
+  it('si un delta resuelve un lote con issues, encadena una foto completa ya (cadencia de #87)', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     resetFullRefreshSession();
-    await runPullCycleNow({ full: true });
-    addAwaitingLot({ id: 'lot-1', sentAt: now });
     const bodies: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
       const body = JSON.parse((init?.body as string) ?? '{}') as { cursors: Record<string, string> };
@@ -538,11 +536,15 @@ describe('runPullCycleNow', () => {
       return Promise.resolve({
         ok: true, status: 200, statusText: 'OK',
         json: () => Promise.resolve({
-          products: { items: [] }, customers: { items: [] }, stock: [],
+          products: { items: [], nextCursor: 'cur-p' }, customers: { items: [], nextCursor: 'cur-c' }, stock: [],
           lots: hasCursor ? { 'lot-1': { status: 'issues', issues: ['stock insuficiente'] } } : {},
         }),
       } as Response);
     }));
+    // Foto completa de arranque, para que la próxima sea un delta con cursores.
+    await runPullCycleNow({ full: true });
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    bodies.length = 0;
 
     await runPullCycleNow();
 
@@ -553,7 +555,7 @@ describe('runPullCycleNow', () => {
 });
 
 describe('syncNow (/SINCRONIZAR)', () => {
-  it.skip('fuerza el push del lote pendiente (ignorando backoff) y después un pull completo', async () => {
+  it('fuerza el push del lote pendiente (ignorando backoff) y después un pull completo', async () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch();
@@ -663,7 +665,7 @@ describe('requestPushSoon y reintentos agendados', () => {
     vi.useRealTimers();
   });
 
-  it.skip('agrupa pedidos seguidos en un solo envío a los 2 s', async () => {
+  it('agrupa pedidos seguidos en un solo envío a los 2 s', async () => {
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch();
 
@@ -678,7 +680,7 @@ describe('requestPushSoon y reintentos agendados', () => {
     expect(calls).toEqual(['POST /sync/push']);
   });
 
-  it.skip('un pedido más cercano adelanta al agendado', async () => {
+  it('un pedido más cercano adelanta al agendado', async () => {
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch();
 
@@ -690,7 +692,7 @@ describe('requestPushSoon y reintentos agendados', () => {
     expect(calls).toEqual(['POST /sync/push']);
   });
 
-  it.skip('un pedido más lejano nunca posterga al agendado (un reintento no se demora por un evento)', async () => {
+  it('un pedido más lejano nunca posterga al agendado (un reintento no se demora por un evento)', async () => {
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch();
 
@@ -702,7 +704,7 @@ describe('requestPushSoon y reintentos agendados', () => {
     expect(calls).toEqual(['POST /sync/push']);
   });
 
-  it.skip('tras un envío fallido, reintenta solo cuando vence el backoff y el lote queda synced', async () => {
+  it('tras un envío fallido, reintenta solo cuando vence el backoff y el lote queda synced', async () => {
     await db.outbox.add(pendingSaleEvent());
     const calls = stubRestFetch(1);
 
@@ -743,7 +745,8 @@ describe('startSyncEngine', () => {
     vi.useRealTimers();
   });
 
-  it.skip('al arrancar corre un push y un pull', async () => {
+  it('al arrancar corre un push y un pull', async () => {
+    await db.outbox.add(pendingSaleEvent()); // si no hay nada pendiente, push no llama a la red
     const calls = stubRestFetch();
     stop = startSyncEngine();
     await settled();
@@ -752,7 +755,7 @@ describe('startSyncEngine', () => {
     expect(calls).toContain('POST /sync/pull');
   });
 
-  it.skip('un evento nuevo en el outbox dispara un push a los ~2s, y agenda un pull ~2min después', async () => {
+  it('un evento nuevo en el outbox dispara un push a los ~2s, y agenda un pull ~2min después', async () => {
     const calls = stubRestFetch();
     stop = startSyncEngine();
     await settled();
@@ -768,8 +771,11 @@ describe('startSyncEngine', () => {
     expect(calls).toEqual(['POST /sync/push', 'POST /sync/pull']);
   });
 
-  it.skip('sin actividad, el push corre cada PUSH_INTERVAL_MS y el pull cada PULL_SAFETY_NET_INTERVAL_MS', async () => {
-    const calls = stubRestFetch();
+  it('sin actividad nueva, el push corre cada PUSH_INTERVAL_MS y el pull cada PULL_SAFETY_NET_INTERVAL_MS', async () => {
+    // Un evento que nunca logra sincronizarse queda pending para siempre — así el intervalo de
+    // push (no el debounce por evento nuevo) tiene algo que reintentar en cada tick.
+    await db.outbox.add(pendingSaleEvent());
+    const calls = stubRestFetch(1000);
     stop = startSyncEngine();
     await settled();
     calls.length = 0;
@@ -784,7 +790,7 @@ describe('startSyncEngine', () => {
     expect(calls).toContain('POST /sync/pull');
   });
 
-  it.skip('la función devuelta detiene los dos intervalos y los disparos agendados', async () => {
+  it('la función devuelta detiene los dos intervalos y los disparos agendados', async () => {
     const calls = stubRestFetch();
     stop = startSyncEngine();
     await settled();
@@ -853,7 +859,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     });
   });
 
-  it.skip('el primer ciclo de la sesión es una foto completa: sin cursores, borra lo que ya no viene y fija los cursores', async () => {
+  it('el primer ciclo de la sesión es una foto completa: sin cursores, borra lo que ya no viene y fija los cursores', async () => {
     await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
     setProductsCursor('cursor-viejo');
     const calls = stubBackend({ products: [catalogProduct('p1')], customers: [] });
@@ -868,7 +874,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     expect(syncStatusSignal.value).toBe('online-idle');
   });
 
-  it.skip('a las 2 horas vuelve a hacer una foto completa', async () => {
+  it('a las 2 horas vuelve a hacer una foto completa', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       stubBackend({ products: [catalogProduct('p1')], customers: [] });
@@ -886,7 +892,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     }
   });
 
-  it.skip('a pedido (full) fuerza la foto completa aunque la última sea reciente', async () => {
+  it('a pedido (full) fuerza la foto completa aunque la última sea reciente', async () => {
     stubBackend({ products: [catalogProduct('p1')], customers: [] });
     await runPullCycleNow();
 
@@ -895,6 +901,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     expect(getLastFullSyncAt()).toBeDefined();
   });
 
+  // Sigue en it.skip hasta la Task 15: google-sheets-connector.ts todavía implementa el puerto viejo.
   it.skip('con un conector snapshot (Sheets) todo ciclo es completo y reconcilia las bajas', async () => {
     saveSyncConfig({
       type: 'google-sheets',
@@ -925,7 +932,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     expect(requests.filter((request) => request.action === 'pullProducts')).toHaveLength(2);
   });
 
-  it.skip('si el pull falla, no se aplica nada: ni upsert ni borrado, ni lastFullSyncAt', async () => {
+  it('si el pull falla, no se aplica nada: ni upsert ni borrado, ni lastFullSyncAt', async () => {
     await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
     stubBackend({ products: [catalogProduct('p1')], customers: [], failCustomers: true });
 
@@ -937,7 +944,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     expect(lastSyncFailureSignal.value).toMatchObject({ ok: false, error: 'sync/request-failed' });
   });
 
-  it.skip('un catálogo vacío con datos locales se conserva, se avisa y la foto queda pendiente', async () => {
+  it('un catálogo vacío con datos locales se conserva, se avisa y la foto queda pendiente', async () => {
     await db.products.bulkPut([catalogProduct('p1'), catalogProduct('p2')]);
     stubBackend({ products: [], customers: [] });
 

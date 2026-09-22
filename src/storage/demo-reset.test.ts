@@ -33,11 +33,10 @@ function fetchRouter(overrides: Record<string, () => Response | Promise<Response
     if (handler) {
       return Promise.resolve(handler());
     }
-    if (path === '/products' || path === '/customers') {
-      return Promise.resolve(jsonResponse({ items: [] }));
-    }
-    if (path === '/stock') {
-      return Promise.resolve(jsonResponse([]));
+    if (path === '/sync/pull') {
+      return Promise.resolve(
+        jsonResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      );
     }
     return Promise.resolve(jsonResponse({}));
   });
@@ -74,7 +73,7 @@ describe('demoReset', () => {
     await expect(db.customers.count()).resolves.toBe(0);
   });
 
-  it.skip('con /CONFIG: llama primero a POST /_demo/reset del backend antes de borrar nada local', async () => {
+  it('con /CONFIG: llama primero a POST /_demo/reset del backend antes de borrar nada local', async () => {
     saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
     const fetchMock = fetchRouter();
     vi.stubGlobal('fetch', fetchMock);
@@ -101,25 +100,30 @@ describe('demoReset', () => {
     await expect(db.customers.get(created.value.id)).resolves.not.toBeUndefined();
   });
 
-  it.skip('con /CONFIG: dispara un resync después de borrar, repoblando desde el backend', async () => {
+  it('con /CONFIG: dispara un resync después de borrar, repoblando desde el backend', async () => {
     saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
     vi.stubGlobal(
       'fetch',
       fetchRouter({
-        '/products': () =>
+        '/sync/pull': () =>
           jsonResponse({
-            items: [
-              {
-                id: 'p1',
-                sku: 'SKU-1',
-                barcodes: [],
-                name: 'Producto Demo',
-                price: 100,
-                taxRate: 0.21,
-                category: 'test',
-                tracksStock: true,
-              },
-            ],
+            products: {
+              items: [
+                {
+                  id: 'p1',
+                  sku: 'SKU-1',
+                  barcodes: [],
+                  name: 'Producto Demo',
+                  price: 100,
+                  taxRate: 0.21,
+                  category: 'test',
+                  tracksStock: true,
+                },
+              ],
+            },
+            customers: { items: [] },
+            stock: [],
+            lots: {},
           }),
       }),
     );
@@ -140,7 +144,7 @@ describe('demoReset', () => {
     expect(getCustomersCursor()).toBeUndefined();
   });
 
-  it.skip('no toca la configuración de /CONFIG (URL, API key, locale)', async () => {
+  it('no toca la configuración de /CONFIG (URL, API key, locale)', async () => {
     saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' });
     vi.stubGlobal('fetch', fetchRouter());
 

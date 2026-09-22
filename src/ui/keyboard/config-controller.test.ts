@@ -33,8 +33,7 @@ import {
 // cerrojo y el resto del motor (que usa `applyConnection`) siguen siendo reales.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  runPushCycle: vi.fn(() => Promise.resolve()),
-  runPullCycleNow: vi.fn(() => Promise.resolve()),
+  runPushThenPull: vi.fn(() => Promise.resolve()),
 }));
 
 // Los `it.skip` de este archivo prueban submitConfig()/probeConnection() contra un conector REST
@@ -59,14 +58,19 @@ function okResponse(body: unknown): Response {
   return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
 }
 
-/** Backend REST de mentira: productos, stock y clientes responden; cualquier POST/DELETE da OK. */
+/** Backend REST de mentira: /sync/pull responde productos/clientes; cualquier otro POST da OK. */
 function stubRestBackend(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn((url: string) => {
     const path = new URL(url).pathname;
-    if (path === '/products') return Promise.resolve(okResponse({ items: [product] }));
-    if (path === '/stock') return Promise.resolve(okResponse([]));
-    if (path === '/customers') {
-      return Promise.resolve(okResponse({ items: [{ id: 'c1', name: 'Ana' }] }));
+    if (path === '/sync/pull') {
+      return Promise.resolve(
+        okResponse({
+          products: { items: [product] },
+          customers: { items: [{ id: 'c1', name: 'Ana' }] },
+          stock: [],
+          lots: {},
+        }),
+      );
     }
     return Promise.resolve(okResponse({}));
   });
@@ -161,7 +165,7 @@ describe('sincronización mientras /CONFIG está abierto', () => {
     expect(syncPausedSignal.value).toBe(false);
   });
 
-  it.skip('se reanuda al aplicar una conexión nueva', async () => {
+  it('se reanuda al aplicar una conexión nueva', async () => {
     stubRestBackend();
     enterConfigScreen();
     setConfigType('rest');
@@ -173,7 +177,7 @@ describe('sincronización mientras /CONFIG está abierto', () => {
     expect(syncPausedSignal.value).toBe(false);
   });
 
-  it.skip('sigue pausada si la prueba falla (el formulario sigue abierto)', async () => {
+  it('sigue pausada si la prueba falla (el formulario sigue abierto)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
@@ -253,7 +257,7 @@ describe('submitConfig — validación (antes de probar)', () => {
 });
 
 describe('submitConfig — primer arranque (sin datos locales)', () => {
-  it.skip('prueba, aplica y deja la conexión activa con la config guardada con verifiedAt', async () => {
+  it('prueba, aplica y deja la conexión activa con la config guardada con verifiedAt', async () => {
     stubRestBackend();
     setConfigType('rest');
     setConfigField('baseUrl', 'https://api.example.com');
@@ -277,7 +281,7 @@ describe('submitConfig — primer arranque (sin datos locales)', () => {
     await expect(db.customers.count()).resolves.toBe(1);
   });
 
-  it.skip('si la prueba falla: mensaje legible, el formulario queda como estaba y no cambia nada', async () => {
+  it('si la prueba falla: mensaje legible, el formulario queda como estaba y no cambia nada', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
     setConfigType('rest');
     setConfigField('baseUrl', 'https://api.example.com');
@@ -303,7 +307,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     verifiedAt: '2025-12-01T00:00:00.000Z',
   };
 
-  it.skip('mismo origen (cambia solo la API key): no pide confirmación y conserva los datos', async () => {
+  it('mismo origen (cambia solo la API key): no pide confirmación y conserva los datos', async () => {
     stubRestBackend();
     await seedUserDataFor(oldConfig);
     connectionStateSignal.value = 'active';
@@ -317,7 +321,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     await expect(db.sales.count()).resolves.toBe(1);
   });
 
-  it.skip('origen distinto: envía lo pendiente al conector actual y pide confirmación con los conteos', async () => {
+  it('origen distinto: envía lo pendiente al conector actual y pide confirmación con los conteos', async () => {
     const fetchMock = stubRestBackend();
     await seedUserDataFor(oldConfig);
     connectionStateSignal.value = 'active';
@@ -331,7 +335,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     expect(configConfirmationSignal.value).toMatchObject({ sales: 1 });
     // El último intento de envío fue contra el backend VIEJO.
     const urls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(urls).toContain('https://viejo.example.com/sales');
+    expect(urls).toContain('https://viejo.example.com/sync/push');
     // Nada cambió todavía.
     await expect(db.sales.count()).resolves.toBe(1);
     const saved = loadSyncConfig();
@@ -340,7 +344,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     );
   });
 
-  it.skip('confirmar borra lo local, carga lo del backend nuevo y vacía la venta en curso', async () => {
+  it('confirmar borra lo local, carga lo del backend nuevo y vacía la venta en curso', async () => {
     stubRestBackend();
     await seedUserDataFor(oldConfig);
     connectionStateSignal.value = 'active';
@@ -362,7 +366,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     );
   });
 
-  it.skip('Esc en la confirmación vuelve a editar sin borrar nada', async () => {
+  it('Esc en la confirmación vuelve a editar sin borrar nada', async () => {
     stubRestBackend();
     await seedUserDataFor(oldConfig);
     connectionStateSignal.value = 'active';
@@ -377,7 +381,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     await expect(db.sales.count()).resolves.toBe(1);
   });
 
-  it.skip('backToEditing hace lo mismo que Esc en la confirmación', async () => {
+  it('backToEditing hace lo mismo que Esc en la confirmación', async () => {
     stubRestBackend();
     await seedUserDataFor(oldConfig);
     connectionStateSignal.value = 'active';
@@ -408,7 +412,7 @@ describe('Esc', () => {
     expect(activeScreenSignal.value).toBe('config');
   });
 
-  it.skip('durante la prueba cancela la prueba: el resultado tardío se descarta', async () => {
+  it('durante la prueba cancela la prueba: el resultado tardío se descarta', async () => {
     let resolveFirst: (response: Response) => void = () => undefined;
     let calls = 0;
     vi.stubGlobal(

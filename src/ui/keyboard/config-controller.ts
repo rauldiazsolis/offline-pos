@@ -7,7 +7,7 @@ import {
   type ProbeSnapshot,
 } from '../../sync/connection.ts';
 import { connectorFields, type ConnectorType } from '../../sync/connector-registry.ts';
-import { runPullCycleNow, runPushCycle } from '../../sync/engine.ts';
+import { runPushThenPull } from '../../sync/engine.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { resetAttachedCustomer } from '../state/customer.ts';
@@ -176,8 +176,7 @@ async function applyAndFinish(pending: PendingApply): Promise<void> {
   resetConfigForm();
   setSyncPaused(false);
   activeScreenSignal.value = 'sale';
-  void runPushCycle();
-  void runPullCycleNow();
+  void runPushThenPull();
 }
 
 /**

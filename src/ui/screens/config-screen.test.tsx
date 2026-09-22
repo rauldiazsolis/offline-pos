@@ -12,8 +12,7 @@ import { ConfigScreen } from './config-screen.tsx';
 // seguiría corriendo cuando el test cierra la base; se neutraliza solo el ciclo.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  runPushCycle: vi.fn(() => Promise.resolve()),
-  runPullCycleNow: vi.fn(() => Promise.resolve()),
+  runPushThenPull: vi.fn(() => Promise.resolve()),
 }));
 
 // Los `it.skip` de este archivo ejercitan submitConfig()/probeConnection() contra un conector REST
@@ -32,7 +31,11 @@ function stubRestBackend(): void {
     'fetch',
     vi.fn((url: string) => {
       const path = new URL(url).pathname;
-      return Promise.resolve(okResponse(path === '/stock' ? [] : { items: [] }));
+      const body =
+        path === '/sync/pull'
+          ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
+          : {};
+      return Promise.resolve(okResponse(body));
     }),
   );
 }
@@ -157,7 +160,7 @@ describe('ConfigScreen — formulario', () => {
 });
 
 describe('ConfigScreen — probar y guardar', () => {
-  it.skip('Ctrl+Enter prueba, guarda con verifiedAt y vuelve a la venta', async () => {
+  it('Ctrl+Enter prueba, guarda con verifiedAt y vuelve a la venta', async () => {
     stubRestBackend();
     render(<ConfigScreen />);
     chooseRest();
@@ -173,7 +176,7 @@ describe('ConfigScreen — probar y guardar', () => {
     expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
   });
 
-  it.skip('muestra "Probando conexión…" mientras espera', async () => {
+  it('muestra "Probando conexión…" mientras espera', async () => {
     // La prueba toma el cerrojo de sync mientras dura: se termina la espera al final del test
     // para no dejarlo tomado para el siguiente.
     let failPending: (reason: Error) => void = () => undefined;
@@ -203,7 +206,7 @@ describe('ConfigScreen — probar y guardar', () => {
     });
   });
 
-  it.skip('si la prueba falla, muestra el motivo y el formulario queda editable', async () => {
+  it('si la prueba falla, muestra el motivo y el formulario queda editable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
     render(<ConfigScreen />);
     chooseRest();
@@ -248,14 +251,14 @@ describe('ConfigScreen — confirmación del borrado', () => {
     });
   }
 
-  it.skip('muestra qué se pierde, con los conteos', async () => {
+  it('muestra qué se pierde, con los conteos', async () => {
     await openConfirmation();
 
     expect(screen.getByText(/1 venta/)).not.toBeNull();
     expect(screen.getByText(/Enter borra y cambia de conexión/)).not.toBeNull();
   });
 
-  it.skip('Enter confirma: aplica la conexión nueva y vuelve a la venta', async () => {
+  it('Enter confirma: aplica la conexión nueva y vuelve a la venta', async () => {
     await openConfirmation();
 
     fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Enter' });
@@ -266,7 +269,7 @@ describe('ConfigScreen — confirmación del borrado', () => {
     await expect(db.sales.count()).resolves.toBe(0);
   });
 
-  it.skip('Esc vuelve a editar sin borrar nada', async () => {
+  it('Esc vuelve a editar sin borrar nada', async () => {
     await openConfirmation();
 
     fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Escape' });

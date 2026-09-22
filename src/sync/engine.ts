@@ -478,6 +478,20 @@ async function scheduleNextPushRetry(): Promise<void> {
 }
 
 /**
+ * Dispara un push y, recién cuando termina (soltó el cerrojo), un pull —
+ * nunca los dos a la vez: como los dos compiten por el mismo cerrojo
+ * (`tryAcquireSyncLock`, sin espera) y el push siempre se llama primero, un
+ * pull disparado en simultáneo perdería la carrera y no correría nunca. No
+ * es la cadencia normal de cada uno (que sigue siendo independiente vía sus
+ * propios timers) — es solo cómo conviven cuando algo los dispara juntos
+ * (arranque, evento `online`).
+ */
+export async function runPushThenPull(options: { full?: boolean } = {}): Promise<void> {
+  await runPushCycle();
+  await runPullCycleNow(options);
+}
+
+/**
  * Motor de sync mientras la pestaña está abierta (Fase 2; Background Sync de
  * Service Worker sigue siendo Fase 7). Push y pull corren en dos cadencias
  * independientes (#87): push al arrancar + cada `PUSH_INTERVAL_MS` + por
@@ -488,13 +502,11 @@ async function scheduleNextPushRetry(): Promise<void> {
  */
 export function startSyncEngine(): () => void {
   resetFullRefreshSession();
-  void runPushCycle();
-  void runPullCycleNow();
+  void runPushThenPull();
   const pushInterval = setInterval(() => void runPushCycle(), PUSH_INTERVAL_MS);
   const pullInterval = setInterval(() => void runPullCycleNow(), PULL_SAFETY_NET_INTERVAL_MS);
   const onOnline = (): void => {
-    void runPushCycle();
-    void runPullCycleNow();
+    void runPushThenPull();
   };
   window.addEventListener('online', onOnline);
   const onOutboxEvent = (): void => {

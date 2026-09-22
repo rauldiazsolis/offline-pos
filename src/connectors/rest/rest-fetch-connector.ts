@@ -92,7 +92,22 @@ export function createRestFetchConnector(config: RestConnectionConfig): Connecto
       if (!parsed.success) {
         return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
       }
-      return ok(parsed.data);
+      // `exactOptionalPropertyTypes`: el `.optional()` de Zod infiere `string | undefined`
+      // explícito, distinto de un `nextCursor?: string` sin valor — se reconstruye sin la clave
+      // cuando está ausente, mismo criterio que `sync/pull-snapshot.ts::toProbeSnapshot`.
+      const { products, customers, stock, lots } = parsed.data;
+      return ok({
+        products: {
+          items: products.items,
+          ...(products.nextCursor !== undefined ? { nextCursor: products.nextCursor } : {}),
+        },
+        customers: {
+          items: customers.items,
+          ...(customers.nextCursor !== undefined ? { nextCursor: customers.nextCursor } : {}),
+        },
+        stock,
+        lots,
+      });
     },
 
     async requestAccountHold(params, idempotencyKey: string): Promise<Result<AccountHoldResult>> {
