@@ -88,8 +88,7 @@ describe('createConnector', () => {
     expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://localhost:4000/sync/pull');
   });
 
-  // google-sheets-connector.ts todavía implementa el puerto viejo — Task 15 del plan de Etapa 1.
-  it.skip('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
+  it('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true, data: { items: [] } }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -97,7 +96,7 @@ describe('createConnector', () => {
       type: 'google-sheets',
       webAppUrl: 'https://script.google.com/macros/s/abc/exec',
     });
-    await connector.pullProducts({});
+    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://script.google.com/macros/s/abc/exec');

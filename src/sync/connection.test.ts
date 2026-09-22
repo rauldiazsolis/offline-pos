@@ -105,11 +105,6 @@ describe('probeConnection', () => {
     expect(result).toMatchObject({ ok: false, error: 'sync/timeout' });
   });
 
-  // Sigue con `it.skip` hasta la Task 14 del plan de Etapa 1: createRestFetchConnector todavía
-  // implementa el puerto viejo (pullProducts/...), así que esto rechaza con TypeError. Un
-  // pullBatch inexistente ahí deja el `withTimeout` de connection.ts sin resolver nunca (el
-  // rechazo no pasa por su `.then`), lo que además filtra el cerrojo de sync a los tests
-  // siguientes — mantenerlo activo antes de Task 14 rompe en cascada el resto del archivo.
   it('sin conector inyectado, arma el real desde la config (REST: POST a {baseUrl}/sync/pull)', async () => {
     const fetchMock = vi.fn((_url: string) =>
       Promise.resolve({

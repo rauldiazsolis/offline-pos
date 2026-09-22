@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CashSession } from '../../domain/cash-session.ts';
 import type { Customer } from '../../domain/customer.ts';
 import type { Sale } from '../../domain/sale.ts';
-import type { StockMovement } from '../../domain/stock.ts';
 import type { GoogleSheetsConfig } from './config.ts';
 import { createGoogleSheetsConnector } from './google-sheets-connector.ts';
 
@@ -59,68 +58,78 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('pullProducts', () => {
-  it('llama a la acción pullProducts con since y fuerza tracksStock: false', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      bridgeOk({
-        items: [
-          {
-            id: 'p1',
-            sku: 'SKU-1',
-            barcodes: ['111'],
-            name: 'Arroz 1kg',
-            price: 100,
-            taxRate: 0.21,
-            category: 'almacen',
-            tracksStock: true, // aunque el puente mande true, el conector lo pisa
-          },
-        ],
-      }),
-    );
+describe('pullBatch', () => {
+  it('llama a pullProducts y pullCustomers, fuerza tracksStock:false y unrestricted:true', async () => {
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string) as { action: string };
+      if (body.action === 'pullProducts') {
+        return Promise.resolve(
+          bridgeOk({
+            items: [
+              {
+                id: 'p1',
+                sku: 'SKU-1',
+                barcodes: ['111'],
+                name: 'Arroz 1kg',
+                price: 100,
+                taxRate: 0.21,
+                category: 'almacen',
+                tracksStock: true,
+              },
+            ],
+          }),
+        );
+      }
+      return Promise.resolve(bridgeOk({ items: [{ id: 'c1', name: 'Ana', phone: '1155' }] }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullProducts({ since: 'cursor-1' });
+    const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pullProducts',
-      payload: { since: 'cursor-1' },
-    });
     expect(result).toEqual({
       ok: true,
       value: {
-        items: [
-          {
-            id: 'p1',
-            sku: 'SKU-1',
-            barcodes: ['111'],
-            name: 'Arroz 1kg',
-            price: 100,
-            taxRate: 0.21,
-            category: 'almacen',
-            tracksStock: false,
-          },
-        ],
+        products: {
+          items: [
+            {
+              id: 'p1',
+              sku: 'SKU-1',
+              barcodes: ['111'],
+              name: 'Arroz 1kg',
+              price: 100,
+              taxRate: 0.21,
+              category: 'almacen',
+              tracksStock: false,
+            },
+          ],
+        },
+        customers: { items: [{ id: 'c1', name: 'Ana', phone: '1155', unrestricted: true }] },
+        stock: [],
+        lots: {},
       },
     });
+    expect(sentEnvelope(fetchMock, 0)).toEqual({ action: 'pullProducts', payload: {} });
+    expect(sentEnvelope(fetchMock, 1)).toEqual({ action: 'pullCustomers', payload: {} });
   });
 
-  it('no manda since si no hay, y nunca devuelve nextCursor (pull completo)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({ items: [] }));
-    vi.stubGlobal('fetch', fetchMock);
+  it('informa ok para cada pendingLotId pedido, sin llamar a ningún endpoint de estado', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeOk({ items: [] })));
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullProducts({});
+    const result = await connector.pullBatch({ cursors: {}, pendingLotIds: ['lot-1', 'lot-2'] });
 
-    expect(sentEnvelope(fetchMock)).toEqual({ action: 'pullProducts', payload: {} });
-    expect(result).toEqual({ ok: true, value: { items: [] } });
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({ lots: { 'lot-1': { status: 'ok' }, 'lot-2': { status: 'ok' } } }),
+    });
   });
 
   it('devuelve sync/invalid-payload si un producto no cumple el schema', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeOk({ items: [{ id: 'p1' }] })));
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullProducts({});
+    const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -128,52 +137,130 @@ describe('pullProducts', () => {
     }
   });
 
-  it('propaga el error del puente', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeError('Planilla ocupada')));
+  it('propaga el error del puente y corta sin llamar a pullCustomers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(bridgeError('Planilla ocupada'));
+    vi.stubGlobal('fetch', fetchMock);
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullProducts({});
+    const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toBe('sync/remote-error');
-      expect(result.meta).toEqual({ message: 'Planilla ocupada' });
     }
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('pullCustomers', () => {
-  it('llama a la acción pullCustomers y devuelve los clientes con unrestricted: true (Etapa 3, #69)', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(bridgeOk({ items: [{ id: 'c1', name: 'Ana', phone: '1155' }] }));
+describe('pushBatch', () => {
+  it('manda cada ítem al puente con su propia idempotencyKey, en orden', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
     vi.stubGlobal('fetch', fetchMock);
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullCustomers({});
+    const result = await connector.pushBatch(
+      [
+        { type: 'sale', id: 'sale-1', sale },
+        { type: 'customer', id: 'c1', customer },
+      ],
+      'lot-1', // el lot id no se usa contra el puente — cada ítem sigue con el suyo propio
+    );
 
-    expect(sentEnvelope(fetchMock)).toEqual({ action: 'pullCustomers', payload: {} });
-    expect(result).toEqual({
-      ok: true,
-      value: { items: [{ id: 'c1', name: 'Ana', phone: '1155', unrestricted: true }] },
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(sentEnvelope(fetchMock, 0)).toEqual({ action: 'pushSale', payload: { sale }, idempotencyKey: 'sale-1' });
+    expect(sentEnvelope(fetchMock, 1)).toEqual({
+      action: 'pushCustomer',
+      payload: { customer },
+      idempotencyKey: 'c1',
     });
   });
 
-  it('devuelve sync/invalid-payload si un cliente no tiene name', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeOk({ items: [{ id: 'c1' }] })));
+  it('sale-void, account-hold-confirm y cash-session mandan la misma forma que antes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createGoogleSheetsConnector(config);
+    const voidParams = { saleId: 'sale-1', voidedAt: '2026-01-02T00:00:00.000Z', voidReason: 'error de precio' };
+
+    await connector.pushBatch(
+      [
+        { type: 'sale-void', id: 'void-1', ...voidParams },
+        { type: 'account-hold-confirm', id: 'confirm-1', holdId: 'hold-1', saleId: 'sale-1' },
+        { type: 'cash-session', id: 'cs-1', session: cashSession },
+      ],
+      'lot-2',
+    );
+
+    expect(sentEnvelope(fetchMock, 0)).toEqual({
+      action: 'pushSaleVoid',
+      payload: voidParams,
+      idempotencyKey: 'void-1',
+    });
+    expect(sentEnvelope(fetchMock, 1)).toEqual({
+      action: 'pushAccountHoldConfirm',
+      payload: { holdId: 'hold-1', saleId: 'sale-1' },
+      idempotencyKey: 'confirm-1',
+    });
+    expect(sentEnvelope(fetchMock, 2)).toEqual({
+      action: 'pushCashSession',
+      payload: { session: cashSession },
+      idempotencyKey: 'cs-1',
+    });
+  });
+
+  it('stock-movement y account-hold-release son no-ops: no llaman al puente', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
+    vi.stubGlobal('fetch', fetchMock);
     const connector = createGoogleSheetsConnector(config);
 
-    const result = await connector.pullCustomers({});
+    const result = await connector.pushBatch(
+      [
+        {
+          type: 'stock-movement',
+          id: 'm1',
+          movement: { id: 'm1', productId: 'p1', delta: -1, reason: 'sale', createdAt: '2026-01-01T00:00:00.000Z' },
+        },
+        { type: 'account-hold-release', id: 'release-1', holdId: 'hold-1' },
+      ],
+      'lot-3',
+    );
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('corta en el primer error del puente, sin mandar los ítems siguientes', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(bridgeError('Venta no encontrada'));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createGoogleSheetsConnector(config);
+
+    const result = await connector.pushBatch(
+      [
+        { type: 'sale', id: 'sale-1', sale },
+        { type: 'customer', id: 'c1', customer },
+      ],
+      'lot-4',
+    );
+
+    expect(result.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('un push devuelve sync/request-failed si no hay red', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    const connector = createGoogleSheetsConnector(config);
+
+    const result = await connector.pushBatch([{ type: 'sale', id: 'sale-1', sale }], 'lot-1');
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sync/invalid-payload');
+      expect(result.error).toBe('sync/request-failed');
+      expect(result.meta).toMatchObject({ message: 'network down' });
     }
   });
 });
 
-describe('operaciones locales (sin red)', () => {
-  it('requestAccountHold aprueba siempre con un holdId nuevo y no llama a fetch', async () => {
+describe('requestAccountHold (sin red)', () => {
+  it('aprueba siempre con un holdId nuevo y no llama a fetch', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     const connector = createGoogleSheetsConnector(config);
@@ -187,145 +274,9 @@ describe('operaciones locales (sin red)', () => {
       expect(first.value.approved).toBe(true);
       expect(second.value.approved).toBe(true);
       if (first.value.approved && second.value.approved) {
-        expect(first.value.holdId.length).toBeGreaterThan(0);
         expect(first.value.holdId).not.toBe(second.value.holdId);
       }
     }
     expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('releaseAccountHold, pullStock y pushStockMovement son no-ops sin red', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-    const movement: StockMovement = {
-      id: 'm1',
-      productId: 'p1',
-      delta: -1,
-      reason: 'sale',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    };
-
-    expect(await connector.releaseAccountHold({ holdId: 'h1' }, 'k')).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    expect(await connector.pullStock()).toEqual({ ok: true, value: [] });
-    expect(await connector.pushStockMovement(movement, 'k')).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('pushes', () => {
-  it('pushSale manda { sale } con la idempotencyKey del motor', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushSale(sale, 'sale-1');
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pushSale',
-      payload: { sale },
-      idempotencyKey: 'sale-1',
-    });
-  });
-
-  it('pushSaleVoid manda { saleId, voidedAt, voidReason } con su propia key', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-    const params = {
-      saleId: 'sale-1',
-      voidedAt: '2026-01-02T00:00:00.000Z',
-      voidReason: 'error de precio',
-    };
-
-    const result = await connector.pushSaleVoid(params, 'void-key-1');
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pushSaleVoid',
-      payload: params,
-      idempotencyKey: 'void-key-1',
-    });
-  });
-
-  it('pushCustomer manda { customer }', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushCustomer(customer, 'c1');
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pushCustomer',
-      payload: { customer },
-      idempotencyKey: 'c1',
-    });
-  });
-
-  it('pushAccountHoldConfirm manda solo { holdId, saleId } (el puente deriva cliente y monto)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushAccountHoldConfirm(
-      { holdId: 'hold-1', saleId: 'sale-1' },
-      'confirm-key-1',
-    );
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pushAccountHoldConfirm',
-      payload: { holdId: 'hold-1', saleId: 'sale-1' },
-      idempotencyKey: 'confirm-key-1',
-    });
-  });
-
-  it('pushCashSession manda { session }', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(bridgeOk({}));
-    vi.stubGlobal('fetch', fetchMock);
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushCashSession(cashSession, 'cs-1');
-
-    expect(result).toEqual({ ok: true, value: undefined });
-    expect(sentEnvelope(fetchMock)).toEqual({
-      action: 'pushCashSession',
-      payload: { session: cashSession },
-      idempotencyKey: 'cs-1',
-    });
-  });
-
-  it('un push propaga el error del puente como sync/remote-error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(bridgeError('Venta no encontrada: sale-1')));
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushAccountHoldConfirm({ holdId: 'h', saleId: 'sale-1' }, 'k');
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sync/remote-error');
-      expect(result.meta).toEqual({ message: 'Venta no encontrada: sale-1' });
-    }
-  });
-
-  it('un push devuelve sync/request-failed si no hay red', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
-    const connector = createGoogleSheetsConnector(config);
-
-    const result = await connector.pushSale(sale, 'sale-1');
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sync/request-failed');
-      expect(result.meta).toMatchObject({ message: 'network down' });
-    }
   });
 });

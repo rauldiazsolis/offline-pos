@@ -647,8 +647,6 @@ function stubRestFetch(failures = 0): string[] {
   return calls;
 }
 
-// Todo este describe depende del conector REST real (Task 14 del plan de Etapa 1) — queda en
-// it.skip hasta esa tarea.
 describe('requestPushSoon y reintentos agendados', () => {
   beforeEach(() => {
     // Solo timeouts y reloj: fake-indexeddb sigue con su scheduler real.
@@ -722,7 +720,6 @@ describe('requestPushSoon y reintentos agendados', () => {
   });
 });
 
-// Depende del conector REST real (Task 14) — queda en it.skip hasta esa tarea.
 describe('startSyncEngine', () => {
   let stop: (() => void) | undefined;
 
@@ -805,8 +802,6 @@ describe('startSyncEngine', () => {
   });
 });
 
-// Depende de los conectores reales (REST: Task 14; Sheets: Task 15) — queda en it.skip hasta esas
-// tareas, donde se verifica y se saca del skip.
 describe('runPullCycleNow — foto completa y reconciliación de bajas (integración con conector real)', () => {
   function catalogProduct(id: string): Product {
     return {
@@ -901,8 +896,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     expect(getLastFullSyncAt()).toBeDefined();
   });
 
-  // Sigue en it.skip hasta la Task 15: google-sheets-connector.ts todavía implementa el puerto viejo.
-  it.skip('con un conector snapshot (Sheets) todo ciclo es completo y reconcilia las bajas', async () => {
+  it('con un conector snapshot (Sheets) todo ciclo es completo y reconcilia las bajas', async () => {
     saveSyncConfig({
       type: 'google-sheets',
       webAppUrl: 'https://script.google.com/macros/s/abc/exec',

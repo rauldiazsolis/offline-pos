@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import { productSchema, type Product } from '../../domain/product.ts';
+import { productSchema } from '../../domain/product.ts';
 import { ok, type Result } from '../../domain/result.ts';
 import { newId } from '../../storage/ids.ts';
 import {
   connectorCustomerSchema,
   type AccountHoldResult,
+  type BatchLotStatus,
   type Connector,
-  type ConnectorCustomer,
-  type ConnectorPullResult,
+  type OutboxBatchItem,
+  type PullBatchParams,
+  type PullBatchResult,
 } from '../../sync/connector.ts';
 import { callBridge } from './bridge-client.ts';
 import type { GoogleSheetsConfig } from './config.ts';
@@ -17,103 +19,112 @@ const bridgeProductSchema = productSchema.omit({ tracksStock: true });
 
 const productsDataSchema = z.object({ items: z.array(bridgeProductSchema) });
 const customersDataSchema = z.object({ items: z.array(connectorCustomerSchema) });
-
-/** Las acciones de escritura del puente responden `data: {}` — no hay nada que leer. */
 const emptyDataSchema = z.object({});
 
 /**
  * Implementación del puerto `Connector` contra un Apps Script Web App (ver
- * `README.md` de esta carpeta y el spec de la Etapa 1, #67). Caso de uso:
- * backend completo para un micro-comercio sin ERP — catálogo y ventas viven
- * en una planilla.
+ * `README.md` de esta carpeta y el spec de la Etapa 1, #67) — adaptada al
+ * contrato batch (#87) de forma **mecánica**: `bridge.gs` sigue exponiendo
+ * las mismas acciones de siempre, una por evento; este conector solo cambia
+ * su cara hacia `sync/engine.ts`, no su forma de hablar con el puente. La
+ * Etapa 2 le da a `bridge.gs` un batch real puertas adentro — ver CLAUDE.md,
+ * "Connector API".
  *
- * Lo que **no** llama al puente, a propósito:
- * - `requestAccountHold`/`releaseAccountHold`: el fiado es sin bloqueo, la
- *   decisión siempre es "sí" — no vale un round-trip. Nunca hubo una
- *   reserva real que liberar.
- * - `pullStock`/`pushStockMovement`: no aplican. `pullProducts` fija
- *   `tracksStock: false`, y `storage/sale-repository.ts` solo genera
- *   movimientos para productos que trackean stock, así que
- *   `pushStockMovement` en la práctica nunca se invoca.
- *
- * `pullCustomers` fija `unrestricted: true` en cada cliente (Etapa 3, #69):
- * el fiado contra Sheets es sin bloqueo ni `creditLimit`/`margin` reales que
- * declarar, así que esta es la única forma de decir "sin restricción" sin
- * fabricar esos números.
+ * `stock-movement`/`account-hold-release` siguen siendo no-ops (nunca hubo
+ * llamada real al puente para esto, ver la implementación anterior a #87):
+ * el fiado contra Sheets es sin bloqueo real que liberar, y `pullProducts`
+ * ya fija `tracksStock: false` así que un movimiento de stock nunca se
+ * genera para estos productos en la práctica.
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
-  async function push(
-    action: string,
-    payload: object,
-    idempotencyKey: string,
-  ): Promise<Result<void>> {
-    const result = await callBridge(config, { action, payload, idempotencyKey }, emptyDataSchema);
-    if (!result.ok) {
-      return result;
+  async function pushOne(item: OutboxBatchItem): Promise<Result<void>> {
+    switch (item.type) {
+      case 'sale':
+        return callBridge(
+          config,
+          { action: 'pushSale', payload: { sale: item.sale }, idempotencyKey: item.id },
+          emptyDataSchema,
+        ).then((r) => (r.ok ? ok(undefined) : r));
+      case 'sale-void': {
+        const payload = {
+          saleId: item.saleId,
+          voidedAt: item.voidedAt,
+          ...(item.voidReason !== undefined ? { voidReason: item.voidReason } : {}),
+        };
+        return callBridge(
+          config,
+          { action: 'pushSaleVoid', payload, idempotencyKey: item.id },
+          emptyDataSchema,
+        ).then((r) => (r.ok ? ok(undefined) : r));
+      }
+      case 'customer':
+        return callBridge(
+          config,
+          { action: 'pushCustomer', payload: { customer: item.customer }, idempotencyKey: item.id },
+          emptyDataSchema,
+        ).then((r) => (r.ok ? ok(undefined) : r));
+      case 'account-hold-confirm':
+        return callBridge(
+          config,
+          {
+            action: 'pushAccountHoldConfirm',
+            payload: { holdId: item.holdId, saleId: item.saleId },
+            idempotencyKey: item.id,
+          },
+          emptyDataSchema,
+        ).then((r) => (r.ok ? ok(undefined) : r));
+      case 'cash-session':
+        return callBridge(
+          config,
+          { action: 'pushCashSession', payload: { session: item.session }, idempotencyKey: item.id },
+          emptyDataSchema,
+        ).then((r) => (r.ok ? ok(undefined) : r));
+      case 'stock-movement':
+      case 'account-hold-release':
+        return Promise.resolve(ok(undefined));
+      default: {
+        const exhaustiveCheck: never = item;
+        throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
+      }
     }
-    return ok(undefined);
   }
 
   return {
-    async pullProducts(params): Promise<Result<ConnectorPullResult<Product>>> {
-      const result = await callBridge(
-        config,
-        { action: 'pullProducts', payload: params },
-        productsDataSchema,
-      );
-      if (!result.ok) {
-        return result;
+    async pushBatch(items: OutboxBatchItem[]): Promise<Result<void>> {
+      for (const item of items) {
+        const result = await pushOne(item);
+        if (!result.ok) {
+          return result;
+        }
       }
-      // Pull completo, sin delta ni cursor: la planilla de un micro-comercio es chica.
-      return ok({ items: result.value.items.map((item) => ({ ...item, tracksStock: false })) });
+      return ok(undefined);
     },
 
-    async pullCustomers(params): Promise<Result<ConnectorPullResult<ConnectorCustomer>>> {
-      const result = await callBridge(
-        config,
-        { action: 'pullCustomers', payload: params },
-        customersDataSchema,
-      );
-      if (!result.ok) {
-        return result;
+    async pullBatch(params: PullBatchParams): Promise<Result<PullBatchResult>> {
+      const productsResult = await callBridge(config, { action: 'pullProducts', payload: {} }, productsDataSchema);
+      if (!productsResult.ok) {
+        return productsResult;
       }
-      return ok({ items: result.value.items.map((item) => ({ ...item, unrestricted: true })) });
-    },
+      const customersResult = await callBridge(config, { action: 'pullCustomers', payload: {} }, customersDataSchema);
+      if (!customersResult.ok) {
+        return customersResult;
+      }
 
-    pushSale(sale, idempotencyKey) {
-      return push('pushSale', { sale }, idempotencyKey);
-    },
+      const lots: Record<string, BatchLotStatus> = {};
+      for (const id of params.pendingLotIds) {
+        lots[id] = { status: 'ok' };
+      }
 
-    pushSaleVoid(params, idempotencyKey) {
-      return push('pushSaleVoid', params, idempotencyKey);
-    },
-
-    pushCustomer(customer, idempotencyKey) {
-      return push('pushCustomer', { customer }, idempotencyKey);
-    },
-
-    pushAccountHoldConfirm(params, idempotencyKey) {
-      return push('pushAccountHoldConfirm', params, idempotencyKey);
-    },
-
-    pushCashSession(session, idempotencyKey) {
-      return push('pushCashSession', { session }, idempotencyKey);
+      return ok({
+        products: { items: productsResult.value.items.map((item) => ({ ...item, tracksStock: false })) },
+        customers: { items: customersResult.value.items.map((item) => ({ ...item, unrestricted: true })) },
+        stock: [],
+        lots,
+      });
     },
 
     requestAccountHold(): Promise<Result<AccountHoldResult>> {
       return Promise.resolve(ok({ approved: true, holdId: newId() }));
-    },
-
-    releaseAccountHold(): Promise<Result<void>> {
-      return Promise.resolve(ok(undefined));
-    },
-
-    pullStock() {
-      return Promise.resolve(ok([]));
-    },
-
-    pushStockMovement(): Promise<Result<void>> {
-      return Promise.resolve(ok(undefined));
     },
   };
 }

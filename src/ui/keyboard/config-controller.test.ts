@@ -36,10 +36,6 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   runPushThenPull: vi.fn(() => Promise.resolve()),
 }));
 
-// Los `it.skip` de este archivo prueban submitConfig()/probeConnection() contra un conector REST
-// real (stubRestBackend) — dependen de que connectors/rest/rest-fetch-connector.ts hable el
-// contrato batch (Task 14 del plan de Etapa 1, #87). Se verifican y se sacan del skip ahí.
-
 const now = '2026-01-01T00:00:00.000Z';
 const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
 

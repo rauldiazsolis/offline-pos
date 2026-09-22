@@ -55,9 +55,6 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-// Los `it.skip` de este archivo dependen de que connectors/rest/rest-fetch-connector.ts hable el
-// contrato batch (Task 14 del plan de Etapa 1, #87) — el resync final de demoReset ahora llama
-// runPushCycle/runPullCycleNow, que arman el conector real. Se verifican y se sacan del skip ahí.
 describe('demoReset', () => {
   it('sin /CONFIG: borra todo lo local y no re-siembra (queda vacía)', async () => {
     const created = await createCustomerLocally('Cliente de prueba');
