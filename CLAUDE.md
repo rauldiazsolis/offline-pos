@@ -196,7 +196,11 @@ casi todo el puerto; la única excepción es `requestAccountHold`, invocada dire
 `ui/keyboard/checkout-controller.ts` vía `sync/account-hold.ts` (ver "Patrón outbox" más arriba).
 `connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
 `connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
-de un puente Apps Script (`bridge.gs`, ver su README). Cada conector es dueño de su schema de config
+de un puente Apps Script (`bridge.gs`, ver su README). Sus dos archivos (`bridge.gs` y
+`columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene los textos
+visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves internas y
+encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en Vitest con
+una planilla falsa (`src/test/fake-spreadsheet.ts`). Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runSyncCycle` y `sync/account-hold.ts::requestAccountHoldNow` ya no
@@ -1007,7 +1011,10 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   pendiente al conector actual), arranque bloqueado sin conexión activa, sin valores por omisión y
   estado de sync honesto (cierra #53) — ver "Ciclo de vida de la conexión". Etapa 2c (#77): comandos
   declarados por conector y tipo `rest-demo` — `/DEMO_RESET` solo con ese tipo, ver "Comandos por
-  conector". Pendiente: Etapa 3 (#69, crédito ilimitado explícito en cuenta corriente).
+  conector". Etapa 2d (#80): planilla de Sheets toda en español con acceso por encabezado, pestañas de
+  tamaño exacto con fila plantilla y formato por columna, fechas reales; permisos mínimos
+  (`@OnlyCurrentDoc`) a propósito — un spike mostró que las tablas nativas exigen un scope más amplio y
+  se descartaron. Pendiente: Etapa 3 (#69, crédito ilimitado explícito en cuenta corriente).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
