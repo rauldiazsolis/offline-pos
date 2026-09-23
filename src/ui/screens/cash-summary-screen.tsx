@@ -30,6 +30,7 @@ import {
   ticketFilterSignal,
 } from '../state/cash-summary.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 
 const NON_CASH_METHODS: PaymentMethod[] = ['debit', 'credit', 'transfer', 'qr', 'account'];
 
@@ -459,17 +460,6 @@ export function CashSummaryScreen() {
     focusFilter();
   };
 
-  // Hacer click sobre algo no enfocable (el título, una tarjeta del panel lateral) le saca el foco
-  // al buscador y lo deja en `<body>` — desde ahí los `keydown` ya no pasan por este contenedor y
-  // la pantalla deja de reaccionar al teclado. El foco se pierde en el `mousedown` (no en el
-  // `click`), así que se cancela ahí; el `click` de botones y filas se dispara igual. El buscador
-  // queda afuera para no romper reubicar el cursor con el mouse dentro del texto.
-  const handleMouseDown = (event: MouseEvent) => {
-    if (event.target !== filterRef.current) {
-      event.preventDefault();
-    }
-  };
-
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -524,7 +514,8 @@ export function CashSummaryScreen() {
   return (
     <div
       onKeyDown={handleKeyDown}
-      onMouseDown={handleMouseDown}
+      // Patrón teclado + mouse: ver ui/hooks/use-mouse-keeps-focus.ts.
+      onMouseDown={keepFocusOnMouseDown}
       style={{
         height: 'var(--app-height)',
         display: 'flex',
