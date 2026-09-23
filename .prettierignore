@@ -7,3 +7,13 @@ pnpm-lock.yaml
 # Documentos de prosa, formateados a mano — no tocar tablas/wrapping.
 CLAUDE.md
 pos-web-diseno-arquitectura.md
+
+# Se pegan tal cual en Apps Script — el archivo del repo debe ser lo que se copia.
+*.gs
+
+# Planes y specs históricos: registro de decisiones, no se reformatean.
+docs/superpowers/
+
+# Datos y HTML de demo escritos a mano.
+demo-backend/src/fixtures/
+demo-backend/src/panel.html
