@@ -209,6 +209,29 @@ describe('probeConnection — convivencia con el motor de sync', () => {
   });
 });
 
+describe('probeConnection — progreso', () => {
+  it('informa el progreso: pulling sin cerrojo tomado', async () => {
+    const stages: string[] = [];
+    await probeConnection(config, {
+      connector: fakeConnector(),
+      onProgress: (stage) => stages.push(stage),
+    });
+    expect(stages).toEqual(['pulling']);
+  });
+
+  it('informa waiting-lock si hay un ciclo en curso', async () => {
+    const release = tryAcquireSyncLock();
+    const stages: string[] = [];
+    const probe = probeConnection(config, {
+      connector: fakeConnector(),
+      onProgress: (stage) => stages.push(stage),
+    });
+    release?.();
+    await probe;
+    expect(stages).toEqual(['waiting-lock', 'pulling']);
+  });
+});
+
 describe('originKey', () => {
   it('normaliza: sin barra final y con el host en minúsculas', () => {
     expect(originKey({ type: 'rest', baseUrl: 'https://Api.Example.com/' })).toBe(
