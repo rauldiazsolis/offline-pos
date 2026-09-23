@@ -5,13 +5,14 @@ import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
+import { openRequiredWizard } from './keyboard/config-controller.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCatalogRepository } from './state/catalog.ts';
 import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
-import { identityResetSignal, resetConfigForm } from './state/sync-config.ts';
+import { identityResetSignal } from './state/sync-config.ts';
 
 /**
  * Arma los repositorios antes del primer render y arranca el motor de sync.
@@ -53,16 +54,15 @@ export async function bootstrap(): Promise<void> {
   startCartPersistence();
 
   // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
-  // conexión probada la app solo muestra `/CONFIG` (ver `ui/app.tsx`). Si hay
-  // una config guardada pero sin probar (por ejemplo la de antes de 2b), el
-  // formulario abre precargado para que un Ctrl+Enter alcance — el origen no
-  // cambia, así que no se pierde ningún dato.
+  // conexión activa la app solo muestra el wizard de `/CONFIG` (ver
+  // `ui/app.tsx`), precargado con lo guardado y abierto en el primer paso que
+  // falta (Etapa 2 de #94: `unverified`, `incomplete` o identidad perdida).
   const configResult = loadSyncConfig();
   const state = connectionState(configResult);
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   if (state !== 'active') {
-    resetConfigForm(configResult.ok ? configResult.value : undefined);
+    await openRequiredWizard();
   }
 
   startSyncEngine();

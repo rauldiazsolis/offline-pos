@@ -300,6 +300,7 @@ describe('applyTerminalSettings', () => {
       pointOfSale: 'Caja 2',
     });
     expect(connectionStateSignal.value).toBe('active');
+    expect(activeConnectorTypeSignal.value).toBe('rest');
   });
 
   it('sin config guardada devuelve el error de lectura', () => {

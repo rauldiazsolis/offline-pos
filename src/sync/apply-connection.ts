@@ -185,6 +185,9 @@ export function applyTerminalSettings(terminal: {
   if (!saved.ok) {
     return saved;
   }
-  setConnectionState(connectionState(ok(next)));
+  const state = connectionState(ok(next));
+  setConnectionState(state);
+  // De `incomplete` a `active`: ahora sí hay comandos del conector (ver `bootstrap`).
+  setActiveConnectorType(state === 'active' ? next.type : null);
   return ok(undefined);
 }

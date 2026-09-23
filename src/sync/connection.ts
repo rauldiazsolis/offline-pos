@@ -1,5 +1,4 @@
 import { err, type Result } from '../domain/result.ts';
-import { hasUserData, type LocalDataSummary } from '../storage/local-data.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector } from './connector.ts';
 import { createConnector, type ConnectorConfig } from './connector-registry.ts';
@@ -79,26 +78,4 @@ export function originKey(config: ConnectorConfig): string {
       return exhaustiveCheck;
     }
   }
-}
-
-export type ConnectionPlan = { wipe: boolean; needsConfirmation: boolean };
-
-/**
- * Decide qué hace falta al aplicar una conexión (función pura):
- * - `wipe`: el origen cambió, o no hay config actual (no se puede saber de
- *   qué origen son los datos, así que se los trata como ajenos).
- * - `needsConfirmation`: hay que borrar **y** hay datos del usuario que se
- *   perderían (ventas, turnos, pendientes de envío, venta en curso). Un
- *   catálogo o clientes solos se reemplazan sin preguntar — nunca se
- *   descartan ventas locales en silencio.
- */
-export function planConnectionChange(params: {
-  current: SyncConfig | undefined;
-  candidate: SyncConfig;
-  localData: LocalDataSummary;
-}): ConnectionPlan {
-  const sameOrigin =
-    params.current !== undefined && originKey(params.current) === originKey(params.candidate);
-  const wipe = !sameOrigin;
-  return { wipe, needsConfirmation: wipe && hasUserData(params.localData) };
 }
