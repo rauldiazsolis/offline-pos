@@ -3,6 +3,7 @@ import { calculateLineTotal, calculateTotals } from '../../domain/totals.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
@@ -48,6 +49,11 @@ export function ReceiptScreen() {
   });
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    // Un botón enfocado con Tab se activa solo con Enter (nativo): no duplicar
+    // la acción con el atajo del contenedor.
+    if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) {
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       window.print();
@@ -64,6 +70,8 @@ export function ReceiptScreen() {
       ref={containerRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      // Teclado + mouse (Etapa 2 de #94): ver ui/hooks/use-mouse-keeps-focus.ts.
+      onMouseDown={keepFocusOnMouseDown}
       style={{
         height: 'var(--app-height)',
         overflowY: 'auto',

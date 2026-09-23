@@ -3,7 +3,9 @@ import { useLayoutEffect } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
+  activateVoidRow,
   cancelVoidConfirmation,
   confirmVoid,
   exitVoidScreen,
@@ -18,10 +20,19 @@ import {
   voidableSalesSignal,
 } from '../state/void-sale.ts';
 
+const buttonStyle = {
+  padding: 'var(--space-2) var(--space-3)',
+  borderRadius: 'var(--radius-md)',
+  whiteSpace: 'nowrap' as const,
+  cursor: 'pointer',
+};
+
 /**
  * `/ANULAR`: mismo patrón lista→↑↓→Enter que la búsqueda de productos, sobre
  * las últimas ventas cerradas. Confirmación explícita antes de anular
- * (Enter otra vez) — anular no se puede deshacer.
+ * (Enter otra vez) — anular no se puede deshacer. Teclado + mouse (Etapa 2
+ * de #94): click en una venta = seleccionarla + Enter; cada atajo tiene su
+ * botón.
  */
 export function VoidSaleScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
@@ -39,6 +50,11 @@ export function VoidSaleScreen() {
   });
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    // Un botón enfocado con Tab se activa solo con Enter (nativo): no duplicar
+    // la acción con el atajo del contenedor.
+    if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) {
+      return;
+    }
     if (voidConfirmingSignal.value) {
       if (event.key === 'Enter') {
         event.preventDefault();
@@ -82,6 +98,7 @@ export function VoidSaleScreen() {
       ref={containerRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      onMouseDown={keepFocusOnMouseDown}
       style={{
         height: 'var(--app-height)',
         overflowY: 'auto',
@@ -113,6 +130,14 @@ export function VoidSaleScreen() {
           <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>
             ¿Anular esta venta? Enter confirma, Esc cancela.
           </p>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+            <button type="button" onClick={cancelVoidConfirmation} style={buttonStyle}>
+              Volver (Esc)
+            </button>
+            <button type="button" onClick={() => void confirmVoid()} style={buttonStyle}>
+              Anular (Enter)
+            </button>
+          </div>
         </div>
       ) : sales.length === 0 ? (
         <p style={{ color: 'var(--color-text-muted)' }}>No hay ventas cerradas para anular.</p>
@@ -121,7 +146,11 @@ export function VoidSaleScreen() {
           {sales.map((sale, index) => (
             <li
               key={sale.id}
+              onClick={() => {
+                activateVoidRow(index);
+              }}
               style={{
+                cursor: 'pointer',
                 display: 'flex',
                 justifyContent: 'space-between',
                 padding: 'var(--space-2)',
@@ -143,7 +172,13 @@ export function VoidSaleScreen() {
           </p>
         )}
       </div>
-      <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Esc para volver a la venta.</p>
+      {!voidConfirmingSignal.value && (
+        <div>
+          <button type="button" onClick={exitVoidScreen} style={buttonStyle}>
+            Volver a la venta (Esc)
+          </button>
+        </div>
+      )}
     </div>
   );
 }

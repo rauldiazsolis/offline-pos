@@ -66,3 +66,16 @@ describe('ReceiptScreen', () => {
     expect(receiptSaleSignal.value).toBeNull();
   });
 });
+
+function leftMouseDown(target: Element): MouseEvent {
+  const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
+describe('ReceiptScreen — mouse (Etapa 2 de #94)', () => {
+  it('un mousedown sobre el título no le saca el foco a la pantalla', () => {
+    render(<ReceiptScreen />);
+    expect(leftMouseDown(screen.getByText('Comprobante')).defaultPrevented).toBe(true);
+  });
+});

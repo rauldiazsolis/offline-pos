@@ -12,6 +12,7 @@ import {
   voidableSalesSignal,
 } from '../state/void-sale.ts';
 import {
+  activateVoidRow,
   cancelVoidConfirmation,
   confirmVoid,
   exitVoidScreen,
@@ -129,5 +130,26 @@ describe('moveVoidSelection', () => {
   it('no hace nada si no hay ventas', () => {
     moveVoidSelection(1);
     expect(voidSelectionIndexSignal.value).toBeNull();
+  });
+});
+
+describe('activateVoidRow (click, Etapa 2 de #94)', () => {
+  it('selecciona la fila clickeada y pide confirmación', async () => {
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    await loadVoidableSales();
+
+    activateVoidRow(1);
+
+    expect(voidSelectionIndexSignal.value).toBe(1);
+    expect(voidConfirmingSignal.value).toBe(true);
+  });
+
+  it('un índice fuera de la lista no hace nada', async () => {
+    await loadVoidableSales();
+
+    activateVoidRow(0);
+
+    expect(voidConfirmingSignal.value).toBe(false);
   });
 });
