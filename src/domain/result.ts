@@ -89,6 +89,9 @@ export type ErrorMeta = {
   'cash-session/persist-failed': { message: string };
   'cash-session/none-ever': undefined; // storage/cash-summary-repository.ts
 
+  // customer-payment.ts (cobranza sin venta, contrato v3)
+  'customer-payment/invalid': { reason: 'empty' | 'account-method' | 'non-positive-amount' };
+
   // storage/demo-reset.ts
   'demo/reset-failed': { message: string };
   'demo/backend-reset-failed': { message: string };

@@ -114,6 +114,13 @@ export function describeError(failure: Failure): string {
       return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
     case 'cash-session/none-ever':
       return 'No hay ningún turno de caja para consultar.';
+    case 'customer-payment/invalid':
+      if (failure.meta.reason === 'account-method') {
+        return 'La cobranza no admite cuenta corriente.';
+      }
+      return failure.meta.reason === 'empty'
+        ? 'Ingresá al menos un monto.'
+        : 'Los montos de la cobranza tienen que ser mayores a cero.';
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':
