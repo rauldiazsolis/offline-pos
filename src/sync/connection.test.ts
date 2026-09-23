@@ -258,14 +258,15 @@ describe('originKey', () => {
   });
 
   it('la API key, el secreto y el locale no forman parte del origen', () => {
-    expect(
-      originKey({
-        type: 'rest',
-        baseUrl: 'https://api.example.com',
-        apiKey: 'a',
-        locale: 'es-AR',
-      }),
-    ).toBe(originKey({ type: 'rest', baseUrl: 'https://api.example.com', apiKey: 'b' }));
+    const withLocale: SyncConfig = {
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      apiKey: 'a',
+      locale: 'es-AR',
+    };
+    expect(originKey(withLocale)).toBe(
+      originKey({ type: 'rest', baseUrl: 'https://api.example.com', apiKey: 'b' }),
+    );
   });
 
   it('dos backends distintos tienen orígenes distintos', () => {

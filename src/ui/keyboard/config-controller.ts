@@ -25,7 +25,12 @@ import {
   type TerminalFieldKey,
 } from '../state/sync-config.ts';
 
-type PendingApply = { candidate: SyncConfig; snapshot: ProbeSnapshot; wipe: boolean };
+type PendingApply = {
+  candidate: SyncConfig;
+  snapshot: ProbeSnapshot;
+  local: 'keep' | 'wipe';
+  originChanged: boolean;
+};
 
 /**
  * Token de la prueba en curso: `handleConfigEscape` lo incrementa para
@@ -170,7 +175,7 @@ async function applyAndFinish(pending: PendingApply): Promise<void> {
     configErrorSignal.value = describeError(result);
     return;
   }
-  if (pending.wipe) {
+  if (pending.local === 'wipe') {
     // La venta en curso ya no existe en la base: se vacía también en memoria.
     cartSignal.value = { lines: [] };
     cartSelectionIndexSignal.value = null;
@@ -221,7 +226,12 @@ export async function submitConfig(): Promise<void> {
     candidate,
     localData: await summarizeLocalData(),
   });
-  const pending: PendingApply = { candidate, snapshot: probe.value, wipe: plan.wipe };
+  const pending: PendingApply = {
+    candidate,
+    snapshot: probe.value,
+    local: plan.wipe ? 'wipe' : 'keep',
+    originChanged: plan.wipe,
+  };
 
   if (!plan.needsConfirmation) {
     await applyAndFinish(pending);

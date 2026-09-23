@@ -25,6 +25,32 @@ export async function reconcileSnapshot(
   snapshot: ProbeSnapshot,
   params: { now: string },
 ): Promise<Result<{ skipped: SnapshotTable[] }>> {
+  try {
+    return ok(
+      await db.transaction(
+        'rw',
+        [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
+        () => applySnapshotReconciled(snapshot, params),
+      ),
+    );
+  } catch (error) {
+    return err('sync/reconcile-failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * La reconciliación de una foto completa, **sin transacción propia**: para
+ * correr dentro de una ya abierta (la de `applyConnection`, Etapa 2 de #94).
+ * Lanza si Dexie falla — quien la llama convierte a `Result`.
+ * `allowEmptyTables`: un backend **nuevo** vacío es legítimo (una planilla
+ * recién creada), así que la salvaguarda de tabla vacía no aplica.
+ */
+export async function applySnapshotReconciled(
+  snapshot: ProbeSnapshot,
+  params: { now: string; allowEmptyTables?: boolean },
+): Promise<{ skipped: SnapshotTable[] }> {
   const { customers, accounts } = splitConnectorCustomers(snapshot.customers, { now: params.now });
   const skipped: SnapshotTable[] = [];
 
@@ -37,67 +63,55 @@ export async function reconcileSnapshot(
   ): string[] {
     const incoming = new Set(incomingKeys);
     const absent = localKeys.filter((key) => !incoming.has(key) && !protectedKeys.has(key));
-    if (incomingKeys.length === 0 && absent.length > 0) {
+    if (incomingKeys.length === 0 && absent.length > 0 && params.allowEmptyTables !== true) {
       skipped.push(table);
       return [];
     }
     return absent;
   }
 
-  try {
-    await db.transaction(
-      'rw',
-      [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
-      async () => {
-        await db.products.bulkPut(snapshot.products);
-        await db.products.bulkDelete(
-          absentKeys(
-            'products',
-            await db.products.toCollection().primaryKeys(),
-            snapshot.products.map((item) => item.id),
-          ),
-        );
+  await db.products.bulkPut(snapshot.products);
+  await db.products.bulkDelete(
+    absentKeys(
+      'products',
+      await db.products.toCollection().primaryKeys(),
+      snapshot.products.map((item) => item.id),
+    ),
+  );
 
-        await db.stock.bulkPut(snapshot.stock);
-        await db.stock.bulkDelete(
-          absentKeys(
-            'stock',
-            await db.stock.toCollection().primaryKeys(),
-            snapshot.stock.map((item) => item.productId),
-          ),
-        );
+  await db.stock.bulkPut(snapshot.stock);
+  await db.stock.bulkDelete(
+    absentKeys(
+      'stock',
+      await db.stock.toCollection().primaryKeys(),
+      snapshot.stock.map((item) => item.productId),
+    ),
+  );
 
-        const pendingCustomerIds = new Set(
-          (await db.outbox.where('status').equals('pending').toArray()).flatMap((event) =>
-            event.type === 'customer' ? [event.customer.id] : [],
-          ),
-        );
-        await db.customers.bulkPut(customers);
-        await db.customers.bulkDelete(
-          absentKeys(
-            'customers',
-            await db.customers.toCollection().primaryKeys(),
-            customers.map((item) => item.id),
-            pendingCustomerIds,
-          ),
-        );
+  const pendingCustomerIds = new Set(
+    (await db.outbox.where('status').equals('pending').toArray()).flatMap((event) =>
+      event.type === 'customer' ? [event.customer.id] : [],
+    ),
+  );
+  await db.customers.bulkPut(customers);
+  await db.customers.bulkDelete(
+    absentKeys(
+      'customers',
+      await db.customers.toCollection().primaryKeys(),
+      customers.map((item) => item.id),
+      pendingCustomerIds,
+    ),
+  );
 
-        // Las cuentas siguen a los clientes y al origen: la que ya no se informa (o cuyo cliente se
-        // fue) se borra. Si los clientes se omitieron (llegaron vacíos), las cuentas también.
-        if (!skipped.includes('customers')) {
-          await db.customerAccounts.bulkPut(accounts);
-          const keepAccounts = new Set(accounts.map((account) => account.customerId));
-          const localAccounts = await db.customerAccounts.toCollection().primaryKeys();
-          await db.customerAccounts.bulkDelete(
-            localAccounts.filter((customerId) => !keepAccounts.has(customerId)),
-          );
-        }
-      },
+  // Las cuentas siguen a los clientes y al origen: la que ya no se informa (o cuyo cliente se
+  // fue) se borra. Si los clientes se omitieron (llegaron vacíos), las cuentas también.
+  if (!skipped.includes('customers')) {
+    await db.customerAccounts.bulkPut(accounts);
+    const keepAccounts = new Set(accounts.map((account) => account.customerId));
+    const localAccounts = await db.customerAccounts.toCollection().primaryKeys();
+    await db.customerAccounts.bulkDelete(
+      localAccounts.filter((customerId) => !keepAccounts.has(customerId)),
     );
-  } catch (error) {
-    return err('sync/reconcile-failed', {
-      message: error instanceof Error ? error.message : String(error),
-    });
   }
-  return ok({ skipped });
+  return { skipped };
 }

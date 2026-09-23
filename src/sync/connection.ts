@@ -2,7 +2,7 @@ import { err, type Result } from '../domain/result.ts';
 import { hasUserData, type LocalDataSummary } from '../storage/local-data.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector } from './connector.ts';
-import { createConnector } from './connector-registry.ts';
+import { createConnector, type ConnectorConfig } from './connector-registry.ts';
 import { acquireSyncLockWaiting, isSyncLockHeld } from './engine.ts';
 import { pullEverything, withTimeout, type ProbeSnapshot } from './pull-snapshot.ts';
 
@@ -67,7 +67,7 @@ function normalizeEndpoint(raw: string): string {
  * el mismo endpoint son el mismo backend. Cambiar la API key, el secreto o el
  * locale no cambia el origen.
  */
-export function originKey(config: SyncConfig): string {
+export function originKey(config: ConnectorConfig): string {
   switch (config.type) {
     case 'rest':
     case 'rest-demo':
