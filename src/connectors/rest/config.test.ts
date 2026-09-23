@@ -48,6 +48,7 @@ describe('restConfigFields', () => {
         label: 'API key',
         optional: true,
         placeholder: 'Token de acceso, si el backend lo exige',
+        secret: true,
       },
     ]);
   });

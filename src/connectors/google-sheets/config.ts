@@ -31,5 +31,6 @@ export const googleSheetsConfigFields: ConfigField<Exclude<keyof GoogleSheetsCon
     label: 'Secreto compartido',
     optional: true,
     placeholder: 'Valor de SHARED_SECRET, si lo configuraste',
+    secret: true,
   },
 ];

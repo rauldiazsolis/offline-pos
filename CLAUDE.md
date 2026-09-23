@@ -316,6 +316,23 @@ normal (POST `/exec` → 302 → GET del resultado): el navegador lo sigue solo 
 maneja; lo que sí es un error real es una respuesta que no es JSON (página de login o de cuota), que
 ahora dice qué revisar.
 
+## Utilidades de consola `pos.*` (Etapa 0 de #94, issue #95)
+
+Objeto global `window.pos` para DevTools, instalado en `main.tsx` **antes** de `bootstrap()` (si el
+arranque falla, `pos.export()`/`pos.reset()` siguen disponibles para recuperar la terminal). Queda
+también en producción y nada pide confirmación: abrir DevTools y tipear ya es deliberado.
+`ui/console/pos-console.ts` es una capa fina con dependencias inyectadas, sin lógica propia:
+`help()`, `sync()` (= `/SINCRONIZAR`, `syncNow`), `status()` (= `/DIAGNOSTICO`: pantalla y consola
+leen la misma foto, `sync/diagnostics.ts::collectDiagnostics`), `outbox()`
+(`storage/local-data.ts::listPendingOutbox`, el mismo que usa el motor para armar un lote),
+`export()` y `reset()` (`sync/terminal-data.ts`). Las dos últimas trabajan sobre `db.tables` y
+todas las claves `offline-pos:*` de `localStorage` (por prefijo, nunca una lista a mano).
+`export()` descarga un JSON para soporte con las credenciales reemplazadas por `"***"` — cada
+conector marca las suyas con `ConfigField.secret`. `reset()` borra **también la config de
+`/CONFIG`** (a diferencia de `/DEMO_RESET`): equivale a perder el id de dispositivo, y sin él la
+terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync y recarga.
+`pos.deviceId()` se suma cuando exista el id de dispositivo (Etapas 1/2 de #94).
+
 ## UX keyboard-first
 
 Principio central: **un único input siempre enfocado** (la barra de comandos) — se elimina el

@@ -12,6 +12,7 @@ import {
   connectorPullMode,
   createConnector,
   toFieldValues,
+  secretConfigKeys,
 } from './connector-registry.ts';
 
 afterEach(() => {
@@ -212,5 +213,11 @@ describe('toFieldValues', () => {
     expect(
       Object.keys(toFieldValues({ type: 'google-sheets', webAppUrl: 'https://a.com' })),
     ).toEqual(connectorFields('google-sheets').map((field) => field.key));
+  });
+});
+
+describe('secretConfigKeys', () => {
+  it('junta las credenciales que marca cada conector', () => {
+    expect([...secretConfigKeys()].sort()).toEqual(['apiKey', 'sharedSecret']);
   });
 });

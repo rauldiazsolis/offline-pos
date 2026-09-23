@@ -12,4 +12,6 @@ export type ConfigField<K extends string = string> = {
   optional: boolean;
   /** Ejemplo de ayuda que muestra el campo vacío — nunca un valor por omisión (Etapa 2b: no se asume ninguna configuración). */
   placeholder: string;
+  /** Credencial (API key, secreto compartido): `pos.export()` la reemplaza por `"***"` en el volcado para soporte. */
+  secret?: boolean;
 };

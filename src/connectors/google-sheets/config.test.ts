@@ -67,6 +67,7 @@ describe('googleSheetsConfigFields', () => {
         label: 'Secreto compartido',
         optional: true,
         placeholder: 'Valor de SHARED_SECRET, si lo configuraste',
+        secret: true,
       },
     ]);
   });

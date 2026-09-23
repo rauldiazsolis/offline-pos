@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import './index.css';
 import { bootstrap } from './ui/bootstrap.ts';
+import { installPosConsole } from './ui/console/pos-console.ts';
 import { ErrorBoundary } from './ui/error-boundary.tsx';
 import { isBenignResizeObserverLoopError, renderFatalError } from './ui/fatal-error.ts';
 import { App } from './ui/app.tsx';
@@ -18,6 +19,7 @@ window.addEventListener('unhandledrejection', (event) => {
   renderFatalError(event.reason as unknown);
 });
 startViewportTracking();
+installPosConsole();
 
 const container = document.getElementById('app');
 if (!container) {
