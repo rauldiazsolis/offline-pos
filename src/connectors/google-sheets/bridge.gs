@@ -32,7 +32,12 @@
  * Estructura de cada pestaña: las CLAVES internas (estables: las usa la lógica y el payload), en el
  * orden con que se crea la pestaña, y el tipo de cada columna. Lo que ve el usuario (etiquetas de
  * columna y de valor) vive en columnas.gs. Cada entrada: [clave, tipo, opcional?].
- * Tipos: text | integer | number | percent | datetime.
+ * Tipos: text | integer | number | quantity | percent | datetime. `quantity` es una cantidad con signo
+ * y hasta 3 decimales (contrato v3: se vende por peso).
+ *
+ * Contrato v3 (#96): una pestaña que ya existía gana sola las columnas opcionales nuevas al final
+ * (ensureColumns) — así una planilla anterior se actualiza al redesplegar el puente. `Turnos` ya no
+ * está: el contrato no tiene cash-session; si la pestaña existía, queda como estaba.
  */
 var SCHEMA = {
   Productos: columns([
@@ -43,6 +48,9 @@ var SCHEMA = {
     ['price', 'number'],
     ['taxRate', 'percent'],
     ['category', 'text'],
+    ['createdAt', 'datetime', true],
+    ['blocked', 'text', true],
+    ['blockedReason', 'text', true],
   ]),
   Clientes: columns([
     ['id', 'text'],
@@ -50,6 +58,11 @@ var SCHEMA = {
     ['document', 'text', true],
     ['phone', 'text', true],
     ['createdAt', 'datetime'],
+    ['blocked', 'text', true],
+    ['blockedReason', 'text', true],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
   ]),
   Ventas: columns([
     ['saleId', 'text'],
@@ -59,7 +72,7 @@ var SCHEMA = {
     ['tipo', 'text'],
     ['productId', 'text'],
     ['descripcion', 'text'],
-    ['cantidad', 'number'],
+    ['cantidad', 'quantity'],
     ['precioUnitario', 'number'],
     ['descuentoTipo', 'text'],
     ['descuentoValor', 'number'],
@@ -68,6 +81,11 @@ var SCHEMA = {
     ['estado', 'text'],
     ['anuladaEn', 'datetime'],
     ['motivoAnulacion', 'text'],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
+    ['anulacionBranch', 'text', true],
+    ['anulacionPointOfSale', 'text', true],
   ]),
   Pagos: columns([
     ['saleId', 'text'],
@@ -76,6 +94,9 @@ var SCHEMA = {
     ['monto', 'number'],
     ['referencia', 'text'],
     ['estado', 'text'],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
   ]),
   CuentaCorriente: columns([
     ['fecha', 'datetime'],
@@ -83,22 +104,37 @@ var SCHEMA = {
     ['saleId', 'text'],
     ['customerId', 'text'],
     ['monto', 'number'],
+    ['customerPaymentId', 'text', true],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
   ]),
-  Turnos: columns([
-    ['sessionId', 'text'],
-    ['abiertoEn', 'datetime'],
-    ['cerradoEn', 'datetime'],
-    ['aperturaEfectivo', 'number'],
-    ['contadoEfectivo', 'number'],
-    ['ventas', 'integer'],
-    ['cash', 'number'],
-    ['debit', 'number'],
-    ['credit', 'number'],
-    ['transfer', 'number'],
-    ['qr', 'number'],
-    ['account', 'number'],
-    ['efectivoEsperado', 'number'],
-    ['diferencia', 'number'],
+  // Contrato v3 (#96): ingresos/egresos de caja, incluido el ajuste por arqueo.
+  MovimientosCaja: columns([
+    ['movementId', 'text'],
+    ['fecha', 'datetime'],
+    ['direccion', 'text'],
+    ['monto', 'number'],
+    ['concepto', 'text'],
+    ['descripcion', 'text', true],
+    ['origenMovimiento', 'text'],
+    ['esperado', 'number', true],
+    ['contado', 'number', true],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
+  ]),
+  // Contrato v3 (#96): cobranzas sin venta, una fila por medio de pago.
+  Cobranzas: columns([
+    ['customerPaymentId', 'text'],
+    ['fecha', 'datetime'],
+    ['customerId', 'text'],
+    ['medio', 'text'],
+    ['monto', 'number'],
+    ['totalCobranza', 'number'],
+    ['deviceId', 'text', true],
+    ['branch', 'text', true],
+    ['pointOfSale', 'text', true],
   ]),
   // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
   // Idempotencia + estado consultable por LOTE de push (antes por evento, #87).
@@ -107,6 +143,7 @@ var SCHEMA = {
     ['status', 'text'],
     ['issues', 'text', true],
     ['at', 'text'],
+    ['deviceId', 'text', true],
   ]),
   // Fingerprint por fila de Productos/Clientes, para poder ofrecer un cursor de pull real sin
   // depender de un trigger onEdit (#87) — ver comentario de `trackChanges` más abajo.
@@ -268,6 +305,7 @@ var NUMBER_FORMATS = {
   text: '@',
   integer: '0',
   number: '#,##0.00',
+  quantity: '#,##0.###',
   percent: '0.0%',
   datetime: 'dd/mm/yyyy hh:mm',
 };
@@ -290,9 +328,54 @@ function validationFor(column) {
 function ensureSheetsExist() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(SCHEMA).forEach(function (name) {
-    if (!spreadsheet.getSheetByName(name)) {
+    var sheet = spreadsheet.getSheetByName(name);
+    if (!sheet) {
       createSheet(spreadsheet, name);
+    } else {
+      ensureColumns(sheet, name);
     }
+  });
+}
+
+/**
+ * Agrega al final de una pestaña existente las columnas OPCIONALES del SCHEMA que le faltan
+ * (contrato v3, #96): así una planilla anterior se actualiza sola al redesplegar el puente, sin
+ * tocar datos. Una requerida que falta no se agrega: sigue siendo el error claro de headerMap (una
+ * columna Precio vacía haría viajar productos a $0). La columna nueva lleva formato y validación en
+ * la fila plantilla (2) según su tipo, igual que createSheet. Se reconoce por etiqueta o clave.
+ */
+function ensureColumns(sheet, name) {
+  var width = Math.max(sheet.getLastColumn(), 1);
+  var present = {};
+  sheet
+    .getRange(1, 1, 1, width)
+    .getValues()[0]
+    .forEach(function (cell) {
+      present[normalize(cell)] = true;
+    });
+  var missing = SCHEMA[name].filter(function (column) {
+    return (
+      column.optional &&
+      !present[normalize(column.key)] &&
+      !present[normalize(COLUMN_LABELS[name][column.key])]
+    );
+  });
+  if (missing.length === 0) {
+    return;
+  }
+  var needed = width + missing.length - sheet.getMaxColumns();
+  if (needed > 0) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), needed);
+  }
+  if (sheet.getMaxRows() < 2) {
+    sheet.insertRowsAfter(1, 1);
+  }
+  missing.forEach(function (column, index) {
+    var position = width + index + 1;
+    sheet.getRange(1, position).setValue(COLUMN_LABELS[name][column.key]).setFontWeight('bold');
+    var template = sheet.getRange(2, position);
+    template.setNumberFormat(NUMBER_FORMATS[column.type]);
+    template.setDataValidations([[validationFor(column)]]);
   });
 }
 
@@ -542,18 +625,17 @@ function pushBatchAction(payload, idempotencyKey) {
   if (findLot(idempotencyKey)) {
     return {};
   }
+  // Contrato v3 (#96): el dispositivo viaja una vez por lote; el origen, en cada evento.
+  var deviceId = payload.deviceId || '';
   var issues = [];
   (payload.events || []).forEach(function (event) {
     try {
-      applyBatchEvent(event);
+      applyBatchEvent(event, stampOf(deviceId, event));
     } catch (error) {
-      issues.push(
-        (event.type || '?') +
-          ' ' +
-          (event.id || '') +
-          ': ' +
-          (error && error.message ? error.message : String(error)),
-      );
+      issues.push({
+        message: (event.type || '?') + ': ' + (error && error.message ? error.message : String(error)),
+        eventId: event.id,
+      });
     }
   });
   appendObjects('_PushLots', [
@@ -562,35 +644,53 @@ function pushBatchAction(payload, idempotencyKey) {
       status: issues.length > 0 ? 'issues' : 'ok',
       issues: issues.length > 0 ? JSON.stringify(issues) : '',
       at: new Date().toISOString(),
+      deviceId: deviceId,
     },
   ]);
   return {};
 }
 
-/** Aplica un evento de outbox — mismo despacho que `demo-backend/src/routes/sync.ts`. */
-function applyBatchEvent(event) {
+/** Columnas de identidad de un evento (contrato v3): dispositivo del lote, origen del evento. */
+function stampOf(deviceId, event) {
+  var origin = event.origin || {};
+  return { deviceId: deviceId, branch: origin.branch, pointOfSale: origin.pointOfSale };
+}
+
+function withStamp(object, stamp) {
+  return Object.assign({}, object, stamp);
+}
+
+/**
+ * Aplica un evento de outbox — mismo despacho que `demo-backend/src/lots.ts`. Un tipo que el
+ * contrato v3 no tiene (p. ej. un `cash-session` viejo) lanza: queda como issue del lote con su
+ * eventId, sin tumbar el resto.
+ */
+function applyBatchEvent(event, stamp) {
   switch (event.type) {
     case 'sale':
-      pushSale({ sale: event.sale });
+      pushSale(event.sale, stamp);
       return;
     case 'sale-void':
-      pushSaleVoid({ saleId: event.saleId, voidedAt: event.voidedAt, voidReason: event.voidReason });
+      pushSaleVoid(event, stamp);
       return;
     case 'customer':
-      pushCustomer({ customer: event.customer });
+      pushCustomer(event.customer, stamp);
       return;
     case 'account-hold-confirm':
-      pushAccountHoldConfirm({ holdId: event.holdId, saleId: event.saleId });
+      pushAccountHoldConfirm(event, stamp);
       return;
-    case 'cash-session':
-      pushCashSession({ session: event.session });
+    case 'cash-movement':
+      pushCashMovement(event.movement, stamp);
+      return;
+    case 'customer-payment':
+      pushCustomerPayment(event.payment, stamp);
       return;
     case 'stock-movement':
     case 'account-hold-release':
       // No-ops de este conector: ver README ("Qué hace cada operación").
       return;
     default:
-      throw new Error('Tipo de evento de outbox desconocido: ' + event.type);
+      throw new Error('Tipo de evento desconocido para el contrato v3: ' + event.type);
   }
 }
 
@@ -661,13 +761,38 @@ function nextTimestamp() {
   return now;
 }
 
+/**
+ * Alta de la fila como ISO (contrato v3: obligatoria en el pull). Si la celda está vacía la completa
+ * ahora y queda fija en la planilla. Al segundo, porque es lo que conserva una celda de fecha.
+ */
+function createdAtOf(name, row, now) {
+  if (Object.prototype.toString.call(row.createdAt) === '[object Date]') {
+    return row.createdAt.toISOString();
+  }
+  if (row.createdAt !== '' && row.createdAt !== undefined && row.createdAt !== null) {
+    return String(row.createdAt);
+  }
+  setCells(name, row._row, { createdAt: now });
+  return now;
+}
+
+/** Bloqueo informativo: "Sí" en Bloqueado, con el motivo (puede quedar vacío). */
+function blockedOf(row) {
+  return row.blocked === 'yes' ? { reason: String(row.blockedReason || '') } : undefined;
+}
+
+function nowToTheSecond() {
+  return new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
+}
+
 function pullProducts() {
+  var now = nowToTheSecond();
   return readRows('Productos')
     .filter(function (row) {
       return row.id !== '' && row.name !== '' && !isNaN(Number(row.price));
     })
     .map(function (row) {
-      return {
+      var product = {
         id: String(row.id),
         sku: String(row.sku),
         barcodes: String(row.barcodes)
@@ -682,11 +807,18 @@ function pullProducts() {
         price: Number(row.price),
         taxRate: Number(row.taxRate),
         category: String(row.category),
+        createdAt: createdAtOf('Productos', row, now),
       };
+      var blocked = blockedOf(row);
+      if (blocked !== undefined) {
+        product.blocked = blocked;
+      }
+      return product;
     });
 }
 
 function pullCustomers() {
+  var now = nowToTheSecond();
   return readRows('Clientes')
     .filter(function (row) {
       return row.id !== '' && row.name !== '';
@@ -697,6 +829,8 @@ function pullCustomers() {
         name: String(row.name),
         document: String(row.document),
         phone: String(row.phone),
+        createdAt: createdAtOf('Clientes', row, now),
+        blocked: blockedOf(row),
       });
     });
 }
@@ -738,7 +872,13 @@ function pullBatchAction(payload) {
     if (row !== undefined) {
       lots[id] =
         row.status === 'issues'
-          ? { status: 'issues', issues: JSON.parse(String(row.issues || '[]')) }
+          ? {
+              status: 'issues',
+              // Un lote registrado antes de v3 guardaba los avisos como texto.
+              issues: JSON.parse(String(row.issues || '[]')).map(function (issue) {
+                return typeof issue === 'string' ? { message: issue } : issue;
+              }),
+            }
           : { status: row.status };
     }
   });
@@ -747,42 +887,60 @@ function pullBatchAction(payload) {
 
 // ---------------------------------------------------------------- pushes
 
-function pushSale(payload) {
-  var sale = payload.sale;
+function pushSale(sale, stamp) {
   if (!sale || !sale.id) {
     throw new Error('Falta sale');
   }
   var lines = sale.lines.map(function (line, index) {
     var discount = line.discount || {};
-    return {
-      saleId: sale.id,
-      fecha: sale.createdAt,
-      customerId: sale.customerId,
-      linea: index + 1,
-      tipo: line.kind,
-      productId: line.productId,
-      descripcion: line.description,
-      cantidad: line.qty,
-      precioUnitario: line.unitPrice,
-      descuentoTipo: discount.type,
-      descuentoValor: discount.value,
-      totalVenta: sale.total,
-      ajusteGlobalPct: sale.globalAdjustmentPercentage,
-      estado: 'cerrada',
-    };
+    return withStamp(
+      {
+        saleId: sale.id,
+        fecha: sale.createdAt,
+        customerId: sale.customerId,
+        linea: index + 1,
+        tipo: line.kind,
+        productId: line.productId,
+        descripcion: line.description,
+        cantidad: line.qty,
+        precioUnitario: line.unitPrice,
+        descuentoTipo: discount.type,
+        descuentoValor: discount.value,
+        totalVenta: sale.total,
+        ajusteGlobalPct: sale.globalAdjustmentPercentage,
+        estado: 'cerrada',
+      },
+      stamp,
+    );
   });
   var payments = sale.payments.map(function (payment) {
-    return {
-      saleId: sale.id,
-      fecha: sale.createdAt,
-      medio: payment.method,
-      monto: payment.amount,
-      referencia: payment.reference,
-      estado: 'cerrada',
-    };
+    return withStamp(
+      {
+        saleId: sale.id,
+        fecha: sale.createdAt,
+        medio: payment.method,
+        monto: payment.amount,
+        referencia: payment.reference,
+        estado: 'cerrada',
+      },
+      stamp,
+    );
   });
+  // CuentaCorriente es el libro completo: un pago a cuenta SIN hold (fiado offline, o acreditación
+  // si es negativo) entra acá directo, con su signo; uno con hold entra al confirmarse el hold.
+  var ledger = sale.payments
+    .filter(function (payment) {
+      return payment.method === 'account' && !payment.reference;
+    })
+    .map(function (payment) {
+      return withStamp(
+        { fecha: sale.createdAt, saleId: sale.id, customerId: sale.customerId, monto: payment.amount },
+        stamp,
+      );
+    });
   appendObjects('Ventas', lines);
   appendObjects('Pagos', payments);
+  appendObjects('CuentaCorriente', ledger);
 }
 
 /** Marca (no borra, RNF-07) las filas de una venta; devuelve cuántas encontró. */
@@ -797,11 +955,13 @@ function markSaleRows(sheetName, saleId, values) {
   return count;
 }
 
-function pushSaleVoid(payload) {
+function pushSaleVoid(payload, stamp) {
   var found = markSaleRows('Ventas', payload.saleId, {
     estado: 'anulada',
     anuladaEn: payload.voidedAt,
     motivoAnulacion: payload.voidReason,
+    anulacionBranch: stamp.branch,
+    anulacionPointOfSale: stamp.pointOfSale,
   });
   if (found === 0) {
     // La venta todavía no llegó: el motor de sync reintenta con backoff.
@@ -810,19 +970,21 @@ function pushSaleVoid(payload) {
   markSaleRows('Pagos', payload.saleId, { estado: 'anulada' });
 }
 
-function pushCustomer(payload) {
-  var customer = payload.customer;
+function pushCustomer(customer, stamp) {
   if (!customer || !customer.id) {
     throw new Error('Falta customer');
   }
   appendObjects('Clientes', [
-    {
-      id: customer.id,
-      name: customer.name,
-      document: customer.document,
-      phone: customer.phone,
-      createdAt: customer.createdAt,
-    },
+    withStamp(
+      {
+        id: customer.id,
+        name: customer.name,
+        document: customer.document,
+        phone: customer.phone,
+        createdAt: customer.createdAt,
+      },
+      stamp,
+    ),
   ]);
 }
 
@@ -830,7 +992,7 @@ function pushCustomer(payload) {
  * Ledger de fiado. El POS solo manda { holdId, saleId }: el cliente sale de la
  * fila de Ventas y el monto de la fila de Pagos (medio "account") de esa venta.
  */
-function pushAccountHoldConfirm(payload) {
+function pushAccountHoldConfirm(payload, stamp) {
   var saleId = payload.saleId;
   var saleRow = readRows('Ventas').filter(function (row) {
     return String(row.saleId) === saleId;
@@ -842,57 +1004,73 @@ function pushAccountHoldConfirm(payload) {
     throw new Error('Venta a cuenta no encontrada: ' + saleId);
   }
   appendObjects('CuentaCorriente', [
-    {
-      fecha: new Date().toISOString(),
-      holdId: payload.holdId,
-      saleId: saleId,
-      customerId: String(saleRow.customerId),
-      monto: Number(paymentRow.monto),
-    },
+    withStamp(
+      {
+        fecha: new Date().toISOString(),
+        holdId: payload.holdId,
+        saleId: saleId,
+        customerId: String(saleRow.customerId),
+        monto: Number(paymentRow.monto),
+      },
+      stamp,
+    ),
   ]);
 }
 
-/**
- * Resumen de un turno cerrado. Suma Pagos de las ventas del turno con estado
- * "cerrada" (las anuladas no cuentan), igual que
- * domain/cash-session.ts::calculateCashSessionSummary en el POS.
- */
-function pushCashSession(payload) {
-  var session = payload.session;
-  if (!session || !session.id) {
-    throw new Error('Falta session');
+/** Ingreso/egreso de caja (contrato v3); el ajuste por arqueo lleva lo esperado y lo contado. */
+function pushCashMovement(movement, stamp) {
+  if (!movement || !movement.id) {
+    throw new Error('Falta movement');
   }
-  var inSession = {};
-  session.sales.forEach(function (id) {
-    inSession[id] = true;
-  });
-  var totals = { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 };
-  var countedSales = {};
-  readRows('Pagos').forEach(function (row) {
-    var saleId = String(row.saleId);
-    if (inSession[saleId] && row.estado === 'cerrada' && totals[row.medio] !== undefined) {
-      totals[row.medio] += Number(row.monto);
-      countedSales[saleId] = true;
-    }
-  });
-  var expectedCash = session.openingAmount + totals.cash;
-  var counted = session.closingAmount;
-  appendObjects('Turnos', [
-    {
-      sessionId: session.id,
-      abiertoEn: session.openedAt,
-      cerradoEn: session.closedAt,
-      aperturaEfectivo: session.openingAmount,
-      contadoEfectivo: counted,
-      ventas: Object.keys(countedSales).length,
-      cash: totals.cash,
-      debit: totals.debit,
-      credit: totals.credit,
-      transfer: totals.transfer,
-      qr: totals.qr,
-      account: totals.account,
-      efectivoEsperado: expectedCash,
-      diferencia: counted === undefined ? undefined : counted - expectedCash,
-    },
+  var count = movement.count || {};
+  appendObjects('MovimientosCaja', [
+    withStamp(
+      {
+        movementId: movement.id,
+        fecha: movement.createdAt,
+        direccion: movement.direction,
+        monto: movement.amount,
+        concepto: movement.concept,
+        descripcion: movement.description,
+        origenMovimiento: movement.source,
+        esperado: count.expected,
+        contado: count.counted,
+      },
+      stamp,
+    ),
+  ]);
+}
+
+/** Una fila por medio en Cobranzas y el total en negativo en el libro de CuentaCorriente. */
+function pushCustomerPayment(payment, stamp) {
+  if (!payment || !payment.id) {
+    throw new Error('Falta payment');
+  }
+  appendObjects(
+    'Cobranzas',
+    payment.payments.map(function (line) {
+      return withStamp(
+        {
+          customerPaymentId: payment.id,
+          fecha: payment.createdAt,
+          customerId: payment.customerId,
+          medio: line.method,
+          monto: line.amount,
+          totalCobranza: payment.total,
+        },
+        stamp,
+      );
+    }),
+  );
+  appendObjects('CuentaCorriente', [
+    withStamp(
+      {
+        fecha: payment.createdAt,
+        customerId: payment.customerId,
+        monto: -payment.total,
+        customerPaymentId: payment.id,
+      },
+      stamp,
+    ),
   ]);
 }
