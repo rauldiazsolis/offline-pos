@@ -74,7 +74,11 @@ async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
 
     const current = await db.customerAccounts.get(customerId);
     if (current !== undefined) {
-      await db.customerAccounts.put({ ...current, balance: current.balance + movement.amount, updatedAt: now });
+      await db.customerAccounts.put({
+        ...current,
+        balance: current.balance + movement.amount,
+        updatedAt: now,
+      });
     }
   }
 }

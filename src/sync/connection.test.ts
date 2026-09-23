@@ -86,9 +86,11 @@ describe('probeConnection', () => {
   });
 
   it('pide sin cursores y sin lotes de interés — un candidato nuevo no tiene lotes en vuelo', async () => {
-    const pullBatch = vi.fn().mockResolvedValue(
-      ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
-    );
+    const pullBatch = vi
+      .fn()
+      .mockResolvedValue(
+        ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      );
 
     await probeConnection(config, { connector: fakeConnector({ pullBatch }) });
 
@@ -111,7 +113,13 @@ describe('probeConnection', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: () => Promise.resolve({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+        json: () =>
+          Promise.resolve({
+            products: { items: [] },
+            customers: { items: [] },
+            stock: [],
+            lots: {},
+          }),
       } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -129,7 +137,9 @@ describe('probeConnection — convivencia con el motor de sync', () => {
     const release = tryAcquireSyncLock();
     if (release === undefined) throw new Error('el cerrojo debería estar libre');
     const pullBatch = vi.fn(() =>
-      Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} })),
+      Promise.resolve(
+        ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      ),
     );
 
     const probing = probeConnection(config, { connector: fakeConnector({ pullBatch }) });
@@ -148,7 +158,9 @@ describe('probeConnection — convivencia con el motor de sync', () => {
     const connector = fakeConnector({
       pullBatch: () => {
         lockDuringProbe = tryAcquireSyncLock();
-        return Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }));
+        return Promise.resolve(
+          ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+        );
       },
     });
 
@@ -173,7 +185,9 @@ describe('probeConnection — convivencia con el motor de sync', () => {
     const release = tryAcquireSyncLock();
     if (release === undefined) throw new Error('el cerrojo debería estar libre');
     const pullBatch = vi.fn(() =>
-      Promise.resolve(ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} })),
+      Promise.resolve(
+        ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      ),
     );
 
     const result = await probeConnection(config, {

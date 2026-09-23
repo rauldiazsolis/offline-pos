@@ -20,7 +20,12 @@ async function routeRestBackend(page: Page): Promise<void> {
       path === '/sync/pull'
         ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
         : {};
-    await route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(body) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: CORS,
+      body: JSON.stringify(body),
+    });
   });
 }
 

@@ -57,7 +57,10 @@ describe('pushBatch', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.example.com/sync/push');
     expect(init.method).toBe('POST');
-    expect(init.headers).toMatchObject({ 'Idempotency-Key': 'lot-1', Authorization: 'Bearer secret-key' });
+    expect(init.headers).toMatchObject({
+      'Idempotency-Key': 'lot-1',
+      Authorization: 'Bearer secret-key',
+    });
     expect(init.body).toBe(JSON.stringify({ events: items }));
   });
 
@@ -102,7 +105,10 @@ describe('pullBatch', () => {
     vi.stubGlobal('fetch', fetchMock);
     const connector = createRestFetchConnector(config);
 
-    const result = await connector.pullBatch({ cursors: { products: 'cur-viejo' }, pendingLotIds: ['lot-1'] });
+    const result = await connector.pullBatch({
+      cursors: { products: 'cur-viejo' },
+      pendingLotIds: ['lot-1'],
+    });
 
     expect(result).toEqual({
       ok: true,
@@ -147,7 +153,10 @@ describe('pullBatch', () => {
   });
 
   it('devuelve sync/invalid-payload si la respuesta no matchea el schema', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ products: { items: [{ id: 'p1' }] } })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ products: { items: [{ id: 'p1' }] } })),
+    );
     const connector = createRestFetchConnector(config);
 
     const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });

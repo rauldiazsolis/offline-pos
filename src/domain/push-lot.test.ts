@@ -34,7 +34,10 @@ describe('markLotFailed', () => {
   it('suma un reintento, guarda el error y calcula el próximo intento con backoff', () => {
     const lot = buildPushLot(['e1'], { id: 'lot-1', now: '2026-01-01T00:00:00.000Z' });
 
-    const failed = markLotFailed(lot, { now: '2026-01-01T00:00:00.000Z', error: 'sync/request-failed' });
+    const failed = markLotFailed(lot, {
+      now: '2026-01-01T00:00:00.000Z',
+      error: 'sync/request-failed',
+    });
 
     expect(failed.retries).toBe(1);
     expect(failed.lastError).toBe('sync/request-failed');
@@ -46,10 +49,13 @@ describe('markLotFailed', () => {
 
 describe('isLotDue', () => {
   it('true si nextAttemptAt ya pasó, false si es futuro', () => {
-    const lot = markLotFailed(buildPushLot(['e1'], { id: 'lot-1', now: '2026-01-01T00:00:00.000Z' }), {
-      now: '2026-01-01T00:00:00.000Z',
-      error: 'x',
-    });
+    const lot = markLotFailed(
+      buildPushLot(['e1'], { id: 'lot-1', now: '2026-01-01T00:00:00.000Z' }),
+      {
+        now: '2026-01-01T00:00:00.000Z',
+        error: 'x',
+      },
+    );
 
     expect(isLotDue(lot, '2026-01-01T00:00:01.000Z')).toBe(false); // backoff de 2s todavía no pasó
     expect(isLotDue(lot, '2026-01-01T00:00:02.500Z')).toBe(true);

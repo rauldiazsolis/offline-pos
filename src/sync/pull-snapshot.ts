@@ -36,7 +36,9 @@ export function toProbeSnapshot(result: PullBatchResult): ProbeSnapshot {
     customers: result.customers.items,
     cursors: {
       ...(result.products.nextCursor !== undefined ? { products: result.products.nextCursor } : {}),
-      ...(result.customers.nextCursor !== undefined ? { customers: result.customers.nextCursor } : {}),
+      ...(result.customers.nextCursor !== undefined
+        ? { customers: result.customers.nextCursor }
+        : {}),
     },
   };
 }

@@ -1,6 +1,12 @@
 import { splitConnectorCustomers } from '../domain/customer.ts';
 import { markSynced, type OutboxEvent } from '../domain/outbox.ts';
-import { buildPushLot, isLotDue, isPushStruggling, markLotFailed, type PushLot } from '../domain/push-lot.ts';
+import {
+  buildPushLot,
+  isLotDue,
+  isPushStruggling,
+  markLotFailed,
+  type PushLot,
+} from '../domain/push-lot.ts';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
@@ -64,7 +70,12 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
     case 'customer':
       return { type: 'customer', id: event.id, customer: event.customer };
     case 'account-hold-confirm':
-      return { type: 'account-hold-confirm', id: event.id, holdId: event.holdId, saleId: event.saleId };
+      return {
+        type: 'account-hold-confirm',
+        id: event.id,
+        holdId: event.holdId,
+        saleId: event.saleId,
+      };
     case 'account-hold-release':
       return { type: 'account-hold-release', id: event.id, holdId: event.holdId };
     case 'cash-session':
@@ -85,7 +96,12 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
  * log; `sync/pending-lot` es el descarte esperado del diseño (ver spec de
  * #87), no un problema, así que va a `console.info` en vez de `console.error`.
  */
-function logSyncAttempt(kind: 'push' | 'pull', now: string, request: unknown, result: Result<unknown>): void {
+function logSyncAttempt(
+  kind: 'push' | 'pull',
+  now: string,
+  request: unknown,
+  result: Result<unknown>,
+): void {
   const entry: SyncLogEntry = {
     at: now,
     kind,
@@ -108,7 +124,9 @@ function logSyncAttempt(kind: 'push' | 'pull', now: string, request: unknown, re
  * recalcula en un reintento) o arma uno nuevo con todo lo pendiente del
  * outbox, en orden `createdAt`. `undefined` si no hay nada que enviar.
  */
-async function buildOrResumeLot(now: string): Promise<{ lot: PushLot; events: OutboxEvent[] } | undefined> {
+async function buildOrResumeLot(
+  now: string,
+): Promise<{ lot: PushLot; events: OutboxEvent[] } | undefined> {
   const existing = getCurrentPushLot();
   if (existing !== undefined) {
     const events = (await db.outbox.bulkGet(existing.eventIds)).filter(
@@ -125,7 +143,10 @@ async function buildOrResumeLot(now: string): Promise<{ lot: PushLot; events: Ou
   if (pending.length === 0) {
     return undefined;
   }
-  const lot = buildPushLot(pending.map((event) => event.id), { id: newId(), now });
+  const lot = buildPushLot(
+    pending.map((event) => event.id),
+    { id: newId(), now },
+  );
   setCurrentPushLot(lot);
   return { lot, events: pending };
 }
@@ -207,7 +228,9 @@ async function pullAndApply(
   // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87): un backend
   // colgado en un delta normal no justificaba la complejidad extra, la foto completa sí porque
   // puede tardar mucho más y correr menos seguido.
-  const pullResult = options.full ? await withTimeout(pullPromise, FULL_REFRESH_TIMEOUT_MS) : await pullPromise;
+  const pullResult = options.full
+    ? await withTimeout(pullPromise, FULL_REFRESH_TIMEOUT_MS)
+    : await pullPromise;
   if (!pullResult.ok) {
     return { applied: false, failure: pullResult, issues: [], request };
   }
@@ -229,7 +252,12 @@ async function pullAndApply(
   resolveAwaitingLots(resolved);
 
   if (stillPending) {
-    return { applied: false, failure: err('sync/pending-lot', undefined) as Failure, issues, request };
+    return {
+      applied: false,
+      failure: err('sync/pending-lot', undefined) as Failure,
+      issues,
+      request,
+    };
   }
 
   if (options.full) {
@@ -270,7 +298,9 @@ async function pullAndApply(
     await db.stock.bulkPut(pullResult.value.stock);
   }
   if (pullResult.value.customers.items.length > 0) {
-    const { customers, accounts } = splitConnectorCustomers(pullResult.value.customers.items, { now });
+    const { customers, accounts } = splitConnectorCustomers(pullResult.value.customers.items, {
+      now,
+    });
     await db.customers.bulkPut(customers);
     if (accounts.length > 0) {
       await db.customerAccounts.bulkPut(accounts);
@@ -289,7 +319,10 @@ async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Resul
   setLocalCatalogCounts(await countLocalCatalog());
   setPushLotIssues(outcome.issues.length > 0 ? outcome.issues : null);
   if (outcome.issues.length > 0) {
-    console.warn('[sync] el backend reportó issues en un lote de push ya confirmado', outcome.issues);
+    console.warn(
+      '[sync] el backend reportó issues en un lote de push ya confirmado',
+      outcome.issues,
+    );
   }
   logSyncAttempt('pull', now, outcome.request, outcome.failure ?? ok(undefined));
 

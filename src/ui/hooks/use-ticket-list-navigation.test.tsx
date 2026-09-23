@@ -59,7 +59,10 @@ function TestHarness({
               Object.defineProperty(el, 'offsetHeight', { value: h, configurable: true });
               const header = document.createElement('div');
               header.className = 'ticket__header';
-              Object.defineProperty(header, 'offsetHeight', { value: headerHeight, configurable: true });
+              Object.defineProperty(header, 'offsetHeight', {
+                value: headerHeight,
+                configurable: true,
+              });
               el.appendChild(header);
             }
           }}
@@ -80,7 +83,9 @@ describe('useTicketListNavigation', () => {
 
     const seen = new Set([selectedIndex.value]);
     for (let i = 0; i < 30; i++) {
-      container.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      container.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
       seen.add(selectedIndex.value);
     }
 
@@ -90,10 +95,14 @@ describe('useTicketListNavigation', () => {
 
   it('PageDown salta directo al siguiente índice', () => {
     const selectedIndex = signal(0);
-    const { getByTestId } = render(<TestHarness heights={[400, 400, 400]} selectedIndex={selectedIndex} />);
+    const { getByTestId } = render(
+      <TestHarness heights={[400, 400, 400]} selectedIndex={selectedIndex} />,
+    );
     const container = getByTestId('container');
 
-    container.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, cancelable: true }));
+    container.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, cancelable: true }),
+    );
 
     expect(selectedIndex.value).toBe(1);
   });
@@ -107,7 +116,9 @@ describe('useTicketListNavigation', () => {
     const container = getByTestId('container');
 
     for (let i = 0; i < 15; i++) {
-      container.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      container.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }),
+      );
     }
 
     expect(selectedIndex.value).toBe(2);
@@ -117,10 +128,18 @@ describe('useTicketListNavigation', () => {
     const selectedIndex = signal(0);
     let handled: boolean | undefined;
     const { getByTestId } = render(
-      <TestHarness heights={[400]} selectedIndex={selectedIndex} onKeyDownResult={(h) => { handled = h; }} />,
+      <TestHarness
+        heights={[400]}
+        selectedIndex={selectedIndex}
+        onKeyDownResult={(h) => {
+          handled = h;
+        }}
+      />,
     );
 
-    getByTestId('container').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }));
+    getByTestId('container').dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true }),
+    );
 
     expect(handled).toBe(false);
   });

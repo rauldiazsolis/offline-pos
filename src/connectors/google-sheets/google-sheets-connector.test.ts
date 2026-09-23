@@ -120,16 +120,21 @@ describe('pullBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pullBatch',
-      payload: { cursors: { products: 'cursor-p', customers: 'cursor-c' }, pendingLotIds: ['lot-1'] },
+      payload: {
+        cursors: { products: 'cursor-p', customers: 'cursor-c' },
+        pendingLotIds: ['lot-1'],
+      },
     });
   });
 
   it('sin nextCursor en la respuesta, no lo agrega (exactOptionalPropertyTypes)', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        bridgeOk({ products: { items: [] }, customers: { items: [] }, lots: {} }),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          bridgeOk({ products: { items: [] }, customers: { items: [] }, lots: {} }),
+        ),
     );
     const connector = createGoogleSheetsConnector(config);
 
@@ -168,9 +173,11 @@ describe('pullBatch', () => {
   it('devuelve sync/invalid-payload si un producto no cumple el schema', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        bridgeOk({ products: { items: [{ id: 'p1' }] }, customers: { items: [] }, lots: {} }),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          bridgeOk({ products: { items: [{ id: 'p1' }] }, customers: { items: [] }, lots: {} }),
+        ),
     );
     const connector = createGoogleSheetsConnector(config);
 
@@ -234,7 +241,13 @@ describe('pushBatch', () => {
       {
         type: 'stock-movement',
         id: 'm1',
-        movement: { id: 'm1', productId: 'p1', delta: -1, reason: 'sale', createdAt: '2026-01-01T00:00:00.000Z' },
+        movement: {
+          id: 'm1',
+          productId: 'p1',
+          delta: -1,
+          reason: 'sale',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
       },
     ];
 

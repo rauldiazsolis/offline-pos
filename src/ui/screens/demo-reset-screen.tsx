@@ -53,8 +53,8 @@ export function DemoResetScreen() {
         }}
       >
         <p style={{ margin: '0 0 var(--space-2)' }}>
-          Esto borra catálogo, stock, clientes, ventas, turnos de caja y el outbox pendiente de
-          esta terminal, y vuelve a sembrar el catálogo y los clientes de ejemplo. La conexión
+          Esto borra catálogo, stock, clientes, ventas, turnos de caja y el outbox pendiente de esta
+          terminal, y vuelve a sembrar el catálogo y los clientes de ejemplo. La conexión
           configurada en /CONFIG no se toca.
         </p>
         <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>

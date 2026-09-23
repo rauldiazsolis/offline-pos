@@ -1,0 +1,4 @@
+# Commits de solo formato; GitHub los omite en blame.
+# Local: git config blame.ignoreRevsFile .git-blame-ignore-revs
+# pnpm format sobre todo el repo
+7cf120be9cd089436a9f478c9285bb5154d57f02

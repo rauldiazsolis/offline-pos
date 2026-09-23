@@ -14,7 +14,10 @@ export type IndexListNavigation = {
  * lista. El propio componente que consume esto (`useScrollSelectedIntoView`) se encarga de que la
  * fila elegida quede visible.
  */
-export function useIndexListNavigation(selectedIndex: Signal<number | null>, count: number): IndexListNavigation {
+export function useIndexListNavigation(
+  selectedIndex: Signal<number | null>,
+  count: number,
+): IndexListNavigation {
   function move(delta: number): void {
     if (count === 0) return;
     const current = selectedIndex.value ?? -1;

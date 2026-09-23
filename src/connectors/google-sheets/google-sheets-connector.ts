@@ -59,7 +59,10 @@ export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connect
     async pullBatch(params: PullBatchParams): Promise<Result<PullBatchResult>> {
       const result = await callBridge(
         config,
-        { action: 'pullBatch', payload: { cursors: params.cursors, pendingLotIds: params.pendingLotIds } },
+        {
+          action: 'pullBatch',
+          payload: { cursors: params.cursors, pendingLotIds: params.pendingLotIds },
+        },
         pullBatchDataSchema,
       );
       if (!result.ok) {

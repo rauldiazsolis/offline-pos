@@ -4,12 +4,21 @@ import type { PaymentMethod } from '../../domain/sale.ts';
 import { calculateTotals } from '../../domain/totals.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
-import { amountTendered, cancelCheckout, changePreview, submitCheckout } from '../keyboard/checkout-controller.ts';
+import {
+  amountTendered,
+  cancelCheckout,
+  changePreview,
+  submitCheckout,
+} from '../keyboard/checkout-controller.ts';
 import { remapDecimalKey } from '../keyboard/decimal-key.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
-import { checkoutBuffersSignal, checkoutErrorSignal, TENDERABLE_METHODS } from '../state/checkout.ts';
+import {
+  checkoutBuffersSignal,
+  checkoutErrorSignal,
+  TENDERABLE_METHODS,
+} from '../state/checkout.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 
 const overlayStyle = {
@@ -165,12 +174,20 @@ export function CheckoutScreen() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div style={cardStyle}>
               <div style={sectionLabelStyle}>Total a pagar</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xl)', fontWeight: 'bold' }}>
+              <div
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--font-size-xl)',
+                  fontWeight: 'bold',
+                }}
+              >
                 {formatMoney(totals.total)}
               </div>
               <div style={rowStyle}>
                 <span>Cantidad de ítems</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{cartSignal.value.lines.length}</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {cartSignal.value.lines.length}
+                </span>
               </div>
               <div style={rowStyle}>
                 <span>Suma de pagos</span>
@@ -200,7 +217,14 @@ export function CheckoutScreen() {
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 'var(--space-3)',
+          }}
+        >
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
             Ctrl+Enter para confirmar, Esc para cancelar.
             {!hasCustomer && ' Adjuntá un cliente con @ para habilitar cuenta corriente.'}

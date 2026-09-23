@@ -22,8 +22,7 @@ function logAttempt(db: DatabaseSync, payload: unknown): void {
 
 function getCustomer(db: DatabaseSync, customerId: string): CustomerAccountPayload | undefined {
   const row = db.prepare('SELECT payload FROM customers WHERE id = ?').get(customerId) as
-    | { payload: string }
-    | undefined;
+    { payload: string } | undefined;
   return row === undefined ? undefined : (JSON.parse(row.payload) as CustomerAccountPayload);
 }
 

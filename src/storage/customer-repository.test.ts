@@ -1,7 +1,11 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from './db.ts';
-import { createCustomerLocally, loadCustomerRepository, releaseAccountHold } from './customer-repository.ts';
+import {
+  createCustomerLocally,
+  loadCustomerRepository,
+  releaseAccountHold,
+} from './customer-repository.ts';
 
 beforeEach(async () => {
   await db.open();

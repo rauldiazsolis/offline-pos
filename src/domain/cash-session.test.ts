@@ -25,7 +25,11 @@ function buildSale(overrides: Partial<Sale> = {}): Sale {
 
 describe('openCashSession', () => {
   it('abre un turno nuevo, sin ventas todavía', () => {
-    const result = openCashSession({ id: 'cs1', openingAmount: 500, now: '2026-01-01T09:00:00.000Z' });
+    const result = openCashSession({
+      id: 'cs1',
+      openingAmount: 500,
+      now: '2026-01-01T09:00:00.000Z',
+    });
 
     expect(result).toEqual({
       ok: true,
@@ -34,9 +38,17 @@ describe('openCashSession', () => {
   });
 
   it('rechaza un monto de apertura negativo', () => {
-    const result = openCashSession({ id: 'cs1', openingAmount: -1, now: '2026-01-01T09:00:00.000Z' });
+    const result = openCashSession({
+      id: 'cs1',
+      openingAmount: -1,
+      now: '2026-01-01T09:00:00.000Z',
+    });
 
-    expect(result).toEqual({ ok: false, error: 'cash-session/invalid-amount', meta: { amount: -1 } });
+    expect(result).toEqual({
+      ok: false,
+      error: 'cash-session/invalid-amount',
+      meta: { amount: -1 },
+    });
   });
 });
 
@@ -49,7 +61,10 @@ describe('closeCashSession', () => {
   };
 
   it('cierra un turno abierto con el monto contado', () => {
-    const result = closeCashSession(openSession, { closingAmount: 600, now: '2026-01-01T20:00:00.000Z' });
+    const result = closeCashSession(openSession, {
+      closingAmount: 600,
+      now: '2026-01-01T20:00:00.000Z',
+    });
 
     expect(result).toEqual({
       ok: true,
@@ -58,23 +73,42 @@ describe('closeCashSession', () => {
   });
 
   it('rechaza cerrar un turno ya cerrado', () => {
-    const closed: CashSession = { ...openSession, closedAt: '2026-01-01T20:00:00.000Z', closingAmount: 600 };
+    const closed: CashSession = {
+      ...openSession,
+      closedAt: '2026-01-01T20:00:00.000Z',
+      closingAmount: 600,
+    };
 
-    const result = closeCashSession(closed, { closingAmount: 600, now: '2026-01-01T21:00:00.000Z' });
+    const result = closeCashSession(closed, {
+      closingAmount: 600,
+      now: '2026-01-01T21:00:00.000Z',
+    });
 
     expect(result).toEqual({ ok: false, error: 'cash-session/already-closed', meta: undefined });
   });
 
   it('rechaza un monto contado negativo', () => {
-    const result = closeCashSession(openSession, { closingAmount: -1, now: '2026-01-01T20:00:00.000Z' });
+    const result = closeCashSession(openSession, {
+      closingAmount: -1,
+      now: '2026-01-01T20:00:00.000Z',
+    });
 
-    expect(result).toEqual({ ok: false, error: 'cash-session/invalid-amount', meta: { amount: -1 } });
+    expect(result).toEqual({
+      ok: false,
+      error: 'cash-session/invalid-amount',
+      meta: { amount: -1 },
+    });
   });
 });
 
 describe('recordSaleInCashSession', () => {
   it('agrega el id sin sacar los que ya estaban', () => {
-    const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 500, sales: ['s1'] };
+    const session: CashSession = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      openingAmount: 500,
+      sales: ['s1'],
+    };
 
     expect(recordSaleInCashSession(session, 's2').sales).toEqual(['s1', 's2']);
   });
@@ -82,7 +116,12 @@ describe('recordSaleInCashSession', () => {
 
 describe('calculateCashSessionSummary', () => {
   it('desglosa por medio de pago y calcula el efectivo esperado sin turno cerrado todavía', () => {
-    const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 500, sales: ['s1', 's2'] };
+    const session: CashSession = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      openingAmount: 500,
+      sales: ['s1', 's2'],
+    };
     const sales = [
       buildSale({ id: 's1', payments: [{ method: 'cash', amount: 100 }] }),
       buildSale({ id: 's2', payments: [{ method: 'debit', amount: 200 }] }),
@@ -120,10 +159,20 @@ describe('calculateCashSessionSummary', () => {
   });
 
   it('excluye una venta anulada de los totales, aunque siga en sales[]', () => {
-    const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 500, sales: ['s1', 's2'] };
+    const session: CashSession = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      openingAmount: 500,
+      sales: ['s1', 's2'],
+    };
     const sales = [
       buildSale({ id: 's1', payments: [{ method: 'cash', amount: 100 }] }),
-      buildSale({ id: 's2', payments: [{ method: 'cash', amount: 50 }], status: 'voided', voidedAt: '2026-01-01T11:00:00.000Z' }),
+      buildSale({
+        id: 's2',
+        payments: [{ method: 'cash', amount: 50 }],
+        status: 'voided',
+        voidedAt: '2026-01-01T11:00:00.000Z',
+      }),
     ];
 
     const summary = calculateCashSessionSummary(session, sales);
@@ -136,12 +185,25 @@ describe('calculateCashSessionSummary', () => {
   });
 
   it('adjustmentTotal suma el ajuste (línea + global) de las ventas cerradas, con signo', () => {
-    const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 0, sales: ['s1', 's2'] };
+    const session: CashSession = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      openingAmount: 0,
+      sales: ['s1', 's2'],
+    };
     const sales = [
       // Línea de $200 con un descuento de línea de $20 → total $180 (subtotal bruto $200).
       buildSale({
         id: 's1',
-        lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100, discount: { type: 'amount', value: 20 } }],
+        lines: [
+          {
+            kind: 'product',
+            productId: 'p1',
+            qty: 2,
+            unitPrice: 100,
+            discount: { type: 'amount', value: 20 },
+          },
+        ],
         payments: [{ method: 'cash', amount: 180 }],
         total: 180,
       }),
@@ -161,11 +223,19 @@ describe('calculateCashSessionSummary', () => {
   });
 
   it('totalCollected es la suma de todos los medios de pago', () => {
-    const session: CashSession = { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 0, sales: ['s1'] };
+    const session: CashSession = {
+      id: 'cs1',
+      openedAt: '2026-01-01T09:00:00.000Z',
+      openingAmount: 0,
+      sales: ['s1'],
+    };
     const sales = [
       buildSale({
         id: 's1',
-        payments: [{ method: 'cash', amount: 60 }, { method: 'debit', amount: 40 }],
+        payments: [
+          { method: 'cash', amount: 60 },
+          { method: 'debit', amount: 40 },
+        ],
         total: 100,
       }),
     ];
@@ -179,7 +249,10 @@ describe('calculateCashSessionSummary', () => {
 describe('calculateProductQuantities', () => {
   it('agrupa por productId, sumando cantidades entre ventas', () => {
     const sales = [
-      buildSale({ id: 's1', lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] }),
+      buildSale({
+        id: 's1',
+        lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }],
+      }),
       buildSale({
         id: 's2',
         lines: [
@@ -202,7 +275,10 @@ describe('calculateProductQuantities', () => {
 
   it('ignora líneas libres (sin identidad de producto)', () => {
     const sales = [
-      buildSale({ id: 's1', lines: [{ kind: 'freeform', description: 'Regalo', qty: 1, unitPrice: 100 }] }),
+      buildSale({
+        id: 's1',
+        lines: [{ kind: 'freeform', description: 'Regalo', qty: 1, unitPrice: 100 }],
+      }),
     ];
 
     expect(calculateProductQuantities(sales)).toEqual([]);

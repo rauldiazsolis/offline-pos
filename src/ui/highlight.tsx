@@ -27,7 +27,11 @@ export function highlightMatches(text: string, query: string): ComponentChildren
     i % 2 === 1 ? (
       <mark
         key={i}
-        style={{ background: 'var(--color-accent)', color: 'var(--color-chrome-bg)', borderRadius: '2px' }}
+        style={{
+          background: 'var(--color-accent)',
+          color: 'var(--color-chrome-bg)',
+          borderRadius: '2px',
+        }}
       >
         {part}
       </mark>

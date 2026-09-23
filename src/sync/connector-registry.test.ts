@@ -65,9 +65,11 @@ describe('connectorConfigSchema', () => {
 
 describe('createConnector', () => {
   it('type rest: arma el conector REST (POST a {baseUrl}/sync/pull)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      );
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest', baseUrl: 'https://api.example.com' });
@@ -78,9 +80,11 @@ describe('createConnector', () => {
   });
 
   it('type rest-demo: arma el mismo conector REST (POST a {baseUrl}/sync/pull)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        okResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      );
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest-demo', baseUrl: 'http://localhost:4000' });

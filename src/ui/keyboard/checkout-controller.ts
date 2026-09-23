@@ -122,7 +122,9 @@ function attachReference(payments: Payment[], reference: string | undefined): Pa
   if (reference === undefined) {
     return payments;
   }
-  return payments.map((payment) => (payment.method === 'account' ? { ...payment, reference } : payment));
+  return payments.map((payment) =>
+    payment.method === 'account' ? { ...payment, reference } : payment,
+  );
 }
 
 /**

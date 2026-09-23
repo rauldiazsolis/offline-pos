@@ -64,7 +64,10 @@ export function buildOutboxEventForVoid(params: {
   };
 }
 
-export function buildOutboxEventForCustomer(customer: Customer, params: { now: string }): OutboxEvent {
+export function buildOutboxEventForCustomer(
+  customer: Customer,
+  params: { now: string },
+): OutboxEvent {
   return { type: 'customer', customer, id: customer.id, status: 'pending', createdAt: params.now };
 }
 
@@ -102,7 +105,13 @@ export function buildOutboxEventForCashSession(
   session: CashSession,
   params: { now: string },
 ): OutboxEvent {
-  return { type: 'cash-session', session, id: session.id, status: 'pending', createdAt: params.now };
+  return {
+    type: 'cash-session',
+    session,
+    id: session.id,
+    status: 'pending',
+    createdAt: params.now,
+  };
 }
 
 /** Marca un evento como enviado con éxito (el lote que lo incluía recibió su ack). */

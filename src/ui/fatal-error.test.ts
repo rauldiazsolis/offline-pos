@@ -4,7 +4,9 @@ import { isBenignResizeObserverLoopError } from './fatal-error.ts';
 describe('isBenignResizeObserverLoopError (issue #42)', () => {
   it('reconoce el mensaje moderno de Chromium', () => {
     expect(
-      isBenignResizeObserverLoopError('ResizeObserver loop completed with undelivered notifications.'),
+      isBenignResizeObserverLoopError(
+        'ResizeObserver loop completed with undelivered notifications.',
+      ),
     ).toBe(true);
   });
 

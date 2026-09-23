@@ -72,11 +72,19 @@ export function DiagnosticoScreen() {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Diagnóstico de sincronización</h1>
+        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
+          Diagnóstico de sincronización
+        </h1>
         <span style={{ color: 'var(--color-text-muted)' }}>Esc para volver a la venta</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 'var(--space-3)' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: 'var(--space-3)',
+        }}
+      >
         <div style={cardStyle}>
           <p style={labelStyle}>Conexión</p>
           {configResult.ok ? (
@@ -104,7 +112,9 @@ export function DiagnosticoScreen() {
           <p style={labelStyle}>Último push</p>
           {currentLot !== undefined ? (
             <>
-              <p style={{ margin: 0 }}>Lote {currentLot.id} — reintento {currentLot.retries}</p>
+              <p style={{ margin: 0 }}>
+                Lote {currentLot.id} — reintento {currentLot.retries}
+              </p>
               <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
                 Próximo intento: {new Date(currentLot.nextAttemptAt).toLocaleString()}
               </p>
@@ -113,7 +123,9 @@ export function DiagnosticoScreen() {
               )}
             </>
           ) : (
-            <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Sin lote pendiente de reintento</p>
+            <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+              Sin lote pendiente de reintento
+            </p>
           )}
         </div>
 
@@ -125,7 +137,9 @@ export function DiagnosticoScreen() {
               : 'Todavía no hubo un pull exitoso'}
           </p>
           {diagnostics.lastSyncFailure !== null && (
-            <p style={{ margin: 0, color: 'var(--color-danger)' }}>{describeError(diagnostics.lastSyncFailure)}</p>
+            <p style={{ margin: 0, color: 'var(--color-danger)' }}>
+              {describeError(diagnostics.lastSyncFailure)}
+            </p>
           )}
           {diagnostics.pushLotIssues !== null && (
             <p style={{ margin: 0, color: 'var(--color-warning, #b45309)' }}>
@@ -153,7 +167,9 @@ export function DiagnosticoScreen() {
       <div style={{ ...cardStyle, flex: 1, minHeight: 0 }}>
         <p style={labelStyle}>Últimos {log.length} intentos de sync</p>
         {log.length === 0 ? (
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Todavía no hubo ningún intento en esta sesión.</p>
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+            Todavía no hubo ningún intento en esta sesión.
+          </p>
         ) : (
           <div style={{ overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -168,9 +184,18 @@ export function DiagnosticoScreen() {
               <tbody>
                 {log.map((entry, index) => (
                   <tr key={index} style={{ borderTop: '1px solid var(--color-border)' }}>
-                    <td style={{ padding: 'var(--space-1)', ...monoStyle }}>{new Date(entry.at).toLocaleTimeString()}</td>
+                    <td style={{ padding: 'var(--space-1)', ...monoStyle }}>
+                      {new Date(entry.at).toLocaleTimeString()}
+                    </td>
                     <td style={{ padding: 'var(--space-1)' }}>{entry.kind}</td>
-                    <td style={{ padding: 'var(--space-1)', ...monoStyle, maxWidth: 400, overflowWrap: 'break-word' }}>
+                    <td
+                      style={{
+                        padding: 'var(--space-1)',
+                        ...monoStyle,
+                        maxWidth: 400,
+                        overflowWrap: 'break-word',
+                      }}
+                    >
                       {JSON.stringify(entry.request)}
                     </td>
                     <td

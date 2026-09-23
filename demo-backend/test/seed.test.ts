@@ -58,11 +58,7 @@ describe('resetToSeed', () => {
   it('borra todo (incluidos datos empujados desde el POS) y vuelve a sembrar', () => {
     const db = openDb(':memory:');
     seedIfEmpty(db, NOW);
-    db.prepare('INSERT INTO sales (id, payload, created_at) VALUES (?, ?, ?)').run(
-      's1',
-      '{}',
-      NOW,
-    );
+    db.prepare('INSERT INTO sales (id, payload, created_at) VALUES (?, ?, ?)').run('s1', '{}', NOW);
     db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
       'nuevo',
       '{}',

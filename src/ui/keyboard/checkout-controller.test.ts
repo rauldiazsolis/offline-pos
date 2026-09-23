@@ -5,7 +5,11 @@ import { openCashSessionAndPersist } from '../../storage/cash-session-repository
 import { db } from '../../storage/db.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { cartSignal } from '../state/cart.ts';
-import { checkoutBuffersSignal, checkoutErrorSignal, pendingHoldSignal } from '../state/checkout.ts';
+import {
+  checkoutBuffersSignal,
+  checkoutErrorSignal,
+  pendingHoldSignal,
+} from '../state/checkout.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';

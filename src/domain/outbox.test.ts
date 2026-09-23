@@ -31,8 +31,22 @@ describe('buildOutboxEventForSale', () => {
 describe('buildOutboxEventsForStockMovements', () => {
   it('un evento por movimiento, cada uno con el id del movimiento', () => {
     const movements = [
-      { id: 'm1', productId: 'p1', delta: -1, reason: 'sale' as const, saleId: 'sale-1', createdAt: now },
-      { id: 'm2', productId: 'p2', delta: -2, reason: 'sale' as const, saleId: 'sale-1', createdAt: now },
+      {
+        id: 'm1',
+        productId: 'p1',
+        delta: -1,
+        reason: 'sale' as const,
+        saleId: 'sale-1',
+        createdAt: now,
+      },
+      {
+        id: 'm2',
+        productId: 'p2',
+        delta: -2,
+        reason: 'sale' as const,
+        saleId: 'sale-1',
+        createdAt: now,
+      },
     ];
     const events = buildOutboxEventsForStockMovements(movements, { now });
     expect(events.map((e) => e.id)).toEqual(['m1', 'm2']);
@@ -81,7 +95,12 @@ describe('buildOutboxEventForCustomer', () => {
 
 describe('buildOutboxEventForHoldConfirm / HoldRelease', () => {
   it('confirm lleva holdId y saleId, con id propio', () => {
-    const event = buildOutboxEventForHoldConfirm({ id: 'confirm-1', holdId: 'hold-1', saleId: 'sale-1', now });
+    const event = buildOutboxEventForHoldConfirm({
+      id: 'confirm-1',
+      holdId: 'hold-1',
+      saleId: 'sale-1',
+      now,
+    });
     expect(event).toEqual({
       type: 'account-hold-confirm',
       holdId: 'hold-1',
