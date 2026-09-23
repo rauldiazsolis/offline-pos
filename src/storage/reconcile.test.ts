@@ -85,7 +85,9 @@ describe('reconcileSnapshot — bajas', () => {
     await reconcileSnapshot(
       snapshot({
         products: [product('p1')],
-        customers: [{ id: 'c1', name: 'Ana Gómez', creditLimit: 500, margin: 0, balance: 10 }],
+        customers: [
+          { id: 'c1', name: 'Ana Gómez', createdAt: now, creditLimit: 500, margin: 0, balance: 10 },
+        ],
       }),
       { now },
     );
@@ -107,7 +109,10 @@ describe('reconcileSnapshot — bajas', () => {
     });
 
     await reconcileSnapshot(
-      snapshot({ products: [product('p1')], customers: [{ id: 'c1', name: 'Ana' }] }),
+      snapshot({
+        products: [product('p1')],
+        customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
+      }),
       { now },
     );
 
@@ -120,10 +125,13 @@ describe('reconcileSnapshot — salvaguardas', () => {
   it('conserva un cliente creado acá cuyo alta todavía está pendiente en el outbox', async () => {
     const local = { id: 'c-local', name: 'Nuevo', createdAt: now };
     await db.customers.bulkPut([local, { id: 'c-viejo', name: 'Viejo', createdAt: now }]);
-    await db.outbox.add(buildOutboxEventForCustomer(local, { now }));
+    await db.outbox.add(buildOutboxEventForCustomer(local, { now, origin: {} }));
 
     await reconcileSnapshot(
-      snapshot({ products: [product('p1')], customers: [{ id: 'c1', name: 'Ana' }] }),
+      snapshot({
+        products: [product('p1')],
+        customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
+      }),
       { now },
     );
 
@@ -133,10 +141,16 @@ describe('reconcileSnapshot — salvaguardas', () => {
   it('un cliente cuyo alta ya se envió (synced) y no vuelve en la foto sí se borra', async () => {
     const local = { id: 'c-local', name: 'Nuevo', createdAt: now };
     await db.customers.put(local);
-    await db.outbox.add({ ...buildOutboxEventForCustomer(local, { now }), status: 'synced' });
+    await db.outbox.add({
+      ...buildOutboxEventForCustomer(local, { now, origin: {} }),
+      status: 'synced',
+    });
 
     await reconcileSnapshot(
-      snapshot({ products: [product('p1')], customers: [{ id: 'c1', name: 'Ana' }] }),
+      snapshot({
+        products: [product('p1')],
+        customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
+      }),
       { now },
     );
 
@@ -160,7 +174,7 @@ describe('reconcileSnapshot — salvaguardas', () => {
     ]);
 
     const result = await reconcileSnapshot(
-      snapshot({ products: [], customers: [{ id: 'c1', name: 'Ana' }] }),
+      snapshot({ products: [], customers: [{ id: 'c1', name: 'Ana', createdAt: now }] }),
       { now },
     );
 

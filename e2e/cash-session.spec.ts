@@ -11,16 +11,9 @@ type StoredCashSession = {
   sales: string[];
 };
 type StoredSale = { id: string; status: string; total: number };
-type StoredOutboxEvent = {
-  id: string;
-  type: string;
-  status: string;
-  session?: StoredCashSession;
-};
+type StoredOutboxEvent = { id: string; type: string; status: string };
 
-test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox', async ({
-  page,
-}) => {
+test('abrir un turno, vender y cerrarlo con arqueo', async ({ page }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
@@ -82,9 +75,8 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
   expect(closed?.closedAt).toBeDefined();
 
   const outboxEvents = await getAllFromStore<StoredOutboxEvent>(page, 'outbox');
-  const cashSessionEvent = outboxEvents.find((event) => event.type === 'cash-session');
-  expect(cashSessionEvent).toMatchObject({ id: closed?.id, status: 'pending' });
-  expect(cashSessionEvent?.session?.closingAmount).toBe(1700);
+  // Contrato v3 (#96): el turno local sigue hasta la Etapa 5, pero ya no viaja.
+  expect(outboxEvents.some((event) => event.type === 'cash-session')).toBe(false);
 });
 
 test('sin turno abierto, /COBRAR (Ctrl+Enter) rechaza cobrar', async ({ page }) => {

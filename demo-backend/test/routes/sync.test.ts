@@ -4,6 +4,7 @@ import { createApp } from '../../src/app.ts';
 import { openDb } from '../../src/db.ts';
 import { registerRoutes } from '../../src/router.ts';
 import { accountHoldRoutes } from '../../src/routes/account-holds.ts';
+import { setDelayEnabled } from '../../src/lots.ts';
 import { syncRoutes } from '../../src/routes/sync.ts';
 
 beforeAll(() => {
@@ -44,7 +45,7 @@ async function push(idempotencyKey: string, events: unknown[]): Promise<Response
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({ events }),
+    body: JSON.stringify({ deviceId: 'dev-1', events }),
   });
 }
 
@@ -55,7 +56,7 @@ async function pull(body: {
   return fetch(`${baseUrl}/sync/pull`, {
     method: 'POST',
     headers: { Authorization: 'Bearer demo-token', 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ deviceId: 'dev-1', ...body }),
   });
 }
 
@@ -76,7 +77,7 @@ describe('POST /sync/push', () => {
     expect(response.status).toBe(400);
   });
 
-  it('aplica los 7 tipos de evento en un solo lote', async () => {
+  it('aplica los 8 tipos de evento v3 en un solo lote', async () => {
     db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
       'cust-01',
       JSON.stringify({ id: 'cust-01', name: 'Ana', creditLimit: 1000, margin: 0, balance: 0 }),
@@ -104,14 +105,33 @@ describe('POST /sync/push', () => {
       { type: 'sale-void', id: 'void-1', saleId: 'sale-1', voidedAt: '2026-01-01T00:00:00.000Z' },
       { type: 'customer', id: 'cust-02', customer: { id: 'cust-02', name: 'Beto' } },
       { type: 'account-hold-confirm', id: 'confirm-1', holdId, saleId: 'sale-1' },
-      { type: 'cash-session', id: 'cs-1', session: { id: 'cs-1', sales: ['sale-1'] } },
+      {
+        type: 'cash-movement',
+        id: 'cm-1',
+        origin: { branch: 'Centro', pointOfSale: 'Caja 1' },
+        movement: { id: 'cm-1', direction: 'out', amount: 50, concept: 'Flete', source: 'manual' },
+      },
+      {
+        type: 'customer-payment',
+        id: 'cp-1',
+        payment: {
+          id: 'cp-1',
+          customerId: 'cust-01',
+          payments: [{ method: 'cash', amount: 100 }],
+          total: 100,
+        },
+      },
+      { type: 'account-hold-release', id: 'release-1', holdId: 'nunca-existio' },
     ]);
 
     expect(response.status).toBe(200);
     expect(db.prepare('SELECT COUNT(*) c FROM sales').get()).toEqual({ c: 1 });
     expect(db.prepare('SELECT COUNT(*) c FROM stock_movements').get()).toEqual({ c: 1 });
     expect(db.prepare('SELECT COUNT(*) c FROM sale_voids').get()).toEqual({ c: 1 });
-    expect(db.prepare('SELECT COUNT(*) c FROM cash_sessions').get()).toEqual({ c: 1 });
+    expect(db.prepare('SELECT COUNT(*) c FROM customer_payments').get()).toEqual({ c: 1 });
+    expect(db.prepare('SELECT device_id, branch, point_of_sale FROM cash_movements').get()).toEqual(
+      { device_id: 'dev-1', branch: 'Centro', point_of_sale: 'Caja 1' },
+    );
     const customer = JSON.parse(
       (
         db.prepare('SELECT payload FROM customers WHERE id = ?').get('cust-01') as {
@@ -119,7 +139,7 @@ describe('POST /sync/push', () => {
         }
       ).payload,
     ) as { balance: number };
-    expect(customer.balance).toBe(300); // confirmado por el lote
+    expect(customer.balance).toBe(300 - 100); // confirmado por el lote, menos la cobranza
     const hold = db.prepare('SELECT status FROM account_holds WHERE id = ?').get(holdId) as {
       status: string;
     };
@@ -162,7 +182,7 @@ describe('POST /sync/push', () => {
     expect(db.prepare('SELECT COUNT(*) c FROM sales').get()).toEqual({ c: 1 });
   });
 
-  it('registra el lote en push_lots como ok', async () => {
+  it('sin demora (default), el lote queda ok al toque', async () => {
     await push('lot-tracked', [
       { type: 'sale', id: 'sale-tracked', sale: { id: 'sale-tracked', total: 1 } },
     ]);
@@ -171,6 +191,53 @@ describe('POST /sync/push', () => {
       status: string;
     };
     expect(lot.status).toBe('ok');
+  });
+
+  it('con demora prendida, el lote queda queued en el pull y el stock no cambia', async () => {
+    setDelayEnabled(db, true);
+    db.prepare('INSERT INTO stock (product_id, quantity, updated_at) VALUES (?, ?, ?)').run(
+      'p9',
+      10,
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    await push('lot-demorado', [
+      {
+        type: 'stock-movement',
+        id: 'mov-9',
+        movement: { id: 'mov-9', productId: 'p9', delta: -3 },
+      },
+    ]);
+    const response = await pull({ cursors: {}, pendingLotIds: ['lot-demorado'] });
+    const body = (await response.json()) as {
+      lots: Record<string, unknown>;
+      stock: { productId: string; quantity: number }[];
+    };
+
+    expect(body.lots).toEqual({ 'lot-demorado': { status: 'queued' } });
+    expect(body.stock.find((item) => item.productId === 'p9')?.quantity).toBe(10);
+  });
+
+  it('guarda el deviceId del lote', async () => {
+    await push('lot-dev', []);
+
+    expect(db.prepare('SELECT device_id FROM push_lots WHERE id = ?').get('lot-dev')).toEqual({
+      device_id: 'dev-1',
+    });
+  });
+
+  it('un tipo desconocido queda como issue con su eventId, nunca como error del push', async () => {
+    const response = await push('lot-viejo', [{ type: 'cash-session', id: 'cs-1', session: {} }]);
+    const pulled = await pull({ cursors: {}, pendingLotIds: ['lot-viejo'] });
+    const body = (await pulled.json()) as { lots: Record<string, unknown> };
+
+    expect(response.status).toBe(200);
+    expect(body.lots).toEqual({
+      'lot-viejo': {
+        status: 'issues',
+        issues: [{ message: expect.stringContaining('cash-session') as unknown, eventId: 'cs-1' }],
+      },
+    });
   });
 });
 
@@ -187,6 +254,8 @@ describe('POST /sync/pull', () => {
         taxRate: 0,
         category: 'x',
         tracksStock: true,
+        createdAt: '2025-06-01T00:00:00.000Z',
+        blocked: { reason: 'Vencido' },
       }),
       '2026-01-01T00:00:01.000Z',
     );
@@ -201,7 +270,13 @@ describe('POST /sync/pull', () => {
     const response = await pull({ cursors: {}, pendingLotIds: [] });
     const body = (await response.json()) as { products: { items: unknown[] }; stock: unknown[] };
 
-    expect(body.products.items).toHaveLength(1);
+    expect(body.products.items).toEqual([
+      expect.objectContaining({
+        id: 'p1',
+        createdAt: '2025-06-01T00:00:00.000Z',
+        blocked: { reason: 'Vencido' },
+      }),
+    ]);
     expect(body.stock).toEqual([
       { productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' },
     ]);

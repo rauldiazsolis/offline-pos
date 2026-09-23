@@ -3,6 +3,7 @@ import type { Customer, CustomerAccount } from '../domain/customer.ts';
 import { buildCustomer } from '../domain/customer.ts';
 import { buildOutboxEventForCustomer, buildOutboxEventForHoldRelease } from '../domain/outbox.ts';
 import { err, ok, type Result } from '../domain/result.ts';
+import { currentEventOrigin } from '../sync/terminal-identity.ts';
 import { db } from './db.ts';
 import { FlexSearchCustomerSearch } from './flexsearch-customer-search.ts';
 import { newId } from './ids.ts';
@@ -58,7 +59,7 @@ export async function loadCustomerRepository(): Promise<CustomerRepository> {
 export async function createCustomerLocally(name: string): Promise<Result<Customer>> {
   const now = new Date().toISOString();
   const customer = buildCustomer(name, { id: newId(), now });
-  const outboxEvent = buildOutboxEventForCustomer(customer, { now });
+  const outboxEvent = buildOutboxEventForCustomer(customer, { now, origin: currentEventOrigin() });
 
   try {
     await db.transaction('rw', db.customers, db.outbox, async () => {
@@ -82,7 +83,12 @@ export async function createCustomerLocally(name: string): Promise<Result<Custom
  */
 export async function releaseAccountHold(params: { holdId: string }): Promise<Result<void>> {
   const now = new Date().toISOString();
-  const event = buildOutboxEventForHoldRelease({ id: newId(), holdId: params.holdId, now });
+  const event = buildOutboxEventForHoldRelease({
+    id: newId(),
+    holdId: params.holdId,
+    now,
+    origin: currentEventOrigin(),
+  });
 
   try {
     await db.outbox.add(event);

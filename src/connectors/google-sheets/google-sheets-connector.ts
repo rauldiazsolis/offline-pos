@@ -1,34 +1,29 @@
 import { z } from 'zod';
-import { productSchema } from '../../domain/product.ts';
 import { ok, type Result } from '../../domain/result.ts';
 import { newId } from '../../storage/ids.ts';
 import {
+  batchLotStatusSchema,
   connectorCustomerSchema,
+  connectorProductSchema,
+  pullResultSchema,
+  toLots,
+  withCursor,
   type AccountHoldResult,
   type Connector,
-  type OutboxBatchItem,
   type PullBatchParams,
   type PullBatchResult,
+  type PushBatch,
 } from '../../sync/connector.ts';
 import { callBridge } from './bridge-client.ts';
 import type { GoogleSheetsConfig } from './config.ts';
 
 /** Producto tal como lo manda el puente: sin `tracksStock`, que fija este conector. */
-const bridgeProductSchema = productSchema.omit({ tracksStock: true });
-
-const pullResultSchema = <T extends z.ZodType>(itemSchema: T) =>
-  z.object({ items: z.array(itemSchema), nextCursor: z.string().optional() });
-
-const lotStatusSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('pending') }),
-  z.object({ status: z.literal('ok') }),
-  z.object({ status: z.literal('issues'), issues: z.array(z.string()) }),
-]);
+const bridgeProductSchema = connectorProductSchema.omit({ tracksStock: true });
 
 const pullBatchDataSchema = z.object({
   products: pullResultSchema(bridgeProductSchema),
   customers: pullResultSchema(connectorCustomerSchema),
-  lots: z.record(z.string(), lotStatusSchema),
+  lots: z.record(z.string(), batchLotStatusSchema),
 });
 
 const emptyDataSchema = z.object({});
@@ -39,6 +34,10 @@ const emptyDataSchema = z.object({});
  * desde la Etapa 2 (#87): `bridge.gs` expone `pushBatch`/`pullBatch`, igual
  * que el conector REST, en vez de una acción por evento/recurso.
  *
+ * Contrato v3 (#96): el lote viaja con `deviceId` y cada evento con su sobre
+ * (`createdAt`, `origin`); el puente procesa cada lote dentro del request, así
+ * que nunca informa `queued`/`processing` — solo `ok` o `issues`.
+ *
  * `stock-movement`/`account-hold-release` siguen siendo no-ops del lado de
  * Sheets (nunca hubo llamada real al puente para esto): el fiado contra
  * Sheets es sin bloqueo real que liberar, y `pullBatch` ya fija
@@ -47,10 +46,10 @@ const emptyDataSchema = z.object({});
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
   return {
-    async pushBatch(items: OutboxBatchItem[], idempotencyId: string): Promise<Result<void>> {
+    async pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>> {
       const result = await callBridge(
         config,
-        { action: 'pushBatch', payload: { events: items }, idempotencyKey: idempotencyId },
+        { action: 'pushBatch', payload: batch, idempotencyKey: idempotencyId },
         emptyDataSchema,
       );
       return result.ok ? ok(undefined) : result;
@@ -61,7 +60,11 @@ export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connect
         config,
         {
           action: 'pullBatch',
-          payload: { cursors: params.cursors, pendingLotIds: params.pendingLotIds },
+          payload: {
+            deviceId: params.deviceId,
+            cursors: params.cursors,
+            pendingLotIds: params.pendingLotIds,
+          },
         },
         pullBatchDataSchema,
       );
@@ -70,16 +73,16 @@ export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connect
       }
       const { products, customers, lots } = result.value;
       return ok({
-        products: {
+        products: withCursor({
           items: products.items.map((item) => ({ ...item, tracksStock: false })),
-          ...(products.nextCursor !== undefined ? { nextCursor: products.nextCursor } : {}),
-        },
-        customers: {
+          nextCursor: products.nextCursor,
+        }),
+        customers: withCursor({
           items: customers.items.map((item) => ({ ...item, unrestricted: true })),
-          ...(customers.nextCursor !== undefined ? { nextCursor: customers.nextCursor } : {}),
-        },
+          nextCursor: customers.nextCursor,
+        }),
         stock: [],
-        lots,
+        lots: toLots(lots),
       });
     },
 

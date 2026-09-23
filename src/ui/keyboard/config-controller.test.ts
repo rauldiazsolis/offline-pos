@@ -12,8 +12,8 @@ import {
   configErrorFieldSignal,
   configErrorSignal,
   configFieldValuesSignal,
-  configLocaleSignal,
   configPhaseSignal,
+  configTerminalSignal,
   configTypeSignal,
 } from '../state/sync-config.ts';
 import {
@@ -23,7 +23,7 @@ import {
   enterConfigScreen,
   handleConfigEscape,
   setConfigField,
-  setConfigLocale,
+  setConfigTerminalField,
   setConfigType,
   submitConfig,
 } from './config-controller.ts';
@@ -48,6 +48,7 @@ const product = {
   taxRate: 0.21,
   category: 'x',
   tracksStock: false,
+  createdAt: '2025-01-01T00:00:00.000Z',
 };
 
 function okResponse(body: unknown): Response {
@@ -62,7 +63,7 @@ function stubRestBackend(): ReturnType<typeof vi.fn> {
       return Promise.resolve(
         okResponse({
           products: { items: [product] },
-          customers: { items: [{ id: 'c1', name: 'Ana' }] },
+          customers: { items: [{ id: 'c1', name: 'Ana', createdAt: '2025-01-01T00:00:00.000Z' }] },
           stock: [],
           lots: {},
         }),
@@ -81,7 +82,7 @@ function makeSale(id: string): Sale {
 async function seedUserDataFor(config: Parameters<typeof saveSyncConfig>[0]): Promise<void> {
   saveSyncConfig(config);
   await db.sales.put(makeSale('s1'));
-  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
 }
 
 beforeEach(async () => {
@@ -107,13 +108,18 @@ describe('enterConfigScreen', () => {
       webAppUrl: '',
       sharedSecret: '',
     });
-    expect(configLocaleSignal.value).toBe('');
+    expect(configTerminalSignal.value).toEqual({ locale: '', branch: '', pointOfSale: '' });
     expect(configErrorSignal.value).toBeNull();
     expect(configPhaseSignal.value).toBe('editing');
   });
 
   it('con una config REST guardada, precarga esos valores', () => {
-    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      locale: 'es-AR',
+      branch: 'Centro',
+    });
 
     enterConfigScreen();
 
@@ -122,7 +128,11 @@ describe('enterConfigScreen', () => {
       baseUrl: 'https://api.example.com',
       apiKey: '',
     });
-    expect(configLocaleSignal.value).toBe('es-AR');
+    expect(configTerminalSignal.value).toEqual({
+      locale: 'es-AR',
+      branch: 'Centro',
+      pointOfSale: '',
+    });
   });
 
   it('con una config de Google Sheets guardada, abre en ese tipo con sus valores', () => {
@@ -258,7 +268,7 @@ describe('submitConfig — primer arranque (sin datos locales)', () => {
     setConfigType('rest');
     setConfigField('baseUrl', 'https://api.example.com');
     setConfigField('apiKey', 'secreto');
-    setConfigLocale('es-AR');
+    setConfigTerminalField('locale', 'es-AR');
 
     await submitConfig();
 
@@ -275,6 +285,20 @@ describe('submitConfig — primer arranque (sin datos locales)', () => {
     expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
     await expect(db.products.count()).resolves.toBe(1);
     await expect(db.customers.count()).resolves.toBe(1);
+  });
+
+  it('guarda sucursal y punto de venta recortados; en blanco no se guardan (contrato v3)', async () => {
+    stubRestBackend();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'https://api.example.com');
+    setConfigTerminalField('branch', '  Centro ');
+    setConfigTerminalField('pointOfSale', '   ');
+
+    await submitConfig();
+
+    const saved = loadSyncConfig();
+    expect(saved).toMatchObject({ ok: true, value: { branch: 'Centro' } });
+    expect(saved.ok && 'pointOfSale' in saved.value).toBe(false);
   });
 
   it('si la prueba falla: mensaje legible, el formulario queda como estaba y no cambia nada', async () => {

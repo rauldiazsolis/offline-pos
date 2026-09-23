@@ -180,6 +180,21 @@ export class FakeSheet {
     );
     this.grid.splice(after, 0, ...created);
   }
+  /** Como Sheets: las columnas nuevas heredan formato y validación de la columna de la izquierda. */
+  insertColumnsAfter(after: number, howMany: number): void {
+    this.grid.forEach((line) => {
+      const source = line[after - 1];
+      if (source === undefined) {
+        throw new Error(`insertColumnsAfter: la columna ${String(after)} no existe`);
+      }
+      const created = Array.from({ length: howMany }, () => ({
+        value: '',
+        format: source.format,
+        validation: source.validation,
+      }));
+      line.splice(after, 0, ...created);
+    });
+  }
   setFrozenRows(count: number): void {
     this.frozenRows = count;
   }

@@ -4,6 +4,7 @@ import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
 import { collectDiagnostics } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
+import { formatAwaitingLotStatus, formatLotIssue } from '../format-lot.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import type { SyncLogEntry } from '../state/sync.ts';
@@ -104,6 +105,9 @@ export function DiagnosticoScreen() {
 
         <div style={cardStyle}>
           <p style={labelStyle}>Motor</p>
+          <p style={{ margin: 0 }}>
+            Dispositivo: <span style={monoStyle}>{diagnostics.deviceId}</span>
+          </p>
           <p style={{ margin: 0 }}>Cerrojo: {diagnostics.lockHeld ? 'ocupado' : 'libre'}</p>
           <p style={{ margin: 0 }}>Red: {diagnostics.online ? 'online' : 'offline'}</p>
         </div>
@@ -143,7 +147,7 @@ export function DiagnosticoScreen() {
           )}
           {diagnostics.pushLotIssues !== null && (
             <p style={{ margin: 0, color: 'var(--color-warning, #b45309)' }}>
-              Issues del backend: {diagnostics.pushLotIssues.join('; ')}
+              Issues del backend: {diagnostics.pushLotIssues.map(formatLotIssue).join('; ')}
             </p>
           )}
         </div>
@@ -157,7 +161,8 @@ export function DiagnosticoScreen() {
           <ul style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
             {awaitingLots.map((lot) => (
               <li key={lot.id} style={monoStyle}>
-                {lot.id} — enviado {new Date(lot.sentAt).toLocaleString()}
+                {lot.id} — enviado {new Date(lot.sentAt).toLocaleString()} —{' '}
+                {formatAwaitingLotStatus(lot)}
               </li>
             ))}
           </ul>

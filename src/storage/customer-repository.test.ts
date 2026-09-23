@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
 import {
   createCustomerLocally,
@@ -27,6 +28,17 @@ describe('createCustomerLocally', () => {
 
       const outboxEvent = await db.outbox.get(result.value.id);
       expect(outboxEvent).toMatchObject({ type: 'customer', status: 'pending' });
+    }
+  });
+
+  it('estampa el origen de la config actual en el evento (contrato v3)', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://x', branch: 'Centro' });
+    try {
+      const result = await createCustomerLocally('Ana');
+      if (!result.ok) throw new Error('setup falló');
+      expect((await db.outbox.get(result.value.id))?.origin).toEqual({ branch: 'Centro' });
+    } finally {
+      localStorage.clear();
     }
   });
 });

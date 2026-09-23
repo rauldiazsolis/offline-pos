@@ -113,14 +113,14 @@ describe('buildAccountMovementForSale', () => {
 describe('splitConnectorCustomer', () => {
   it('sin datos de cuenta, devuelve solo el customer', () => {
     const { customer, account } = splitConnectorCustomer(
-      { id: 'c1', name: 'Juan Pérez' },
+      { id: 'c1', name: 'Juan Pérez', createdAt: '2025-06-01T00:00:00.000Z' },
       { now: '2026-01-01T00:00:00.000Z' },
     );
 
     expect(customer).toEqual({
       id: 'c1',
       name: 'Juan Pérez',
-      createdAt: '2026-01-01T00:00:00.000Z',
+      createdAt: '2025-06-01T00:00:00.000Z',
     });
     expect(account).toBeUndefined();
   });
@@ -130,6 +130,7 @@ describe('splitConnectorCustomer', () => {
       {
         id: 'c1',
         name: 'Juan Pérez',
+        createdAt: '2025-06-01T00:00:00.000Z',
         creditLimit: 1000,
         margin: 100,
         balance: 200,
@@ -150,7 +151,7 @@ describe('splitConnectorCustomer', () => {
 
   it('con datos de cuenta parciales, no arma un account (todo o nada)', () => {
     const { account } = splitConnectorCustomer(
-      { id: 'c1', name: 'Juan Pérez', creditLimit: 1000 },
+      { id: 'c1', name: 'Juan Pérez', createdAt: '2025-06-01T00:00:00.000Z', creditLimit: 1000 },
       { now: '2026-01-01T00:00:00.000Z' },
     );
 
@@ -159,7 +160,7 @@ describe('splitConnectorCustomer', () => {
 
   it('con unrestricted true, arma un account aunque falten los tres campos de crédito (Etapa 3, #69)', () => {
     const { account } = splitConnectorCustomer(
-      { id: 'c1', name: 'Juan Pérez', unrestricted: true },
+      { id: 'c1', name: 'Juan Pérez', createdAt: '2025-06-01T00:00:00.000Z', unrestricted: true },
       { now: '2026-01-01T00:00:00.000Z' },
     );
 
@@ -175,7 +176,13 @@ describe('splitConnectorCustomer', () => {
 
   it('con unrestricted false y datos parciales, no arma un account (false no es lo mismo que true)', () => {
     const { account } = splitConnectorCustomer(
-      { id: 'c1', name: 'Juan Pérez', unrestricted: false, creditLimit: 1000 },
+      {
+        id: 'c1',
+        name: 'Juan Pérez',
+        createdAt: '2025-06-01T00:00:00.000Z',
+        unrestricted: false,
+        creditLimit: 1000,
+      },
       { now: '2026-01-01T00:00:00.000Z' },
     );
 
@@ -183,12 +190,39 @@ describe('splitConnectorCustomer', () => {
   });
 });
 
+describe('splitConnectorCustomer (contrato v3)', () => {
+  it('usa la fecha de alta real del backend y conserva el bloqueo', () => {
+    const { customer } = splitConnectorCustomer(
+      {
+        id: 'c1',
+        name: 'Ana',
+        createdAt: '2025-03-01T12:00:00.000Z',
+        blocked: { reason: 'Deuda vencida' },
+      },
+      { now: '2026-09-23T10:00:00.000Z' },
+    );
+    expect(customer).toEqual({
+      id: 'c1',
+      name: 'Ana',
+      createdAt: '2025-03-01T12:00:00.000Z',
+      blocked: { reason: 'Deuda vencida' },
+    });
+  });
+});
+
 describe('splitConnectorCustomers', () => {
   it('separa cada fila en Customer y, si trae los tres campos de crédito, CustomerAccount', () => {
     const { customers, accounts } = splitConnectorCustomers(
       [
-        { id: 'c1', name: 'Ana' },
-        { id: 'c2', name: 'Beto', creditLimit: 100, margin: 10, balance: 5 },
+        { id: 'c1', name: 'Ana', createdAt: '2025-06-01T00:00:00.000Z' },
+        {
+          id: 'c2',
+          name: 'Beto',
+          createdAt: '2025-06-02T00:00:00.000Z',
+          creditLimit: 100,
+          margin: 10,
+          balance: 5,
+        },
       ],
       { now: '2026-01-01T00:00:00.000Z' },
     );

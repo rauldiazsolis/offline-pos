@@ -84,6 +84,18 @@ describe('ConfigScreen — formulario', () => {
     expect(screen.getByLabelText(/Locale/)).not.toBeNull();
   });
 
+  it('muestra Sucursal y Punto de venta (opcionales) antes del locale, al final (contrato v3)', () => {
+    render(<ConfigScreen />);
+    chooseRest();
+
+    const labels = [...document.querySelectorAll('[data-config-field]')].map((input) =>
+      input.getAttribute('data-config-field'),
+    );
+    expect(labels.slice(-3)).toEqual(['branch', 'pointOfSale', 'locale']);
+    expect(screen.getByLabelText(/Sucursal \(opcional\)/)).not.toBeNull();
+    expect(screen.getByLabelText(/Punto de venta \(opcional\)/)).not.toBeNull();
+  });
+
   it('cambiar a Google Sheets intercambia los campos sin ocultar el selector', () => {
     render(<ConfigScreen />);
     chooseRest();

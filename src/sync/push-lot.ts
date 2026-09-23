@@ -36,7 +36,8 @@ export function clearCurrentPushLot(): void {
   }
 }
 
-export type AwaitingLot = { id: string; sentAt: string };
+/** `lastStatus`: último estado en curso que informó el backend (contrato v3); ausente = sin informar. */
+export type AwaitingLot = { id: string; sentAt: string; lastStatus?: 'queued' | 'processing' };
 
 export function getAwaitingLots(): AwaitingLot[] {
   try {
@@ -67,9 +68,23 @@ export function addAwaitingLot(lot: AwaitingLot): void {
   setAwaitingLots([...getAwaitingLots(), lot]);
 }
 
-/** Saca de la lista los lotes ya resueltos (`ok` o `issues`) — los `pending` (o no informados) se conservan. */
-export function resolveAwaitingLots(resolvedIds: Set<string>): void {
-  setAwaitingLots(getAwaitingLots().filter((lot) => !resolvedIds.has(lot.id)));
+/**
+ * Saca los lotes resueltos (`ok`/`issues`) y anota el último estado informado
+ * de los que siguen en curso (`queued`/`processing`); un lote no informado se
+ * conserva tal cual.
+ */
+export function updateAwaitingLots(
+  resolvedIds: Set<string>,
+  inProgress: Record<string, 'queued' | 'processing'>,
+): void {
+  setAwaitingLots(
+    getAwaitingLots()
+      .filter((lot) => !resolvedIds.has(lot.id))
+      .map((lot) => {
+        const status = inProgress[lot.id];
+        return status === undefined ? lot : { ...lot, lastStatus: status };
+      }),
+  );
 }
 
 /** Usado por `/DEMO_RESET` y al cambiar de conexión (`sync/apply-connection.ts`) — mismo momento que `clearSyncCursors`. */

@@ -1,15 +1,37 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '2.0.0'
+  version: '3.0.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
     diseño (`pos-web-diseno-arquitectura.md`), la sección "Connector API" de
-    `CLAUDE.md` y el spec de rediseño
-    (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87).
+    `CLAUDE.md` y los specs de rediseño
+    (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87;
+    `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`,
+    issue #96).
 
-    **v2 reemplaza por completo la v1** (10 endpoints por recurso/evento) por
+    **v3 reemplaza a la v2** (cambio incompatible, Etapa 1 del epic #94):
+      - Sobre por evento: cada `OutboxBatchItem` lleva `id`, `type`,
+        `createdAt` y `origin` (`branch`/`pointOfSale`, estampados en el POS
+        al encolar el evento, no al armar el lote). El `deviceId` de la
+        terminal viaja una vez por request, en push y en pull.
+      - Estados de lote `queued` (recibido, sin empezar), `processing`, `ok`
+        e `issues`; `pending` desaparece. `issues` pasa de texto a
+        `LotIssue` (`{ message, eventId? }`).
+      - Eventos nuevos `cash-movement` y `customer-payment`; se elimina
+        `cash-session`. Cobranzas y movimientos de caja no se anulan.
+      - Cantidades con signo y hasta 3 decimales; `Sale.total` y
+        `Payment.amount` pueden ser negativos (devolución declarativa).
+      - El pull trae `createdAt` (obligatorio) y `blocked` (bloqueo
+        informativo) en productos y clientes.
+
+    **Transición de identidad**: `deviceId`, `origin.branch` y
+    `origin.pointOfSale` son obligatorios en v3, pero **tolerados ausentes
+    hasta la Etapa 2 del epic #94 (#97)** — un backend tiene que aceptar un
+    request sin `deviceId` y un `origin` vacío, y guardarlos vacíos.
+
+    **v2 reemplazó por completo la v1** (10 endpoints por recurso/evento) por
     dos operaciones batch más dos excepciones síncronas. Principio central:
     **el backend nunca valida ni rechaza el contenido de lo que el POS
     manda** — solo registra y audita. Puede dejar de aceptar lotes de una
@@ -19,7 +41,7 @@ info:
     "rechazo" síncrono.
 
     Cada operación está marcada con una extensión `x-pos-status`:
-      - `implemented-etapa-1`: el POS ya la consume (rediseño de sync, Etapa 1, #87).
+      - `implemented-v3`: el POS ya la consume con la forma de v3 (#96).
       - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
     Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
@@ -36,7 +58,7 @@ paths:
     post:
       operationId: pushBatch
       summary: Envía toda la cola pendiente del outbox en un solo lote
-      x-pos-status: implemented-etapa-1
+      x-pos-status: implemented-v3
       description: |
         Un solo `idempotency_id` para el lote entero (no uno por evento) —
         reintentar el mismo lote (mismo id, mismo conjunto de eventos) nunca
@@ -49,6 +71,12 @@ paths:
         transporte reales (auth, payload no parseable). Cualquier
         inconsistencia de negocio (stock, cuenta corriente) se resuelve del
         lado del backend y se informa como `issues`, nunca como un 4xx.
+
+        v3: el backend puede dejar un lote `queued` (recibido, sin empezar) o
+        `processing` y resolverlo después. Un tipo de evento que no reconoce
+        (por ejemplo un `cash-session` de una terminal vieja) se informa como
+        `LotIssue` con su `eventId` — nunca como error del push, y nunca
+        impide aplicar el resto del lote.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -65,7 +93,7 @@ paths:
     post:
       operationId: pullBatch
       summary: Trae productos, stock y clientes en una sola llamada, más el estado de lotes de push
-      x-pos-status: implemented-etapa-1
+      x-pos-status: implemented-v3
       description: |
         Un `POST` (no `GET`) porque los parámetros son estructurados
         (cursores por recurso, lista de ids de lotes) — no una query string
@@ -79,14 +107,19 @@ paths:
 
         `lots` en la respuesta solo trae estado para los ids de
         `pendingLotIds` que el backend todavía reconoce — un id ausente en
-        la respuesta se trata, del lado del POS, igual que `pending` (más
+        la respuesta se trata, del lado del POS, como `processing` (lo más
         conservador: nunca aplicar datos si no se puede confirmar que un
-        lote de interés ya se resolvió).
+        lote de interés ya se resolvió). La foto y los estados de lote
+        tienen que ser **del mismo instante** (consistentes entre sí).
 
-        **Regla de aplicación (la más importante de este endpoint)**: si
-        algún lote de `pendingLotIds` sigue `pending` (o no viene informado),
-        el POS descarta el resto de esta respuesta entera — ni el delta ni
-        la foto completa se aplican — y reintenta más tarde.
+        **Regla de aplicación (la más importante de este endpoint)**: en
+        esta versión del POS, si algún lote de `pendingLotIds` sigue
+        `queued` o `processing` (o no viene informado), el POS descarta el
+        resto de esta respuesta entera — ni el delta ni la foto completa se
+        aplican — y reintenta más tarde. La Etapa 3 del epic #94 (#98)
+        refina esta regla (datos maestros siempre; stock/saldo reaplicando
+        los eventos de los lotes `queued`). Un lote `issues` nunca bloquea:
+        el POS solo le muestra los avisos al humano.
       requestBody:
         required: true
         content:
@@ -105,7 +138,7 @@ paths:
     post:
       operationId: postAccountHold
       summary: Bloqueo síncrono de crédito antes de cerrar una venta a cuenta corriente
-      x-pos-status: implemented-etapa-1
+      x-pos-status: implemented-v3
       description: |
         Única operación del contrato pensada para llamarse de forma síncrona
         durante el cobro (§5 del doc de diseño) — nunca pasa por el outbox ni
@@ -170,9 +203,19 @@ components:
       description: ULID del lote (o de la operación síncrona) — repetir el mismo valor nunca debe duplicar el efecto.
 
   schemas:
+    Blocked:
+      type: object
+      required: [reason]
+      description: |
+        Bloqueo informativo — nunca impide operar; el POS lo muestra y el
+        usuario decide. Ausente = no bloqueado. `reason` puede ser vacío (el
+        POS muestra "Bloqueado" a secas).
+      properties:
+        reason: { type: string }
+
     Product:
       type: object
-      required: [id, sku, barcodes, name, price, taxRate, category, tracksStock]
+      required: [id, sku, barcodes, name, price, taxRate, category, tracksStock, createdAt]
       properties:
         id: { type: string }
         sku: { type: string }
@@ -182,23 +225,32 @@ components:
         taxRate: { type: number, minimum: 0, maximum: 1 }
         category: { type: string }
         tracksStock: { type: boolean }
+        createdAt: { type: string, format: date-time, description: Fecha de alta real. }
+        blocked: { $ref: '#/components/schemas/Blocked' }
 
     StockItem:
       type: object
       required: [productId, quantity, updatedAt]
       properties:
         productId: { type: string }
-        quantity: { type: number }
+        quantity: { type: number, description: 'Con signo, hasta 3 decimales.' }
         updatedAt: { type: string, format: date-time }
 
     Customer:
       type: object
-      required: [id, name]
+      required: [id, name, createdAt]
       properties:
         id: { type: string }
         name: { type: string }
         document: { type: string }
         phone: { type: string }
+        createdAt:
+          type: string
+          format: date-time
+          description: |
+            Fecha de alta real — obligatoria en el pull. En un evento
+            `customer` es la fecha en que se creó en el POS.
+        blocked: { $ref: '#/components/schemas/Blocked' }
         creditLimit:
           { type: number, description: Cuenta corriente, opcional — ver §6 del doc de diseño. }
         margin: { type: number }
@@ -228,7 +280,7 @@ components:
       properties:
         kind: { type: string, enum: [product] }
         productId: { type: string }
-        qty: { type: number }
+        qty: { type: number, description: 'Con signo, hasta 3 decimales (se vende por peso).' }
         unitPrice: { type: number }
         discount: { $ref: '#/components/schemas/Discount' }
 
@@ -238,7 +290,7 @@ components:
       properties:
         kind: { type: string, enum: [freeform] }
         description: { type: string }
-        qty: { type: number }
+        qty: { type: number, description: 'Con signo, hasta 3 decimales.' }
         unitPrice: { type: number }
         discount: { $ref: '#/components/schemas/Discount' }
 
@@ -247,13 +299,17 @@ components:
       required: [method, amount]
       properties:
         method: { type: string, enum: [cash, debit, credit, transfer, qr, account] }
-        amount: { type: number }
+        amount:
+          type: number
+          description: |
+            Con signo, 2 decimales. Un ticket negativo es una devolución
+            declarativa, con cualquier medio. Un pago `account` sin
+            `reference` (sin hold) es fiado offline si es positivo, o una
+            acreditación al cliente si es negativo — un pago `account`
+            negativo nunca lleva hold.
         reference:
-          {
-            type: string,
-            description: Para method=account con red,
-            el holdId del bloqueo aprobado (§5).,
-          }
+          type: string
+          description: Para method=account con red, el holdId del bloqueo aprobado (§5).
 
     Sale:
       type: object
@@ -262,7 +318,7 @@ components:
         id: { type: string }
         lines: { type: array, items: { $ref: '#/components/schemas/SaleLine' } }
         payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
-        total: { type: number }
+        total: { type: number, description: 'Puede ser 0 o negativo (devolución).' }
         status: { type: string, enum: [open, closed, voided] }
         createdAt: { type: string, format: date-time }
         syncedAt: { type: string, format: date-time }
@@ -276,28 +332,85 @@ components:
       properties:
         id: { type: string }
         productId: { type: string }
-        delta: { type: number }
+        delta: { type: number, description: 'Con signo, hasta 3 decimales.' }
         reason: { type: string, enum: [sale, sale-void] }
         saleId: { type: string }
         createdAt: { type: string, format: date-time }
 
-    CashSession:
+    CashMovement:
       type: object
-      required: [id, openedAt, openingAmount, sales]
+      required: [id, direction, amount, concept, source, createdAt]
+      description: |
+        Ingreso/egreso de caja. El arqueo viaja solo como ajuste
+        (`source: count-adjustment`, concepto fijo "Ajuste por arqueo",
+        `direction` según el signo de `counted - expected` y
+        `amount = |counted - expected|`) y solo si la diferencia no es 0.
+        No se anula: un movimiento mal cargado se compensa con otro.
       properties:
         id: { type: string }
-        openedAt: { type: string, format: date-time }
-        closedAt: { type: string, format: date-time }
-        openingAmount: { type: number }
-        closingAmount: { type: number }
-        sales: { type: array, items: { type: string } }
+        direction: { type: string, enum: [in, out] }
+        amount: { type: number, exclusiveMinimum: 0, description: 2 decimales. }
+        concept: { type: string }
+        description: { type: string }
+        source: { type: string, enum: [manual, count-adjustment] }
+        count:
+          type: object
+          required: [expected, counted]
+          description: Obligatorio si source = count-adjustment.
+          properties:
+            expected: { type: number }
+            counted: { type: number }
+        createdAt: { type: string, format: date-time }
+
+    CustomerPayment:
+      type: object
+      required: [id, customerId, payments, total, createdAt]
+      description: |
+        Cobranza sin venta, a favor de un cliente identificado (tenga o no
+        cuenta corriente). Sin vuelto: lo tendido es lo acreditado. No se
+        anula: se corrige con otro registro.
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        payments:
+          type: array
+          items: { $ref: '#/components/schemas/Payment' }
+          description: method != account, amount > 0.
+        total: { type: number, description: Suma de payments. }
+        createdAt: { type: string, format: date-time }
+
+    EventOrigin:
+      type: object
+      required: [branch, pointOfSale]
+      description: |
+        Sucursal y punto de venta, texto libre, estampados al encolar el
+        evento en el POS (no al armar el lote): cambiar la sucursal con
+        eventos pendientes no reescribe los ya encolados. **Transición**:
+        obligatorios en v3, pero tolerados ausentes hasta la Etapa 2 del
+        epic #94 (#97) — un backend tiene que aceptar un `origin` vacío.
+      properties:
+        branch: { type: string }
+        pointOfSale: { type: string }
+
+    EventEnvelope:
+      type: object
+      required: [id, type, createdAt, origin]
+      description: Sobre común de los 8 tipos de evento.
+      properties:
+        id:
+          type: string
+          description: Id del evento — también el que usan los LotIssue (`eventId`).
+        type: { type: string }
+        createdAt:
+          { type: string, format: date-time, description: Cuándo se encoló el evento en el POS. }
+        origin: { $ref: '#/components/schemas/EventOrigin' }
 
     OutboxBatchItem:
       description: |
         Un evento del outbox tal como viaja dentro de un lote de push —
-        discriminado por `type`. Los 7 tipos son exactamente los mismos que
-        ya existían por separado en la v1 del contrato; acá viajan todos
-        juntos en `PushBatchRequest.events`.
+        sobre (`EventEnvelope`) más el payload de su tipo, discriminado por
+        `type`. Un tipo que el backend no reconoce se informa como
+        `LotIssue` del lote, nunca como error.
       oneOf:
         - $ref: '#/components/schemas/SaleEvent'
         - $ref: '#/components/schemas/StockMovementEvent'
@@ -305,79 +418,106 @@ components:
         - $ref: '#/components/schemas/CustomerEvent'
         - $ref: '#/components/schemas/AccountHoldConfirmEvent'
         - $ref: '#/components/schemas/AccountHoldReleaseEvent'
-        - $ref: '#/components/schemas/CashSessionEvent'
+        - $ref: '#/components/schemas/CashMovementEvent'
+        - $ref: '#/components/schemas/CustomerPaymentEvent'
 
     SaleEvent:
-      type: object
-      required: [type, id, sale]
-      properties:
-        type: { type: string, enum: [sale] }
-        id: { type: string }
-        sale: { $ref: '#/components/schemas/Sale' }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, sale]
+          properties:
+            type: { type: string, enum: [sale] }
+            sale: { $ref: '#/components/schemas/Sale' }
 
     StockMovementEvent:
-      type: object
-      required: [type, id, movement]
-      properties:
-        type: { type: string, enum: [stock-movement] }
-        id: { type: string }
-        movement: { $ref: '#/components/schemas/StockMovement' }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, movement]
+          properties:
+            type: { type: string, enum: [stock-movement] }
+            movement: { $ref: '#/components/schemas/StockMovement' }
 
     SaleVoidEvent:
-      type: object
-      required: [type, id, saleId, voidedAt]
-      properties:
-        type: { type: string, enum: [sale-void] }
-        id: { type: string }
-        saleId: { type: string }
-        voidedAt: { type: string, format: date-time }
-        voidReason: { type: string }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, saleId, voidedAt]
+          description: Solo para ventas — cobranzas y movimientos de caja no se anulan.
+          properties:
+            type: { type: string, enum: [sale-void] }
+            saleId: { type: string }
+            voidedAt: { type: string, format: date-time }
+            voidReason: { type: string }
 
     CustomerEvent:
-      type: object
-      required: [type, id, customer]
-      properties:
-        type: { type: string, enum: [customer] }
-        id: { type: string }
-        customer: { $ref: '#/components/schemas/Customer' }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, customer]
+          properties:
+            type: { type: string, enum: [customer] }
+            customer: { $ref: '#/components/schemas/Customer' }
 
     AccountHoldConfirmEvent:
-      type: object
-      required: [type, id, holdId, saleId]
-      properties:
-        type: { type: string, enum: [account-hold-confirm] }
-        id: { type: string }
-        holdId: { type: string }
-        saleId: { type: string }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, holdId, saleId]
+          properties:
+            type: { type: string, enum: [account-hold-confirm] }
+            holdId: { type: string }
+            saleId: { type: string }
 
     AccountHoldReleaseEvent:
-      type: object
-      required: [type, id, holdId]
-      properties:
-        type: { type: string, enum: [account-hold-release] }
-        id: { type: string }
-        holdId: { type: string }
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, holdId]
+          properties:
+            type: { type: string, enum: [account-hold-release] }
+            holdId: { type: string }
 
-    CashSessionEvent:
-      type: object
-      required: [type, id, session]
-      properties:
-        type: { type: string, enum: [cash-session] }
-        id: { type: string }
-        session: { $ref: '#/components/schemas/CashSession' }
+    CashMovementEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, movement]
+          properties:
+            type: { type: string, enum: [cash-movement] }
+            movement: { $ref: '#/components/schemas/CashMovement' }
+
+    CustomerPaymentEvent:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelope'
+        - type: object
+          required: [type, payment]
+          properties:
+            type: { type: string, enum: [customer-payment] }
+            payment: { $ref: '#/components/schemas/CustomerPayment' }
 
     PushBatchRequest:
       type: object
-      required: [events]
+      required: [deviceId, events]
       properties:
+        deviceId:
+          type: string
+          description: UUID de la terminal, una vez por request (tolerado ausente hasta #97).
         events:
           type: array
           items: { $ref: '#/components/schemas/OutboxBatchItem' }
 
     PullBatchRequest:
       type: object
-      required: [cursors, pendingLotIds]
+      required: [deviceId, cursors, pendingLotIds]
       properties:
+        deviceId:
+          type: string
+          description: |
+            UUID de la terminal (tolerado ausente hasta #97). En v3 todavía no
+            se usa: habilita que el backend informe lotes que la terminal
+            perdió de vista (#90).
         cursors:
           type: object
           description: Cursor por recurso; ausente pide la foto completa de ese recurso.
@@ -403,14 +543,27 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/Customer' } }
         nextCursor: { type: string, description: Pasar como cursors.customers en el próximo pull. }
 
+    LotIssue:
+      type: object
+      required: [message]
+      description: Aviso del backend sobre un lote ya procesado. Siempre se refiere a un lote.
+      properties:
+        message: { type: string, description: Texto para el humano. }
+        eventId: { type: string, description: Id del evento del lote al que se refiere el aviso. }
+
     BatchLotStatus:
       description: |
-        `pending` es un valor propio, no la ausencia de ok/issues: mientras
-        un lote está pending no se sabe todavía si va a tener problemas.
+        `queued` = recibido, sin empezar; `processing` = en curso; `ok` =
+        procesado sin avisos; `issues` = procesado, con avisos para el
+        humano (nunca bloquea al POS). Un lote pedido y no informado se
+        trata como `processing`.
       oneOf:
         - type: object
           required: [status]
-          properties: { status: { type: string, enum: [pending] } }
+          properties: { status: { type: string, enum: [queued] } }
+        - type: object
+          required: [status]
+          properties: { status: { type: string, enum: [processing] } }
         - type: object
           required: [status]
           properties: { status: { type: string, enum: [ok] } }
@@ -418,7 +571,7 @@ components:
           required: [status, issues]
           properties:
             status: { type: string, enum: [issues] }
-            issues: { type: array, items: { type: string } }
+            issues: { type: array, items: { $ref: '#/components/schemas/LotIssue' } }
 
     PullBatchResponse:
       type: object

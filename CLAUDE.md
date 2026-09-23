@@ -129,6 +129,20 @@ tabla local `outbox` (`domain/outbox.ts::OutboxEvent`, unión discriminada por `
 `payload: unknown`), en la misma transacción Dexie que el registro de negocio. La venta/anulación
 ya está cerrada y operativa localmente sin importar el resultado del sync.
 
+**Identidad de cada evento (contrato v3, #96)**: al encolar, cada evento se **estampa** con su
+`origin` (sucursal y punto de venta de `/CONFIG`, `sync/terminal-identity.ts::currentEventOrigin`,
+que los repositorios de `storage/` leen junto al `now`) y lo guarda en el `OutboxEvent`: al armar un
+lote nunca se relee la config, así que cambiar la sucursal con eventos pendientes no reescribe los ya
+encolados (auditoría). `sync/engine.ts::toBatchItem` arma el sobre de red (`id`, `createdAt`,
+`origin` — vacío para un evento encolado antes de v3). El id de dispositivo
+(`sync/terminal-identity.ts::getDeviceId`, UUID en `localStorage` bajo `offline-pos:device-id`,
+generado la primera vez) viaja **una vez por request**, en push y en pull, no por evento. Sucursal,
+punto de venta y `deviceId` son obligatorios en el contrato pero tolerados ausentes hasta la Etapa 2
+de #94 (#97, que además implementa el ciclo de vida del id). Un evento `cash-session` que haya
+quedado pendiente en una terminal (tipo que v3 eliminó) nunca viaja:
+`storage/local-data.ts::listPendingOutbox` lo excluye y lo marca como enviado
+(`domain/outbox.ts::isLegacyOutboxType`).
+
 **Push: un solo lote, un solo ack (#87)**. `sync/engine.ts::pushPendingLot` manda **toda** la cola
 `pending` del outbox de una vez, con un `idempotency_id` (ULID) generado al armar el lote y
 **congelado** junto con el conjunto exacto de eventos incluidos: un reintento del mismo lote (fallo
@@ -143,12 +157,19 @@ exponencial (mismo esquema que antes, ahora por lote en vez de por evento);
 **Pull: un solo lote, gateado por el estado de los lotes de push (#87)**.
 `sync/engine.ts::runPullCycle` pide productos/clientes (con cursor `since` opcional por recurso, o
 sin él para pedir la foto completa de ese recurso) y stock (siempre completo) en una sola llamada,
-más el estado (`pending`/`ok`/`issues`) de los lotes de push que el POS todavía espera confirmar.
-**Si alguno de esos lotes sigue `pending` (o el backend no lo informa), el pull entero se descarta**
-— ni el delta ni la foto completa se aplican — porque aplicar sin saber si el último push ya se
-procesó podría reconciliar contra un estado que ese push todavía no reflejó. Un lote que se resuelve
-con `issues` no bloquea nada (el POS nunca se autobloquea) — solo se muestra al humano vía
-`pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`).
+más el estado de los lotes de push que el POS todavía espera confirmar — contrato v3 (#96):
+`queued` (recibido, sin empezar), `processing`, `ok` o `issues`, con los avisos como `LotIssue`
+(`{ message, eventId? }`, `sync/connector.ts`). **Si alguno de esos lotes sigue `queued` o
+`processing` (o el backend no lo informa, que cuenta como `processing`), el pull entero se
+descarta** — ni el delta ni la foto completa se aplican — porque aplicar sin saber si el último push
+ya se procesó podría reconciliar contra un estado que ese push todavía no reflejó. Esa es la regla
+de la Etapa 1 de #94 (igual que el `pending` de v2); la Etapa 3 (#98) la refina (datos maestros
+siempre, stock/saldo reaplicando eventos de lotes `queued`). El último estado en curso informado se
+guarda en el lote en espera (`AwaitingLot.lastStatus`, `sync/push-lot.ts::updateAwaitingLots`) y
+`/DIAGNOSTICO` lo muestra ("en cola"/"procesando"/"sin informar"). Un lote que se resuelve con
+`issues` no bloquea nada (el POS nunca se autobloquea) — solo se muestra al humano vía
+`pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`), formateado con el
+evento al que se refiere (`ui/format-lot.ts::formatLotIssue`).
 
 **Log de intentos y `/DIAGNOSTICO`**: un usuario probando el conector de Sheets contra un
 despliegue real se topó con un error de sync sin poder ver el detalle (la Console del navegador no
@@ -157,10 +178,11 @@ a `connector.pushBatch`/`pullBatch` — `request`/`result` son literalmente lo q
 tiene en la mano, sin resumir, para poder correlacionar con Network — en `syncLogSignal`
 (`ui/state/sync.ts`, tope de 20, más nuevo primero, sin persistir). Un ciclo exitoso no toca la
 consola; un fallo real (`sync/request-failed`, `sync/remote-error`, etc.) hace `console.error`; el
-descarte por lote `pending` (comportamiento esperado de la regla de arriba, no un problema) hace
+descarte por lote en curso (comportamiento esperado de la regla de arriba, no un problema) hace
 `console.info`; un lote resuelto con `issues` hace `console.warn`. `/DIAGNOSTICO` (comando core,
 `ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
-motor (`sync/engine.ts::isSyncLockHeld`) y los lotes en espera — de solo lectura, mismo patrón de
+motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo y los lotes en espera con su último
+estado — de solo lectura, mismo patrón de
 teclado que `/RESUMEN`; la barra de estado sigue sin ser interactiva (decisión que se mantiene, ver
 "Barra de estado" más abajo).
 
@@ -205,7 +227,8 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`). **Desde la Etapa 1 del rediseño de sync (#87,
+documentado en `docs/connector-api.openapi.yaml`, **versión 3.0.0** desde la Etapa 1 del epic #94 —
+#96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`). **Desde la Etapa 1 del rediseño de sync (#87,
 "el backend nunca rechaza") el contrato pasó de 10 endpoints por recurso/evento a dos operaciones
 batch** (`POST /sync/push`, `POST /sync/pull`) más dos excepciones síncronas: la reserva de crédito
 existente (`POST /account-holds`, sin cambios) y una futura consulta de saldo
@@ -224,10 +247,28 @@ Los tres gaps que la v1 del contrato fue encontrando sobre la marcha (`sale-void
 en Fase 1 sin que §6 la tuviera prevista, con su propia Idempotency-Key por ser una operación
 distinta sobre un recurso ya enviado, RNF-07 —; `customer` — RF-16, alta de un cliente local sin
 forma de avisarle al backend —; `account-hold-confirm` — §5 decía que "viaja en el outbox" pero el
-contrato nunca había definido ese endpoint) y el turno de caja cerrado (`cash-session`, Fase 6, el
-único de los cuatro que ya estaba documentado desde el diseño original) viajan hoy como eventos del
-lote de `/sync/push` (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya
-no son endpoints HTTP propios.
+contrato nunca había definido ese endpoint) viajan hoy como eventos del lote de `/sync/push`
+(`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya no son endpoints HTTP
+propios.
+
+**Contrato v3 (#96)** — 8 tipos de evento: `sale`, `stock-movement`, `sale-void`, `customer`,
+`account-hold-confirm`, `account-hold-release`, y dos nuevos: `cash-movement`
+(`domain/cash-movement.ts`: ingreso/egreso de caja; el arqueo viaja solo como ajuste
+`count-adjustment` con lo esperado y lo contado, y solo si la diferencia no es 0) y
+`customer-payment` (`domain/customer-payment.ts`: cobranza sin venta, sin cuenta corriente como medio
+y sin vuelto). Ninguno de los dos tiene UI todavía — los generan las Etapas 5 y 6 de #94 — pero el
+dominio, el outbox, los conectores y el minibackend ya los soportan. Ninguno se anula (se corrigen
+con otro registro, RNF-07). `cash-session` se eliminó: el turno local de `/CAJA` sigue hasta la Etapa
+5, pero ya no viaja. Cantidades con signo y hasta 3 decimales, `Sale.total`/`Payment.amount` pueden
+ser negativos (el POS los genera recién en la Etapa 4, los conectores ya los aceptan); un pago
+`account` sin `reference` es fiado offline (positivo) o acreditación (negativo). El pull trae
+`createdAt` **obligatorio** (fecha de alta real — `splitConnectorCustomer` la usa en vez de la hora
+del pull) y `blocked?: { reason }` (bloqueo informativo, nunca impide operar) en productos y clientes;
+`blocked` se guarda en IndexedDB pero no se muestra hasta la Etapa 4. El puerto: `pushBatch(batch:
+PushBatch, idempotencyId)` con `PushBatch = { deviceId, events }`, y `PullBatchParams.deviceId`. Los
+schemas Zod de red que comparten los dos conectores TS (`connectorProductSchema`,
+`batchLotStatusSchema`, `pullBatchResponseSchema`, `toPullBatchResult`, …) viven en
+`sync/connector.ts`, no en cada conector.
 
 `sync/connector.ts` define el puerto `Connector` — vive en `sync/`, no en `domain/`, porque habla en
 términos de red (cursores, Idempotency-Key, tipos como `ConnectorCustomer`/`AccountHoldResult`) que
@@ -248,7 +289,15 @@ pendiente era un request HTTP propio, cada uno tomando el lock de punta a punta.
 cursor real para Productos/Clientes pese a que Sheets no trackea "última modificación" por fila:
 compara el contenido de cada fila contra un fingerprint guardado en una hoja oculta (`_Snapshot`) en
 vez de depender de un trigger `onEdit` (más difícil de probar y que no cubriría las escrituras del
-propio bridge de todos modos) — ver el README del conector, sección "Cursor de pull". Cada conector es dueño de su schema de config
+propio bridge de todos modos) — ver el README del conector, sección "Cursor de pull". Contrato v3
+(#96): pestañas nuevas `MovimientosCaja` y `Cobranzas`; columnas de identidad (Dispositivo, Sucursal,
+Punto de venta) en lo que escribe, Alta/Bloqueado/Motivo del bloqueo en Productos y Clientes (Alta se
+completa sola la primera vez que se lee la fila); `CuentaCorriente` pasa a ser el libro completo
+(holds confirmados, pagos a cuenta sin hold con su signo, cobranzas en negativo); `Turnos` sale del
+schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns` agrega al
+final de cada pestaña existente las columnas **opcionales** que le faltan (una requerida que falta
+sigue siendo el error de siempre — agregarla vacía haría viajar productos a $0). Sheets procesa cada
+lote dentro del request: nunca informa `queued`/`processing`. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y
@@ -258,7 +307,9 @@ carga de código de terceros en runtime (descartada: ejecución de código arbit
 maneja ventas y pagos) — un conector nuevo es un PR al repo. Todo `POST` de eventos de negocio es
 idempotente vía `Idempotency-Key`. La conexión se configura por terminal vía `/CONFIG` (runtime,
 `localStorage` — `sync/config.ts`), desacoplada del contrato: lo guardado es `{ type, …campos del
-conector, locale? }`, y una config guardada sin `type` (anterior al registro) se lee como
+conector, locale?, branch?, pointOfSale? }` (los tres últimos son config de terminal, fuera de la
+unión por `type`; sucursal y punto de venta se estampan en cada evento, opcionales hasta la Etapa 2
+de #94, que los vuelve obligatorios), y una config guardada sin `type` (anterior al registro) se lee como
 `type: 'rest'` (`z.preprocess` en `syncConfigSchema`), así ninguna terminal ya configurada pierde su
 conexión al actualizar. Un integrador nuevo implementa el contrato — un backend que ya habla el
 contrato REST no requiere tocar código del POS (RNF-06); un backend con otro formato (como la planilla
@@ -331,7 +382,9 @@ todas las claves `offline-pos:*` de `localStorage` (por prefijo, nunca una lista
 conector marca las suyas con `ConfigField.secret`. `reset()` borra **también la config de
 `/CONFIG`** (a diferencia de `/DEMO_RESET`): equivale a perder el id de dispositivo, y sin él la
 terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync y recarga.
-`pos.deviceId()` se suma cuando exista el id de dispositivo (Etapas 1/2 de #94).
+`pos.deviceId()` (Etapa 1 de #94, #96) devuelve el id de dispositivo de la terminal
+(`sync/terminal-identity.ts::getDeviceId`), el mismo que muestra `/DIAGNOSTICO` y que viaja en cada
+push/pull. Como vive bajo `offline-pos:*`, `reset()` también lo borra.
 
 ## UX keyboard-first
 
@@ -505,8 +558,9 @@ hay un turno abierto, agrega el id de la venta a su `sales[]` en la misma transa
 El arqueo al cerrar es **solo de efectivo** (apertura + ventas en efectivo del turno vs. lo
 contado) — tarjeta/cuenta corriente no tienen equivalente físico para "contar", aunque el reporte
 básico sí desglosa el total por cada medio de pago. Un turno **abierto** nunca se sincroniza (mismo
-criterio que una `Sale` con `status: 'open'`, Fase 1: nace ya cerrada) — solo se encola en el
-outbox al cerrarse, ya completo (ver "Connector API" más abajo).
+criterio que una `Sale` con `status: 'open'`, Fase 1: nace ya cerrada). Hasta el contrato v2 se
+encolaba en el outbox al cerrarse; desde v3 (#96) **no viaja nunca** — el turno local sigue hasta la
+Etapa 5 de #94, que lo reemplaza por movimientos de caja (ver "Connector API" más abajo).
 
 **`/DESCARTAR` (Ciclo 8)**: vacía la venta en curso completa — líneas, cliente adjunto y el % de
 recargo/descuento — vía `domain/cart.ts::discardCart`. A propósito distinto de `/ANULAR`: esa anula
@@ -1140,6 +1194,22 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   (`ui/errors.ts`, los signals de `ui/state/sync.ts`, comando+pantalla de `/RESUMEN`), sin spec
   aparte.
 
+- Contrato del Connector API v3 (Etapa 1 del epic #94, issue #96, absorbe #90; spec
+  `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`, plan
+  `docs/superpowers/plans/2026-09-23-contrato-connector-api-v3.md`): sobre por evento con `origin`
+  estampado al encolar, `deviceId` por request, estados de lote `queued`/`processing`/`ok`/`issues`
+  con avisos `{ message, eventId? }`, eventos `cash-movement` y `customer-payment` (sin UI todavía),
+  `cash-session` eliminado, bloqueos y `createdAt` en el pull — implementado en el dominio, el motor,
+  `/CONFIG` (Sucursal y Punto de venta opcionales), `/DIAGNOSTICO`, `pos.deviceId()`, el conector
+  REST, el de Google Sheets (lado TS y puente) y el minibackend. El minibackend separa la
+  **recepción** de un lote (`queued`) de su **procesamiento** (`demo-backend/src/lots.ts`: los efectos
+  — stock, saldos, filas — recién al terminar); el panel `/_demo` puede demorar los lotes nuevos y
+  avanzarlos a mano (Empezar / Terminar OK / Terminar con aviso), bloquear productos y clientes, y
+  lista movimientos de caja y cobranzas con su identidad. Su base SQLite lleva `SCHEMA_VERSION`
+  (`PRAGMA user_version`): una base de otra versión se recrea vacía y el arranque resiembra. Una
+  desviación del plan: `ensureColumns` del puente solo agrega columnas opcionales (ver "Connector
+  API").
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear
@@ -1170,8 +1240,8 @@ de que esté hecha. Se avanza directo a Fase 6. Detalle completo de la decisión
 ya estaba resuelta desde Fase 2/3 (cada pull sobrescribe con el dato del backend, que siempre
 manda) — confirmado con el usuario antes de arrancar, no se agregó nada nuevo ahí. El trabajo real
 fue turnos de caja: `domain/cash-session.ts` (`CashSession`, `openCashSession`/`closeCashSession`/
-`calculateCashSessionSummary`), `storage/cash-session-repository.ts` (persistencia + outbox al
-cerrar), comando `/CAJA` y pantalla nueva (`ui/screens/cash-session-screen.tsx`) para abrir/cerrar
+`calculateCashSessionSummary`), `storage/cash-session-repository.ts` (persistencia; hasta el
+contrato v3 también el outbox al cerrar), comando `/CAJA` y pantalla nueva (`ui/screens/cash-session-screen.tsx`) para abrir/cerrar
 con arqueo de efectivo, y el gate de `/COBRAR` sin turno abierto — ver "UX keyboard-first" y
 "Patrones establecidos" más arriba para el detalle completo, incluida la carrera real de un reset
 de buffer después de un `await` que agarró el e2e corrido repetidas veces. La reconciliación

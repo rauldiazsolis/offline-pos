@@ -1,34 +1,16 @@
-import { z } from 'zod';
-import { productSchema } from '../../domain/product.ts';
 import { err, ok, type Result } from '../../domain/result.ts';
-import { stockItemSchema } from '../../domain/stock.ts';
 import { toZodIssues } from '../../domain/zod-issues.ts';
 import {
   accountHoldResultSchema,
-  connectorCustomerSchema,
+  pullBatchResponseSchema,
+  toPullBatchResult,
   type AccountHoldResult,
   type Connector,
-  type OutboxBatchItem,
   type PullBatchParams,
   type PullBatchResult,
+  type PushBatch,
 } from '../../sync/connector.ts';
 import type { RestConnectionConfig } from './config.ts';
-
-const batchLotStatusSchema = z.union([
-  z.object({ status: z.literal('pending') }),
-  z.object({ status: z.literal('ok') }),
-  z.object({ status: z.literal('issues'), issues: z.array(z.string()) }),
-]);
-
-const pullBatchResponseSchema = z.object({
-  products: z.object({ items: z.array(productSchema), nextCursor: z.string().optional() }),
-  customers: z.object({
-    items: z.array(connectorCustomerSchema),
-    nextCursor: z.string().optional(),
-  }),
-  stock: z.array(stockItemSchema),
-  lots: z.record(z.string(), batchLotStatusSchema),
-});
 
 function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): HeadersInit {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -43,7 +25,7 @@ function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): He
 
 /**
  * Implementación de referencia del puerto `Connector` sobre `fetch` (ver
- * `docs/connector-api.openapi.yaml`, contrato v2 — #87). El *request*
+ * `docs/connector-api.openapi.yaml`, contrato v3 — #96). El *request*
  * (nuestro propio dato ya tipado) nunca se valida con Zod; la *respuesta* de
  * un pull sí es externa → se valida.
  */
@@ -78,8 +60,8 @@ export function createRestFetchConnector(config: RestConnectionConfig): Connecto
   }
 
   return {
-    async pushBatch(items: OutboxBatchItem[], idempotencyId: string): Promise<Result<void>> {
-      const result = await postJson('/sync/push', idempotencyId, { events: items });
+    async pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>> {
+      const result = await postJson('/sync/push', idempotencyId, batch);
       if (!result.ok) {
         return result;
       }
@@ -95,22 +77,7 @@ export function createRestFetchConnector(config: RestConnectionConfig): Connecto
       if (!parsed.success) {
         return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
       }
-      // `exactOptionalPropertyTypes`: el `.optional()` de Zod infiere `string | undefined`
-      // explícito, distinto de un `nextCursor?: string` sin valor — se reconstruye sin la clave
-      // cuando está ausente, mismo criterio que `sync/pull-snapshot.ts::toProbeSnapshot`.
-      const { products, customers, stock, lots } = parsed.data;
-      return ok({
-        products: {
-          items: products.items,
-          ...(products.nextCursor !== undefined ? { nextCursor: products.nextCursor } : {}),
-        },
-        customers: {
-          items: customers.items,
-          ...(customers.nextCursor !== undefined ? { nextCursor: customers.nextCursor } : {}),
-        },
-        stock,
-        lots,
-      });
+      return ok(toPullBatchResult(parsed.data));
     },
 
     async requestAccountHold(params, idempotencyKey: string): Promise<Result<AccountHoldResult>> {

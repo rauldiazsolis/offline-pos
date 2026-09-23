@@ -73,7 +73,7 @@ describe('createConnector', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest', baseUrl: 'https://api.example.com' });
-    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
+    await connector.pullBatch({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((fetchMock.mock.calls[0] as [string])[0]).toBe('https://api.example.com/sync/pull');
@@ -88,7 +88,7 @@ describe('createConnector', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({ type: 'rest-demo', baseUrl: 'http://localhost:4000' });
-    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
+    await connector.pullBatch({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
 
     expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://localhost:4000/sync/pull');
   });
@@ -106,7 +106,7 @@ describe('createConnector', () => {
       type: 'google-sheets',
       webAppUrl: 'https://script.google.com/macros/s/abc/exec',
     });
-    await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
+    await connector.pullBatch({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://script.google.com/macros/s/abc/exec');

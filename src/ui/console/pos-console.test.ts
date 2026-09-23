@@ -15,10 +15,14 @@ const diagnostics: SyncDiagnostics = {
   lockHeld: false,
   online: true,
   currentLot: undefined,
-  awaitingLots: [{ id: 'LOT1', sentAt: '2026-09-23T11:00:00.000Z' }],
+  awaitingLots: [
+    { id: 'LOT1', sentAt: '2026-09-23T11:00:00.000Z' },
+    { id: 'LOT2', sentAt: '2026-09-23T11:01:00.000Z', lastStatus: 'processing' },
+  ],
   lastSyncedAt: '2026-09-23T11:05:00.000Z',
   lastSyncFailure: null,
   pushLotIssues: null,
+  deviceId: 'dev-1',
   log: [
     { at: '2026-09-23T11:05:00.000Z', kind: 'pull', request: { full: true }, result: { ok: true } },
     {
@@ -50,6 +54,7 @@ function fakeDeps(overrides: Partial<PosConsoleDeps> = {}): PosConsoleDeps {
         localStorage: {},
       }),
     resetTerminal: () => Promise.resolve(ok(undefined)),
+    getDeviceId: () => 'dev-1',
     download: vi.fn(),
     reload: vi.fn(),
     console: { log: vi.fn(), info: vi.fn(), error: vi.fn(), table: vi.fn() },
@@ -87,7 +92,11 @@ describe('pos.status', () => {
     });
     expect(JSON.stringify(status)).not.toContain('secreta');
     expect(status.cerrojo).toBe('libre');
-    expect(status.lotesEnEspera).toEqual([{ id: 'LOT1', enviado: '2026-09-23T11:00:00.000Z' }]);
+    expect(status.dispositivo).toBe('dev-1');
+    expect(status.lotesEnEspera).toEqual([
+      { id: 'LOT1', enviado: '2026-09-23T11:00:00.000Z', estado: 'sin informar' },
+      { id: 'LOT2', enviado: '2026-09-23T11:01:00.000Z', estado: 'procesando' },
+    ]);
     expect(status.log.map((entry) => entry.resultado)).toEqual([
       'OK',
       expect.stringContaining('30'),
@@ -107,6 +116,25 @@ describe('pos.status', () => {
     expect(pos.status().conexion).toEqual({
       error: 'No hay conexión configurada todavía. Usá /CONFIG.',
     });
+  });
+});
+
+describe('contrato v3 (#96)', () => {
+  it('pos.deviceId() devuelve el id de dispositivo', () => {
+    expect(createPosConsole(fakeDeps()).deviceId()).toBe('dev-1');
+  });
+
+  it('status() formatea los avisos del backend con su evento', () => {
+    const pos = createPosConsole(
+      fakeDeps({
+        collectDiagnostics: () => ({
+          ...diagnostics,
+          pushLotIssues: [{ message: 'x', eventId: 'e1' }, { message: 'y' }],
+        }),
+      }),
+    );
+
+    expect(pos.status().issuesDelBackend).toEqual(['x (evento e1)', 'y']);
   });
 });
 

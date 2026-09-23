@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Product } from '../domain/product.ts';
+import type { ConnectorProduct } from './connector.ts';
 import { err, ok } from '../domain/result.ts';
 import type { LocalDataSummary } from '../storage/local-data.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
@@ -13,7 +13,7 @@ afterEach(() => {
 
 const config: SyncConfig = { type: 'rest', baseUrl: 'https://api.example.com' };
 
-const product: Product = {
+const product: ConnectorProduct = {
   id: 'p1',
   sku: 'S1',
   barcodes: [],
@@ -22,6 +22,7 @@ const product: Product = {
   taxRate: 0.21,
   category: 'x',
   tracksStock: false,
+  createdAt: '2025-01-01T00:00:00.000Z',
 };
 
 describe('withTimeout', () => {
@@ -48,7 +49,10 @@ describe('probeConnection', () => {
           ok({
             products: { items: [product], nextCursor: 'cur-p' },
             stock: [{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }],
-            customers: { items: [{ id: 'c1', name: 'Ana' }], nextCursor: 'cur-c' },
+            customers: {
+              items: [{ id: 'c1', name: 'Ana', createdAt: '2025-01-01T00:00:00.000Z' }],
+              nextCursor: 'cur-c',
+            },
             lots: {},
           }),
         ),
@@ -61,7 +65,7 @@ describe('probeConnection', () => {
       value: {
         products: [product],
         stock: [{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }],
-        customers: [{ id: 'c1', name: 'Ana' }],
+        customers: [{ id: 'c1', name: 'Ana', createdAt: '2025-01-01T00:00:00.000Z' }],
         cursors: { products: 'cur-p', customers: 'cur-c' },
       },
     });
@@ -94,7 +98,11 @@ describe('probeConnection', () => {
 
     await probeConnection(config, { connector: fakeConnector({ pullBatch }) });
 
-    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
+    expect(pullBatch).toHaveBeenCalledWith({
+      deviceId: expect.any(String) as unknown,
+      cursors: {},
+      pendingLotIds: [],
+    });
   });
 
   it('un backend colgado devuelve sync/timeout en vez de esperar para siempre', async () => {

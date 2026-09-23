@@ -56,6 +56,7 @@ function setOnline(online: boolean): void {
 const now = '2026-01-01T00:00:00.000Z';
 
 beforeEach(async () => {
+  localStorage.setItem('offline-pos:device-id', 'dev-1');
   await db.open();
   setCatalogRepository({
     search: () => [],
@@ -116,8 +117,8 @@ describe('pushPendingLot', () => {
 
     expect(summary).toEqual({ attempted: 2, failed: false });
     expect(pushBatch).toHaveBeenCalledTimes(1);
-    const [items] = pushBatch.mock.calls[0] as [unknown[], string];
-    expect(items.map((item) => (item as { id: string }).id)).toEqual(['first', 'second']);
+    const [batch] = pushBatch.mock.calls[0] as [{ events: unknown[] }, string];
+    expect(batch.events.map((item) => (item as { id: string }).id)).toEqual(['first', 'second']);
   });
 
   it('marca todos los eventos del lote como synced tras un ack exitoso, y limpia el lote en curso', async () => {
@@ -140,7 +141,11 @@ describe('pushPendingLot', () => {
     expect(syncLogSignal.value[0]).toEqual({
       at: now,
       kind: 'push',
-      request: { idempotencyId: lotId, events: [{ type: 'sale', sale, id: 'sale-1' }] },
+      request: {
+        idempotencyId: lotId,
+        deviceId: 'dev-1',
+        events: [{ type: 'sale', sale, id: 'sale-1', createdAt: now, origin: {} }],
+      },
       result: { ok: true },
     });
     expect(errorSpy).not.toHaveBeenCalled();
@@ -213,9 +218,12 @@ describe('pushPendingLot', () => {
       ignoreBackoff: true,
     });
 
-    const [items, idempotencyId] = pushBatchRetry.mock.calls[0] as [unknown[], string];
+    const [retried, idempotencyId] = pushBatchRetry.mock.calls[0] as [
+      { events: unknown[] },
+      string,
+    ];
     expect(idempotencyId).toBe(lotIdAfterFailure); // mismo id congelado, no uno nuevo
-    expect(items.map((item) => (item as { id: string }).id)).toEqual(['sale-1']); // sale-2 queda para el próximo lote
+    expect(retried.events.map((item) => (item as { id: string }).id)).toEqual(['sale-1']); // sale-2 queda para el próximo lote
   });
 });
 
@@ -224,7 +232,7 @@ describe('toBatchItem', () => {
   it.each([
     [
       { type: 'sale' as const, sale, id: 'sale-1', status: 'pending' as const, createdAt: now },
-      { type: 'sale', sale, id: 'sale-1' },
+      { type: 'sale', sale, id: 'sale-1', createdAt: now, origin: {} },
     ],
     [
       {
@@ -252,6 +260,8 @@ describe('toBatchItem', () => {
           createdAt: now,
         },
         id: 'm1',
+        createdAt: now,
+        origin: {},
       },
     ],
     [
@@ -264,7 +274,15 @@ describe('toBatchItem', () => {
         status: 'pending' as const,
         createdAt: now,
       },
-      { type: 'sale-void', saleId: 'sale-1', voidedAt: now, voidReason: 'error', id: 'void-1' },
+      {
+        type: 'sale-void',
+        saleId: 'sale-1',
+        voidedAt: now,
+        voidReason: 'error',
+        id: 'void-1',
+        createdAt: now,
+        origin: {},
+      },
     ],
     [
       {
@@ -274,7 +292,13 @@ describe('toBatchItem', () => {
         status: 'pending' as const,
         createdAt: now,
       },
-      { type: 'customer', customer: { id: 'c1', name: 'Juan Pérez', createdAt: now }, id: 'c1' },
+      {
+        type: 'customer',
+        customer: { id: 'c1', name: 'Juan Pérez', createdAt: now },
+        id: 'c1',
+        createdAt: now,
+        origin: {},
+      },
     ],
     [
       {
@@ -285,7 +309,14 @@ describe('toBatchItem', () => {
         status: 'pending' as const,
         createdAt: now,
       },
-      { type: 'account-hold-confirm', holdId: 'hold-1', saleId: 'sale-1', id: 'confirm-1' },
+      {
+        type: 'account-hold-confirm',
+        holdId: 'hold-1',
+        saleId: 'sale-1',
+        id: 'confirm-1',
+        createdAt: now,
+        origin: {},
+      },
     ],
     [
       {
@@ -295,24 +326,122 @@ describe('toBatchItem', () => {
         status: 'pending' as const,
         createdAt: now,
       },
-      { type: 'account-hold-release', holdId: 'hold-1', id: 'release-1' },
+      {
+        type: 'account-hold-release',
+        holdId: 'hold-1',
+        id: 'release-1',
+        createdAt: now,
+        origin: {},
+      },
     ],
     [
       {
-        type: 'cash-session' as const,
-        session: { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] },
-        id: 'cs1',
+        type: 'cash-movement' as const,
+        movement: {
+          id: 'cm1',
+          direction: 'in' as const,
+          amount: 10,
+          concept: 'Cambio',
+          source: 'manual' as const,
+          createdAt: now,
+        },
+        id: 'cm1',
+        status: 'pending' as const,
+        createdAt: now,
+        origin: { branch: 'Centro', pointOfSale: 'Caja 1' },
+      },
+      {
+        type: 'cash-movement',
+        movement: {
+          id: 'cm1',
+          direction: 'in',
+          amount: 10,
+          concept: 'Cambio',
+          source: 'manual',
+          createdAt: now,
+        },
+        id: 'cm1',
+        createdAt: now,
+        origin: { branch: 'Centro', pointOfSale: 'Caja 1' },
+      },
+    ],
+    [
+      {
+        type: 'customer-payment' as const,
+        payment: {
+          id: 'cp1',
+          customerId: 'c1',
+          payments: [{ method: 'cash' as const, amount: 10 }],
+          total: 10,
+          createdAt: now,
+        },
+        id: 'cp1',
         status: 'pending' as const,
         createdAt: now,
       },
       {
-        type: 'cash-session',
-        session: { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] },
-        id: 'cs1',
+        type: 'customer-payment',
+        payment: {
+          id: 'cp1',
+          customerId: 'c1',
+          payments: [{ method: 'cash', amount: 10 }],
+          total: 10,
+          createdAt: now,
+        },
+        id: 'cp1',
+        createdAt: now,
+        origin: {},
       },
     ],
-  ])('convierte %o a %o, sin status ni createdAt', (event, expected) => {
+  ])('convierte %o a %o: payload + sobre, sin status', (event, expected) => {
     expect(toBatchItem(event)).toEqual(expected);
+  });
+});
+
+describe('toBatchItem — sobre v3', () => {
+  it('un evento sin origen (encolado antes de v3) viaja con origen vacío', () => {
+    const item = toBatchItem({
+      type: 'account-hold-release',
+      holdId: 'h1',
+      id: 'e1',
+      status: 'pending',
+      createdAt: now,
+    });
+    expect(item).toEqual({
+      type: 'account-hold-release',
+      holdId: 'h1',
+      id: 'e1',
+      createdAt: now,
+      origin: {},
+    });
+  });
+
+  it('el lote viaja con deviceId y cada evento con su sobre (createdAt y origen)', async () => {
+    await db.outbox.add({
+      type: 'customer',
+      customer: { id: 'c1', name: 'Ana', createdAt: now },
+      id: 'c1',
+      status: 'pending',
+      createdAt: now,
+      origin: { branch: 'Centro' },
+    });
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
+    await pushPendingLot(fakeConnector({ pushBatch }), now);
+    expect(pushBatch).toHaveBeenCalledWith(
+      {
+        deviceId: 'dev-1',
+        events: [
+          {
+            type: 'customer',
+            customer: { id: 'c1', name: 'Ana', createdAt: now },
+            id: 'c1',
+            createdAt: now,
+            origin: { branch: 'Centro' },
+          },
+        ],
+      },
+      expect.any(String),
+    );
   });
 });
 
@@ -358,6 +487,7 @@ describe('runPullCycle — delta', () => {
     await runPullCycle(fakeConnector({ pullBatch }), now);
 
     expect(pullBatch).toHaveBeenLastCalledWith({
+      deviceId: 'dev-1',
       cursors: { products: 'cursor-2' },
       pendingLotIds: [],
     });
@@ -489,7 +619,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
         },
         customers: { items: [] },
         stock: [],
-        lots: { 'lot-1': { status: 'pending' } },
+        lots: { 'lot-1': { status: 'queued' } },
       }),
     );
 
@@ -497,7 +627,8 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
 
     expect(report).toEqual({ ok: false, error: 'sync/pending-lot', meta: undefined });
     expect((await db.products.get('p1'))?.name).toBe('Viejo'); // no se aplicó nada
-    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]); // sigue esperando
+    // Sigue esperando, con el último estado informado (contrato v3).
+    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now, lastStatus: 'queued' }]);
     // El descarte por lote pendiente es el comportamiento esperado del diseño, no un error real —
     // console.info (para debuguear), nunca console.error.
     expect(syncLogSignal.value[0]?.result).toEqual({
@@ -509,7 +640,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('si el backend no informa nada sobre un lote que esperamos, se trata como todavía pending', async () => {
+  it('si el backend no informa nada sobre un lote que esperamos, se trata como processing (contrato v3)', async () => {
     addAwaitingLot({ id: 'lot-1', sentAt: now });
     const pullBatch = vi
       .fn()
@@ -521,6 +652,25 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
 
     expect(report.ok).toBe(false);
     expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]);
+  });
+
+  it('un lote processing también descarta el pull y guarda el último estado', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    addAwaitingLot({ id: 'lot-1', sentAt: now });
+    const pullBatch = vi.fn().mockResolvedValue(
+      ok({
+        products: { items: [] },
+        customers: { items: [] },
+        stock: [{ productId: 'p1', quantity: 3, updatedAt: now }],
+        lots: { 'lot-1': { status: 'processing' } },
+      }),
+    );
+
+    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(report).toMatchObject({ ok: false, error: 'sync/pending-lot' });
+    expect(await db.stock.count()).toBe(0);
+    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now, lastStatus: 'processing' }]);
   });
 
   it('un lote resuelto ok se saca de la lista de espera y el pull se aplica normalmente', async () => {
@@ -548,7 +698,12 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
         products: { items: [] },
         customers: { items: [] },
         stock: [],
-        lots: { 'lot-1': { status: 'issues', issues: ['stock insuficiente en p1'] } },
+        lots: {
+          'lot-1': {
+            status: 'issues',
+            issues: [{ message: 'stock insuficiente en p1', eventId: 'm1' }],
+          },
+        },
       }),
     );
 
@@ -556,9 +711,13 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
 
     expect(report.ok).toBe(true);
     expect(getAwaitingLots()).toEqual([]);
-    expect(pushLotIssuesSignal.value).toEqual(['stock insuficiente en p1']);
+    expect(pushLotIssuesSignal.value).toEqual([
+      { message: 'stock insuficiente en p1', eventId: 'm1' },
+    ]);
     // Informativo, no bloquea nada (el POS nunca se autobloquea) — igual vale un console.warn.
-    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), ['stock insuficiente en p1']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), [
+      { message: 'stock insuficiente en p1', eventId: 'm1' },
+    ]);
   });
 
   it('un pull exitoso sin issues queda en el log sin tocar la consola', async () => {
@@ -571,7 +730,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
     expect(lastEntry).toEqual({
       at: now,
       kind: 'pull',
-      request: { cursors: {}, pendingLotIds: [] },
+      request: { deviceId: 'dev-1', cursors: {}, pendingLotIds: [] },
       result: { ok: true },
     });
     expect(errorSpy).not.toHaveBeenCalled();
@@ -603,7 +762,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
 
     await runPullCycle(fakeConnector({ pullBatch }), now);
 
-    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
+    expect(pullBatch).toHaveBeenCalledWith({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
   });
 });
 
@@ -634,7 +793,7 @@ describe('runPullCycle — foto completa y reconciliación de bajas', () => {
 
     await runPullCycle(fakeConnector({ pullBatch }), now, { full: true });
 
-    expect(pullBatch).toHaveBeenCalledWith({ cursors: {}, pendingLotIds: [] });
+    expect(pullBatch).toHaveBeenCalledWith({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
     expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
     expect(getProductsCursor()).toBe('cur-p');
     expect(getCustomersCursor()).toBe('cur-c');
@@ -804,7 +963,7 @@ describe('runPullCycleNow', () => {
 
     await runPullCycleNow();
 
-    expect(bodies).toEqual([{ cursors: {}, pendingLotIds: [] }]);
+    expect(bodies).toEqual([{ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] }]);
   });
 
   it('si un delta resuelve un lote con issues, encadena una foto completa ya (cadencia de #87)', async () => {
@@ -827,7 +986,7 @@ describe('runPullCycleNow', () => {
               customers: { items: [], nextCursor: 'cur-c' },
               stock: [],
               lots: hasCursor
-                ? { 'lot-1': { status: 'issues', issues: ['stock insuficiente'] } }
+                ? { 'lot-1': { status: 'issues', issues: [{ message: 'stock insuficiente' }] } }
                 : {},
             }),
         } as Response);
@@ -1109,6 +1268,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
       taxRate: 0.21,
       category: 'x',
       tracksStock: false,
+      createdAt: now,
     };
   }
 
@@ -1129,7 +1289,12 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
         const failing = state.failCustomers === true;
         const response = {
           products: { items: state.products, nextCursor: 'cur-p' },
-          customers: failing ? undefined : { items: state.customers, nextCursor: 'cur-c' },
+          customers: failing
+            ? undefined
+            : {
+                items: state.customers.map((customer) => ({ createdAt: now, ...customer })),
+                nextCursor: 'cur-c',
+              },
           stock: [],
           lots: {},
         };

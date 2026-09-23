@@ -18,10 +18,11 @@ import {
   configErrorFieldSignal,
   configErrorSignal,
   configFieldValuesSignal,
-  configLocaleSignal,
   configPhaseSignal,
+  configTerminalSignal,
   configTypeSignal,
   resetConfigForm,
+  type TerminalFieldKey,
 } from '../state/sync-config.ts';
 
 type PendingApply = { candidate: SyncConfig; snapshot: ProbeSnapshot; wipe: boolean };
@@ -109,8 +110,9 @@ export function setConfigField(key: string, value: string): void {
   clearConfigError();
 }
 
-export function setConfigLocale(value: string): void {
-  configLocaleSignal.value = value;
+/** Edita un campo de terminal (locale, sucursal, punto de venta). */
+export function setConfigTerminalField(key: TerminalFieldKey, value: string): void {
+  configTerminalSignal.value = { ...configTerminalSignal.value, [key]: value };
   clearConfigError();
 }
 
@@ -135,9 +137,11 @@ function validateForm(): SyncConfig | undefined {
       candidate[field.key] = value;
     }
   }
-  const locale = configLocaleSignal.value.trim();
-  if (locale !== '') {
-    candidate.locale = locale;
+  for (const [key, value] of Object.entries(configTerminalSignal.value)) {
+    const trimmed = value.trim();
+    if (trimmed !== '') {
+      candidate[key] = trimmed;
+    }
   }
 
   const parsed = syncConfigSchema.safeParse(candidate);

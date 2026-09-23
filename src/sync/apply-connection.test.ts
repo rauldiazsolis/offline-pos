@@ -34,8 +34,8 @@ const snapshot: ProbeSnapshot = {
   products: [product],
   stock: [{ productId: 'p1', quantity: 5, updatedAt: now }],
   customers: [
-    { id: 'c1', name: 'Ana' },
-    { id: 'c2', name: 'Beto', creditLimit: 100, margin: 10, balance: 5 },
+    { id: 'c1', name: 'Ana', createdAt: now },
+    { id: 'c2', name: 'Beto', createdAt: now, creditLimit: 100, margin: 10, balance: 5 },
   ],
   cursors: { products: 'cur-p', customers: 'cur-c' },
 };
@@ -56,7 +56,7 @@ async function seedOldWorld(): Promise<void> {
   setProductsCursor('cursor-viejo');
   await db.products.put({ ...product, id: 'viejo', name: 'Del backend viejo' });
   await db.sales.put(makeSale('s-vieja'));
-  await db.outbox.put(buildOutboxEventForSale(makeSale('s-vieja'), { now }));
+  await db.outbox.put(buildOutboxEventForSale(makeSale('s-vieja'), { now, origin: {} }));
   await db.cashSessions.put({ id: 'cs1', openedAt: now, openingAmount: 0, sales: [] });
   await db.draftCart.put({
     id: 'current',
@@ -191,7 +191,7 @@ describe('applyConnection', () => {
 
 describe('flushPendingBeforeWipe', () => {
   it('empuja los pendientes al conector actual ignorando el backoff del lote', async () => {
-    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
     const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
 
     await flushPendingBeforeWipe(oldConfig, { connector: fakeConnector({ pushBatch }) });
@@ -201,7 +201,7 @@ describe('flushPendingBeforeWipe', () => {
   });
 
   it('si el conector se cuelga, vuelve igual (tope de tiempo) y libera el cerrojo', async () => {
-    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
     const connector = fakeConnector({ pushBatch: () => new Promise<never>(() => undefined) });
 
     await flushPendingBeforeWipe(oldConfig, { connector, timeoutMs: 40 });
@@ -212,7 +212,7 @@ describe('flushPendingBeforeWipe', () => {
   });
 
   it('si el cerrojo sigue tomado y vence la espera, no empuja nada', async () => {
-    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
     const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
     const release = tryAcquireSyncLock();
 

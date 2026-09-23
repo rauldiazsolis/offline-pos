@@ -31,6 +31,10 @@ export const syncConfigSchema = z.preprocess(
   connectorConfigSchema.and(
     z.object({
       locale: z.string().optional(),
+      // Terminal (contrato v3, #96): se estampan en cada evento al encolarlo.
+      // Opcionales hasta la Etapa 2 (#97), que los vuelve obligatorios.
+      branch: z.string().optional(),
+      pointOfSale: z.string().optional(),
       // Fecha ISO de la última prueba de conexión exitosa (Etapa 2b, #76). La
       // escribe únicamente `sync/apply-connection.ts::applyConnection`; una
       // config sin este campo (incluidas las guardadas antes de 2b) es "sin

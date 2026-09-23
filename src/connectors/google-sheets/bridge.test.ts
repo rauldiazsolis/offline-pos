@@ -89,7 +89,7 @@ describe('arnés (humo contra el puente actual)', () => {
 
     expect(response.error).toBeUndefined();
     expect(response.ok).toBe(true);
-    expect(spreadsheet.sheetNames()).toContain('Turnos');
+    expect(spreadsheet.sheetNames()).toContain('MovimientosCaja');
     expect(table(spreadsheet, 'Productos')).toHaveLength(5);
     expect(response.data).toEqual(
       expect.objectContaining({
@@ -104,6 +104,7 @@ describe('arnés (humo contra el puente actual)', () => {
 });
 
 const PRODUCT_LABELS = ['Id', 'SKU', 'Códigos de barras', 'Nombre', 'Precio', 'IVA', 'Categoría'];
+const PRODUCT_V3_LABELS = [...PRODUCT_LABELS, 'Alta', 'Bloqueado', 'Motivo del bloqueo'];
 
 describe('lectura por encabezado (Etapa 2d)', () => {
   it('crea las pestañas con etiquetas legibles en español', () => {
@@ -115,7 +116,7 @@ describe('lectura por encabezado (Etapa 2d)', () => {
       PRODUCT_LABELS,
     );
     expect(spreadsheet.getSheetByName('Ventas')?.values()[0]).toContain('Precio unitario');
-    expect(spreadsheet.getSheetByName('Turnos')?.values()[0]).toContain('Tarjeta de débito');
+    expect(spreadsheet.getSheetByName('Cobranzas')?.values()[0]).toContain('Medio de pago');
   });
 
   it('lee columnas reordenadas e ignora las que agregó el usuario', () => {
@@ -139,6 +140,7 @@ describe('lectura por encabezado (Etapa 2d)', () => {
               price: 1500,
               taxRate: 0.21,
               category: 'almacen',
+              createdAt: expect.any(String) as unknown,
             },
           ],
           nextCursor: expect.any(String) as unknown,
@@ -157,7 +159,7 @@ describe('lectura por encabezado (Etapa 2d)', () => {
     const response = pullBatch(call);
 
     expect(response.ok).toBe(true);
-    expect(sheet.values()[0]).toEqual(PRODUCT_LABELS);
+    expect(sheet.values()[0]).toEqual(PRODUCT_V3_LABELS);
   });
 
   it('reconoce las etiquetas sin distinguir mayúsculas, acentos ni espacios', () => {
@@ -197,7 +199,7 @@ describe('lectura por encabezado (Etapa 2d)', () => {
 
     const response = pullBatch(call);
     expect((response.data as { customers: { items: unknown[] } }).customers.items).toEqual([
-      { id: 'c-1', name: 'Ana' },
+      { id: 'c-1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' },
     ]);
   });
 });
@@ -224,13 +226,19 @@ const SALE = {
   ],
 };
 
-const saleEvent = (id: string, sale: unknown = SALE) => ({ type: 'sale', id, sale });
+const saleEvent = (id: string, sale: unknown = SALE) => ({
+  type: 'sale',
+  id,
+  createdAt: NOW,
+  origin: {},
+  sale,
+});
 
 describe('pushBatch — un solo lote, un solo ack (#87)', () => {
   it('escribe cada línea y cada pago con valores en español y fechas reales', () => {
     const { spreadsheet, call } = loadBridge();
 
-    const response = call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    const response = call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
     expect(response.ok).toBe(true);
     expect(table(spreadsheet, 'Ventas')).toEqual([
@@ -251,6 +259,11 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         'Cerrada',
         '',
         '',
+        'dev-1',
+        '',
+        '',
+        '',
+        '',
       ],
       [
         's1',
@@ -269,11 +282,16 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         'Cerrada',
         '',
         '',
+        'dev-1',
+        '',
+        '',
+        '',
+        '',
       ],
     ]);
     expect(table(spreadsheet, 'Pagos')).toEqual([
-      ['s1', NOW, 'Efectivo', 1000, '', 'Cerrada'],
-      ['s1', NOW, 'Cuenta corriente', 1100, 'h-1', 'Cerrada'],
+      ['s1', NOW, 'Efectivo', 1000, '', 'Cerrada', 'dev-1', '', ''],
+      ['s1', NOW, 'Cuenta corriente', 1100, 'h-1', 'Cerrada', 'dev-1', '', ''],
     ]);
     const fecha = spreadsheet.getSheetByName('Ventas')?.values()[1]?.[1];
     expect(Object.prototype.toString.call(fecha)).toBe('[object Date]');
@@ -285,19 +303,20 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
       ['Estado', 'Monto', 'Id de venta', 'Fecha', 'Medio de pago', 'Referencia'],
     ]);
 
-    call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
+    // La pestaña vieja ganó al final las columnas de identidad (ensureColumns, contrato v3).
     expect(table(spreadsheet, 'Pagos')).toEqual([
-      ['Cerrada', 1000, 's1', NOW, 'Efectivo', ''],
-      ['Cerrada', 1100, 's1', NOW, 'Cuenta corriente', 'h-1'],
+      ['Cerrada', 1000, 's1', NOW, 'Efectivo', '', 'dev-1', '', ''],
+      ['Cerrada', 1100, 's1', NOW, 'Cuenta corriente', 'h-1', 'dev-1', '', ''],
     ]);
   });
 
   it('es idempotente por lote: repetir el mismo idempotencyKey no reprocesa', () => {
     const { spreadsheet, call } = loadBridge();
 
-    call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
-    const again = call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
+    const again = call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
     expect(again.ok).toBe(true);
     expect(table(spreadsheet, 'Ventas')).toHaveLength(2);
@@ -311,19 +330,20 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     const response = call(
       'pushBatch',
       {
+        deviceId: 'dev-1',
         events: [
           saleEvent('e1'),
           { type: 'customer', id: 'e2', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
           {
-            type: 'cash-session',
+            type: 'cash-movement',
             id: 'e3',
-            session: {
-              id: 't1',
-              openedAt: NOW,
-              closedAt: '2026-01-02T18:00:00.000Z',
-              openingAmount: 500,
-              closingAmount: 1450,
-              sales: ['s1'],
+            movement: {
+              id: 'm1',
+              direction: 'in',
+              amount: 500,
+              concept: 'Cambio',
+              source: 'manual',
+              createdAt: NOW,
             },
           },
           { type: 'account-hold-confirm', id: 'e4', holdId: 'h-1', saleId: 's1' },
@@ -337,7 +357,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     expect(response.ok).toBe(true);
     expect(table(spreadsheet, 'Ventas')).toHaveLength(2);
     expect(table(spreadsheet, 'Clientes')).toHaveLength(4);
-    expect(table(spreadsheet, 'Turnos')).toHaveLength(1);
+    expect(table(spreadsheet, 'MovimientosCaja')).toHaveLength(1);
     expect(table(spreadsheet, 'CuentaCorriente')).toHaveLength(1);
   });
 
@@ -347,6 +367,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     const response = call(
       'pushBatch',
       {
+        deviceId: 'dev-1',
         events: [
           { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
           { type: 'sale-void', id: 'e2', saleId: 'nope', voidedAt: NOW },
@@ -360,19 +381,25 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     expect(table(spreadsheet, 'Clientes')).toHaveLength(4); // el evento que sí pudo, se aplicó
 
     const pull = pullBatch(call, {}, ['lot-1']);
-    const lots = (pull.data as { lots: Record<string, { status: string; issues?: string[] }> })
-      .lots;
+    const lots = (
+      pull.data as {
+        lots: Record<string, { status: string; issues?: { message: string; eventId?: string }[] }>;
+      }
+    ).lots;
     expect(lots['lot-1']?.status).toBe('issues');
     expect(lots['lot-1']?.issues).toEqual([
-      expect.stringContaining('Venta no encontrada: nope'),
-      expect.stringContaining('Venta a cuenta no encontrada: tampoco'),
+      { message: expect.stringContaining('Venta no encontrada: nope') as unknown, eventId: 'e2' },
+      {
+        message: expect.stringContaining('Venta a cuenta no encontrada: tampoco') as unknown,
+        eventId: 'e3',
+      },
     ]);
   });
 
   it('un lote sin problemas queda ok', () => {
     const { call } = loadBridge();
 
-    call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
     const pull = pullBatch(call, {}, ['lot-1']);
     expect((pull.data as { lots: Record<string, unknown> }).lots).toEqual({
@@ -380,7 +407,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     });
   });
 
-  it('un id de lote desconocido no aparece en la respuesta (mismo criterio que "pending" del lado del POS)', () => {
+  it('un id de lote desconocido no aparece en la respuesta (el POS lo trata como processing)', () => {
     const { call } = loadBridge();
 
     const pull = pullBatch(call, {}, ['nunca-existio']);
@@ -390,11 +417,12 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
   it('pushSaleVoid marca (no borra) las filas de la venta con estado, fecha y motivo', () => {
     const { spreadsheet, call } = loadBridge();
-    call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
     const response = call(
       'pushBatch',
       {
+        deviceId: 'dev-1',
         events: [
           {
             type: 'sale-void',
@@ -410,7 +438,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
     expect(response.ok).toBe(true);
     for (const line of table(spreadsheet, 'Ventas')) {
-      expect(line.slice(13)).toEqual(['Anulada', '2026-01-03T09:00:00.000Z', 'error de carga']);
+      expect(line.slice(13, 16)).toEqual(['Anulada', '2026-01-03T09:00:00.000Z', 'error de carga']);
     }
     for (const line of table(spreadsheet, 'Pagos')) {
       expect(line[5]).toBe('Anulada');
@@ -419,16 +447,19 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
   it('pushAccountHoldConfirm deriva cliente y monto de Ventas y Pagos', () => {
     const { spreadsheet, call } = loadBridge();
-    call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
     call(
       'pushBatch',
-      { events: [{ type: 'account-hold-confirm', id: 'e2', holdId: 'h-1', saleId: 's1' }] },
+      {
+        deviceId: 'dev-1',
+        events: [{ type: 'account-hold-confirm', id: 'e2', holdId: 'h-1', saleId: 's1' }],
+      },
       'lot-2',
     );
 
     expect(table(spreadsheet, 'CuentaCorriente')).toEqual([
-      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100],
+      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100, '', 'dev-1', '', ''],
     ]);
   });
 
@@ -462,13 +493,16 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
     const response = call(
       'pushBatch',
-      { events: [{ type: 'account-hold-confirm', id: 'e1', holdId: 'h-1', saleId: 's1' }] },
+      {
+        deviceId: 'dev-1',
+        events: [{ type: 'account-hold-confirm', id: 'e1', holdId: 'h-1', saleId: 's1' }],
+      },
       'lot-1',
     );
 
     expect(response.ok).toBe(true);
     expect(table(spreadsheet, 'CuentaCorriente')).toEqual([
-      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100],
+      [expect.any(String) as unknown, 'h-1', 's1', 'c-001', 1100, '', 'dev-1', '', ''],
     ]);
     expect(pagos.values()[0]).toContain('Medio de pago');
     expect(ventas.values()[0]).toContain('Id de venta');
@@ -521,6 +555,7 @@ describe('cursor de pull (#87)', () => {
     call(
       'pushBatch',
       {
+        deviceId: 'dev-1',
         events: [
           { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
         ],
@@ -552,10 +587,10 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
 
     pullBatch(call);
 
-    const turnos = spreadsheet.getSheetByName('Turnos');
-    expect([turnos?.getMaxRows(), turnos?.getMaxColumns()]).toEqual([2, 14]);
+    const movimientos = spreadsheet.getSheetByName('MovimientosCaja');
+    expect([movimientos?.getMaxRows(), movimientos?.getMaxColumns()]).toEqual([2, 12]);
     const productos = spreadsheet.getSheetByName('Productos');
-    expect([productos?.getMaxRows(), productos?.getMaxColumns()]).toEqual([6, 7]); // 5 sembrados
+    expect([productos?.getMaxRows(), productos?.getMaxColumns()]).toEqual([6, 10]); // 5 sembrados
   });
 
   it('el encabezado va congelado y las pestañas internas ocultas', () => {
@@ -575,7 +610,17 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
     pullBatch(call);
 
     const pagos = spreadsheet.getSheetByName('Pagos');
-    expect(pagos?.formats(2)).toEqual(['@', 'dd/mm/yyyy hh:mm', '@', '#,##0.00', '@', '@']);
+    expect(pagos?.formats(2)).toEqual([
+      '@',
+      'dd/mm/yyyy hh:mm',
+      '@',
+      '#,##0.00',
+      '@',
+      '@',
+      '@',
+      '@',
+      '@',
+    ]);
     expect(pagos?.validations(2)[2]).toEqual({
       list: [
         'Efectivo',
@@ -597,7 +642,12 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
       '#,##0.00',
       '0.0%',
       '@',
+      'dd/mm/yyyy hh:mm',
+      '@',
+      '@',
     ]);
+    const bloqueado = spreadsheet.getSheetByName('Productos')?.validations(2)[8];
+    expect(bloqueado).toEqual({ list: ['Sí', 'No'], allowInvalid: false });
   });
 
   it.each([false, true])(
@@ -605,7 +655,7 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
     (validationCountsAsContent) => {
       const { spreadsheet, call } = loadBridge({ validationCountsAsContent });
 
-      call('pushBatch', { events: [saleEvent('e1')] }, 'lot-1');
+      call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
       const ventas = spreadsheet.getSheetByName('Ventas');
       expect(ventas?.values()[1]?.[0]).toBe('s1'); // la fila 2 se llenó
@@ -613,7 +663,11 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
       expect(ventas?.formats(3)).toEqual(ventas?.formats(2));
       expect(ventas?.validations(3)).toEqual(ventas?.validations(2));
 
-      call('pushBatch', { events: [saleEvent('e2', { ...SALE, id: 's2' })] }, 'lot-2');
+      call(
+        'pushBatch',
+        { deviceId: 'dev-1', events: [saleEvent('e2', { ...SALE, id: 's2' })] },
+        'lot-2',
+      );
 
       expect(ventas?.getMaxRows()).toBe(5);
       expect(ventas?.formats(5)).toEqual(ventas?.formats(2));
@@ -622,7 +676,7 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
     },
   );
 
-  it('no redimensiona una pestaña que ya existía', () => {
+  it('en una pestaña que ya existía solo agrega las columnas que faltan, no filas', () => {
     const { spreadsheet, call } = loadBridge();
     const productos = spreadsheet.addSheet('Productos', [
       ['Id', 'SKU', 'Códigos de barras', 'Nombre', 'Precio', 'IVA', 'Categoría'],
@@ -631,7 +685,287 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
 
     pullBatch(call);
 
-    expect([productos.getMaxRows(), productos.getMaxColumns()]).toEqual([13, 7]);
+    expect([productos.getMaxRows(), productos.getMaxColumns()]).toEqual([13, 10]);
+  });
+});
+
+describe('contrato v3 (#96)', () => {
+  const v3SaleEvent = (overrides: { origin?: unknown; sale?: Record<string, unknown> } = {}) => ({
+    type: 'sale',
+    id: 'e-sale',
+    createdAt: NOW,
+    origin: overrides.origin ?? {},
+    sale: { ...SALE, ...overrides.sale },
+  });
+
+  it('crea MovimientosCaja y Cobranzas, y ya no crea Turnos', () => {
+    const { spreadsheet, call } = loadBridge();
+    pullBatch(call);
+    expect(spreadsheet.sheetNames()).toEqual(
+      expect.arrayContaining(['MovimientosCaja', 'Cobranzas']),
+    );
+    expect(spreadsheet.sheetNames()).not.toContain('Turnos');
+    expect(spreadsheet.getSheetByName('MovimientosCaja')?.values()[0]).toContain('Esperado');
+  });
+
+  it('ensureColumns agrega al final las columnas que le faltan a una pestaña vieja, sin tocar datos', () => {
+    const { spreadsheet, call } = loadBridge();
+    spreadsheet.addSheet('Productos', [
+      ['Id', 'SKU', 'Códigos de barras', 'Nombre', 'Precio', 'IVA', 'Categoría'],
+      ['p-1', 'S1', '', 'Yerba', 100, 0.21, 'almacen'],
+    ]);
+
+    pullBatch(call);
+
+    const sheet = spreadsheet.getSheetByName('Productos');
+    expect(sheet?.values()[0]?.slice(0, 10)).toEqual(PRODUCT_V3_LABELS);
+    expect(sheet?.values()[1]?.slice(0, 4)).toEqual(['p-1', 'S1', '', 'Yerba']);
+    expect(sheet?.formats(2).slice(7)).toEqual(['dd/mm/yyyy hh:mm', '@', '@']);
+  });
+
+  it('una pestaña vieja con solo el encabezado gana también su fila plantilla', () => {
+    const { spreadsheet, call } = loadBridge();
+    const sheet = spreadsheet.addSheet('Pagos', [
+      ['Id de venta', 'Fecha', 'Medio de pago', 'Monto', 'Referencia', 'Estado'],
+    ]);
+
+    pullBatch(call);
+
+    expect(sheet.values()[0]?.slice(6)).toEqual(['Dispositivo', 'Sucursal', 'Punto de venta']);
+    expect(sheet.formats(2).slice(6)).toEqual(['@', '@', '@']);
+  });
+
+  it('completa la Alta que falta la primera vez que lee la fila, y después queda fija', () => {
+    const { call } = loadBridge();
+    const dates = (response: ReturnType<typeof pullBatch>) =>
+      (response.data as { products: { items: { id: string; createdAt: string }[] } }).products.items
+        .map((item) => `${item.id}=${item.createdAt}`)
+        .sort();
+
+    const first = dates(pullBatch(call));
+    const second = dates(pullBatch(call));
+
+    expect(first.every((entry) => /=\d{4}-\d{2}-\d{2}T/.test(entry))).toBe(true);
+    expect(second).toEqual(first);
+  });
+
+  it('informa el bloqueo con su motivo', () => {
+    const { spreadsheet, call } = loadBridge();
+    pullBatch(call);
+    const sheet = spreadsheet.getSheetByName('Productos');
+    const header = sheet?.values()[0] ?? [];
+    // fila 2 = primer producto sembrado (p-001); columnas por encabezado
+    sheet?.getRange(2, header.indexOf('Bloqueado') + 1).setValue('Sí');
+    sheet?.getRange(2, header.indexOf('Motivo del bloqueo') + 1).setValue('Vencido');
+
+    const response = pullBatch(call);
+
+    const items = (
+      response.data as { products: { items: { id: string; blocked?: { reason: string } }[] } }
+    ).products.items;
+    expect(items.find((item) => item.id === 'p-001')?.blocked).toEqual({ reason: 'Vencido' });
+    expect(items.find((item) => item.id === 'p-002')).not.toHaveProperty('blocked');
+  });
+
+  it('estampa dispositivo, sucursal y punto de venta en lo que escribe', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [v3SaleEvent({ origin: { branch: 'Centro', pointOfSale: 'Caja 1' } })],
+      },
+      'lot-1',
+    );
+
+    expect(table(spreadsheet, 'Ventas')[0]).toEqual(
+      expect.arrayContaining(['dev-1', 'Centro', 'Caja 1']),
+    );
+    expect(table(spreadsheet, 'Pagos')[0]).toEqual(
+      expect.arrayContaining(['dev-1', 'Centro', 'Caja 1']),
+    );
+    const lots = table(spreadsheet, '_PushLots');
+    expect(lots[0]).toEqual(expect.arrayContaining(['lot-1', 'dev-1']));
+  });
+
+  it('la anulación deja su propia sucursal y punto de venta', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushBatch', { deviceId: 'dev-1', events: [v3SaleEvent()] }, 'lot-1');
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-2',
+        events: [
+          {
+            type: 'sale-void',
+            id: 'v1',
+            createdAt: NOW,
+            origin: { branch: 'Norte', pointOfSale: 'Caja 2' },
+            saleId: 's1',
+            voidedAt: NOW,
+          },
+        ],
+      },
+      'lot-2',
+    );
+
+    expect(table(spreadsheet, 'Ventas')[0]?.slice(-2)).toEqual(['Norte', 'Caja 2']);
+  });
+
+  it('cash-movement escribe una fila en MovimientosCaja con valores en español', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          {
+            type: 'cash-movement',
+            id: 'm1',
+            createdAt: NOW,
+            origin: {},
+            movement: {
+              id: 'm1',
+              direction: 'out',
+              amount: 250,
+              concept: 'Ajuste por arqueo',
+              source: 'count-adjustment',
+              count: { expected: 1000, counted: 750 },
+              createdAt: NOW,
+            },
+          },
+        ],
+      },
+      'lot-1',
+    );
+
+    expect(table(spreadsheet, 'MovimientosCaja')[0]).toEqual([
+      'm1',
+      NOW,
+      'Egreso',
+      250,
+      'Ajuste por arqueo',
+      '',
+      'Ajuste por arqueo',
+      1000,
+      750,
+      'dev-1',
+      '',
+      '',
+    ]);
+  });
+
+  it('customer-payment escribe una fila por medio en Cobranzas y una negativa en CuentaCorriente', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          {
+            type: 'customer-payment',
+            id: 'cp1',
+            createdAt: NOW,
+            origin: {},
+            payment: {
+              id: 'cp1',
+              customerId: 'c-1',
+              payments: [
+                { method: 'cash', amount: 300 },
+                { method: 'qr', amount: 200 },
+              ],
+              total: 500,
+              createdAt: NOW,
+            },
+          },
+        ],
+      },
+      'lot-1',
+    );
+
+    expect(table(spreadsheet, 'Cobranzas')).toEqual([
+      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', ''],
+      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', ''],
+    ]);
+    expect(table(spreadsheet, 'CuentaCorriente')[0]).toEqual(
+      expect.arrayContaining(['c-1', -500, 'cp1']),
+    );
+  });
+
+  it('un pago a cuenta sin hold (fiado offline o acreditación) va al libro de CuentaCorriente con su signo', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          v3SaleEvent({
+            sale: {
+              customerId: 'c-1',
+              payments: [{ method: 'account', amount: -120 }],
+              total: -120,
+            },
+          }),
+        ],
+      },
+      'lot-1',
+    );
+
+    expect(table(spreadsheet, 'CuentaCorriente')).toEqual([
+      [NOW, '', 's1', 'c-1', -120, '', 'dev-1', '', ''],
+    ]);
+  });
+
+  it('un tipo desconocido (cash-session viejo) queda como issue con su eventId, sin tumbar el lote', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    const response = call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          { type: 'cash-session', id: 'cs1', createdAt: NOW, origin: {}, session: {} },
+          {
+            type: 'customer',
+            id: 'c-9',
+            createdAt: NOW,
+            origin: {},
+            customer: { id: 'c-9', name: 'Zoe', createdAt: NOW },
+          },
+        ],
+      },
+      'lot-1',
+    );
+    const pull = pullBatch(call, {}, ['lot-1']);
+
+    expect(response.ok).toBe(true);
+    expect(table(spreadsheet, 'Clientes')).toHaveLength(4);
+    expect((pull.data as { lots: unknown }).lots).toEqual({
+      'lot-1': {
+        status: 'issues',
+        issues: [{ message: expect.stringContaining('cash-session') as unknown, eventId: 'cs1' }],
+      },
+    });
+  });
+
+  it('un lote registrado antes de v3 (avisos como texto) se informa con objetos', () => {
+    const { spreadsheet, call } = loadBridge();
+    pullBatch(call); // crea _PushLots
+    spreadsheet
+      .getSheetByName('_PushLots')
+      ?.getRange(2, 1, 1, 4)
+      .setValues([['viejo', 'issues', JSON.stringify(['algo falló']), NOW]]);
+
+    const pull = pullBatch(call, {}, ['viejo']);
+
+    expect((pull.data as { lots: unknown }).lots).toEqual({
+      viejo: { status: 'issues', issues: [{ message: 'algo falló' }] },
+    });
   });
 });
 

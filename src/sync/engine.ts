@@ -30,7 +30,7 @@ import {
   syncPausedSignal,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
-import type { Connector, OutboxBatchItem } from './connector.ts';
+import type { Connector, LotIssue, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
 import {
@@ -48,38 +48,43 @@ import {
   clearCurrentPushLot,
   getAwaitingLots,
   getCurrentPushLot,
-  resolveAwaitingLots,
   setCurrentPushLot,
+  updateAwaitingLots,
 } from './push-lot.ts';
+import { getDeviceId } from './terminal-identity.ts';
 
-/** Convierte un evento del outbox a su forma de red — sin `status`/`createdAt`, bookkeeping local. */
+/** Convierte un evento del outbox a su forma de red (contrato v3): payload + sobre, sin `status`. */
 export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
+  // Un evento encolado antes de v3 no tiene `origin`: viaja vacío (el contrato lo tolera hasta #97).
+  const envelope = { id: event.id, createdAt: event.createdAt, origin: event.origin ?? {} };
   switch (event.type) {
     case 'sale':
-      return { type: 'sale', id: event.id, sale: event.sale };
+      return { type: 'sale', sale: event.sale, ...envelope };
     case 'stock-movement':
-      return { type: 'stock-movement', id: event.id, movement: event.movement };
+      return { type: 'stock-movement', movement: event.movement, ...envelope };
     case 'sale-void':
       return {
         type: 'sale-void',
-        id: event.id,
         saleId: event.saleId,
         voidedAt: event.voidedAt,
         ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
+        ...envelope,
       };
     case 'customer':
-      return { type: 'customer', id: event.id, customer: event.customer };
+      return { type: 'customer', customer: event.customer, ...envelope };
     case 'account-hold-confirm':
       return {
         type: 'account-hold-confirm',
-        id: event.id,
         holdId: event.holdId,
         saleId: event.saleId,
+        ...envelope,
       };
     case 'account-hold-release':
-      return { type: 'account-hold-release', id: event.id, holdId: event.holdId };
-    case 'cash-session':
-      return { type: 'cash-session', id: event.id, session: event.session };
+      return { type: 'account-hold-release', holdId: event.holdId, ...envelope };
+    case 'cash-movement':
+      return { type: 'cash-movement', movement: event.movement, ...envelope };
+    case 'customer-payment':
+      return { type: 'customer-payment', payment: event.payment, ...envelope };
     default: {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
@@ -174,9 +179,9 @@ export async function pushPendingLot(
     return { attempted: 0, failed: false };
   }
 
-  const items = events.map(toBatchItem);
-  const result = await connector.pushBatch(items, lot.id);
-  logSyncAttempt('push', now, { idempotencyId: lot.id, events: items }, result);
+  const batch = { deviceId: getDeviceId(), events: events.map(toBatchItem) };
+  const result = await connector.pushBatch(batch, lot.id);
+  logSyncAttempt('push', now, { idempotencyId: lot.id, ...batch }, result);
   if (result.ok) {
     await db.outbox.bulkPut(events.map(markSynced));
     clearCurrentPushLot();
@@ -199,12 +204,13 @@ export function resetFullRefreshSession(): void {
 /** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
 export const FULL_REFRESH_TIMEOUT_MS = 60_000;
 
-type PullOutcome = { applied: boolean; failure?: Failure; issues: string[]; request: unknown };
+type PullOutcome = { applied: boolean; failure?: Failure; issues: LotIssue[]; request: unknown };
 
 /**
  * Un ciclo de **pull**: un solo `pullBatch` (delta si `full` no está, foto
  * completa si sí), gateado por el estado de los lotes de push que el POS
- * todavía espera confirmar (#87) — si alguno sigue `pending`, no se aplica
+ * todavía espera confirmar (#87) — si alguno sigue `queued`/`processing`
+ * (contrato v3, #96; o el backend no lo informa), no se aplica
  * nada de este pull (ver spec, "Regla de aplicación"). Reemplaza
  * `pullCatalog`/`pullCustomers`/`syncOnce`/`syncFull` de antes de #87.
  */
@@ -223,7 +229,11 @@ async function pullAndApply(
         ...(customersCursor !== undefined ? { customers: customersCursor } : {}),
       };
 
-  const request = { cursors, pendingLotIds: awaiting.map((lot) => lot.id) };
+  const request = {
+    deviceId: getDeviceId(),
+    cursors,
+    pendingLotIds: awaiting.map((lot) => lot.id),
+  };
   const pullPromise = connector.pullBatch(request);
   // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87): un backend
   // colgado en un delta normal no justificaba la complejidad extra, la foto completa sí porque
@@ -236,12 +246,17 @@ async function pullAndApply(
   }
 
   const resolved = new Set<string>();
-  const issues: string[] = [];
-  let stillPending = false;
+  const inProgress: Record<string, 'queued' | 'processing'> = {};
+  const issues: LotIssue[] = [];
+  let stillInProgress = false;
   for (const lot of awaiting) {
     const status = pullResult.value.lots[lot.id];
-    if (status === undefined || status.status === 'pending') {
-      stillPending = true;
+    // Contrato v3: un lote pedido que el backend no informa cuenta como `processing`.
+    if (status === undefined || status.status === 'queued' || status.status === 'processing') {
+      stillInProgress = true;
+      if (status !== undefined) {
+        inProgress[lot.id] = status.status;
+      }
       continue;
     }
     resolved.add(lot.id);
@@ -249,9 +264,11 @@ async function pullAndApply(
       issues.push(...status.issues);
     }
   }
-  resolveAwaitingLots(resolved);
+  updateAwaitingLots(resolved, inProgress);
 
-  if (stillPending) {
+  // Etapa 1: `queued` y `processing` descartan el pull entero, igual que el `pending` de antes.
+  // La Etapa 3 (#98) aplica datos maestros siempre y reaplica eventos de los lotes `queued`.
+  if (stillInProgress) {
     return {
       applied: false,
       failure: err('sync/pending-lot', undefined) as Failure,

@@ -11,6 +11,8 @@ type ProductFixtureEntry = {
   taxRate: number;
   category: string;
   tracksStock: boolean;
+  createdAt: string;
+  blocked?: { reason: string };
   initialStock: number;
 };
 
@@ -22,6 +24,8 @@ type CustomerFixtureEntry = {
   creditLimit?: number;
   margin?: number;
   balance?: number;
+  createdAt: string;
+  blocked?: { reason: string };
 };
 
 function insertSeedRows(db: DatabaseSync, now: string): void {
@@ -63,10 +67,13 @@ export function resetToSeed(db: DatabaseSync, now: string): void {
     DELETE FROM sales;
     DELETE FROM sale_voids;
     DELETE FROM stock_movements;
-    DELETE FROM cash_sessions;
+    DELETE FROM cash_movements;
+    DELETE FROM customer_payments;
     DELETE FROM account_hold_attempts;
     DELETE FROM account_holds;
     DELETE FROM idempotency_keys;
+    DELETE FROM push_lots;
+    DELETE FROM demo_settings;
   `);
   insertSeedRows(db, now);
 }
