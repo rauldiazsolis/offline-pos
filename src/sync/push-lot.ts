@@ -11,9 +11,6 @@ import type { PushLot } from '../domain/push-lot.ts';
 const CURRENT_LOT_KEY = 'offline-pos:sync:push-lot';
 const AWAITING_LOTS_KEY = 'offline-pos:sync:push-lot-awaiting';
 
-/** Tope defensivo: si el backend nunca resuelve un lote, no crece sin límite. */
-const MAX_AWAITING_LOTS = 20;
-
 export function getCurrentPushLot(): PushLot | undefined {
   try {
     const raw = localStorage.getItem(CURRENT_LOT_KEY);
@@ -50,9 +47,16 @@ export function getAwaitingLots(): AwaitingLot[] {
   }
 }
 
+/**
+ * Sin tope de tamaño a propósito: el POS no tiene autoridad para decidir cuándo dejar de
+ * preguntar por un lote (esa decisión es del humano, no de la app — a discutir más adelante un
+ * indicador en la barra de estado o una pantalla de detalle de sync). En la práctica esta lista
+ * queda en 0-2 elementos casi siempre; solo crece si el backend nunca resuelve nada, y aun así el
+ * costo de guardar unos cientos de `{id, sentAt}` es insignificante.
+ */
 function setAwaitingLots(lots: AwaitingLot[]): void {
   try {
-    localStorage.setItem(AWAITING_LOTS_KEY, JSON.stringify(lots.slice(-MAX_AWAITING_LOTS)));
+    localStorage.setItem(AWAITING_LOTS_KEY, JSON.stringify(lots));
   } catch {
     /* best-effort */
   }

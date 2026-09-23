@@ -52,13 +52,13 @@ describe('lotes esperando resolución', () => {
     expect(getAwaitingLots().map((l) => l.id)).toEqual(['lot-2']);
   });
 
-  it('cap: conserva solo los últimos 20 lotes agregados', () => {
+  it('sin tope: el POS no tiene autoridad para decidir dejar de rastrear un lote (a discutir más adelante una pantalla/indicador para el humano)', () => {
     for (let i = 0; i < 25; i += 1) {
       addAwaitingLot({ id: `lot-${String(i)}`, sentAt: '2026-01-01T00:00:00.000Z' });
     }
     const ids = getAwaitingLots().map((l) => l.id);
-    expect(ids).toHaveLength(20);
-    expect(ids[0]).toBe('lot-5');
+    expect(ids).toHaveLength(25);
+    expect(ids[0]).toBe('lot-0');
     expect(ids.at(-1)).toBe('lot-24');
   });
 });
