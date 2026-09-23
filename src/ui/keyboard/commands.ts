@@ -17,6 +17,7 @@ export const CORE_COMMANDS: CommandInfo[] = [
   { name: 'DESCARTAR', description: 'Vaciar la venta en curso (líneas, cliente y ajuste)' },
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },
   { name: 'SINCRONIZAR', description: 'Sincronizar ahora' },
+  { name: 'DIAGNOSTICO', description: 'Ver el estado y el historial reciente de sincronización' },
 ];
 
 /**

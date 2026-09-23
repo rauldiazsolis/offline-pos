@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import type { Failure } from '../../domain/result.ts';
+import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 
@@ -90,4 +90,29 @@ export const pushLotIssuesSignal = signal<string[] | null>(null);
 
 export function setPushLotIssues(issues: string[] | null): void {
   pushLotIssuesSignal.value = issues;
+}
+
+/**
+ * Historial de los últimos intentos de push/pull, para `/DIAGNOSTICO` — el
+ * usuario probó el conector de Sheets contra un despliegue real y se topó
+ * con un error sin poder ver el detalle (la Console del navegador no
+ * mostraba nada). `request`/`result` son literalmente lo que `sync/engine.ts`
+ * ya tiene en la mano en el punto donde llama a `connector.pushBatch`/
+ * `pullBatch` — sin resumir nada, para poder correlacionar con la pestaña
+ * Network. Tope de 20, más nuevo primero, sin persistencia (se pierde al
+ * refrescar — no hace falta más para debuguear una sesión en curso).
+ */
+export type SyncLogEntry = {
+  at: string;
+  kind: 'push' | 'pull';
+  request: unknown;
+  result: { ok: true } | { ok: false; error: ErrorCode; meta: unknown };
+};
+
+const SYNC_LOG_MAX_ENTRIES = 20;
+
+export const syncLogSignal = signal<SyncLogEntry[]>([]);
+
+export function appendSyncLogEntry(entry: SyncLogEntry): void {
+  syncLogSignal.value = [entry, ...syncLogSignal.value].slice(0, SYNC_LOG_MAX_ENTRIES);
 }

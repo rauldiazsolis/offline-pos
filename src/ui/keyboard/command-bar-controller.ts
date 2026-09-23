@@ -40,6 +40,7 @@ import { getCurrentOpenCashSession } from '../../storage/cash-session-repository
 import { enterCashScreen } from './cash-session-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
+import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
@@ -294,6 +295,10 @@ function runCommand(name: string, _args: string[]): void {
     case 'SINCRONIZAR':
       // A pedido: fuerza el push del lote pendiente ya (ignora backoff) y un pull completo ya (#87).
       void syncNow();
+      clearBuffer();
+      return;
+    case 'DIAGNOSTICO':
+      enterDiagnosticoScreen();
       clearBuffer();
       return;
     default: {

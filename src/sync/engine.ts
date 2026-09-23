@@ -11,6 +11,7 @@ import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
+  appendSyncLogEntry,
   lastSyncFailureSignal,
   pushLotIssuesSignal,
   setLastSyncFailure,
@@ -21,6 +22,7 @@ import {
   setSyncConfigured,
   setSyncStatus,
   syncPausedSignal,
+  type SyncLogEntry,
 } from '../ui/state/sync.ts';
 import type { Connector, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
@@ -75,6 +77,33 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
 }
 
 /**
+ * Registra un intento real de push/pull para `/DIAGNOSTICO` — `request`/
+ * `result` son literalmente lo que el call site ya tiene en la mano (los
+ * argumentos que le pasó al `Connector` y lo que devolvió), sin resumir
+ * nada, así se puede correlacionar con la pestaña Network del navegador.
+ * Un ciclo exitoso normal no imprime nada en consola — solo queda en el
+ * log; `sync/pending-lot` es el descarte esperado del diseño (ver spec de
+ * #87), no un problema, así que va a `console.info` en vez de `console.error`.
+ */
+function logSyncAttempt(kind: 'push' | 'pull', now: string, request: unknown, result: Result<unknown>): void {
+  const entry: SyncLogEntry = {
+    at: now,
+    kind,
+    request,
+    result: result.ok ? { ok: true } : { ok: false, error: result.error, meta: result.meta },
+  };
+  appendSyncLogEntry(entry);
+  if (result.ok) {
+    return;
+  }
+  if (result.error === 'sync/pending-lot') {
+    console.info(`[sync] ${kind} descartado — lote de push todavía pendiente`, entry);
+    return;
+  }
+  console.error(`[sync] ${kind} falló: ${result.error}`, entry);
+}
+
+/**
  * Retoma el lote en curso (mismo id, mismo conjunto de eventos — nunca se
  * recalcula en un reintento) o arma uno nuevo con todo lo pendiente del
  * outbox, en orden `createdAt`. `undefined` si no hay nada que enviar.
@@ -124,7 +153,9 @@ export async function pushPendingLot(
     return { attempted: 0, failed: false };
   }
 
-  const result = await connector.pushBatch(events.map(toBatchItem), lot.id);
+  const items = events.map(toBatchItem);
+  const result = await connector.pushBatch(items, lot.id);
+  logSyncAttempt('push', now, { idempotencyId: lot.id, events: items }, result);
   if (result.ok) {
     await db.outbox.bulkPut(events.map(markSynced));
     clearCurrentPushLot();
@@ -147,7 +178,7 @@ export function resetFullRefreshSession(): void {
 /** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
 export const FULL_REFRESH_TIMEOUT_MS = 60_000;
 
-type PullOutcome = { applied: boolean; failure?: Failure; issues: string[] };
+type PullOutcome = { applied: boolean; failure?: Failure; issues: string[]; request: unknown };
 
 /**
  * Un ciclo de **pull**: un solo `pullBatch` (delta si `full` no está, foto
@@ -171,13 +202,14 @@ async function pullAndApply(
         ...(customersCursor !== undefined ? { customers: customersCursor } : {}),
       };
 
-  const pullPromise = connector.pullBatch({ cursors, pendingLotIds: awaiting.map((lot) => lot.id) });
+  const request = { cursors, pendingLotIds: awaiting.map((lot) => lot.id) };
+  const pullPromise = connector.pullBatch(request);
   // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87): un backend
   // colgado en un delta normal no justificaba la complejidad extra, la foto completa sí porque
   // puede tardar mucho más y correr menos seguido.
   const pullResult = options.full ? await withTimeout(pullPromise, FULL_REFRESH_TIMEOUT_MS) : await pullPromise;
   if (!pullResult.ok) {
-    return { applied: false, failure: pullResult, issues: [] };
+    return { applied: false, failure: pullResult, issues: [], request };
   }
 
   const resolved = new Set<string>();
@@ -197,20 +229,21 @@ async function pullAndApply(
   resolveAwaitingLots(resolved);
 
   if (stillPending) {
-    return { applied: false, failure: err('sync/pending-lot', undefined) as Failure, issues };
+    return { applied: false, failure: err('sync/pending-lot', undefined) as Failure, issues, request };
   }
 
   if (options.full) {
     const snapshot = toProbeSnapshot(pullResult.value);
     const applied = await reconcileSnapshot(snapshot, { now });
     if (!applied.ok) {
-      return { applied: false, failure: applied, issues };
+      return { applied: false, failure: applied, issues, request };
     }
     if (applied.value.skipped.length > 0) {
       return {
         applied: false,
         failure: err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure,
         issues,
+        request,
       };
     }
     if (snapshot.cursors.products !== undefined) {
@@ -223,7 +256,7 @@ async function pullAndApply(
     setCustomerRepository(await loadCustomerRepository());
     setLastFullSyncAt(now);
     fullRefreshDoneThisSession = true;
-    return { applied: true, issues };
+    return { applied: true, issues, request };
   }
 
   if (pullResult.value.products.items.length > 0) {
@@ -247,7 +280,7 @@ async function pullAndApply(
   if (pullResult.value.customers.nextCursor !== undefined) {
     setCustomersCursor(pullResult.value.customers.nextCursor);
   }
-  return { applied: true, issues };
+  return { applied: true, issues, request };
 }
 
 /** Cola común de un ciclo de pull: conteos, aviso de issues y estado honesto (#53, adaptado a #87). */
@@ -255,6 +288,10 @@ async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Resul
   setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
   setLocalCatalogCounts(await countLocalCatalog());
   setPushLotIssues(outcome.issues.length > 0 ? outcome.issues : null);
+  if (outcome.issues.length > 0) {
+    console.warn('[sync] el backend reportó issues en un lote de push ya confirmado', outcome.issues);
+  }
+  logSyncAttempt('pull', now, outcome.request, outcome.failure ?? ok(undefined));
 
   if (outcome.failure !== undefined) {
     setLastSyncFailure(outcome.failure);
@@ -296,6 +333,11 @@ export async function runPullCycle(
  * el intervalo entre ciclos.
  */
 let syncInProgress = false;
+
+/** Para `/DIAGNOSTICO`: solo lectura, no toma ni libera el cerrojo. */
+export function isSyncLockHeld(): boolean {
+  return syncInProgress;
+}
 
 /** Toma el cerrojo sin esperar; devuelve la función que lo libera, o `undefined` si ya está tomado. */
 export function tryAcquireSyncLock(): (() => void) | undefined {

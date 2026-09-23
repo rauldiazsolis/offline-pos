@@ -12,6 +12,7 @@ import {
   pushLotIssuesSignal,
   setSyncPaused,
   syncConfiguredSignal,
+  syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
 import { saveSyncConfig } from './config.ts';
@@ -65,7 +66,9 @@ afterEach(async () => {
   await db.delete();
   localStorage.clear();
   setOnline(true);
+  syncLogSignal.value = [];
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 const sale: Sale = {
@@ -109,6 +112,23 @@ describe('pushPendingLot', () => {
     expect(getCurrentPushLot()).toBeUndefined();
   });
 
+  it('un push exitoso queda en el log de sync, sin tocar la consola (para /DIAGNOSTICO)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+
+    await pushPendingLot(fakeConnector({ pushBatch: () => Promise.resolve(ok(undefined)) }), now);
+
+    const lotId = getAwaitingLots()[0]?.id;
+    expect(syncLogSignal.value).toHaveLength(1);
+    expect(syncLogSignal.value[0]).toEqual({
+      at: now,
+      kind: 'push',
+      request: { idempotencyId: lotId, events: [{ type: 'sale', sale, id: 'sale-1' }] },
+      result: { ok: true },
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
   it('tras el ack, agrega el lote a la lista de espera de resolución', async () => {
     await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
 
@@ -118,6 +138,7 @@ describe('pushPendingLot', () => {
   });
 
   it('un fallo de red deja los eventos pending y guarda el lote con backoff, sin agregarlo a la espera', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
     const pushBatch = vi.fn().mockResolvedValue(err('sync/request-failed', { message: 'boom' }));
 
@@ -127,6 +148,13 @@ describe('pushPendingLot', () => {
     expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
     expect(getCurrentPushLot()?.retries).toBe(1);
     expect(getAwaitingLots()).toEqual([]);
+    expect(syncLogSignal.value).toHaveLength(1);
+    expect(syncLogSignal.value[0]?.result).toEqual({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { message: 'boom' },
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('respeta el backoff del lote: no reintenta antes de tiempo salvo ignoreBackoff', async () => {
@@ -304,6 +332,8 @@ describe('runPullCycle — delta', () => {
 
 describe('runPullCycle — gateado por lotes de push pendientes', () => {
   it('si un lote que nos interesa sigue pending, no aplica el pull y no toca el catálogo local', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     addAwaitingLot({ id: 'lot-1', sentAt: now });
     await db.products.put({
       id: 'p1', sku: 'S1', barcodes: [], name: 'Viejo', price: 1, taxRate: 0, category: 'x', tracksStock: false,
@@ -322,6 +352,11 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
     expect(report).toEqual({ ok: false, error: 'sync/pending-lot', meta: undefined });
     expect((await db.products.get('p1'))?.name).toBe('Viejo'); // no se aplicó nada
     expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]); // sigue esperando
+    // El descarte por lote pendiente es el comportamiento esperado del diseño, no un error real —
+    // console.info (para debuguear), nunca console.error.
+    expect(syncLogSignal.value[0]?.result).toEqual({ ok: false, error: 'sync/pending-lot', meta: undefined });
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('si el backend no informa nada sobre un lote que esperamos, se trata como todavía pending', async () => {
@@ -349,6 +384,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
   });
 
   it('un lote resuelto con issues se saca de la espera, el pull igual se aplica, y se avisa vía pushLotIssuesSignal', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     addAwaitingLot({ id: 'lot-1', sentAt: now });
     const pullBatch = vi.fn().mockResolvedValue(
       ok({
@@ -364,6 +400,39 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
     expect(report.ok).toBe(true);
     expect(getAwaitingLots()).toEqual([]);
     expect(pushLotIssuesSignal.value).toEqual(['stock insuficiente en p1']);
+    // Informativo, no bloquea nada (el POS nunca se autobloquea) — igual vale un console.warn.
+    expect(warnSpy).toHaveBeenCalledWith(expect.any(String), ['stock insuficiente en p1']);
+  });
+
+  it('un pull exitoso sin issues queda en el log sin tocar la consola', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await runPullCycle(fakeConnector(), now);
+
+    const lastEntry = syncLogSignal.value[0];
+    expect(lastEntry).toEqual({
+      at: now,
+      kind: 'pull',
+      request: { cursors: {}, pendingLotIds: [] },
+      result: { ok: true },
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('un fallo de red en el pull queda en el log y hace console.error', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const pullBatch = vi.fn().mockResolvedValue(err('sync/remote-error', { message: 'Planilla ocupada' }));
+
+    await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(syncLogSignal.value[0]?.result).toEqual({
+      ok: false,
+      error: 'sync/remote-error',
+      meta: { message: 'Planilla ocupada' },
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('sin lotes en espera, pullBatch se llama con pendingLotIds vacío y el pull se aplica directo', async () => {

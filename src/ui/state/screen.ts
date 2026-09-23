@@ -13,6 +13,7 @@ export type ActiveScreen =
   | 'config'
   | 'cash'
   | 'cash-summary'
-  | 'demo-reset';
+  | 'demo-reset'
+  | 'diagnostico';
 
 export const activeScreenSignal = signal<ActiveScreen>('sale');
