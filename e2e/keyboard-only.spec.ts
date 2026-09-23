@@ -14,6 +14,9 @@ test('venta → /COBRAR → Esc → la barra de comandos recupera el foco', asyn
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeFocused();
   await openCashSession(page);
+  // Etapa 2 de #94: /COBRAR necesita algo que cobrar.
+  await commandBar.fill('regalo$100');
+  await commandBar.press('Enter');
 
   await commandBar.press('Control+Enter');
   await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
@@ -108,6 +111,8 @@ test('venta → /CONFIG → Esc → la barra de comandos recupera el foco', asyn
   await commandBar.fill('/CONFIG');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  // Con la terminal activa, el wizard abre en Revisar.
+  await expect(page.getByRole('button', { name: 'Aplicar (Enter)' })).toBeVisible();
 
   await page.keyboard.press('Escape');
 
@@ -124,6 +129,21 @@ test('venta → /DIAGNOSTICO → Esc → la barra de comandos recupera el foco',
   await expect(page.getByText('Sin probar').or(page.getByText(/Probada:/))).toBeVisible();
 
   await page.keyboard.press('Escape');
+
+  await expect(commandBar).toBeFocused();
+});
+
+test('venta → /ANULAR → click en "Volver a la venta (Esc)" → la barra de comandos recupera el foco', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+
+  await commandBar.fill('/ANULAR');
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Anular venta' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Volver a la venta (Esc)' }).click();
 
   await expect(commandBar).toBeFocused();
 });

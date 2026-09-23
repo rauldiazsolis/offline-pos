@@ -100,3 +100,36 @@ export async function fillPayment(page: Page, label: string, amount: number): Pr
 export async function confirmCheckout(page: Page): Promise<void> {
   await page.keyboard.press('Control+Enter');
 }
+
+/**
+ * Recorre el wizard de `/CONFIG` solo con teclado (Etapa 2 de #94) contra un
+ * backend REST y aplica: Terminal → Tipo → Datos del conector → Probar (arranca
+ * solo) → Revisar. Pensado para una terminal sin datos del usuario (el paso
+ * "Datos locales" se saltea). Termina en la pantalla de venta.
+ */
+export async function completeWizardRest(
+  page: Page,
+  params: {
+    baseUrl: string;
+    apiKey?: string;
+    branch?: string;
+    pointOfSale?: string;
+    type?: 'rest' | 'rest-demo';
+  },
+): Promise<void> {
+  await page.getByLabel('Sucursal').fill(params.branch ?? 'Casa central');
+  await page.getByLabel('Punto de venta').fill(params.pointOfSale ?? 'Caja 1');
+  await page.keyboard.press('Enter');
+  const label = params.type === 'rest-demo' ? /^REST \(minibackend de demo\)/ : /^REST genérico/;
+  await page.getByRole('button', { name: label }).click();
+  await page.getByLabel('URL del sistema externo').fill(params.baseUrl);
+  if (params.apiKey !== undefined) {
+    await page.getByLabel('API key (opcional)').fill(params.apiKey);
+  }
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Conexión OK/)).toBeVisible({ timeout: 25_000 });
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Aplicar (Enter)' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+}

@@ -397,7 +397,7 @@ function applyPhrase(model: WizardModel): string {
   }
   const sales = localDataSignal.value?.sales ?? 0;
   return sales > 0
-    ? `Se conecta a ${host} y se conservan ${plural(sales, 'venta', 'ventas')}.`
+    ? `Se conecta a ${host} y ${sales === 1 ? 'se conserva' : 'se conservan'} ${plural(sales, 'venta', 'ventas')}.`
     : `Se conecta a ${host} y se conservan los datos locales.`;
 }
 

@@ -5,8 +5,8 @@ const WEB_APP_URL = 'https://script.google.com/macros/s/e2e/exec';
 const STORAGE_KEY = 'offline-pos:sync-config';
 
 test.beforeEach(async ({ page }) => {
-  // El puente de Sheets simulado: guardar una conexión ahora la PRUEBA (pull
-  // completo), así que toda acción responde OK con listas vacías (con CORS).
+  // El puente de Sheets simulado: aplicar una conexión nueva exige PROBARLA
+  // (pull completo), así que toda acción responde OK con listas vacías (con CORS).
   await page.route('https://script.google.com/**', (route) =>
     route.fulfill({
       status: 200,
@@ -20,61 +20,82 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+/** Con la terminal activa, /CONFIG abre el wizard en Revisar. */
 async function openConfig(page: Page): Promise<void> {
   const commandBar = page.getByLabel('Barra de comandos');
   await commandBar.fill('/CONFIG');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Paso 6: Revisar' })).toHaveAttribute(
+    'aria-current',
+    'step',
+  );
 }
 
-test('elegir Google Sheets solo con teclado, validar al confirmar, guardar y verlo precargado', async ({
+test('pasar a Google Sheets solo con teclado: instrucciones, validación, prueba y resumen precargado', async ({
   page,
 }) => {
   await page.goto('/');
   await openConfig(page);
 
-  // El foco arranca en el selector de tipo; type-ahead ("G") elige Google Sheets.
-  const typeSelect = page.getByLabel('Tipo de conexión');
-  await expect(typeSelect).toBeFocused();
-  await typeSelect.press('G');
-  await expect(typeSelect).toHaveValue('google-sheets');
+  // Alt+2 vuelve a "Tipo de conexión"; ↓↓ de REST genérico a Google Sheets; Enter avanza.
+  await page.keyboard.press('Alt+2');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('button', { name: /^Google Sheets/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.keyboard.press('Enter');
 
-  // Los campos de REST desaparecen, los de Sheets aparecen, el selector sigue.
-  await expect(page.getByLabel(/URL del sistema externo/)).toHaveCount(0);
-  await page.keyboard.press('Tab');
-  await expect(page.getByLabel(/URL del Web App/)).toBeFocused();
+  // Datos del conector: el primer campo enfocado y las instrucciones del tipo a la vista.
+  const urlField = page.getByLabel('URL del Web App de Google Apps Script');
+  await expect(urlField).toBeFocused();
+  await expect(page.getByText(/termina en \/exec/)).toBeVisible();
 
-  // Validación solo al confirmar: una URL inválida no molesta mientras se tipea…
+  // Validación al avanzar: una URL inválida no molesta mientras se tipea…
   await page.keyboard.type('no-es-una-url');
   await expect(page.getByRole('alert')).toHaveCount(0);
-  // …pero Ctrl+Enter la rechaza, se queda en el modal y deja el campo seleccionado.
-  await page.keyboard.press('Control+Enter');
+  // …pero Enter la rechaza, se queda en el paso y deja el campo seleccionado.
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('alert')).toContainText('URL del Web App');
-  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(urlField).toBeFocused();
 
-  // El campo quedó enfocado y seleccionado: tipear reemplaza.
+  // El campo quedó seleccionado: tipear reemplaza.
   await page.keyboard.type(WEB_APP_URL);
-  await page.keyboard.press('Control+Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('secreto-e2e');
+  await page.keyboard.press('Enter');
+  await expect(page.getByText(/Conexión OK/)).toBeVisible();
+  await page.keyboard.press('Enter');
+  // Sin datos del usuario, "Datos locales" se saltea: directo a Revisar.
+  await expect(page.getByRole('button', { name: 'Aplicar (Enter)' })).toBeVisible();
+  await page.keyboard.press('Enter');
   await expect(page.getByLabel('Barra de comandos')).toBeFocused();
 
   const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
   const parsed = JSON.parse(stored ?? 'null') as Record<string, unknown>;
-  expect(parsed).toMatchObject({ type: 'google-sheets', webAppUrl: WEB_APP_URL });
-  // Se guardó tras PROBAR la conexión: queda marcada como verificada.
+  expect(parsed).toMatchObject({
+    type: 'google-sheets',
+    webAppUrl: WEB_APP_URL,
+    sharedSecret: 'secreto-e2e',
+    branch: 'Casa central',
+    pointOfSale: 'Caja 1',
+  });
   expect(parsed.verifiedAt).toBeTruthy();
 
-  // Reabrir /CONFIG muestra lo guardado, no el formulario vacío.
+  // Reabrir /CONFIG muestra lo guardado en el resumen, con el secreto oculto.
   await openConfig(page);
-  await expect(page.getByLabel('Tipo de conexión')).toHaveValue('google-sheets');
-  await expect(page.getByLabel(/URL del Web App/)).toHaveValue(WEB_APP_URL);
+  await expect(page.getByRole('dialog').getByText(WEB_APP_URL).first()).toBeVisible();
+  await expect(page.getByText(/Secreto compartido: •••/).first()).toBeVisible();
+  await expect(page.getByText('secreto-e2e')).toHaveCount(0);
 });
 
 test('Esc cancela sin guardar', async ({ page }) => {
   await page.goto('/');
   await openConfig(page);
-  // El formulario arranca sin campos: primero hay que elegir el tipo.
-  await page.getByLabel('Tipo de conexión').selectOption('rest');
-  await page.getByLabel(/URL del sistema externo/).fill('http://localhost:9999');
+  await page.keyboard.press('Alt+3');
+  await page.getByLabel('URL del sistema externo').fill('http://localhost:9999');
 
   await page.keyboard.press('Escape');
 
