@@ -51,7 +51,7 @@ describe('App (Ciclo 8: ancho mínimo soportado)', () => {
 });
 
 describe('App (Etapa 2b: bloqueo de arranque)', () => {
-  it.each(['unconfigured', 'unverified'] as const)(
+  it.each(['unconfigured', 'unverified', 'incomplete'] as const)(
     'con la conexión %s muestra solo la configuración: no hay pantalla de venta ni barra de comandos',
     (state) => {
       connectionStateSignal.value = state;

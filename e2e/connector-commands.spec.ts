@@ -33,6 +33,8 @@ test('con rest-demo, /DEMO_RESET aparece en el menú y abre su pantalla de confi
           type: 'rest-demo',
           baseUrl: 'http://127.0.0.1:9',
           verifiedAt: '2026-01-01T00:00:00.000Z',
+          branch: 'Casa central',
+          pointOfSale: 'Caja 1',
         }),
       );
     },

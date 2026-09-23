@@ -71,7 +71,21 @@ describe('bootstrap', () => {
     expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
   });
 
-  it('con una config con verifiedAt: active', async () => {
+  it('con una config con verifiedAt, sucursal y punto de venta: active', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+    });
+
+    await bootstrap();
+
+    expect(connectionStateSignal.value).toBe('active');
+  });
+
+  it('con una config verificada sin sucursal (Etapa 1): incomplete', async () => {
     saveSyncConfig({
       type: 'rest',
       baseUrl: 'https://api.example.com',
@@ -80,7 +94,7 @@ describe('bootstrap', () => {
 
     await bootstrap();
 
-    expect(connectionStateSignal.value).toBe('active');
+    expect(connectionStateSignal.value).toBe('incomplete');
   });
 
   it('el conector activo sale de la config guardada, y solo si está verificada', async () => {
@@ -95,6 +109,8 @@ describe('bootstrap', () => {
       type: 'rest-demo',
       baseUrl: 'http://localhost:4000',
       verifiedAt: '2026-01-01T00:00:00.000Z',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
     });
     await bootstrap();
     expect(activeConnectorTypeSignal.value).toBe('rest-demo');
