@@ -1,31 +1,29 @@
 import { splitConnectorCustomers } from '../domain/customer.ts';
-import {
-  isDue,
-  isSyncStruggling,
-  markFailed,
-  markSynced,
-  type OutboxEvent,
-} from '../domain/outbox.ts';
+import { markSynced, type OutboxEvent } from '../domain/outbox.ts';
+import { buildPushLot, isLotDue, isPushStruggling, markLotFailed, type PushLot } from '../domain/push-lot.ts';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
+import { newId } from '../storage/ids.ts';
 import { countLocalCatalog } from '../storage/local-data.ts';
 import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
   lastSyncFailureSignal,
+  pushLotIssuesSignal,
   setLastSyncFailure,
   setLastSyncedAt,
   setLocalCatalogCounts,
   setPendingOutboxCount,
+  setPushLotIssues,
   setSyncConfigured,
   setSyncStatus,
   syncPausedSignal,
 } from '../ui/state/sync.ts';
-import type { Connector } from './connector.ts';
-import { loadSyncConfig } from './config.ts';
+import type { Connector, OutboxBatchItem } from './connector.ts';
+import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
 import {
   getCustomersCursor,
@@ -36,34 +34,39 @@ import {
   setProductsCursor,
 } from './cursor.ts';
 import { isFullRefreshDue } from './full-refresh.ts';
-import { pullEverything, withTimeout } from './pull-snapshot.ts';
+import { toProbeSnapshot, withTimeout } from './pull-snapshot.ts';
+import {
+  addAwaitingLot,
+  clearCurrentPushLot,
+  getAwaitingLots,
+  getCurrentPushLot,
+  resolveAwaitingLots,
+  setCurrentPushLot,
+} from './push-lot.ts';
 
-function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>> {
+/** Convierte un evento del outbox a su forma de red — sin `status`/`createdAt`, bookkeeping local. */
+export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
   switch (event.type) {
     case 'sale':
-      return connector.pushSale(event.sale, event.id);
+      return { type: 'sale', id: event.id, sale: event.sale };
     case 'stock-movement':
-      return connector.pushStockMovement(event.movement, event.id);
+      return { type: 'stock-movement', id: event.id, movement: event.movement };
     case 'sale-void':
-      return connector.pushSaleVoid(
-        {
-          saleId: event.saleId,
-          voidedAt: event.voidedAt,
-          ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
-        },
-        event.id,
-      );
+      return {
+        type: 'sale-void',
+        id: event.id,
+        saleId: event.saleId,
+        voidedAt: event.voidedAt,
+        ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
+      };
     case 'customer':
-      return connector.pushCustomer(event.customer, event.id);
+      return { type: 'customer', id: event.id, customer: event.customer };
     case 'account-hold-confirm':
-      return connector.pushAccountHoldConfirm(
-        { holdId: event.holdId, saleId: event.saleId },
-        event.id,
-      );
+      return { type: 'account-hold-confirm', id: event.id, holdId: event.holdId, saleId: event.saleId };
     case 'account-hold-release':
-      return connector.releaseAccountHold({ holdId: event.holdId }, event.id);
+      return { type: 'account-hold-release', id: event.id, holdId: event.holdId };
     case 'cash-session':
-      return connector.pushCashSession(event.session, event.id);
+      return { type: 'cash-session', id: event.id, session: event.session };
     default: {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
@@ -71,162 +74,67 @@ function pushOne(connector: Connector, event: OutboxEvent): Promise<Result<void>
   }
 }
 
-export type PushSummary = { attempted: number; failed: number };
+/**
+ * Retoma el lote en curso (mismo id, mismo conjunto de eventos — nunca se
+ * recalcula en un reintento) o arma uno nuevo con todo lo pendiente del
+ * outbox, en orden `createdAt`. `undefined` si no hay nada que enviar.
+ */
+async function buildOrResumeLot(now: string): Promise<{ lot: PushLot; events: OutboxEvent[] } | undefined> {
+  const existing = getCurrentPushLot();
+  if (existing !== undefined) {
+    const events = (await db.outbox.bulkGet(existing.eventIds)).filter(
+      (event): event is OutboxEvent => event !== undefined && event.status === 'pending',
+    );
+    if (events.length > 0) {
+      return { lot: existing, events };
+    }
+    // Ya no queda nada pendiente de ese lote (p.ej. lo limpió /DEMO_RESET) — se descarta.
+    clearCurrentPushLot();
+  }
+
+  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
+  if (pending.length === 0) {
+    return undefined;
+  }
+  const lot = buildPushLot(pending.map((event) => event.id), { id: newId(), now });
+  setCurrentPushLot(lot);
+  return { lot, events: pending };
+}
+
+export type PushSummary = { attempted: number; failed: boolean };
 
 /**
- * Empuja el outbox pendiente en orden. `ignoreBackoff` saltea la ventana de
- * reintento (`isDue`): lo usa el envío final antes de borrar los datos al
- * cambiar de conexión (`sync/apply-connection.ts::flushPendingBeforeWipe`);
- * `now` sigue siendo la hora real, así un fallo calcula bien su próximo intento.
+ * Un ciclo de **push**: manda todo el outbox pendiente en un solo lote
+ * (#87) — reemplaza el `pushOnce`/`pushPendingEvents` por-evento de antes.
+ * `ignoreBackoff` saltea la ventana de reintento del lote: lo usa el envío
+ * final antes de borrar los datos al cambiar de conexión
+ * (`sync/apply-connection.ts::flushPendingBeforeWipe`) y `/SINCRONIZAR`.
  */
-export async function pushPendingEvents(
+export async function pushPendingLot(
   connector: Connector,
   now: string,
   options: { ignoreBackoff?: boolean } = {},
 ): Promise<PushSummary> {
-  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
-  let attempted = 0;
-  let failed = 0;
-
-  for (const event of pending) {
-    if (options.ignoreBackoff !== true && !isDue(event, now)) {
-      continue;
-    }
-    attempted += 1;
-    const result = await pushOne(connector, event);
-    if (!result.ok) {
-      failed += 1;
-    }
-    await db.outbox.put(
-      result.ok ? markSynced(event) : markFailed(event, { now, error: result.error }),
-    );
+  const resumed = await buildOrResumeLot(now);
+  if (resumed === undefined) {
+    return { attempted: 0, failed: false };
   }
-  return { attempted, failed };
+  const { lot, events } = resumed;
+  if (options.ignoreBackoff !== true && !isLotDue(lot, now)) {
+    return { attempted: 0, failed: false };
+  }
+
+  const result = await connector.pushBatch(events.map(toBatchItem), lot.id);
+  if (result.ok) {
+    await db.outbox.bulkPut(events.map(markSynced));
+    clearCurrentPushLot();
+    addAwaitingLot({ id: lot.id, sentAt: now });
+    return { attempted: events.length, failed: false };
+  }
+
+  setCurrentPushLot(markLotFailed(lot, { now, error: result.error }));
+  return { attempted: events.length, failed: true };
 }
-
-async function pullCatalog(
-  connector: Connector,
-): Promise<{ products: Result<void>; stock: Result<void> }> {
-  const since = getProductsCursor();
-  const productsResult = await connector.pullProducts(since !== undefined ? { since } : {});
-  let products: Result<void>;
-  if (productsResult.ok) {
-    if (productsResult.value.items.length > 0) {
-      await db.products.bulkPut(productsResult.value.items);
-    }
-    if (productsResult.value.nextCursor !== undefined) {
-      setProductsCursor(productsResult.value.nextCursor);
-    }
-    // El catálogo pudo haber cambiado — Fase 1 lo indexaba una sola vez
-    // asumiéndolo estático, acá se reconstruye a propósito.
-    setCatalogRepository(await loadCatalogRepository());
-    products = ok(undefined);
-  } else {
-    products = productsResult;
-  }
-
-  const stockResult = await connector.pullStock();
-  let stock: Result<void>;
-  if (stockResult.ok) {
-    if (stockResult.value.length > 0) {
-      await db.stock.bulkPut(stockResult.value);
-    }
-    stock = ok(undefined);
-  } else {
-    stock = stockResult;
-  }
-  return { products, stock };
-}
-
-/**
- * Pull de clientes por delta, mismo criterio que `pullCatalog`: cada fila
- * cruda se separa en `Customer`/`CustomerAccount` (`splitConnectorCustomers`)
- * antes de guardarse, así las dos tablas quedan siempre consistentes entre
- * sí incluso si un cliente todavía no tiene cuenta corriente.
- */
-async function pullCustomers(connector: Connector): Promise<Result<void>> {
-  const since = getCustomersCursor();
-  const result = await connector.pullCustomers(since !== undefined ? { since } : {});
-  if (!result.ok) {
-    return result;
-  }
-
-  if (result.value.items.length > 0) {
-    const { customers, accounts } = splitConnectorCustomers(result.value.items, {
-      now: new Date().toISOString(),
-    });
-    await db.customers.bulkPut(customers);
-    if (accounts.length > 0) {
-      await db.customerAccounts.bulkPut(accounts);
-    }
-    setCustomerRepository(await loadCustomerRepository());
-  }
-  if (result.value.nextCursor !== undefined) {
-    setCustomersCursor(result.value.nextCursor);
-  }
-  return ok(undefined);
-}
-
-export type SyncReport = {
-  push: PushSummary;
-  pulls: { products: Result<void>; stock: Result<void>; customers: Result<void> };
-};
-
-/**
- * Un ciclo de sync: push del outbox pendiente + pull de catálogo. Nunca
- * bloquea la UI — el caller (`runSyncCycle`) lo dispara en background.
- * No conoce config ni arma el `Connector`: eso es responsabilidad del
- * caller, así esta función se testea directo contra un `Connector` fake.
- *
- * Estado honesto (#53): un pull que falla ya no se traga en silencio — el
- * estado pasa a `sync-error`, el motivo queda en `lastSyncFailureSignal` y
- * `lastSyncedAt` solo se actualiza en un ciclo completamente exitoso.
- */
-export async function syncOnce(connector: Connector, now: string): Promise<SyncReport> {
-  setSyncStatus('syncing');
-
-  const push = await pushPendingEvents(connector, now);
-  const catalog = await pullCatalog(connector);
-  const customers = await pullCustomers(connector);
-  const report: SyncReport = {
-    push,
-    pulls: { products: catalog.products, stock: catalog.stock, customers },
-  };
-
-  await finishCycle(
-    now,
-    [catalog.products, catalog.stock, customers].find((result): result is Failure => !result.ok),
-  );
-  return report;
-}
-
-/**
- * Cola común de un ciclo completo: conteos y estado honesto (#53). `failure` (un pull que falló, o
- * una tabla que llegó vacía) deja `sync-error` con el motivo; `lastSyncedAt` solo avanza en un
- * ciclo completamente exitoso.
- */
-async function finishCycle(now: string, failure: Failure | undefined): Promise<void> {
-  const events = await db.outbox.toArray();
-  setPendingOutboxCount(events.filter((event) => event.status === 'pending').length);
-  setLocalCatalogCounts(await countLocalCatalog());
-
-  if (failure !== undefined) {
-    setLastSyncFailure(failure);
-    setSyncStatus('sync-error');
-    return;
-  }
-  setLastSyncFailure(null);
-
-  if (isSyncStruggling(events)) {
-    setSyncStatus('sync-error');
-    return;
-  }
-  setSyncStatus('online-idle');
-  setLastSyncedAt(now);
-}
-
-/** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
-export const FULL_REFRESH_TIMEOUT_MS = 60_000;
 
 /** ¿Ya se hizo una foto completa desde que arrancó el motor (esta carga de la página)? */
 let fullRefreshDoneThisSession = false;
@@ -236,83 +144,156 @@ export function resetFullRefreshSession(): void {
   fullRefreshDoneThisSession = false;
 }
 
+/** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
+export const FULL_REFRESH_TIMEOUT_MS = 60_000;
+
+type PullOutcome = { applied: boolean; failure?: Failure; issues: string[] };
+
 /**
- * Ciclo con **foto completa**: push del outbox y después el catálogo entero (sin `since`) en
- * memoria, todo o nada — si una parte falla no se aplica nada. Recién con las tres partes en la mano
- * se reconcilia en una transacción (`storage/reconcile.ts`): se actualiza lo que llegó y se borra lo
- * que el origen dio de baja. Es lo único que se entera de las bajas: un delta nunca las informa.
- *
- * Una tabla que llega vacía teniendo datos locales no se borra: queda `sync/empty-snapshot` en la
- * barra y la foto **no** se da por hecha, así el próximo ciclo la reintenta.
+ * Un ciclo de **pull**: un solo `pullBatch` (delta si `full` no está, foto
+ * completa si sí), gateado por el estado de los lotes de push que el POS
+ * todavía espera confirmar (#87) — si alguno sigue `pending`, no se aplica
+ * nada de este pull (ver spec, "Regla de aplicación"). Reemplaza
+ * `pullCatalog`/`pullCustomers`/`syncOnce`/`syncFull` de antes de #87.
  */
-export async function syncFull(connector: Connector, now: string): Promise<SyncReport> {
-  setSyncStatus('syncing');
+async function pullAndApply(
+  connector: Connector,
+  now: string,
+  options: { full: boolean },
+): Promise<PullOutcome> {
+  const awaiting = getAwaitingLots();
+  const productsCursor = getProductsCursor();
+  const customersCursor = getCustomersCursor();
+  const cursors = options.full
+    ? {}
+    : {
+        ...(productsCursor !== undefined ? { products: productsCursor } : {}),
+        ...(customersCursor !== undefined ? { customers: customersCursor } : {}),
+      };
 
-  const push = await pushPendingEvents(connector, now);
-
-  let failure: Failure | undefined;
-  const snapshot = await withTimeout(pullEverything(connector), FULL_REFRESH_TIMEOUT_MS);
-  if (!snapshot.ok) {
-    failure = snapshot;
-  } else {
-    const applied = await reconcileSnapshot(snapshot.value, { now });
-    if (!applied.ok) {
-      failure = applied;
-    } else if (applied.value.skipped.length > 0) {
-      failure = err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure;
-    }
-    if (applied.ok) {
-      if (snapshot.value.cursors.products !== undefined) {
-        setProductsCursor(snapshot.value.cursors.products);
-      }
-      if (snapshot.value.cursors.customers !== undefined) {
-        setCustomersCursor(snapshot.value.cursors.customers);
-      }
-      setCatalogRepository(await loadCatalogRepository());
-      setCustomerRepository(await loadCustomerRepository());
-      if (applied.value.skipped.length === 0) {
-        setLastFullSyncAt(now);
-        fullRefreshDoneThisSession = true;
-      }
-    }
+  const pullPromise = connector.pullBatch({ cursors, pendingLotIds: awaiting.map((lot) => lot.id) });
+  // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87): un backend
+  // colgado en un delta normal no justificaba la complejidad extra, la foto completa sí porque
+  // puede tardar mucho más y correr menos seguido.
+  const pullResult = options.full ? await withTimeout(pullPromise, FULL_REFRESH_TIMEOUT_MS) : await pullPromise;
+  if (!pullResult.ok) {
+    return { applied: false, failure: pullResult, issues: [] };
   }
 
-  await finishCycle(now, failure);
-  const result: Result<void> = failure ?? ok(undefined);
-  return { push, pulls: { products: result, stock: result, customers: result } };
+  const resolved = new Set<string>();
+  const issues: string[] = [];
+  let stillPending = false;
+  for (const lot of awaiting) {
+    const status = pullResult.value.lots[lot.id];
+    if (status === undefined || status.status === 'pending') {
+      stillPending = true;
+      continue;
+    }
+    resolved.add(lot.id);
+    if (status.status === 'issues') {
+      issues.push(...status.issues);
+    }
+  }
+  resolveAwaitingLots(resolved);
+
+  if (stillPending) {
+    return { applied: false, failure: err('sync/pending-lot', undefined) as Failure, issues };
+  }
+
+  if (options.full) {
+    const snapshot = toProbeSnapshot(pullResult.value);
+    const applied = await reconcileSnapshot(snapshot, { now });
+    if (!applied.ok) {
+      return { applied: false, failure: applied, issues };
+    }
+    if (applied.value.skipped.length > 0) {
+      return {
+        applied: false,
+        failure: err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure,
+        issues,
+      };
+    }
+    if (snapshot.cursors.products !== undefined) {
+      setProductsCursor(snapshot.cursors.products);
+    }
+    if (snapshot.cursors.customers !== undefined) {
+      setCustomersCursor(snapshot.cursors.customers);
+    }
+    setCatalogRepository(await loadCatalogRepository());
+    setCustomerRepository(await loadCustomerRepository());
+    setLastFullSyncAt(now);
+    fullRefreshDoneThisSession = true;
+    return { applied: true, issues };
+  }
+
+  if (pullResult.value.products.items.length > 0) {
+    await db.products.bulkPut(pullResult.value.products.items);
+    setCatalogRepository(await loadCatalogRepository());
+  }
+  if (pullResult.value.products.nextCursor !== undefined) {
+    setProductsCursor(pullResult.value.products.nextCursor);
+  }
+  if (pullResult.value.stock.length > 0) {
+    await db.stock.bulkPut(pullResult.value.stock);
+  }
+  if (pullResult.value.customers.items.length > 0) {
+    const { customers, accounts } = splitConnectorCustomers(pullResult.value.customers.items, { now });
+    await db.customers.bulkPut(customers);
+    if (accounts.length > 0) {
+      await db.customerAccounts.bulkPut(accounts);
+    }
+    setCustomerRepository(await loadCustomerRepository());
+  }
+  if (pullResult.value.customers.nextCursor !== undefined) {
+    setCustomersCursor(pullResult.value.customers.nextCursor);
+  }
+  return { applied: true, issues };
 }
 
-/**
- * Ciclo de **solo envío**: empuja el outbox pendiente sin traer catálogo, stock ni
- * clientes. Lo disparan los eventos nuevos del outbox (venta, anulación, cliente,
- * cierre de caja) y los reintentos: cuesta un request en vez de tres, y una venta
- * no espera al próximo ciclo completo. No toca `lastSyncedAt` ni los conteos del
- * catálogo (no los refrescó), y no borra una falla de pull sin resolver: mientras
- * esa siga, el estado sigue siendo `sync-error`.
- */
-export async function pushOnce(connector: Connector, now: string): Promise<PushSummary> {
+/** Cola común de un ciclo de pull: conteos, aviso de issues y estado honesto (#53, adaptado a #87). */
+async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Result<void>> {
+  setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
+  setLocalCatalogCounts(await countLocalCatalog());
+  setPushLotIssues(outcome.issues.length > 0 ? outcome.issues : null);
+
+  if (outcome.failure !== undefined) {
+    setLastSyncFailure(outcome.failure);
+    setSyncStatus('sync-error');
+    return outcome.failure;
+  }
+  setLastSyncFailure(null);
+
+  if (isPushStruggling(getCurrentPushLot())) {
+    setSyncStatus('sync-error');
+    return ok(undefined);
+  }
+  setSyncStatus('online-idle');
+  setLastSyncedAt(now);
+  return ok(undefined);
+}
+
+export async function runPullCycle(
+  connector: Connector,
+  now: string,
+  options: { full?: boolean } = {},
+): Promise<Result<void>> {
   setSyncStatus('syncing');
-
-  const push = await pushPendingEvents(connector, now);
-
-  const events = await db.outbox.toArray();
-  setPendingOutboxCount(events.filter((event) => event.status === 'pending').length);
-  setSyncStatus(
-    lastSyncFailureSignal.value !== null || isSyncStruggling(events) ? 'sync-error' : 'online-idle',
-  );
-  return push;
+  const outcome = await pullAndApply(connector, now, { full: options.full === true });
+  return finishPullCycle(now, outcome);
 }
 
 /**
- * Es responsabilidad de la app no saturar a la API: si un push tarda más
+ * Es responsabilidad de la app no saturar a la API: si un ciclo tarda más
  * que el intervalo del loop (una API lenta de verdad), el próximo disparo
  * (`setInterval`, evento `online`, o `/SINCRONIZAR`) no debe arrancar un
  * segundo ciclo en paralelo — ver issue #1. La bandera se lee/escribe de
- * forma síncrona (`tryAcquireSyncLock`, primera línea de `runSyncCycle`),
- * antes de cualquier `await`, así una llamada reentrante la ve actualizada
- * sin importar en qué punto del ciclo anterior ocurra. Desde la Etapa 2b es
- * también el cerrojo de `sync/apply-connection.ts`: aplicar una conexión no
- * puede intercalarse con un ciclo.
+ * forma síncrona (`tryAcquireSyncLock`), antes de cualquier `await`, así
+ * una llamada reentrante la ve actualizada sin importar en qué punto del
+ * ciclo anterior ocurra. Desde la Etapa 2b es también el cerrojo de
+ * `sync/apply-connection.ts`: aplicar una conexión no puede intercalarse
+ * con un ciclo. Con push y pull ahora independientes (#87), cada request
+ * individual lo toma y lo suelta alrededor de sí mismo — nunca durante todo
+ * el intervalo entre ciclos.
  */
 let syncInProgress = false;
 
@@ -339,16 +320,15 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
 }
 
 /**
- * Arma el `Connector` real desde la config guardada y corre un ciclo. Acá
- * viven los chequeos de entorno (¿hay red? ¿hay una conexión activa?) que
- * `syncOnce` no conoce a propósito — así queda testeable de forma aislada.
- * Una config sin probar (`verifiedAt` ausente) no sincroniza: la app pide
- * probarla antes de operar (Etapa 2b).
+ * Preámbulo común a cualquier ciclo (push o pull, #87): toma el cerrojo
+ * **solo mientras dura este request** (nunca durante todo el intervalo entre
+ * ciclos), respeta `/CONFIG` abierto, chequea red y config activa. `run`
+ * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
+ * ni `runPullCycle` necesitan saber de dónde salió.
  */
-export async function runSyncCycle(
-  options: { pull?: boolean; full?: boolean } = {},
+async function withConnectorCycle(
+  run: (connector: Connector, now: string, config: SyncConfig) => Promise<void>,
 ): Promise<void> {
-  // `/CONFIG` abierto: no arrancar ciclos (ver `syncPausedSignal`).
   if (syncPausedSignal.value) {
     return;
   }
@@ -356,59 +336,88 @@ export async function runSyncCycle(
   if (release === undefined) {
     return;
   }
-
   try {
     if (!navigator.onLine) {
       setSyncStatus('offline');
       return;
     }
-
     const configResult = loadSyncConfig();
     if (!configResult.ok || configResult.value.verifiedAt === undefined) {
       setSyncConfigured(false);
       return;
     }
     setSyncConfigured(true);
-
     const connector = createConnector(configResult.value);
-    const now = new Date().toISOString();
-    if (options.pull === false) {
-      await pushOnce(connector, now);
-    } else if (
-      isFullRefreshDue({
-        mode: connectorPullMode(configResult.value.type),
-        lastFullAt: getLastFullSyncAt(),
-        now,
-        doneThisSession: fullRefreshDoneThisSession,
-        forced: options.full === true,
-      })
-    ) {
-      await syncFull(connector, now);
-    } else {
-      await syncOnce(connector, now);
-    }
-    await scheduleNextRetry();
+    await run(connector, new Date().toISOString(), configResult.value);
   } finally {
     release();
   }
 }
 
-/** Ciclo completo (envío + pull) de red de seguridad: el resto lo disparan los eventos. */
-export const SYNC_INTERVAL_MS = 5 * 60 * 1000;
-/** Espera antes de un envío disparado por un evento: agrupa los que llegan seguidos. */
-export const SYNC_DEBOUNCE_MS = 2_000;
+/** Ciclo de **push**: reemplaza el `pull:false` de `runSyncCycle` de antes de #87. */
+export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): Promise<void> {
+  await withConnectorCycle(async (connector, now) => {
+    const summary = await pushPendingLot(connector, now, options);
+    setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
+    setSyncStatus(
+      lastSyncFailureSignal.value !== null || isPushStruggling(getCurrentPushLot())
+        ? 'sync-error'
+        : 'online-idle',
+    );
+    if (summary.attempted > 0 && !summary.failed) {
+      schedulePullSoon(PULL_DELAY_AFTER_PUSH_MS);
+    }
+    scheduleNextPushRetry();
+  });
+}
+
+/**
+ * Ciclo de **pull**: decide foto completa vs. delta y corre `runPullCycle`. Si un delta resuelve
+ * un lote con `issues`, encadena una foto completa ya mismo, sin esperar a la cadencia de 2h —
+ * mismo criterio de la tabla de cadencias del spec ("pull completo ... o si un pull delta avisa
+ * issues graves en algún lote"): acá se trata cualquier `issues` como grave, ya que
+ * `BatchLotStatus` no distingue severidad — más conservador, nunca se autobloquea, solo adelanta
+ * la reconciliación completa.
+ */
+export async function runPullCycleNow(options: { full?: boolean } = {}): Promise<void> {
+  await withConnectorCycle(async (connector, now, config) => {
+    const full =
+      options.full === true ||
+      isFullRefreshDue({
+        mode: connectorPullMode(config.type),
+        lastFullAt: getLastFullSyncAt(),
+        now,
+        doneThisSession: fullRefreshDoneThisSession,
+      });
+    await runPullCycle(connector, now, { full });
+    if (!full && pushLotIssuesSignal.value !== null) {
+      await runPullCycle(connector, now, { full: true });
+    }
+  });
+}
+
+/** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
+export async function syncNow(): Promise<void> {
+  await runPushCycle({ ignoreBackoff: true });
+  await runPullCycleNow({ full: true });
+}
+
+/** Ciclo completo al arrancar/red de seguridad de push (10-15 min — #87 separa esto del pull). */
+export const PUSH_INTERVAL_MS = 12 * 60 * 1000;
+/** Red de seguridad de pull, independiente de que haya habido push (#87: cadencias propias). */
+export const PULL_SAFETY_NET_INTERVAL_MS = 15 * 60 * 1000;
+/** "Un rato después" de un push exitoso, antes de pedir el delta correspondiente (#87). */
+export const PULL_DELAY_AFTER_PUSH_MS = 2 * 60 * 1000;
+/** Agrupa pedidos de push seguidos (varios eventos del outbox casi juntos). */
+export const PUSH_DEBOUNCE_MS = 2_000;
 const MIN_RETRY_TIMER_MS = 1_000;
 const MAX_RETRY_TIMER_MS = 5 * 60 * 1000;
 
 let pushTimer: ReturnType<typeof setTimeout> | undefined;
 let pushDueAt = 0;
 
-/**
- * Agenda un ciclo de solo envío. Si ya hay uno agendado más cerca, lo conserva
- * (varios eventos seguidos comparten un envío, y un evento nunca demora un
- * reintento); si el nuevo es más cercano, lo adelanta.
- */
-export function requestPushSoon(delayMs: number = SYNC_DEBOUNCE_MS): void {
+/** Agenda un push. Si ya hay uno agendado más cerca, lo conserva; si el nuevo es más cercano, lo adelanta. */
+export function requestPushSoon(delayMs: number = PUSH_DEBOUNCE_MS): void {
   const dueAt = Date.now() + delayMs;
   if (pushTimer !== undefined) {
     if (pushDueAt <= dueAt) {
@@ -419,11 +428,10 @@ export function requestPushSoon(delayMs: number = SYNC_DEBOUNCE_MS): void {
   pushDueAt = dueAt;
   pushTimer = setTimeout(() => {
     pushTimer = undefined;
-    void runSyncCycle({ pull: false });
+    void runPushCycle();
   }, delayMs);
 }
 
-/** Cancela el envío agendado (al detener el motor y en los tests). */
 export function cancelScheduledPush(): void {
   if (pushTimer !== undefined) {
     clearTimeout(pushTimer);
@@ -431,39 +439,74 @@ export function cancelScheduledPush(): void {
   }
 }
 
-/**
- * Agenda un envío para cuando venza el backoff del evento pendiente más próximo:
- * con un ciclo completo cada 5 minutos, los reintentos de 2, 4, 8… segundos no
- * pueden depender del tick del intervalo.
- */
-async function scheduleNextRetry(): Promise<void> {
-  const pending = await db.outbox.where('status').equals('pending').toArray();
-  if (pending.length === 0) {
+let pullTimer: ReturnType<typeof setTimeout> | undefined;
+let pullDueAt = 0;
+
+function schedulePullSoon(delayMs: number): void {
+  const dueAt = Date.now() + delayMs;
+  if (pullTimer !== undefined) {
+    if (pullDueAt <= dueAt) {
+      return;
+    }
+    clearTimeout(pullTimer);
+  }
+  pullDueAt = dueAt;
+  pullTimer = setTimeout(() => {
+    pullTimer = undefined;
+    void runPullCycleNow();
+  }, delayMs);
+}
+
+export function cancelScheduledPull(): void {
+  if (pullTimer !== undefined) {
+    clearTimeout(pullTimer);
+    pullTimer = undefined;
+  }
+}
+
+/** Agenda un push para cuando venza el backoff del lote en curso, si hay uno fallido. */
+function scheduleNextPushRetry(): void {
+  const lot = getCurrentPushLot();
+  if (lot === undefined) {
     return;
   }
-  const soonest = Math.min(...pending.map((event) => new Date(event.nextAttemptAt).getTime()));
-  requestPushSoon(Math.min(Math.max(soonest - Date.now(), MIN_RETRY_TIMER_MS), MAX_RETRY_TIMER_MS));
+  const delay = Math.min(
+    Math.max(new Date(lot.nextAttemptAt).getTime() - Date.now(), MIN_RETRY_TIMER_MS),
+    MAX_RETRY_TIMER_MS,
+  );
+  requestPushSoon(delay);
 }
 
 /**
- * Motor de sync mientras la pestaña está abierta — NO la Background Sync API de
- * Service Worker, eso es explícitamente Fase 7 (PWA). Se llama una sola vez desde
- * `ui/bootstrap.ts`. Tres disparadores:
- * - un ciclo **completo** al arrancar, al volver la red y cada `SYNC_INTERVAL_MS`;
- * - un ciclo de **solo envío** por cada evento nuevo en `outbox` (venta, anulación,
- *   cliente, cierre de caja, fiado) — el hook de Dexie cubre todos los caminos que
- *   encolan sin que cada controlador tenga que acordarse;
- * - un ciclo de solo envío al vencer el backoff de un evento fallido.
- * Devuelve la función que lo detiene (tests).
+ * Dispara un push y, recién cuando termina (soltó el cerrojo), un pull —
+ * nunca los dos a la vez: como los dos compiten por el mismo cerrojo
+ * (`tryAcquireSyncLock`, sin espera) y el push siempre se llama primero, un
+ * pull disparado en simultáneo perdería la carrera y no correría nunca. No
+ * es la cadencia normal de cada uno (que sigue siendo independiente vía sus
+ * propios timers) — es solo cómo conviven cuando algo los dispara juntos
+ * (arranque, evento `online`).
+ */
+export async function runPushThenPull(options: { full?: boolean } = {}): Promise<void> {
+  await runPushCycle();
+  await runPullCycleNow(options);
+}
+
+/**
+ * Motor de sync mientras la pestaña está abierta (Fase 2; Background Sync de
+ * Service Worker sigue siendo Fase 7). Push y pull corren en dos cadencias
+ * independientes (#87): push al arrancar + cada `PUSH_INTERVAL_MS` + por
+ * cada evento nuevo del outbox (debounced) + al vencer su backoff; pull al
+ * arrancar + cada `PULL_SAFETY_NET_INTERVAL_MS` + un rato después de cada
+ * push exitoso. El evento `online` dispara los dos. Devuelve la función que
+ * lo detiene (tests).
  */
 export function startSyncEngine(): () => void {
   resetFullRefreshSession();
-  void runSyncCycle();
-  const interval = setInterval(() => {
-    void runSyncCycle();
-  }, SYNC_INTERVAL_MS);
+  void runPushThenPull();
+  const pushInterval = setInterval(() => void runPushCycle(), PUSH_INTERVAL_MS);
+  const pullInterval = setInterval(() => void runPullCycleNow(), PULL_SAFETY_NET_INTERVAL_MS);
   const onOnline = (): void => {
-    void runSyncCycle();
+    void runPushThenPull();
   };
   window.addEventListener('online', onOnline);
   const onOutboxEvent = (): void => {
@@ -472,9 +515,11 @@ export function startSyncEngine(): () => void {
   db.outbox.hook('creating', onOutboxEvent);
 
   return () => {
-    clearInterval(interval);
+    clearInterval(pushInterval);
+    clearInterval(pullInterval);
     window.removeEventListener('online', onOnline);
     db.outbox.hook('creating').unsubscribe(onOutboxEvent);
     cancelScheduledPush();
+    cancelScheduledPull();
   };
 }

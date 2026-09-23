@@ -190,23 +190,19 @@ describe('applyConnection', () => {
 });
 
 describe('flushPendingBeforeWipe', () => {
-  it('empuja los pendientes al conector actual ignorando el backoff', async () => {
-    await db.outbox.put({
-      ...buildOutboxEventForSale(makeSale('s1'), { now }),
-      retries: 2,
-      nextAttemptAt: '2099-01-01T00:00:00.000Z',
-    });
-    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
+  it('empuja los pendientes al conector actual ignorando el backoff del lote', async () => {
+    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
 
-    await flushPendingBeforeWipe(oldConfig, { connector: fakeConnector({ pushSale }) });
+    await flushPendingBeforeWipe(oldConfig, { connector: fakeConnector({ pushBatch }) });
 
-    expect(pushSale).toHaveBeenCalledTimes(1);
+    expect(pushBatch).toHaveBeenCalledTimes(1);
     await expect(db.outbox.get(makeSale('s1').id)).resolves.toMatchObject({ status: 'synced' });
   });
 
   it('si el conector se cuelga, vuelve igual (tope de tiempo) y libera el cerrojo', async () => {
     await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
-    const connector = fakeConnector({ pushSale: () => new Promise<never>(() => undefined) });
+    const connector = fakeConnector({ pushBatch: () => new Promise<never>(() => undefined) });
 
     await flushPendingBeforeWipe(oldConfig, { connector, timeoutMs: 40 });
 
@@ -217,15 +213,15 @@ describe('flushPendingBeforeWipe', () => {
 
   it('si el cerrojo sigue tomado y vence la espera, no empuja nada', async () => {
     await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
-    const pushSale = vi.fn().mockResolvedValue(ok(undefined));
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
     const release = tryAcquireSyncLock();
 
     await flushPendingBeforeWipe(oldConfig, {
-      connector: fakeConnector({ pushSale }),
+      connector: fakeConnector({ pushBatch }),
       timeoutMs: 40,
     });
 
-    expect(pushSale).not.toHaveBeenCalled();
+    expect(pushBatch).not.toHaveBeenCalled();
     release?.();
   });
 });

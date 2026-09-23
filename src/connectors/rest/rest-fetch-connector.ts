@@ -1,29 +1,30 @@
 import { z } from 'zod';
-import type { CashSession } from '../../domain/cash-session.ts';
-import type { Customer } from '../../domain/customer.ts';
-import { productSchema, type Product } from '../../domain/product.ts';
+import { productSchema } from '../../domain/product.ts';
 import { err, ok, type Result } from '../../domain/result.ts';
-import type { Sale } from '../../domain/sale.ts';
-import { stockItemSchema, type StockItem, type StockMovement } from '../../domain/stock.ts';
+import { stockItemSchema } from '../../domain/stock.ts';
 import { toZodIssues } from '../../domain/zod-issues.ts';
 import {
   accountHoldResultSchema,
   connectorCustomerSchema,
   type AccountHoldResult,
   type Connector,
-  type ConnectorCustomer,
-  type ConnectorPullResult,
+  type OutboxBatchItem,
+  type PullBatchParams,
+  type PullBatchResult,
 } from '../../sync/connector.ts';
 import type { RestConnectionConfig } from './config.ts';
 
-const productsPullResponseSchema = z.object({
-  items: z.array(productSchema),
-  nextCursor: z.string().optional(),
-});
+const batchLotStatusSchema = z.union([
+  z.object({ status: z.literal('pending') }),
+  z.object({ status: z.literal('ok') }),
+  z.object({ status: z.literal('issues'), issues: z.array(z.string()) }),
+]);
 
-const customersPullResponseSchema = z.object({
-  items: z.array(connectorCustomerSchema),
-  nextCursor: z.string().optional(),
+const pullBatchResponseSchema = z.object({
+  products: z.object({ items: z.array(productSchema), nextCursor: z.string().optional() }),
+  customers: z.object({ items: z.array(connectorCustomerSchema), nextCursor: z.string().optional() }),
+  stock: z.array(stockItemSchema),
+  lots: z.record(z.string(), batchLotStatusSchema),
 });
 
 function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): HeadersInit {
@@ -37,61 +38,18 @@ function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): He
   return headers;
 }
 
-/** GET + parseo a JSON, envuelto en Result — el *contenido* se valida aparte, en el caller. */
-async function fetchJson(url: string, headers: HeadersInit): Promise<Result<unknown>> {
-  let response: Response;
-  try {
-    response = await fetch(url, { headers });
-  } catch (error) {
-    return err('sync/request-failed', {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-  if (!response.ok) {
-    return err('sync/request-failed', { status: response.status, message: response.statusText });
-  }
-  try {
-    return ok(await response.json());
-  } catch {
-    return err('sync/invalid-payload', {
-      issues: [{ path: '', message: 'La respuesta no es JSON válido' }],
-    });
-  }
-}
-
 /**
  * Implementación de referencia del puerto `Connector` sobre `fetch` (ver
- * `docs/connector-api.openapi.yaml`). El *request* (nuestro propio dato ya
- * tipado) nunca se valida con Zod — la regla de "unknown solo en el borde,
- * validado" es para datos que entran, no para lo que nosotros mandamos. La
- * *respuesta* de un pull sí es externa → se valida.
+ * `docs/connector-api.openapi.yaml`, contrato v2 — #87). El *request*
+ * (nuestro propio dato ya tipado) nunca se valida con Zod; la *respuesta* de
+ * un pull sí es externa → se valida.
  */
 export function createRestFetchConnector(config: RestConnectionConfig): Connector {
-  async function postEvent(
+  async function postJson(
     path: string,
-    idempotencyKey: string,
+    idempotencyKey: string | undefined,
     body: unknown,
-  ): Promise<Result<void>> {
-    let response: Response;
-    try {
-      response = await fetch(`${config.baseUrl}${path}`, {
-        method: 'POST',
-        headers: buildHeaders(config, idempotencyKey),
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      return err('sync/request-failed', {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-    if (!response.ok) {
-      return err('sync/request-failed', { status: response.status, message: response.statusText });
-    }
-    return ok(undefined);
-  }
-
-  /** Como `postEvent`, pero devuelve el body parseado — para POSTs que responden datos (el hold). */
-  async function postJson(path: string, idempotencyKey: string, body: unknown): Promise<Result<unknown>> {
+  ): Promise<Result<unknown>> {
     let response: Response;
     try {
       response = await fetch(`${config.baseUrl}${path}`, {
@@ -116,95 +74,40 @@ export function createRestFetchConnector(config: RestConnectionConfig): Connecto
     }
   }
 
-  async function deleteResource(path: string, idempotencyKey: string): Promise<Result<void>> {
-    let response: Response;
-    try {
-      response = await fetch(`${config.baseUrl}${path}`, {
-        method: 'DELETE',
-        headers: buildHeaders(config, idempotencyKey),
-      });
-    } catch (error) {
-      return err('sync/request-failed', {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-    if (!response.ok) {
-      return err('sync/request-failed', { status: response.status, message: response.statusText });
-    }
-    return ok(undefined);
-  }
-
   return {
-    async pullProducts(params): Promise<Result<ConnectorPullResult<Product>>> {
-      const url = new URL('/products', config.baseUrl);
-      if (params.since !== undefined) {
-        url.searchParams.set('since', params.since);
+    async pushBatch(items: OutboxBatchItem[], idempotencyId: string): Promise<Result<void>> {
+      const result = await postJson('/sync/push', idempotencyId, { events: items });
+      if (!result.ok) {
+        return result;
       }
+      return ok(undefined);
+    },
 
-      const jsonResult = await fetchJson(url.toString(), buildHeaders(config));
-      if (!jsonResult.ok) {
-        return jsonResult;
+    async pullBatch(params: PullBatchParams): Promise<Result<PullBatchResult>> {
+      const result = await postJson('/sync/pull', undefined, params);
+      if (!result.ok) {
+        return result;
       }
-
-      const parsed = productsPullResponseSchema.safeParse(jsonResult.value);
+      const parsed = pullBatchResponseSchema.safeParse(result.value);
       if (!parsed.success) {
         return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
       }
+      // `exactOptionalPropertyTypes`: el `.optional()` de Zod infiere `string | undefined`
+      // explícito, distinto de un `nextCursor?: string` sin valor — se reconstruye sin la clave
+      // cuando está ausente, mismo criterio que `sync/pull-snapshot.ts::toProbeSnapshot`.
+      const { products, customers, stock, lots } = parsed.data;
       return ok({
-        items: parsed.data.items,
-        ...(parsed.data.nextCursor !== undefined ? { nextCursor: parsed.data.nextCursor } : {}),
+        products: {
+          items: products.items,
+          ...(products.nextCursor !== undefined ? { nextCursor: products.nextCursor } : {}),
+        },
+        customers: {
+          items: customers.items,
+          ...(customers.nextCursor !== undefined ? { nextCursor: customers.nextCursor } : {}),
+        },
+        stock,
+        lots,
       });
-    },
-
-    async pullStock(): Promise<Result<StockItem[]>> {
-      const url = new URL('/stock', config.baseUrl);
-      const jsonResult = await fetchJson(url.toString(), buildHeaders(config));
-      if (!jsonResult.ok) {
-        return jsonResult;
-      }
-
-      const parsed = z.array(stockItemSchema).safeParse(jsonResult.value);
-      if (!parsed.success) {
-        return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
-      }
-      return ok(parsed.data);
-    },
-
-    pushSale(sale: Sale, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent('/sales', idempotencyKey, sale);
-    },
-
-    pushStockMovement(movement: StockMovement, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent('/stock-movements', idempotencyKey, movement);
-    },
-
-    pushSaleVoid(params, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent(`/sales/${params.saleId}/void`, idempotencyKey, params);
-    },
-
-    async pullCustomers(params): Promise<Result<ConnectorPullResult<ConnectorCustomer>>> {
-      const url = new URL('/customers', config.baseUrl);
-      if (params.since !== undefined) {
-        url.searchParams.set('since', params.since);
-      }
-
-      const jsonResult = await fetchJson(url.toString(), buildHeaders(config));
-      if (!jsonResult.ok) {
-        return jsonResult;
-      }
-
-      const parsed = customersPullResponseSchema.safeParse(jsonResult.value);
-      if (!parsed.success) {
-        return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
-      }
-      return ok({
-        items: parsed.data.items,
-        ...(parsed.data.nextCursor !== undefined ? { nextCursor: parsed.data.nextCursor } : {}),
-      });
-    },
-
-    pushCustomer(customer: Customer, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent('/customers', idempotencyKey, customer);
     },
 
     async requestAccountHold(params, idempotencyKey: string): Promise<Result<AccountHoldResult>> {
@@ -212,26 +115,11 @@ export function createRestFetchConnector(config: RestConnectionConfig): Connecto
       if (!jsonResult.ok) {
         return jsonResult;
       }
-
       const parsed = accountHoldResultSchema.safeParse(jsonResult.value);
       if (!parsed.success) {
         return err('sync/invalid-payload', { issues: toZodIssues(parsed.error) });
       }
       return ok(parsed.data);
-    },
-
-    pushAccountHoldConfirm(params, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent(`/account-holds/${params.holdId}/confirm`, idempotencyKey, {
-        saleId: params.saleId,
-      });
-    },
-
-    releaseAccountHold(params, idempotencyKey: string): Promise<Result<void>> {
-      return deleteResource(`/account-holds/${params.holdId}`, idempotencyKey);
-    },
-
-    pushCashSession(session: CashSession, idempotencyKey: string): Promise<Result<void>> {
-      return postEvent('/cash-sessions', idempotencyKey, session);
     },
   };
 }

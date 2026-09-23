@@ -33,11 +33,10 @@ function fetchRouter(overrides: Record<string, () => Response | Promise<Response
     if (handler) {
       return Promise.resolve(handler());
     }
-    if (path === '/products' || path === '/customers') {
-      return Promise.resolve(jsonResponse({ items: [] }));
-    }
-    if (path === '/stock') {
-      return Promise.resolve(jsonResponse([]));
+    if (path === '/sync/pull') {
+      return Promise.resolve(
+        jsonResponse({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+      );
     }
     return Promise.resolve(jsonResponse({}));
   });
@@ -103,20 +102,25 @@ describe('demoReset', () => {
     vi.stubGlobal(
       'fetch',
       fetchRouter({
-        '/products': () =>
+        '/sync/pull': () =>
           jsonResponse({
-            items: [
-              {
-                id: 'p1',
-                sku: 'SKU-1',
-                barcodes: [],
-                name: 'Producto Demo',
-                price: 100,
-                taxRate: 0.21,
-                category: 'test',
-                tracksStock: true,
-              },
-            ],
+            products: {
+              items: [
+                {
+                  id: 'p1',
+                  sku: 'SKU-1',
+                  barcodes: [],
+                  name: 'Producto Demo',
+                  price: 100,
+                  taxRate: 0.21,
+                  category: 'test',
+                  tracksStock: true,
+                },
+              ],
+            },
+            customers: { items: [] },
+            stock: [],
+            lots: {},
           }),
       }),
     );

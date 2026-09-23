@@ -1,216 +1,125 @@
 import { describe, expect, it } from 'vitest';
-import type { Customer } from './customer.ts';
+import type { Sale } from './sale.ts';
 import {
+  buildOutboxEventForCashSession,
   buildOutboxEventForCustomer,
   buildOutboxEventForHoldConfirm,
   buildOutboxEventForHoldRelease,
   buildOutboxEventForSale,
   buildOutboxEventForVoid,
   buildOutboxEventsForStockMovements,
-  isDue,
-  isSyncStruggling,
-  markFailed,
   markSynced,
-  nextRetryDelayMs,
-  SYNC_ERROR_RETRY_THRESHOLD,
-  type OutboxEvent,
 } from './outbox.ts';
-import type { Sale } from './sale.ts';
-import type { StockMovement } from './stock.ts';
 
 const sale: Sale = {
   id: 'sale-1',
-  lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }],
-  payments: [{ method: 'cash', amount: 100 }],
-  total: 100,
+  lines: [],
+  payments: [],
+  total: 0,
   status: 'closed',
   createdAt: '2026-01-01T00:00:00.000Z',
 };
-
-const movement: StockMovement = {
-  id: 'm1',
-  productId: 'p1',
-  delta: -1,
-  reason: 'sale',
-  saleId: 'sale-1',
-  createdAt: '2026-01-01T00:00:00.000Z',
-};
-
-describe('nextRetryDelayMs', () => {
-  it('crece exponencialmente con un techo', () => {
-    expect(nextRetryDelayMs(0)).toBe(1000);
-    expect(nextRetryDelayMs(1)).toBe(2000);
-    expect(nextRetryDelayMs(2)).toBe(4000);
-    expect(nextRetryDelayMs(20)).toBe(5 * 60 * 1000);
-  });
-});
+const now = '2026-01-01T00:00:00.000Z';
 
 describe('buildOutboxEventForSale', () => {
-  it('usa el id de la venta como id del evento (Idempotency-Key)', () => {
-    const event = buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' });
-
-    expect(event).toEqual({
-      type: 'sale',
-      sale,
-      id: 'sale-1',
-      status: 'pending',
-      retries: 0,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      nextAttemptAt: '2026-01-01T00:00:00.000Z',
-    });
+  it('arranca pending, con el id de la venta como id del evento', () => {
+    const event = buildOutboxEventForSale(sale, { now });
+    expect(event).toEqual({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
   });
 });
 
 describe('buildOutboxEventsForStockMovements', () => {
-  it('genera un evento por movimiento, usando el id del movimiento', () => {
-    const events = buildOutboxEventsForStockMovements([movement], {
-      now: '2026-01-01T00:00:00.000Z',
-    });
-
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      type: 'stock-movement',
-      movement,
-      id: 'm1',
-      status: 'pending',
-    });
+  it('un evento por movimiento, cada uno con el id del movimiento', () => {
+    const movements = [
+      { id: 'm1', productId: 'p1', delta: -1, reason: 'sale' as const, saleId: 'sale-1', createdAt: now },
+      { id: 'm2', productId: 'p2', delta: -2, reason: 'sale' as const, saleId: 'sale-1', createdAt: now },
+    ];
+    const events = buildOutboxEventsForStockMovements(movements, { now });
+    expect(events.map((e) => e.id)).toEqual(['m1', 'm2']);
+    expect(events[0]).toMatchObject({ type: 'stock-movement', status: 'pending' });
   });
 });
 
 describe('buildOutboxEventForVoid', () => {
-  it('usa un id propio, distinto del id de la venta', () => {
+  it('id propio, distinto del id de la venta anulada', () => {
     const event = buildOutboxEventForVoid({
-      id: 'void-event-1',
+      id: 'void-1',
       saleId: 'sale-1',
-      voidedAt: '2026-01-02T00:00:00.000Z',
+      voidedAt: now,
       voidReason: 'error de cobro',
-      now: '2026-01-02T00:00:00.000Z',
+      now,
     });
-
-    expect(event.id).toBe('void-event-1');
-    expect(event.id).not.toBe('sale-1');
-    expect(event).toMatchObject({
+    expect(event).toEqual({
       type: 'sale-void',
       saleId: 'sale-1',
+      voidedAt: now,
       voidReason: 'error de cobro',
+      id: 'void-1',
+      status: 'pending',
+      createdAt: now,
     });
   });
 
   it('omite voidReason si no se pasa (nunca undefined explícito)', () => {
-    const event = buildOutboxEventForVoid({
-      id: 'void-event-1',
-      saleId: 'sale-1',
-      voidedAt: '2026-01-02T00:00:00.000Z',
-      now: '2026-01-02T00:00:00.000Z',
-    });
-
+    const event = buildOutboxEventForVoid({ id: 'void-1', saleId: 'sale-1', voidedAt: now, now });
     expect('voidReason' in event).toBe(false);
   });
 });
 
-const customer: Customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
-
 describe('buildOutboxEventForCustomer', () => {
-  it('usa el id del cliente como id del evento (Idempotency-Key)', () => {
-    const event = buildOutboxEventForCustomer(customer, { now: '2026-01-01T00:00:00.000Z' });
-
-    expect(event).toMatchObject({ type: 'customer', customer, id: 'c1', status: 'pending' });
+  it('id del cliente como id del evento', () => {
+    const customer = { id: 'c1', name: 'Juan Pérez', createdAt: now };
+    expect(buildOutboxEventForCustomer(customer, { now })).toEqual({
+      type: 'customer',
+      customer,
+      id: 'c1',
+      status: 'pending',
+      createdAt: now,
+    });
   });
 });
 
-describe('buildOutboxEventForHoldConfirm', () => {
-  it('usa un id propio, distinto del holdId y del saleId', () => {
-    const event = buildOutboxEventForHoldConfirm({
-      id: 'confirm-1',
-      holdId: 'hold-1',
-      saleId: 'sale-1',
-      now: '2026-01-01T00:00:00.000Z',
-    });
-
-    expect(event.id).toBe('confirm-1');
-    expect(event).toMatchObject({
+describe('buildOutboxEventForHoldConfirm / HoldRelease', () => {
+  it('confirm lleva holdId y saleId, con id propio', () => {
+    const event = buildOutboxEventForHoldConfirm({ id: 'confirm-1', holdId: 'hold-1', saleId: 'sale-1', now });
+    expect(event).toEqual({
       type: 'account-hold-confirm',
       holdId: 'hold-1',
       saleId: 'sale-1',
+      id: 'confirm-1',
+      status: 'pending',
+      createdAt: now,
     });
   });
-});
 
-describe('buildOutboxEventForHoldRelease', () => {
-  it('usa un id propio, distinto del holdId', () => {
-    const event = buildOutboxEventForHoldRelease({
-      id: 'release-1',
+  it('release lleva holdId, con id propio', () => {
+    const event = buildOutboxEventForHoldRelease({ id: 'release-1', holdId: 'hold-1', now });
+    expect(event).toEqual({
+      type: 'account-hold-release',
       holdId: 'hold-1',
-      now: '2026-01-01T00:00:00.000Z',
+      id: 'release-1',
+      status: 'pending',
+      createdAt: now,
     });
-
-    expect(event.id).toBe('release-1');
-    expect(event).toMatchObject({ type: 'account-hold-release', holdId: 'hold-1' });
   });
 });
 
-describe('markSynced / markFailed', () => {
-  const pendingEvent: OutboxEvent = buildOutboxEventForSale(sale, {
-    now: '2026-01-01T00:00:00.000Z',
-  });
-
-  it('markSynced pasa el status a synced sin tocar el resto', () => {
-    const synced = markSynced(pendingEvent);
-    expect(synced.status).toBe('synced');
-    expect(synced.retries).toBe(0);
-  });
-
-  it('markFailed suma un reintento y calcula el próximo intento con backoff', () => {
-    const failed = markFailed(pendingEvent, {
-      now: '2026-01-01T00:00:00.000Z',
-      error: 'network error',
+describe('buildOutboxEventForCashSession', () => {
+  it('id del turno como id del evento', () => {
+    const session = { id: 'cs1', openedAt: now, openingAmount: 500, sales: ['s1'] };
+    expect(buildOutboxEventForCashSession(session, { now })).toEqual({
+      type: 'cash-session',
+      session,
+      id: 'cs1',
+      status: 'pending',
+      createdAt: now,
     });
-
-    expect(failed.retries).toBe(1);
-    expect(failed.lastError).toBe('network error');
-    expect(failed.nextAttemptAt).toBe('2026-01-01T00:00:02.000Z'); // +2000ms (retries=1)
   });
 });
 
-describe('isDue', () => {
-  it('true para un evento pendiente cuyo nextAttemptAt ya pasó', () => {
-    const event = buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' });
-    expect(isDue(event, '2026-01-01T00:00:01.000Z')).toBe(true);
-  });
-
-  it('false para un evento pendiente cuyo nextAttemptAt es futuro', () => {
-    const event = markFailed(buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' }), {
-      now: '2026-01-01T00:00:00.000Z',
-      error: 'x',
-    });
-    expect(isDue(event, '2026-01-01T00:00:00.500Z')).toBe(false);
-  });
-
-  it('false para un evento ya sincronizado', () => {
-    const event = markSynced(buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' }));
-    expect(isDue(event, '2026-01-01T01:00:00.000Z')).toBe(false);
-  });
-});
-
-describe('isSyncStruggling', () => {
-  it('false si ningún evento pendiente superó el umbral de reintentos', () => {
-    const event = buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' });
-    expect(isSyncStruggling([event])).toBe(false);
-  });
-
-  it('true si algún evento pendiente llegó al umbral de reintentos', () => {
-    let event = buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' });
-    for (let i = 0; i < SYNC_ERROR_RETRY_THRESHOLD; i++) {
-      event = markFailed(event, { now: '2026-01-01T00:00:00.000Z', error: 'x' });
-    }
-    expect(isSyncStruggling([event])).toBe(true);
-  });
-
-  it('ignora eventos ya sincronizados', () => {
-    let event = buildOutboxEventForSale(sale, { now: '2026-01-01T00:00:00.000Z' });
-    for (let i = 0; i < SYNC_ERROR_RETRY_THRESHOLD; i++) {
-      event = markFailed(event, { now: '2026-01-01T00:00:00.000Z', error: 'x' });
-    }
-    expect(isSyncStruggling([markSynced(event)])).toBe(false);
+describe('markSynced', () => {
+  it('pasa el evento a synced sin tocar el resto de los campos', () => {
+    const event = buildOutboxEventForSale(sale, { now });
+    expect(markSynced(event)).toEqual({ ...event, status: 'synced' });
   });
 });

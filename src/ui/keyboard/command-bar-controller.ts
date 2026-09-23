@@ -43,7 +43,7 @@ import { enterConfigScreen } from './config-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
-import { runSyncCycle } from '../../sync/engine.ts';
+import { syncNow } from '../../sync/engine.ts';
 
 /**
  * Capa de glue con IO (resuelve productos/stock contra el catálogo, llama a
@@ -292,8 +292,8 @@ function runCommand(name: string, _args: string[]): void {
       clearBuffer();
       return;
     case 'SINCRONIZAR':
-      // A pedido = foto completa: es la forma de enterarse ya de lo que se dio de baja en el origen.
-      void runSyncCycle({ full: true });
+      // A pedido: fuerza el push del lote pendiente ya (ignora backoff) y un pull completo ya (#87).
+      void syncNow();
       clearBuffer();
       return;
     default: {

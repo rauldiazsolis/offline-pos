@@ -1,7 +1,7 @@
 import type { PullMode } from './connector-registry.ts';
 
-/** Cada cuánto un conector `delta` hace una foto completa para enterarse de las bajas. */
-export const FULL_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+/** Cada cuánto un conector `delta` hace una foto completa para enterarse de las bajas (#87: 2h). */
+export const FULL_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
 /**
  * ¿Este ciclo tiene que traer el catálogo **completo** (sin `since`) y reconciliar las bajas?

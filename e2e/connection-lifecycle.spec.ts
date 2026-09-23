@@ -8,7 +8,7 @@ const CORS = {
   'access-control-allow-methods': '*',
 };
 
-/** Backend REST simulado en http://backend.test: OPTIONS, productos/stock/clientes vacíos. */
+/** Backend REST simulado en http://backend.test: OPTIONS + /sync/push y /sync/pull vacíos. */
 async function routeRestBackend(page: Page): Promise<void> {
   await page.route('http://backend.test/**', async (route) => {
     if (route.request().method() === 'OPTIONS') {
@@ -16,12 +16,11 @@ async function routeRestBackend(page: Page): Promise<void> {
       return;
     }
     const path = new URL(route.request().url()).pathname;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: CORS,
-      body: JSON.stringify(path === '/stock' ? [] : { items: [] }),
-    });
+    const body =
+      path === '/sync/pull'
+        ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
+        : {};
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(body) });
   });
 }
 

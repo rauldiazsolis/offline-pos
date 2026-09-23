@@ -33,7 +33,7 @@ import {
 // cerrojo y el resto del motor (que usa `applyConnection`) siguen siendo reales.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  runSyncCycle: vi.fn(() => Promise.resolve()),
+  runPushThenPull: vi.fn(() => Promise.resolve()),
 }));
 
 const now = '2026-01-01T00:00:00.000Z';
@@ -54,14 +54,19 @@ function okResponse(body: unknown): Response {
   return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
 }
 
-/** Backend REST de mentira: productos, stock y clientes responden; cualquier POST/DELETE da OK. */
+/** Backend REST de mentira: /sync/pull responde productos/clientes; cualquier otro POST da OK. */
 function stubRestBackend(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn((url: string) => {
     const path = new URL(url).pathname;
-    if (path === '/products') return Promise.resolve(okResponse({ items: [product] }));
-    if (path === '/stock') return Promise.resolve(okResponse([]));
-    if (path === '/customers') {
-      return Promise.resolve(okResponse({ items: [{ id: 'c1', name: 'Ana' }] }));
+    if (path === '/sync/pull') {
+      return Promise.resolve(
+        okResponse({
+          products: { items: [product] },
+          customers: { items: [{ id: 'c1', name: 'Ana' }] },
+          stock: [],
+          lots: {},
+        }),
+      );
     }
     return Promise.resolve(okResponse({}));
   });
@@ -326,7 +331,7 @@ describe('submitConfig — cambio de conexión con datos locales', () => {
     expect(configConfirmationSignal.value).toMatchObject({ sales: 1 });
     // El último intento de envío fue contra el backend VIEJO.
     const urls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(urls).toContain('https://viejo.example.com/sales');
+    expect(urls).toContain('https://viejo.example.com/sync/push');
     // Nada cambió todavía.
     await expect(db.sales.count()).resolves.toBe(1);
     const saved = loadSyncConfig();

@@ -13,43 +13,24 @@ export type OutboxEventPayload =
   | { type: 'cash-session'; session: CashSession };
 
 /**
- * Evento inmutable de sincronización (ver "Patrón outbox" en CLAUDE.md).
- * `id` es también la Idempotency-Key que se envía al conector — para
- * 'sale', 'stock-movement' y 'customer' es el id de la propia entidad
- * (la entidad ES el evento a sincronizar); 'sale-void',
- * 'account-hold-confirm' y 'account-hold-release' son operaciones
- * distintas sobre un recurso ya enviado (una venta, un hold aprobado por el
- * backend), así que cada una necesita su propio id nuevo (reusar el id del
- * recurso original mezclaría operaciones distintas bajo la misma clave de
- * idempotencia).
+ * Evento inmutable de sincronización (ver "Patrón outbox" en CLAUDE.md). El
+ * reintento/backoff ya no es por evento — es por LOTE de push
+ * (`domain/push-lot.ts`, #87) — así que `OutboxEvent` solo necesita saber si
+ * ya viajó (`status`) y cuándo se creó (orden de armado del lote,
+ * `createdAt`). `id` es también el id que identifica al evento dentro del
+ * lote que lo incluye — para 'sale', 'stock-movement' y 'customer' es el id
+ * de la propia entidad (la entidad ES el evento a sincronizar); 'sale-void',
+ * 'account-hold-confirm' y 'account-hold-release' son operaciones distintas
+ * sobre un recurso ya enviado, así que cada una necesita su propio id nuevo.
  */
 export type OutboxEvent = OutboxEventPayload & {
   id: string;
   status: 'pending' | 'synced';
-  retries: number;
-  createdAt: string; // ISO 8601
-  nextAttemptAt: string; // ISO 8601 — el motor ignora filas con esto en el futuro
-  lastError?: string;
+  createdAt: string; // ISO 8601 — también el orden FIFO al armar un lote
 };
 
-const BASE_RETRY_DELAY_MS = 1000;
-const MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
-
-/** Backoff exponencial con techo, determinístico (sin jitter aleatorio). */
-export function nextRetryDelayMs(retries: number): number {
-  return Math.min(BASE_RETRY_DELAY_MS * 2 ** retries, MAX_RETRY_DELAY_MS);
-}
-
 export function buildOutboxEventForSale(sale: Sale, params: { now: string }): OutboxEvent {
-  return {
-    type: 'sale',
-    sale,
-    id: sale.id,
-    status: 'pending',
-    retries: 0,
-    createdAt: params.now,
-    nextAttemptAt: params.now,
-  };
+  return { type: 'sale', sale, id: sale.id, status: 'pending', createdAt: params.now };
 }
 
 export function buildOutboxEventsForStockMovements(
@@ -61,9 +42,7 @@ export function buildOutboxEventsForStockMovements(
     movement,
     id: movement.id,
     status: 'pending',
-    retries: 0,
     createdAt: params.now,
-    nextAttemptAt: params.now,
   }));
 }
 
@@ -81,30 +60,14 @@ export function buildOutboxEventForVoid(params: {
     ...(params.voidReason !== undefined ? { voidReason: params.voidReason } : {}),
     id: params.id,
     status: 'pending',
-    retries: 0,
     createdAt: params.now,
-    nextAttemptAt: params.now,
   };
 }
 
 export function buildOutboxEventForCustomer(customer: Customer, params: { now: string }): OutboxEvent {
-  return {
-    type: 'customer',
-    customer,
-    id: customer.id,
-    status: 'pending',
-    retries: 0,
-    createdAt: params.now,
-    nextAttemptAt: params.now,
-  };
+  return { type: 'customer', customer, id: customer.id, status: 'pending', createdAt: params.now };
 }
 
-/**
- * Confirma ante el backend que un hold ya aprobado se usó en `saleId` —
- * RF-19, encolado en la misma transacción que la venta que lo consumió
- * (ver `storage/sale-repository.ts`) para que sobreviva a un corte de red
- * justo después de la aprobación.
- */
 export function buildOutboxEventForHoldConfirm(params: {
   id: string;
   holdId: string;
@@ -117,17 +80,10 @@ export function buildOutboxEventForHoldConfirm(params: {
     saleId: params.saleId,
     id: params.id,
     status: 'pending',
-    retries: 0,
     createdAt: params.now,
-    nextAttemptAt: params.now,
   };
 }
 
-/**
- * Libera (best-effort) un hold aprobado que terminó sin usarse — el cobro se
- * canceló después de que el backend ya lo había aprobado. Si nunca llega a
- * sincronizarse, el hold expira solo del lado del backend (§6 del diseño).
- */
 export function buildOutboxEventForHoldRelease(params: {
   id: string;
   holdId: string;
@@ -138,67 +94,18 @@ export function buildOutboxEventForHoldRelease(params: {
     holdId: params.holdId,
     id: params.id,
     status: 'pending',
-    retries: 0,
     createdAt: params.now,
-    nextAttemptAt: params.now,
   };
 }
 
-/**
- * Un turno de caja cerrado se encola una sola vez, ya completo (`sales[]`
- * final, `closingAmount` presente) — mismo criterio que `'sale'`: la
- * entidad ES el evento (`id` = Idempotency-Key), no una operación aparte
- * como `'sale-void'`. Un turno abierto nunca genera un evento (ver
- * `domain/cash-session.ts`).
- */
 export function buildOutboxEventForCashSession(
   session: CashSession,
   params: { now: string },
 ): OutboxEvent {
-  return {
-    type: 'cash-session',
-    session,
-    id: session.id,
-    status: 'pending',
-    retries: 0,
-    createdAt: params.now,
-    nextAttemptAt: params.now,
-  };
+  return { type: 'cash-session', session, id: session.id, status: 'pending', createdAt: params.now };
 }
 
-/** Marca un evento como enviado con éxito. */
+/** Marca un evento como enviado con éxito (el lote que lo incluía recibió su ack). */
 export function markSynced(event: OutboxEvent): OutboxEvent {
   return { ...event, status: 'synced' };
-}
-
-/** Registra un intento fallido: suma un reintento y calcula cuándo reintentar. */
-export function markFailed(
-  event: OutboxEvent,
-  params: { now: string; error: string },
-): OutboxEvent {
-  const retries = event.retries + 1;
-  const nextAttemptAt = new Date(
-    new Date(params.now).getTime() + nextRetryDelayMs(retries),
-  ).toISOString();
-  return { ...event, retries, nextAttemptAt, lastError: params.error };
-}
-
-/** true si el evento está pendiente y ya pasó su ventana de backoff. */
-export function isDue(event: OutboxEvent, now: string): boolean {
-  return (
-    event.status === 'pending' && new Date(event.nextAttemptAt).getTime() <= new Date(now).getTime()
-  );
-}
-
-export const SYNC_ERROR_RETRY_THRESHOLD = 3;
-
-/**
- * true si algún evento pendiente lleva varios reintentos fallidos seguidos
- * — dispara el estado `sync-error` de la barra (distinto de `syncing`,
- * que es solo un delay normal).
- */
-export function isSyncStruggling(events: OutboxEvent[]): boolean {
-  return events.some(
-    (event) => event.status === 'pending' && event.retries >= SYNC_ERROR_RETRY_THRESHOLD,
-  );
 }

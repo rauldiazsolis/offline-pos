@@ -20,7 +20,8 @@ import { withTimeout, type ProbeSnapshot } from './connection.ts';
 import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
 import { clearSyncCursors, setCustomersCursor, setProductsCursor } from './cursor.ts';
-import { acquireSyncLockWaiting, pushPendingEvents } from './engine.ts';
+import { acquireSyncLockWaiting, pushPendingLot } from './engine.ts';
+import { clearPushLotState } from './push-lot.ts';
 
 export const FLUSH_TIMEOUT_MS = 10_000;
 export const APPLY_LOCK_WAIT_MS = 30_000;
@@ -46,7 +47,7 @@ export async function flushPendingBeforeWipe(
   try {
     const connector = options.connector ?? createConnector(current);
     await withTimeout(
-      pushPendingEvents(connector, new Date().toISOString(), { ignoreBackoff: true }).then(() =>
+      pushPendingLot(connector, new Date().toISOString(), { ignoreBackoff: true }).then(() =>
         ok(undefined),
       ),
       timeoutMs,
@@ -107,6 +108,7 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     }
 
     clearSyncCursors();
+    clearPushLotState();
     if (params.snapshot.cursors.products !== undefined) {
       setProductsCursor(params.snapshot.cursors.products);
     }

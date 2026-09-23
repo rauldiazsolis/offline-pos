@@ -12,7 +12,7 @@ import { ConfigScreen } from './config-screen.tsx';
 // seguiría corriendo cuando el test cierra la base; se neutraliza solo el ciclo.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  runSyncCycle: vi.fn(() => Promise.resolve()),
+  runPushThenPull: vi.fn(() => Promise.resolve()),
 }));
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
@@ -27,7 +27,11 @@ function stubRestBackend(): void {
     'fetch',
     vi.fn((url: string) => {
       const path = new URL(url).pathname;
-      return Promise.resolve(okResponse(path === '/stock' ? [] : { items: [] }));
+      const body =
+        path === '/sync/pull'
+          ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
+          : {};
+      return Promise.resolve(okResponse(body));
     }),
   );
 }
