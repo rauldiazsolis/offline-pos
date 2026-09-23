@@ -51,6 +51,10 @@ export type ConnectorTypeInfo = {
   fields: ConfigField[];
   /** Comandos de la barra que solo existen con este conector (Etapa 2c, #77). */
   commands: ConnectorCommand[];
+  /** Una línea en el paso "Tipo de conexión" del wizard (Etapa 2 de #94, #97). */
+  description: string;
+  /** Pasos numerados en "Datos del conector". */
+  setupHelp: string[];
 };
 
 /** Orden = orden del selector de `/CONFIG`. */
@@ -61,6 +65,12 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'delta',
     fields: restConfigFields,
     commands: [],
+    description: 'Cualquier backend que implemente el contrato del Connector API v3.',
+    setupHelp: [
+      'El backend tiene que implementar el contrato v3 (docs/connector-api.openapi.yaml).',
+      'Cargá la URL base del backend, por ejemplo https://api.mi-negocio.com.',
+      'Si el backend pide una API key, cargala; si no, dejala vacía.',
+    ],
   },
   {
     type: 'rest-demo',
@@ -68,6 +78,13 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'delta',
     fields: restDemoConfigFields,
     commands: restDemoCommands,
+    description:
+      'El minibackend de demostración que viene con el POS, para probar sin un backend real.',
+    setupHelp: [
+      'Levantá el minibackend: pnpm dev (levanta la app y el minibackend) o solo el minibackend con pnpm --filter demo-backend start.',
+      'La URL es http://localhost:4000.',
+      'El panel del minibackend está en http://localhost:4000/_demo.',
+    ],
   },
   {
     type: 'google-sheets',
@@ -75,8 +92,25 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'snapshot',
     fields: googleSheetsConfigFields,
     commands: [],
+    description: 'Una planilla de Google Sheets, a través de un puente de Apps Script.',
+    setupHelp: [
+      'En la planilla: Extensiones → Apps Script. Pegá bridge.gs y columnas.gs (están en src/connectors/google-sheets/).',
+      'Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier persona.',
+      'Copiá la URL de la aplicación web: termina en /exec.',
+      'Si configuraste SHARED_SECRET en las propiedades del script, cargá el mismo valor como secreto compartido.',
+      'Detalle completo en el README del conector (src/connectors/google-sheets/README.md).',
+    ],
   },
 ];
+
+/** La entrada del registro de un tipo; un tipo fuera del registro es un bug (invariante). */
+export function connectorInfo(type: ConnectorType): ConnectorTypeInfo {
+  const info = CONNECTOR_TYPES.find((entry) => entry.type === type);
+  if (info === undefined) {
+    throw new Error(`Tipo de conector desconocido: ${type}`);
+  }
+  return info;
+}
 
 export function connectorLabel(type: ConnectorType): string {
   return CONNECTOR_TYPES.find((info) => info.type === type)?.label ?? type;

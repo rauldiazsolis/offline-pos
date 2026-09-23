@@ -4,6 +4,7 @@ import { googleSheetsConfigSchema } from '../connectors/google-sheets/config.ts'
 import { restConfigSchema } from '../connectors/rest/config.ts';
 import { restDemoConfigSchema } from '../connectors/rest-demo/config.ts';
 import {
+  connectorInfo,
   CONNECTOR_TYPES,
   connectorCommands,
   connectorConfigSchema,
@@ -115,6 +116,17 @@ describe('createConnector', () => {
 });
 
 describe('CONNECTOR_TYPES', () => {
+  it('cada tipo tiene descripción e instrucciones', () => {
+    for (const info of CONNECTOR_TYPES) {
+      expect(info.description.trim()).not.toBe('');
+      expect(info.setupHelp.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('connectorInfo devuelve la entrada del tipo', () => {
+    expect(connectorInfo('google-sheets').label).toBe('Google Sheets');
+  });
+
   it('lista REST, REST (minibackend de demo) y Google Sheets con su etiqueta', () => {
     expect(CONNECTOR_TYPES.map((info) => [info.type, info.label])).toEqual([
       ['rest', 'REST genérico'],
