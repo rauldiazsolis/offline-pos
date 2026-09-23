@@ -91,6 +91,19 @@ export function connectorFields(type: ConnectorType): ConfigField[] {
 }
 
 /** Comandos que declara un tipo de conector; `null` (todavía sin conector) no declara ninguno. */
+/**
+ * Claves de config que algún conector marca como credencial
+ * (`ConfigField.secret`) — de todos los tipos, no solo del activo, así una
+ * config con un `type` inesperado igual sale redactada en `pos.export()`.
+ */
+export function secretConfigKeys(): Set<string> {
+  return new Set(
+    CONNECTOR_TYPES.flatMap((info) =>
+      info.fields.filter((field) => field.secret === true).map((field) => field.key),
+    ),
+  );
+}
+
 export function connectorCommands(type: ConnectorType | null): ConnectorCommand[] {
   if (type === null) {
     return [];

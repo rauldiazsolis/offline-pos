@@ -1,14 +1,12 @@
 import type { TargetedKeyboardEvent } from 'preact';
 import type { Failure } from '../../domain/result.ts';
-import { loadSyncConfig } from '../../sync/config.ts';
 import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
-import { isSyncLockHeld } from '../../sync/engine.ts';
-import { getAwaitingLots, getCurrentPushLot } from '../../sync/push-lot.ts';
+import { collectDiagnostics } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
-import { lastSyncFailureSignal, lastSyncedAtSignal, pushLotIssuesSignal, syncLogSignal, type SyncLogEntry } from '../state/sync.ts';
+import type { SyncLogEntry } from '../state/sync.ts';
 
 const cardStyle = {
   border: '1px solid var(--color-border)',
@@ -38,9 +36,10 @@ function describeLogResult(result: SyncLogEntry['result']): string {
  * `/DIAGNOSTICO`: pantalla de solo lectura sobre el estado de sincronización
  * — un usuario probando el conector de Sheets contra un despliegue real se
  * topó con un error sin poder ver el detalle (la Console del navegador no
- * mostraba nada). Todo acá sale de signals que ya existen o de lecturas
- * síncronas de `localStorage` (`sync/config.ts`, `sync/push-lot.ts`) — se
- * actualiza solo mientras está abierta, sin poll.
+ * mostraba nada). Todo acá sale de `sync/diagnostics.ts::collectDiagnostics`
+ * (signals y lecturas síncronas de `localStorage`), la misma foto que
+ * `pos.status()` muestra en la consola — se actualiza sola mientras está
+ * abierta, sin poll.
  */
 export function DiagnosticoScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
@@ -52,10 +51,8 @@ export function DiagnosticoScreen() {
     }
   };
 
-  const configResult = loadSyncConfig();
-  const currentLot = getCurrentPushLot();
-  const awaitingLots = getAwaitingLots();
-  const log = syncLogSignal.value;
+  const diagnostics = collectDiagnostics();
+  const { config: configResult, currentLot, awaitingLots, log } = diagnostics;
 
   return (
     <div
@@ -99,8 +96,8 @@ export function DiagnosticoScreen() {
 
         <div style={cardStyle}>
           <p style={labelStyle}>Motor</p>
-          <p style={{ margin: 0 }}>Cerrojo: {isSyncLockHeld() ? 'ocupado' : 'libre'}</p>
-          <p style={{ margin: 0 }}>Red: {navigator.onLine ? 'online' : 'offline'}</p>
+          <p style={{ margin: 0 }}>Cerrojo: {diagnostics.lockHeld ? 'ocupado' : 'libre'}</p>
+          <p style={{ margin: 0 }}>Red: {diagnostics.online ? 'online' : 'offline'}</p>
         </div>
 
         <div style={cardStyle}>
@@ -123,16 +120,16 @@ export function DiagnosticoScreen() {
         <div style={cardStyle}>
           <p style={labelStyle}>Último pull</p>
           <p style={{ margin: 0 }}>
-            {lastSyncedAtSignal.value !== null
-              ? `OK ${new Date(lastSyncedAtSignal.value).toLocaleString()}`
+            {diagnostics.lastSyncedAt !== null
+              ? `OK ${new Date(diagnostics.lastSyncedAt).toLocaleString()}`
               : 'Todavía no hubo un pull exitoso'}
           </p>
-          {lastSyncFailureSignal.value !== null && (
-            <p style={{ margin: 0, color: 'var(--color-danger)' }}>{describeError(lastSyncFailureSignal.value)}</p>
+          {diagnostics.lastSyncFailure !== null && (
+            <p style={{ margin: 0, color: 'var(--color-danger)' }}>{describeError(diagnostics.lastSyncFailure)}</p>
           )}
-          {pushLotIssuesSignal.value !== null && (
+          {diagnostics.pushLotIssues !== null && (
             <p style={{ margin: 0, color: 'var(--color-warning, #b45309)' }}>
-              Issues del backend: {pushLotIssuesSignal.value.join('; ')}
+              Issues del backend: {diagnostics.pushLotIssues.join('; ')}
             </p>
           )}
         </div>

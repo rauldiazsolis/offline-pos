@@ -93,6 +93,9 @@ export type ErrorMeta = {
   'demo/reset-failed': { message: string };
   'demo/backend-reset-failed': { message: string };
   'demo/unavailable-for-connector': { connectorLabel: string };
+
+  // sync/terminal-data.ts (pos.reset() desde la consola)
+  'terminal/reset-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

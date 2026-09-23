@@ -6,7 +6,7 @@ import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
 import { newId } from '../storage/ids.ts';
-import { countLocalCatalog } from '../storage/local-data.ts';
+import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
 import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
@@ -121,7 +121,7 @@ async function buildOrResumeLot(now: string): Promise<{ lot: PushLot; events: Ou
     clearCurrentPushLot();
   }
 
-  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
+  const pending = await listPendingOutbox();
   if (pending.length === 0) {
     return undefined;
   }

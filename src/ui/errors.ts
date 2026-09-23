@@ -120,6 +120,8 @@ export function describeError(failure: Failure): string {
       return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}). ¿Está corriendo?`;
     case 'demo/unavailable-for-connector':
       return `/DEMO_RESET no está disponible con ${failure.meta.connectorLabel}: solo funciona con el backend REST de demo.`;
+    case 'terminal/reset-failed':
+      return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;
