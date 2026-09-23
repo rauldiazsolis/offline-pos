@@ -4,8 +4,10 @@ Backend completo para un micro-comercio sin ERP: el catálogo y las ventas viven
 Google Sheets. Implementa el puerto `Connector` (`src/sync/connector.ts`) contra un **puente Apps
 Script** (`bridge.gs`) desplegado como Web App.
 
-> Estado: conectado al POS desde la Etapa 2 (#68) — se elige en `/CONFIG` con el tipo de conexión
-> "Google Sheets".
+> Estado: conectado al POS desde la Etapa 2 del epic #68 — se elige en `/CONFIG` con el tipo de
+> conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
+> contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
+> Productos/Clientes.
 
 ## Setup (comerciante)
 
@@ -66,17 +68,14 @@ Sheets API, que necesita un permiso mucho más amplio (todas tus planillas o tod
 
 ## Qué hace cada operación
 
-| Operación del POS                           | Comportamiento                                                                                                      |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `pullProducts`                              | Lee `Productos` completo (sin delta). `tracksStock: false` fijo: el POS nunca bloquea una venta por falta de stock. |
-| `pullCustomers`                             | Lee `Clientes` completo.                                                                                            |
-| `pushSale`                                  | Una fila por línea en `Ventas` + una fila por medio de pago en `Pagos`.                                             |
-| `pushSaleVoid`                              | Marca las filas de esa venta en `Ventas` y `Pagos` con Estado = Anulada (no borra).                                 |
-| `pushCustomer`                              | Una fila en `Clientes`.                                                                                             |
-| `pushAccountHoldConfirm`                    | Una fila en `CuentaCorriente` (ledger de fiado). Cliente y monto se derivan de `Ventas`/`Pagos`.                    |
-| `pushCashSession`                           | Una fila en `Turnos` con el total por medio de pago (solo ventas Cerradas del turno) y el arqueo de efectivo.       |
-| `requestAccountHold` / `releaseAccountHold` | Locales, sin red: el fiado es sin bloqueo (siempre aprobado).                                                       |
-| `pullStock` / `pushStockMovement`           | No-ops: no aplican a este caso de uso.                                                                              |
+Desde la Etapa 2 (#87) el puente expone solo dos acciones — igual que el contrato REST —, cada una
+resolviendo internamente varias de las operaciones de antes:
+
+| Operación del POS | Comportamiento                                                                                                                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pushBatch`        | Aplica **todo el lote de una sola vez**: una fila por línea/pago en `Ventas`/`Pagos` (`sale`), marca Estado = Anulada sin borrar (`sale-void`), una fila en `Clientes` (`customer`), una fila en `CuentaCorriente` derivada de `Ventas`/`Pagos` (`account-hold-confirm`), una fila en `Turnos` con el total por medio de pago (`cash-session`). `stock-movement`/`account-hold-release` son no-ops. Un evento que no se puede aplicar (ej. `sale-void` de una venta que esa fila todavía no tiene) queda como *issue* del lote — nunca tumba el resto del lote ni el ack. |
+| `pullBatch`        | Trae `Productos` y `Clientes`, completo o solo lo que cambió desde el cursor de cada uno (ver "Cursor de pull" abajo), más el estado (`ok`/`issues`/ausente) de los `idempotencyKey` de push que se le pidan. `tracksStock: false` fijo: el POS nunca bloquea una venta por falta de stock. |
+| `requestAccountHold` / `releaseAccountHold` | Locales, sin red: el fiado es sin bloqueo (siempre aprobado).                                                                                                                              |
 
 Limitaciones conocidas:
 
@@ -84,8 +83,24 @@ Limitaciones conocidas:
   confirmación); sí queda en `Pagos` con Medio de pago = Cuenta corriente.
 - Anular una venta después de cerrado el turno no reescribe la fila ya escrita en `Turnos`.
 - El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
+- Una fila borrada de `Productos`/`Clientes` no genera un "tombstone": el delta de `pullBatch` no
+  informa bajas, solo altas y cambios. Una baja se refleja recién en la próxima foto completa (al
+  configurar, cada 2h o a pedido — mismo mecanismo que documenta CLAUDE.md para la reconciliación en
+  general).
 - `/DEMO_RESET` no existe con este conector (solo lo declara el tipo `rest-demo`, ver "Comandos por
   conector" en CLAUDE.md): no aparece en el menú de "/". La planilla nunca se resetea desde el POS.
+
+## Cursor de pull (Etapa 2, #87)
+
+Sheets no tiene una noción nativa de "última modificación" por fila, y de todos modos `pullBatch`
+necesita leer la pestaña completa (no hay forma de leer "solo lo que cambió" directamente). El
+puente aprovecha esa lectura obligada: por cada fila de `Productos`/`Clientes` guarda un
+*fingerprint* de su contenido en una pestaña oculta (`_Snapshot`) y lo compara contra lo que vio la
+vez anterior. Fila nueva o con contenido distinto → se le asigna la hora actual como su
+`updatedAt` y se persiste; sin cambios → conserva la que ya tenía. El `nextCursor` que devuelve
+`pullBatch` es el máximo `updatedAt` entre todas las filas vigentes de ese recurso. Esto cubre por
+igual una edición manual del comerciante en la planilla y una escritura del propio puente
+(`pushCustomer`), sin necesitar un trigger `onEdit`.
 
 ## Contrato del puente
 
@@ -94,8 +109,8 @@ evita el preflight `OPTIONS` que Apps Script no maneja) y body JSON:
 
 ```json
 {
-  "action": "pushSale",
-  "payload": { "sale": {} },
+  "action": "pushBatch",
+  "payload": { "events": [{ "type": "sale", "id": "01J...", "sale": {} }] },
   "idempotencyKey": "01J...",
   "sharedSecret": "..."
 }
@@ -108,9 +123,11 @@ Respuesta (siempre HTTP 200; el resultado viaja en el body):
 { "ok": false, "error": "mensaje" }
 ```
 
-Acciones: `pullProducts`, `pullCustomers` (responden `data: { items: [...] }`); `pushSale`,
-`pushSaleVoid`, `pushCustomer`, `pushAccountHoldConfirm`, `pushCashSession` (responden `data: {}`).
-Las de escritura son idempotentes por `idempotencyKey` (pestaña oculta `_Idempotency`) y toman
+Acciones: `pullBatch` (payload `{ cursors: { products?, customers? }, pendingLotIds: [] }`,
+responde `data: { products: { items, nextCursor? }, customers: { items, nextCursor? }, lots: {} }`);
+`pushBatch` (payload `{ events: [...] }`, responde `data: {}`). `pushBatch` es idempotente por
+`idempotencyKey` — el **lote completo**, no cada evento — vía la pestaña oculta `_PushLots`, que
+también guarda `ok`/`issues` para que `pullBatch` lo informe. Ambas toman
 `LockService.getScriptLock()`.
 
 ## Desarrollo
@@ -121,9 +138,10 @@ planilla falsa en memoria (`src/test/fake-spreadsheet.ts`). El lado TS (`bridge-
 `google-sheets-connector.ts`) se testea con `fetch` mockeado. **Lo que la planilla falsa no puede probar
 (CORS, formatos y fechas reales, permisos) se valida contra un despliegue real con este checklist:**
 
-### Checklist de validación manual (antes de dar la Etapa 1 por cerrada)
+### Checklist de validación manual
 
-Reemplazar `$URL` por la URL del Web App de una copia de prueba.
+Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejemplo para `pushBatch`:
+`{ action: 'pushBatch', payload: { events: [{ type: 'sale', id: '01J...', sale: {...} }] }, idempotencyKey: '01J...' }`.
 
 1. Health check: abrir `$URL` en el navegador → `{"ok":true,"data":{"service":"pos-sheets-bridge"}}`.
 2. **CORS desde un navegador** (la asunción crítica del diseño). Abrir cualquier página `http(s)` (por
@@ -133,47 +151,49 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba.
      await fetch('$URL', {
        method: 'POST',
        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-       body: JSON.stringify({ action: 'pullProducts', payload: {} }),
+       body: JSON.stringify({ action: 'pullBatch', payload: { cursors: {}, pendingLotIds: [] } }),
      })
    ).json();
    ```
-   Esperado: `{ ok: true, data: { items: [...] } }` **sin error de CORS ni request `OPTIONS`** en la
-   pestaña Network. Si falla, el diseño de `text/plain` no alcanza: parar y revisar.
-3. `pullCustomers` con la misma forma → 3 clientes de prueba, sin campos vacíos.
-4. `pushSale` (una venta con 2 líneas y 2 pagos, uno de `medio: "account"` con `customerId`) →
-   aparecen 2 filas en `Ventas` y 2 en `Pagos`, con Estado = Cerrada.
-5. Idempotencia: repetir exactamente el mismo `pushSale` (misma `idempotencyKey`) → `ok: true` y **no**
-   se agregan filas.
-6. `pushAccountHoldConfirm` con `{ holdId, saleId }` de esa venta → una fila en `CuentaCorriente` con
-   el cliente y el monto correctos. Con un `saleId` inexistente → `ok: false`.
-7. `pushSaleVoid` de esa venta → sus filas de `Ventas` y `Pagos` pasan a Estado = Anulada, con fecha
-   y motivo. Con un `saleId` inexistente → `ok: false`.
-8. `pushCashSession` con `sales: [<saleId>]` → una fila en `Turnos`; con la venta ya anulada, los
-   totales por medio son 0 (no cuenta).
-9. Secreto: setear `SHARED_SECRET`, repetir el paso 2 sin `sharedSecret` → `ok: false` "Secreto
+   Esperado: `{ ok: true, data: { products: { items: [...] }, customers: { items: [...] }, lots: {} } }`
+   **sin error de CORS ni request `OPTIONS`** en la pestaña Network. Si falla, el diseño de
+   `text/plain` no alcanza: parar y revisar.
+3. `pushBatch` con un lote de varios tipos de evento a la vez (una venta, un cliente nuevo, un cierre
+   de turno) → aparecen filas en `Ventas`/`Pagos`, `Clientes` y `Turnos` en una sola llamada.
+4. Idempotencia: repetir exactamente el mismo `pushBatch` (mismo `idempotencyKey`, mismos eventos) →
+   `ok: true` y **no** se agregan filas de nuevo.
+5. Issue de lote: en un `pushBatch` nuevo, incluir un evento `sale-void` con un `saleId` inexistente
+   junto a uno válido → el `ok` del push sigue siendo `true`, el evento válido se aplica, y un
+   `pullBatch` posterior con ese `idempotencyKey` en `pendingLotIds` responde
+   `lots: { '<id>': { status: 'issues', issues: [...] } }`.
+6. `pushBatch` con `account-hold-confirm` (`{ holdId, saleId }` de una venta ya pusheada) → una fila
+   en `CuentaCorriente` con el cliente y el monto correctos.
+7. Cursor: un `pullBatch` sin `cursors` trae todo `Productos`/`Clientes` y devuelve `nextCursor` para
+   cada uno; repetirlo pasando esos `nextCursor` de vuelta sin haber cambiado nada → `items: []` en
+   los dos. Editar a mano el precio de un producto en la planilla y repetir con el mismo cursor →
+   ese producto (solo ese) vuelve a aparecer.
+8. Secreto: setear `SHARED_SECRET`, repetir el paso 2 sin `sharedSecret` → `ok: false` "Secreto
    compartido inválido"; con el secreto correcto → `ok: true`.
-10. Auto-provisión: borrar la pestaña `Turnos` y llamar cualquier acción → se recrea con sus encabezados en español.
-11. Concurrencia (opcional): dos `pushSale` distintos disparados a la vez → ambos escritos, sin
+9. Auto-provisión: borrar la pestaña `Turnos` y llamar cualquier acción → se recrea con sus encabezados en español.
+10. Concurrencia (opcional): dos `pushBatch` distintos disparados a la vez → ambos escritos, sin
     filas mezcladas.
-
-12. Provisión (Etapa 2d): borrar todas las pestañas del puente y llamar `pullProducts` → pestañas con
+11. Provisión: borrar todas las pestañas del puente y llamar `pullBatch` → pestañas con
     encabezados en español, congeladas y en negrita, **sin filas ni columnas de sobra** (`Turnos`: 2
     filas × 14 columnas; `Productos`: 6 filas con los 5 productos de prueba).
-13. Formato: Precio con miles y decimales, IVA como `21,0%`, Fecha como `dd/mm/aaaa hh:mm`, un código de
+12. Formato: Precio con miles y decimales, IVA como `21,0%`, Fecha como `dd/mm/aaaa hh:mm`, un código de
     barras con ceros a la izquierda no los pierde. Desplegables en Estado, Medio de pago y Tipo.
-14. `pushSale` de 2 líneas y 2 pagos → la primera fila de `Ventas` y `Pagos` es la plantilla (no queda
-    una fila vacía arriba) y las filas siguientes mantienen formato y desplegables.
-15. Fechas: la hora que muestra `Fecha` coincide con la hora local de la venta en el POS. Si difiere,
+13. Fechas: la hora que muestra `Fecha` coincide con la hora local de la venta en el POS. Si difiere,
     revisar la zona horaria del proyecto de Apps Script contra la de la planilla (riesgo conocido:
     el puente escribe un `Date`).
-16. Reordenar columnas de `Productos` y agregar una propia ("Notas") → `pullProducts` devuelve lo mismo y
-    un `pushCustomer`/`pushSale` escribe en las columnas correctas.
-17. Borrar o renombrar `Precio` → `pullProducts` responde `ok: false` con "Falta la columna 'Precio' en la
+14. Reordenar columnas de `Productos` y agregar una propia ("Notas") → `pullBatch` devuelve lo mismo y
+    un `pushBatch` con `customer`/`sale` escribe en las columnas correctas.
+15. Borrar o renombrar `Precio` → `pullBatch` responde `ok: false` con "Falta la columna 'Precio' en la
     pestaña Productos". Borrar `Teléfono` → sigue funcionando.
-18. Convertir `Clientes` en tabla nativa (Formato > Convertir en tabla) y hacer un `pushCustomer` → anotar
-    si la tabla se expande sola con la fila nueva. Si no, dejarlo como limitación en este README.
-19. Planilla de la Etapa 1 o 2 (encabezados viejos): llamar cualquier acción → los encabezados pasan a
-    español, los datos y valores viejos (`cash`, `cerrada`) se leen y `pushSaleVoid` de una venta vieja
-    funciona.
+16. Convertir `Clientes` en tabla nativa (Formato > Convertir en tabla) y hacer un `pushBatch` con un
+    `customer` → anotar si la tabla se expande sola con la fila nueva. Si no, dejarlo como limitación
+    en este README.
+17. Planilla de una etapa anterior (encabezados viejos, sin `_PushLots`/`_Snapshot`): llamar cualquier
+    acción → los encabezados pasan a español, los datos y valores viejos (`cash`, `cerrada`) se leen,
+    las pestañas nuevas se crean solas y un `sale-void` de una venta vieja funciona.
 
-Registrar el resultado de esta lista en el issue #67 (pasos 1–11) y en el #80 (pasos 12–19).
+Registrar el resultado de esta lista en el issue #87.

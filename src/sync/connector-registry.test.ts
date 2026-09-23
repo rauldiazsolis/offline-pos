@@ -89,7 +89,12 @@ describe('createConnector', () => {
   });
 
   it('type google-sheets: arma el conector de Sheets (POST al Web App con la acción)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse({ ok: true, data: { items: [] } }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({
+        ok: true,
+        data: { products: { items: [] }, customers: { items: [] }, lots: {} },
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const connector = createConnector({
@@ -100,7 +105,7 @@ describe('createConnector', () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://script.google.com/macros/s/abc/exec');
-    expect(JSON.parse(init.body as string)).toMatchObject({ action: 'pullProducts' });
+    expect(JSON.parse(init.body as string)).toMatchObject({ action: 'pullBatch' });
   });
 });
 

@@ -12,7 +12,10 @@ test.beforeEach(async ({ page }) => {
       status: 200,
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ ok: true, data: { items: [] } }),
+      body: JSON.stringify({
+        ok: true,
+        data: { products: { items: [] }, customers: { items: [] }, lots: {} },
+      }),
     }),
   );
 });

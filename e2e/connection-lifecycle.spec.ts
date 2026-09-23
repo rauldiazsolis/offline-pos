@@ -27,23 +27,23 @@ async function routeRestBackend(page: Page): Promise<void> {
 /** Puente de Sheets simulado: un producto propio, sin clientes. */
 async function routeSheetsBridge(page: Page): Promise<void> {
   await page.route('https://script.google.com/**', async (route) => {
-    const body = route.request().postDataJSON() as { action: string } | null;
-    const data =
-      body?.action === 'pullProducts'
-        ? {
-            items: [
-              {
-                id: 'sheet-p1',
-                sku: 'SHEET-1',
-                barcodes: [],
-                name: 'Producto de la planilla',
-                price: 500,
-                taxRate: 0.21,
-                category: 'x',
-              },
-            ],
-          }
-        : { items: [] };
+    const data = {
+      products: {
+        items: [
+          {
+            id: 'sheet-p1',
+            sku: 'SHEET-1',
+            barcodes: [],
+            name: 'Producto de la planilla',
+            price: 500,
+            taxRate: 0.21,
+            category: 'x',
+          },
+        ],
+      },
+      customers: { items: [] },
+      lots: {},
+    };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
