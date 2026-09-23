@@ -6,6 +6,7 @@ import {
   getCurrentOpenCashSession,
   openCashSessionAndPersist,
 } from './cash-session-repository.ts';
+import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
 import { closeSaleAndPersist, voidSaleAndPersist } from './sale-repository.ts';
 
@@ -83,6 +84,20 @@ describe('closeSaleAndPersist', () => {
 
     const movementEvent = events.find((event) => event.type === 'stock-movement');
     expect(movementEvent?.status).toBe('pending');
+  });
+
+  it('estampa en cada evento la sucursal de la config actual (contrato v3)', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://x', branch: 'Centro' });
+    try {
+      await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+      const events = await db.outbox.toArray();
+      expect(events.map((event) => event.origin)).toEqual([
+        { branch: 'Centro' },
+        { branch: 'Centro' },
+      ]);
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('con un pago account, registra el movimiento y descuenta el balance cacheado', async () => {

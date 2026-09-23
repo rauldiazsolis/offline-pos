@@ -81,7 +81,7 @@ function makeSale(id: string): Sale {
 async function seedUserDataFor(config: Parameters<typeof saveSyncConfig>[0]): Promise<void> {
   saveSyncConfig(config);
   await db.sales.put(makeSale('s1'));
-  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
+  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
 }
 
 beforeEach(async () => {

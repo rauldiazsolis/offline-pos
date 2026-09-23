@@ -5,7 +5,6 @@ import {
   type CashSession,
   type CashSessionSummary,
 } from '../domain/cash-session.ts';
-import { buildOutboxEventForCashSession } from '../domain/outbox.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
@@ -83,8 +82,9 @@ export async function openCashSessionAndPersist(params: {
 
 /**
  * Cierra el turno abierto: calcula el resumen (arqueo) contra las `Sale[]`
- * reales del turno y encola el evento de outbox recién al cerrar, en la
- * misma transacción que persiste la sesión cerrada.
+ * reales del turno y persiste la sesión cerrada. El turno local sigue hasta
+ * la Etapa 5 de #94, pero ya no viaja: el contrato v3 (#96) no tiene
+ * `cash-session`.
  */
 export async function closeCashSessionAndPersist(params: {
   closingAmount: number;
@@ -103,10 +103,7 @@ export async function closeCashSessionAndPersist(params: {
   const summary = await summarize(closed);
 
   try {
-    await db.transaction('rw', db.cashSessions, db.outbox, async () => {
-      await db.cashSessions.put(closed);
-      await db.outbox.add(buildOutboxEventForCashSession(closed, { now }));
-    });
+    await db.cashSessions.put(closed);
   } catch (error) {
     return err('cash-session/persist-failed', {
       message: error instanceof Error ? error.message : String(error),

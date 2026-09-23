@@ -49,7 +49,7 @@ describe('closeCashSessionAndPersist', () => {
     expect(result).toEqual({ ok: false, error: 'cash-session/none-open', meta: undefined });
   });
 
-  it('cierra el turno, calcula el resumen y encola el evento de outbox', async () => {
+  it('cierra el turno y calcula el resumen, sin encolar nada (contrato v3)', async () => {
     await openCashSessionAndPersist({ openingAmount: 500 });
     await db.sales.add({
       id: 's1',
@@ -81,9 +81,8 @@ describe('closeCashSessionAndPersist', () => {
     }
     expect(await getCurrentOpenCashSession()).toBeUndefined();
 
-    const outboxEvents = await db.outbox.toArray();
-    const cashSessionEvent = outboxEvents.find((event) => event.type === 'cash-session');
-    expect(cashSessionEvent?.status).toBe('pending');
+    // Contrato v3 (#96): el turno local sigue hasta la Etapa 5, pero ya no viaja.
+    expect(await db.outbox.count()).toBe(0);
   });
 
   it('rechaza cerrar un turno que ya está cerrado (dos cierres seguidos)', async () => {

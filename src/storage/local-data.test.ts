@@ -1,12 +1,13 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { buildOutboxEventForSale, markSynced } from '../domain/outbox.ts';
+import { buildOutboxEventForSale, markSynced, type OutboxEvent } from '../domain/outbox.ts';
 import type { Sale } from '../domain/sale.ts';
 import { db } from './db.ts';
 import {
   clearAllTables,
   countLocalCatalog,
   hasUserData,
+  listPendingOutbox,
   summarizeLocalData,
   type LocalDataSummary,
 } from './local-data.ts';
@@ -42,8 +43,8 @@ async function seedEverything(): Promise<void> {
   await db.customers.put({ id: 'c1', name: 'Ana', createdAt: now });
   await db.sales.bulkPut([makeSale('s1'), makeSale('s2')]);
   await db.cashSessions.put({ id: 'cs1', openedAt: now, openingAmount: 0, sales: [] });
-  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now }));
-  await db.outbox.put(markSynced(buildOutboxEventForSale(makeSale('s2'), { now })));
+  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
+  await db.outbox.put(markSynced(buildOutboxEventForSale(makeSale('s2'), { now, origin: {} })));
   await db.draftCart.put({
     id: 'current',
     cart: {
@@ -126,5 +127,28 @@ describe('clearAllTables', () => {
     for (const table of db.tables) {
       await expect(table.count()).resolves.toBe(0);
     }
+  });
+});
+
+describe('listPendingOutbox', () => {
+  it('un cash-session legado pendiente no se lista y queda marcado como enviado', async () => {
+    await db.outbox.bulkAdd([
+      {
+        type: 'cash-session',
+        session: {},
+        id: 'legacy',
+        status: 'pending',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      } as unknown as OutboxEvent,
+      {
+        type: 'customer',
+        customer: { id: 'c1', name: 'A', createdAt: 'x' },
+        id: 'c1',
+        status: 'pending',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+    ]);
+    expect((await listPendingOutbox()).map((event) => event.id)).toEqual(['c1']);
+    expect((await db.outbox.get('legacy'))?.status).toBe('synced');
   });
 });

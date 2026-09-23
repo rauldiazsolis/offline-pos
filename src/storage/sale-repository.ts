@@ -11,6 +11,7 @@ import { err, ok, type Result } from '../domain/result.ts';
 import { buildStockMovementsForSale, closeSale, voidSale } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
 import type { StockMovement } from '../domain/stock.ts';
+import { currentEventOrigin } from '../sync/terminal-identity.ts';
 import { getCurrentOpenCashSession } from './cash-session-repository.ts';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
@@ -101,6 +102,7 @@ export async function closeSaleAndPersist(params: {
   pendingHold?: { holdId: string };
 }): Promise<Result<Sale>> {
   const now = new Date().toISOString();
+  const origin = currentEventOrigin();
 
   // Fase 6: no se puede cerrar una venta sin un turno de caja abierto — el
   // gate real vive acá (`command-bar-controller.ts::triggerCheckout` ya
@@ -131,8 +133,8 @@ export async function closeSaleAndPersist(params: {
     trackedProductIds,
   });
   const outboxEvents = [
-    buildOutboxEventForSale(sale, { now }),
-    ...buildOutboxEventsForStockMovements(movements, { now }),
+    buildOutboxEventForSale(sale, { now, origin }),
+    ...buildOutboxEventsForStockMovements(movements, { now, origin }),
     ...(params.pendingHold !== undefined
       ? [
           buildOutboxEventForHoldConfirm({
@@ -140,6 +142,7 @@ export async function closeSaleAndPersist(params: {
             holdId: params.pendingHold.holdId,
             saleId: sale.id,
             now,
+            origin,
           }),
         ]
       : []),
@@ -186,6 +189,7 @@ export async function voidSaleAndPersist(
   params?: { reason?: string },
 ): Promise<Result<Sale>> {
   const now = new Date().toISOString();
+  const origin = currentEventOrigin();
   const existing = await db.sales.get(saleId);
   if (existing === undefined) {
     return err('sale/not-found', { saleId });
@@ -214,8 +218,9 @@ export async function voidSaleAndPersist(
       voidedAt: now,
       ...(voided.voidReason !== undefined ? { voidReason: voided.voidReason } : {}),
       now,
+      origin,
     }),
-    ...buildOutboxEventsForStockMovements(movements, { now }),
+    ...buildOutboxEventsForStockMovements(movements, { now, origin }),
   ];
 
   try {

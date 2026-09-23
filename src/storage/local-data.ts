@@ -1,4 +1,4 @@
-import type { OutboxEvent } from '../domain/outbox.ts';
+import { isLegacyOutboxType, markSynced, type OutboxEvent } from '../domain/outbox.ts';
 import { db } from './db.ts';
 
 /**
@@ -53,9 +53,18 @@ export async function summarizeLocalData(): Promise<LocalDataSummary> {
   };
 }
 
-/** Eventos del outbox que todavía no viajaron, en orden FIFO — el mismo orden en que se arma un lote. */
+/**
+ * Eventos del outbox que todavía no viajaron, en orden FIFO — el mismo orden
+ * en que se arma un lote. Un evento de un tipo que el contrato ya no tiene
+ * (`cash-session`, v3) se marca como enviado acá y nunca viaja.
+ */
 export async function listPendingOutbox(): Promise<OutboxEvent[]> {
-  return db.outbox.where('status').equals('pending').sortBy('createdAt');
+  const pending = await db.outbox.where('status').equals('pending').sortBy('createdAt');
+  const legacy = pending.filter((event) => isLegacyOutboxType(event.type));
+  if (legacy.length > 0) {
+    await db.outbox.bulkPut(legacy.map(markSynced));
+  }
+  return pending.filter((event) => !isLegacyOutboxType(event.type));
 }
 
 /**

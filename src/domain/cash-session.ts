@@ -4,9 +4,9 @@ import type { Payment, Sale } from './sale.ts';
 /**
  * Turno de caja (Fase 6). Igual que una `Sale` nunca se persiste con
  * `status: 'open'` (nace ya cerrada, Fase 1), un turno **abierto** no se
- * sincroniza — solo se encola en el outbox al cerrarse, con el registro
- * completo (ver `buildOutboxEventForCashSession` en `domain/outbox.ts`).
- * Mientras está abierto vive solo en la tabla local `cashSessions`
+ * sincroniza. Desde el contrato v3 (#96) tampoco viaja al cerrarse: el
+ * contrato ya no tiene `cash-session` y el turno local se va en la Etapa 5
+ * de #94. Mientras está abierto vive solo en la tabla local `cashSessions`
  * (`storage/cash-session-repository.ts`), mismo espíritu que `draftCart`:
  * sobrevive a un refresh/crash de esta terminal, no viaja a ningún lado
  * todavía.
