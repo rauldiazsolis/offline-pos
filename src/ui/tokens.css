@@ -190,3 +190,20 @@
 .wizard-option:hover {
   border-color: var(--color-accent);
 }
+
+/*
+ * Filas de los overlays de la barra de comandos (Etapa 2 de #94): clickeables.
+ * El hover es decorativo — nunca mueve la selección; Enter sigue ejecutando la
+ * fila resaltada.
+ */
+.command-bar-row {
+  cursor: pointer;
+}
+
+.command-bar-row:hover:not([aria-disabled='true']) {
+  box-shadow: inset 0 0 0 1px var(--color-chrome-border);
+}
+
+.command-bar-row[aria-disabled='true'] {
+  cursor: default;
+}

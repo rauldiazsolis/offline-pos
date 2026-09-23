@@ -944,3 +944,66 @@ describe('CommandBarInput', () => {
     });
   });
 });
+
+describe('CommandBarInput — mouse (Etapa 2 de #94)', () => {
+  function mouseDown(target: Element): MouseEvent {
+    const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  it('click en una fila del overlay ejecuta y el input conserva el foco', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+    fireEvent.input(input, { target: { value: '/DIAG' } });
+    const row = screen.getByText('/DIAGNOSTICO').closest('li');
+    expect(row).not.toBeNull();
+    expect(mouseDown(row as Element).defaultPrevented).toBe(true);
+    fireEvent.click(row as Element);
+    expect(activeScreenSignal.value).toBe('diagnostico');
+  });
+
+  it('/COBRAR con el carrito vacío se ve deshabilitado, con el motivo, y el click no hace nada', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+    fireEvent.input(input, { target: { value: '/' } });
+    const row = screen.getByText('/COBRAR').closest('li');
+    expect(row?.getAttribute('aria-disabled')).toBe('true');
+    expect(row?.textContent).toContain('sin artículos ni cliente');
+    fireEvent.click(row as Element);
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('click en un cliente lo adjunta; click en "Consumidor Final" lo desadjunta', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+    fireEvent.input(input, { target: { value: '@ana' } });
+    fireEvent.click(screen.getByText('Ana García').closest('li') as Element);
+    expect(attachedCustomerSignal.value?.id).toBe('c1');
+
+    fireEvent.input(input, { target: { value: '@' } });
+    fireEvent.click(screen.getByText('Consumidor Final'));
+    expect(attachedCustomerSignal.value).toBeUndefined();
+  });
+
+  it('click en "+ Crear cliente" lo crea y adjunta', async () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+    fireEvent.input(input, { target: { value: '@Nuevo Cliente' } });
+    fireEvent.click(screen.getByText('+ Crear cliente "Nuevo Cliente"', { exact: false }));
+    await waitFor(() => {
+      expect(attachedCustomerSignal.value?.name).toBe('Nuevo Cliente');
+    });
+  });
+
+  it('click en un artículo lo agrega al carrito', async () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+    fireEvent.input(input, { target: { value: 'multi' } });
+    fireEvent.click(screen.getByText('Fideos 500g').closest('li') as Element);
+    await waitFor(() => {
+      expect(cartSignal.value.lines).toHaveLength(1);
+    });
+    expect(cartSignal.value.lines[0]).toMatchObject({ productId: 'p2' });
+  });
+});

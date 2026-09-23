@@ -1,6 +1,27 @@
 import { CartView } from '../components/CartView.tsx';
 import { CommandBarInput } from '../components/CommandBarInput.tsx';
 import { StatusBar } from '../components/StatusBar.tsx';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
+import { dismissCommandBarOverlay } from '../keyboard/command-bar-controller.ts';
+
+/**
+ * Teclado + mouse (Etapa 2 de #94): ningún click le saca el foco a la barra
+ * de comandos, y un click fuera del overlay lo cierra como Esc (#28), sin
+ * tocar lo tipeado. Solo el botón izquierdo: rueda y autoscroll siguen.
+ */
+function handleMouseDown(event: MouseEvent): void {
+  keepFocusOnMouseDown(event);
+  if (event.button !== 0) {
+    return;
+  }
+  const target = event.target;
+  if (
+    target instanceof Element &&
+    target.closest('[data-command-bar-overlay], .command-bar-input') === null
+  ) {
+    dismissCommandBarOverlay();
+  }
+}
 
 /**
  * Pantalla de venta: barra de estado arriba (info pasiva, "chrome" oscuro),
@@ -36,6 +57,7 @@ import { StatusBar } from '../components/StatusBar.tsx';
 export function SaleScreen() {
   return (
     <div
+      onMouseDown={handleMouseDown}
       style={{
         height: 'var(--app-height)',
         overflow: 'hidden',

@@ -14,6 +14,7 @@ import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import {
+  activateCommandBarRow,
   moveSelection,
   submitCommandBar,
   triggerCheckout,
@@ -123,6 +124,22 @@ describe('comandos habilitados (Etapa 2 de #94)', () => {
     updateCommandBarBuffer('/NOEXISTE');
     submitCommandBar();
     expect(commandBarErrorSignal.value).toBe('Comando desconocido: /NOEXISTE');
+  });
+});
+
+describe('activateCommandBarRow (click en una fila, Etapa 2 de #94)', () => {
+  it('comando: ejecuta la fila clickeada', () => {
+    updateCommandBarBuffer('/');
+    const index = commandResultsSignal.value.findIndex((command) => command.name === 'DIAGNOSTICO');
+    activateCommandBarRow('command', index);
+    expect(activeScreenSignal.value).toBe('diagnostico');
+  });
+
+  it('comando deshabilitado: no hace nada', () => {
+    updateCommandBarBuffer('/');
+    activateCommandBarRow('command', 0); // COBRAR con carrito vacío
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(commandBarBufferSignal.value).toBe('/');
   });
 });
 

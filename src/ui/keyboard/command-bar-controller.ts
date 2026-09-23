@@ -236,6 +236,33 @@ async function addByCode(code: string, qty: number): Promise<void> {
  * verificación de fondo (ver `storage/sale-repository.ts`), esto es solo
  * para fallar rápido sin llegar a abrir la pantalla de cobro.
  */
+/**
+ * Click en una fila de un overlay de la barra (Etapa 2 de #94): lo mismo que
+ * llevar la selección ahí y apretar Enter — mismo camino (`submitCommandBar`,
+ * con `pendingBarOperation`). Ejecuta de una. Un comando deshabilitado no hace
+ * nada. En clientes, un índice igual al largo de la lista es "+ Crear cliente".
+ */
+export function activateCommandBarRow(
+  list: 'command' | 'customer' | 'search',
+  index: number,
+): void {
+  switch (list) {
+    case 'command':
+      if (commandResultsSignal.value[index]?.availability.enabled !== true) {
+        return;
+      }
+      commandSelectionIndexSignal.value = index;
+      break;
+    case 'customer':
+      customerSelectionIndexSignal.value = index;
+      break;
+    case 'search':
+      searchSelectionIndexSignal.value = index;
+      break;
+  }
+  submitCommandBar();
+}
+
 export async function triggerCheckout(): Promise<void> {
   await pendingBarOperation;
   // Etapa 2 de #94: sin nada que cobrar, el motivo en el slot de error — el
