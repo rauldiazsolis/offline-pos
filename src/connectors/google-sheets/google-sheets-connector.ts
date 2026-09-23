@@ -5,7 +5,6 @@ import { newId } from '../../storage/ids.ts';
 import {
   connectorCustomerSchema,
   type AccountHoldResult,
-  type BatchLotStatus,
   type Connector,
   type OutboxBatchItem,
   type PullBatchParams,
@@ -17,107 +16,65 @@ import type { GoogleSheetsConfig } from './config.ts';
 /** Producto tal como lo manda el puente: sin `tracksStock`, que fija este conector. */
 const bridgeProductSchema = productSchema.omit({ tracksStock: true });
 
-const productsDataSchema = z.object({ items: z.array(bridgeProductSchema) });
-const customersDataSchema = z.object({ items: z.array(connectorCustomerSchema) });
+const pullResultSchema = <T extends z.ZodType>(itemSchema: T) =>
+  z.object({ items: z.array(itemSchema), nextCursor: z.string().optional() });
+
+const lotStatusSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('pending') }),
+  z.object({ status: z.literal('ok') }),
+  z.object({ status: z.literal('issues'), issues: z.array(z.string()) }),
+]);
+
+const pullBatchDataSchema = z.object({
+  products: pullResultSchema(bridgeProductSchema),
+  customers: pullResultSchema(connectorCustomerSchema),
+  lots: z.record(z.string(), lotStatusSchema),
+});
+
 const emptyDataSchema = z.object({});
 
 /**
  * Implementación del puerto `Connector` contra un Apps Script Web App (ver
- * `README.md` de esta carpeta y el spec de la Etapa 1, #67) — adaptada al
- * contrato batch (#87) de forma **mecánica**: `bridge.gs` sigue exponiendo
- * las mismas acciones de siempre, una por evento; este conector solo cambia
- * su cara hacia `sync/engine.ts`, no su forma de hablar con el puente. La
- * Etapa 2 le da a `bridge.gs` un batch real puertas adentro — ver CLAUDE.md,
- * "Connector API".
+ * `README.md` de esta carpeta y el spec de la Etapa 1, #67) — batch real
+ * desde la Etapa 2 (#87): `bridge.gs` expone `pushBatch`/`pullBatch`, igual
+ * que el conector REST, en vez de una acción por evento/recurso.
  *
- * `stock-movement`/`account-hold-release` siguen siendo no-ops (nunca hubo
- * llamada real al puente para esto, ver la implementación anterior a #87):
- * el fiado contra Sheets es sin bloqueo real que liberar, y `pullProducts`
- * ya fija `tracksStock: false` así que un movimiento de stock nunca se
- * genera para estos productos en la práctica.
+ * `stock-movement`/`account-hold-release` siguen siendo no-ops del lado de
+ * Sheets (nunca hubo llamada real al puente para esto): el fiado contra
+ * Sheets es sin bloqueo real que liberar, y `pullBatch` ya fija
+ * `tracksStock: false` así que un movimiento de stock nunca se genera para
+ * estos productos en la práctica.
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
-  async function pushOne(item: OutboxBatchItem): Promise<Result<void>> {
-    switch (item.type) {
-      case 'sale':
-        return callBridge(
-          config,
-          { action: 'pushSale', payload: { sale: item.sale }, idempotencyKey: item.id },
-          emptyDataSchema,
-        ).then((r) => (r.ok ? ok(undefined) : r));
-      case 'sale-void': {
-        const payload = {
-          saleId: item.saleId,
-          voidedAt: item.voidedAt,
-          ...(item.voidReason !== undefined ? { voidReason: item.voidReason } : {}),
-        };
-        return callBridge(
-          config,
-          { action: 'pushSaleVoid', payload, idempotencyKey: item.id },
-          emptyDataSchema,
-        ).then((r) => (r.ok ? ok(undefined) : r));
-      }
-      case 'customer':
-        return callBridge(
-          config,
-          { action: 'pushCustomer', payload: { customer: item.customer }, idempotencyKey: item.id },
-          emptyDataSchema,
-        ).then((r) => (r.ok ? ok(undefined) : r));
-      case 'account-hold-confirm':
-        return callBridge(
-          config,
-          {
-            action: 'pushAccountHoldConfirm',
-            payload: { holdId: item.holdId, saleId: item.saleId },
-            idempotencyKey: item.id,
-          },
-          emptyDataSchema,
-        ).then((r) => (r.ok ? ok(undefined) : r));
-      case 'cash-session':
-        return callBridge(
-          config,
-          { action: 'pushCashSession', payload: { session: item.session }, idempotencyKey: item.id },
-          emptyDataSchema,
-        ).then((r) => (r.ok ? ok(undefined) : r));
-      case 'stock-movement':
-      case 'account-hold-release':
-        return Promise.resolve(ok(undefined));
-      default: {
-        const exhaustiveCheck: never = item;
-        throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
-      }
-    }
-  }
-
   return {
-    async pushBatch(items: OutboxBatchItem[]): Promise<Result<void>> {
-      for (const item of items) {
-        const result = await pushOne(item);
-        if (!result.ok) {
-          return result;
-        }
-      }
-      return ok(undefined);
+    async pushBatch(items: OutboxBatchItem[], idempotencyId: string): Promise<Result<void>> {
+      const result = await callBridge(
+        config,
+        { action: 'pushBatch', payload: { events: items }, idempotencyKey: idempotencyId },
+        emptyDataSchema,
+      );
+      return result.ok ? ok(undefined) : result;
     },
 
     async pullBatch(params: PullBatchParams): Promise<Result<PullBatchResult>> {
-      const productsResult = await callBridge(config, { action: 'pullProducts', payload: {} }, productsDataSchema);
-      if (!productsResult.ok) {
-        return productsResult;
+      const result = await callBridge(
+        config,
+        { action: 'pullBatch', payload: { cursors: params.cursors, pendingLotIds: params.pendingLotIds } },
+        pullBatchDataSchema,
+      );
+      if (!result.ok) {
+        return result;
       }
-      const customersResult = await callBridge(config, { action: 'pullCustomers', payload: {} }, customersDataSchema);
-      if (!customersResult.ok) {
-        return customersResult;
-      }
-
-      const lots: Record<string, BatchLotStatus> = {};
-      for (const id of params.pendingLotIds) {
-        lots[id] = { status: 'ok' };
-      }
-
+      const { products, customers, lots } = result.value;
       return ok({
-        products: { items: productsResult.value.items.map((item) => ({ ...item, tracksStock: false })) },
-        customers: { items: customersResult.value.items.map((item) => ({ ...item, unrestricted: true })) },
+        products: {
+          items: products.items.map((item) => ({ ...item, tracksStock: false })),
+          ...(products.nextCursor !== undefined ? { nextCursor: products.nextCursor } : {}),
+        },
+        customers: {
+          items: customers.items.map((item) => ({ ...item, unrestricted: true })),
+          ...(customers.nextCursor !== undefined ? { nextCursor: customers.nextCursor } : {}),
+        },
         stock: [],
         lots,
       });

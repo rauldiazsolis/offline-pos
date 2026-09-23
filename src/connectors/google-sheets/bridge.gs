@@ -100,10 +100,21 @@ var SCHEMA = {
     ['efectivoEsperado', 'number'],
     ['diferencia', 'number'],
   ]),
-  // Pestaña oculta: la fecha queda como texto ISO a propósito (no la ve nadie).
-  _Idempotency: columns([
-    ['key', 'text'],
+  // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
+  // Idempotencia + estado consultable por LOTE de push (antes por evento, #87).
+  _PushLots: columns([
+    ['id', 'text'],
+    ['status', 'text'],
+    ['issues', 'text', true],
     ['at', 'text'],
+  ]),
+  // Fingerprint por fila de Productos/Clientes, para poder ofrecer un cursor de pull real sin
+  // depender de un trigger onEdit (#87) — ver comentario de `trackChanges` más abajo.
+  _Snapshot: columns([
+    ['resource', 'text'],
+    ['id', 'text'],
+    ['fingerprint', 'text'],
+    ['updatedAt', 'text'],
   ]),
 };
 
@@ -187,14 +198,12 @@ var SEED = {
   ],
 };
 
+// Contrato batch (#87): dos operaciones, nada de acciones por recurso/evento. Las funciones de
+// abajo (pushSale, pullProducts, etc.) siguen existiendo, pero solo como piezas internas que
+// pushBatchAction/pullBatchAction llaman — no son alcanzables desde afuera.
 var ACTIONS = {
-  pullProducts: pullProducts,
-  pullCustomers: pullCustomers,
-  pushSale: idempotent(pushSale),
-  pushSaleVoid: idempotent(pushSaleVoid),
-  pushCustomer: idempotent(pushCustomer),
-  pushAccountHoldConfirm: idempotent(pushAccountHoldConfirm),
-  pushCashSession: idempotent(pushCashSession),
+  pushBatch: pushBatchAction,
+  pullBatch: pullBatchAction,
 };
 
 // ---------------------------------------------------------------- entrada
@@ -313,7 +322,7 @@ function createSheet(spreadsheet, name) {
     }),
   ]);
   template.setDataValidations([defs.map(validationFor)]);
-  if (name === '_Idempotency') {
+  if (name === '_PushLots' || name === '_Snapshot') {
     sheet.hideSheet();
   }
   if (SEED[name]) {
@@ -517,34 +526,143 @@ function compact(object) {
   return result;
 }
 
+// -------------------------------------------------- lotes de push (#87)
+
 /**
- * Envuelve una acción de escritura: si la key ya está en _Idempotency responde
- * éxito sin reescribir; si no, escribe y recién ahí registra la key.
+ * Punto de entrada de `pushBatch`: idempotente por LOTE (no por evento, ver
+ * CLAUDE.md "Patrón outbox"). Un lote ya visto no se reprocesa — responde
+ * `{}` igual que la primera vez, sin volver a escribir nada. Un evento que
+ * falla dentro del lote no tumba el resto ni el ack: queda como `issue` del
+ * lote, consultable después vía `pullBatch` (el backend nunca rechaza).
  */
-function idempotent(write) {
-  return function (payload, key) {
-    if (!key) {
-      throw new Error('Falta idempotencyKey');
-    }
-    if (hasKey(key)) {
-      return {};
-    }
-    write(payload);
-    appendObjects('_Idempotency', [{ key: key, at: new Date().toISOString() }]);
+function pushBatchAction(payload, idempotencyKey) {
+  if (!idempotencyKey) {
+    throw new Error('Falta idempotencyKey');
+  }
+  if (findLot(idempotencyKey)) {
     return {};
-  };
+  }
+  var issues = [];
+  (payload.events || []).forEach(function (event) {
+    try {
+      applyBatchEvent(event);
+    } catch (error) {
+      issues.push(
+        (event.type || '?') +
+          ' ' +
+          (event.id || '') +
+          ': ' +
+          (error && error.message ? error.message : String(error)),
+      );
+    }
+  });
+  appendObjects('_PushLots', [
+    {
+      id: idempotencyKey,
+      status: issues.length > 0 ? 'issues' : 'ok',
+      issues: issues.length > 0 ? JSON.stringify(issues) : '',
+      at: new Date().toISOString(),
+    },
+  ]);
+  return {};
 }
 
-function hasKey(key) {
-  return readRows('_Idempotency').some(function (row) {
-    return String(row.key) === key;
-  });
+/** Aplica un evento de outbox — mismo despacho que `demo-backend/src/routes/sync.ts`. */
+function applyBatchEvent(event) {
+  switch (event.type) {
+    case 'sale':
+      pushSale({ sale: event.sale });
+      return;
+    case 'sale-void':
+      pushSaleVoid({ saleId: event.saleId, voidedAt: event.voidedAt, voidReason: event.voidReason });
+      return;
+    case 'customer':
+      pushCustomer({ customer: event.customer });
+      return;
+    case 'account-hold-confirm':
+      pushAccountHoldConfirm({ holdId: event.holdId, saleId: event.saleId });
+      return;
+    case 'cash-session':
+      pushCashSession({ session: event.session });
+      return;
+    case 'stock-movement':
+    case 'account-hold-release':
+      // No-ops de este conector: ver README ("Qué hace cada operación").
+      return;
+    default:
+      throw new Error('Tipo de evento de outbox desconocido: ' + event.type);
+  }
+}
+
+function findLot(id) {
+  return readRows('_PushLots').filter(function (row) {
+    return String(row.id) === id;
+  })[0];
 }
 
 // ----------------------------------------------------------------- pulls
 
+/**
+ * Sheets no tiene una noción nativa de "última modificación" por fila, así
+ * que no hay forma de leer solo lo que cambió: `pullBatch` igual tiene que
+ * leer la pestaña completa. Esta función aprovecha esa lectura obligada para
+ * ofrecer un cursor real: compara el contenido de cada fila contra lo visto
+ * la última vez (`_Snapshot`, por `resource`+`id`). Fila nueva o distinta →
+ * `updatedAt` nuevo, se persiste; sin cambios → conserva el `updatedAt`
+ * anterior. Cubre por igual una edición manual del comerciante y una
+ * escritura del propio bridge (`pushCustomer`), sin necesitar un trigger
+ * `onEdit` (más difícil de probar y que no cubriría las escrituras propias
+ * de todos modos).
+ */
+function trackChanges(resource, items) {
+  var existing = {};
+  readRows('_Snapshot').forEach(function (row) {
+    if (row.resource === resource) {
+      existing[row.id] = row;
+    }
+  });
+  var now = nextTimestamp();
+  var updatedAtById = {};
+  var toAppend = [];
+  items.forEach(function (item) {
+    var fingerprint = JSON.stringify(item);
+    var previous = existing[item.id];
+    if (previous === undefined) {
+      updatedAtById[item.id] = now;
+      toAppend.push({ resource: resource, id: item.id, fingerprint: fingerprint, updatedAt: now });
+    } else if (previous.fingerprint !== fingerprint) {
+      updatedAtById[item.id] = now;
+      setCells('_Snapshot', previous._row, { fingerprint: fingerprint, updatedAt: now });
+    } else {
+      updatedAtById[item.id] = String(previous.updatedAt);
+    }
+  });
+  appendObjects('_Snapshot', toAppend);
+  return updatedAtById;
+}
+
+/**
+ * `new Date().toISOString()` no alcanza para garantizar que dos llamadas
+ * separadas (dos `pullBatch` distintos) devuelvan timestamps distintos: el
+ * reloj real puede repetirse dentro del mismo milisegundo. El cursor tiene
+ * que ser estrictamente creciente entre llamadas para que un filtro `>` no
+ * pierda ni repita filas, así que se ancla al máximo ya persistido en
+ * `_Snapshot` (todos los recursos) y lo empuja 1ms para adelante si hiciera
+ * falta — nunca antes del reloj real, solo lo suficiente para ser único.
+ */
+function nextTimestamp() {
+  var now = new Date().toISOString();
+  var last = readRows('_Snapshot').reduce(function (max, row) {
+    return String(row.updatedAt) > max ? String(row.updatedAt) : max;
+  }, '');
+  if (last !== '' && now <= last) {
+    return new Date(new Date(last).getTime() + 1).toISOString();
+  }
+  return now;
+}
+
 function pullProducts() {
-  var items = readRows('Productos')
+  return readRows('Productos')
     .filter(function (row) {
       return row.id !== '' && row.name !== '' && !isNaN(Number(row.price));
     })
@@ -566,11 +684,10 @@ function pullProducts() {
         category: String(row.category),
       };
     });
-  return { items: items };
 }
 
 function pullCustomers() {
-  var items = readRows('Clientes')
+  return readRows('Clientes')
     .filter(function (row) {
       return row.id !== '' && row.name !== '';
     })
@@ -582,7 +699,50 @@ function pullCustomers() {
         phone: String(row.phone),
       });
     });
-  return { items: items };
+}
+
+/** Combina el fingerprint de cambios con el filtro de cursor — misma forma que `ConnectorPullResult<T>`. */
+function pullResource(resource, since, items) {
+  var updatedAtById = trackChanges(resource, items);
+  var withTimestamps = items
+    .map(function (item) {
+      return { item: item, updatedAt: updatedAtById[item.id] };
+    })
+    .sort(function (a, b) {
+      return a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0;
+    });
+  var filtered = since
+    ? withTimestamps.filter(function (entry) {
+        return entry.updatedAt > since;
+      })
+    : withTimestamps;
+  var result = {
+    items: filtered.map(function (entry) {
+      return entry.item;
+    }),
+  };
+  var last = withTimestamps[withTimestamps.length - 1];
+  if (last !== undefined) {
+    result.nextCursor = last.updatedAt;
+  }
+  return result;
+}
+
+function pullBatchAction(payload) {
+  var cursors = payload.cursors || {};
+  var products = pullResource('Productos', cursors.products, pullProducts());
+  var customers = pullResource('Clientes', cursors.customers, pullCustomers());
+  var lots = {};
+  (payload.pendingLotIds || []).forEach(function (id) {
+    var row = findLot(id);
+    if (row !== undefined) {
+      lots[id] =
+        row.status === 'issues'
+          ? { status: 'issues', issues: JSON.parse(String(row.issues || '[]')) }
+          : { status: row.status };
+    }
+  });
+  return { products: products, customers: customers, lots: lots };
 }
 
 // ---------------------------------------------------------------- pushes

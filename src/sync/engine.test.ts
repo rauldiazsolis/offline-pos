@@ -979,12 +979,19 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
       vi.fn((_url: string, init?: RequestInit) => {
         const body = JSON.parse(init?.body as string) as { action: string; payload: unknown };
         requests.push(body);
-        const items = body.action === 'pullProducts' ? [catalogProduct('p1')] : [];
         return Promise.resolve({
           ok: true,
           status: 200,
           statusText: 'OK',
-          json: () => Promise.resolve({ ok: true, data: { items } }),
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              data: {
+                products: { items: [catalogProduct('p1')] },
+                customers: { items: [] },
+                lots: {},
+              },
+            }),
         } as Response);
       }),
     );
@@ -994,7 +1001,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
     await runPullCycleNow();
 
     expect(await db.products.toCollection().primaryKeys()).toEqual(['p1']);
-    expect(requests.filter((request) => request.action === 'pullProducts')).toHaveLength(2);
+    expect(requests.filter((request) => request.action === 'pullBatch')).toHaveLength(2);
   });
 
   it('si el pull falla, no se aplica nada: ni upsert ni borrado, ni lastFullSyncAt', async () => {

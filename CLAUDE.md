@@ -241,7 +241,14 @@ de un puente Apps Script (`bridge.gs`, ver su README). Sus dos archivos (`bridge
 `columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene los textos
 visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves internas y
 encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en Vitest con
-una planilla falsa (`src/test/fake-spreadsheet.ts`). Cada conector es dueño de su schema de config
+una planilla falsa (`src/test/fake-spreadsheet.ts`). Desde la Etapa 2 de #87, `bridge.gs` expone
+solo `pushBatch`/`pullBatch` (las acciones por evento/recurso de antes quedan como funciones
+internas que esas dos llaman) y resuelve el lock del script puertas adentro — antes cada evento
+pendiente era un request HTTP propio, cada uno tomando el lock de punta a punta. `pullBatch` ofrece
+cursor real para Productos/Clientes pese a que Sheets no trackea "última modificación" por fila:
+compara el contenido de cada fila contra un fingerprint guardado en una hoja oculta (`_Snapshot`) en
+vez de depender de un trigger `onEdit` (más difícil de probar y que no cubriría las escrituras del
+propio bridge de todos modos) — ver el README del conector, sección "Cursor de pull". Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y
@@ -1093,15 +1100,19 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   "el POS vende... y el backend es responsable de aceptar cualquier cosa" — el contrato pasa de
   10 endpoints por recurso/evento a dos operaciones batch (`pushBatch`/`pullBatch`) con cadencias
   propias, gateadas entre sí (un pull nunca aplica datos mientras un lote de push que le interesa
-  siga sin resolverse). Dividido en dos etapas como el epic #66: **Etapa 1** (este commit) —
+  siga sin resolverse). Dividido en dos etapas como el epic #66: **Etapa 1** (PR #89, mergeado) —
   contrato nuevo, motor de sync, `demo-backend` y `connectors/rest/` de punta a punta;
-  `connectors/google-sheets/` recibe un adaptador mecánico (mismos endpoints de `bridge.gs` de
-  siempre, sin tocar el puente). **Etapa 2** (pendiente) — batch real en `bridge.gs`, resolviendo el
-  lock del script puertas adentro en vez de exponerlo como error al POS. Reemplaza la cadencia que
-  se acababa de construir en los PR #83/#84 horas antes de esta sesión de brainstorming. Cierra
-  parcialmente el issue #13 (ver "Connector API" más arriba) — la mitad de esa issue sobre
-  notificación asíncrona de discrepancias de negocio (ej. descuadre de stock) sigue sin diseñarse,
-  se re-scopeó ahí mismo.
+  `connectors/google-sheets/` recibió primero un adaptador mecánico (mismos endpoints de `bridge.gs`
+  de antes de #87, sin tocar el puente). **Etapa 2** (cierra el issue) — batch real en `bridge.gs`:
+  `pushBatch`/`pullBatch` reemplazan las acciones por evento/recurso, un evento que falla dentro de
+  un lote queda como *issue* del lote sin tumbar el resto ni el ack (`_PushLots`, hoja oculta,
+  reemplaza a `_Idempotency` — la idempotencia pasa a ser por lote, no por evento), y se sumó cursor
+  real para Productos/Clientes vía fingerprint por fila (`_Snapshot`, ver "Connector API" y el README
+  del conector) — decisión del usuario, tomada contra mi recomendación inicial de dejarlo para más
+  adelante como límite documentado. Reemplaza la cadencia que se acababa de construir en los
+  PR #83/#84 horas antes de la sesión de brainstorming original. Cierra parcialmente el issue #13
+  (ver "Connector API" más arriba) — la mitad de esa issue sobre notificación asíncrona de
+  discrepancias de negocio (ej. descuadre de stock) sigue sin diseñarse, se re-scopeó ahí mismo.
 
 - Observabilidad de sync y `/DIAGNOSTICO`: un usuario probando el conector de Sheets contra un
   despliegue real de `bridge.gs` se topó con un error de sync sin poder ver el detalle — la Console

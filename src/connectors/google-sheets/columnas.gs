@@ -75,9 +75,17 @@ var COLUMN_LABELS = {
     efectivoEsperado: 'Efectivo esperado',
     diferencia: 'Diferencia',
   },
-  _Idempotency: {
-    key: 'Clave',
-    at: 'Registrada el',
+  _PushLots: {
+    id: 'Id',
+    status: 'Estado',
+    issues: 'Problemas',
+    at: 'Registrado el',
+  },
+  _Snapshot: {
+    resource: 'Recurso',
+    id: 'Id',
+    fingerprint: 'Fingerprint',
+    updatedAt: 'Actualizado el',
   },
 };
 
