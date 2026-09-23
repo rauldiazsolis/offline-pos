@@ -43,6 +43,8 @@ async function routeSheetsBridge(page: Page): Promise<void> {
             price: 500,
             taxRate: 0.21,
             category: 'x',
+            // Contrato v3 (#96): la fecha de alta es obligatoria en el pull.
+            createdAt: '2026-01-01T00:00:00.000Z',
           },
         ],
       },
