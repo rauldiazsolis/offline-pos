@@ -259,10 +259,10 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
     expect(cashSummaryTabSignal.value).toBe('products');
   });
 
-  it('"[Esc] Cerrar" es un botón clickeable', () => {
+  it('"Cerrar (Esc)" es un botón clickeable', () => {
     render(<CashSummaryScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Cerrar/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar (Esc)' }));
 
     expect(activeScreenSignal.value).toBe('sale');
   });

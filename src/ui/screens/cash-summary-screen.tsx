@@ -556,7 +556,7 @@ export function CashSummaryScreen() {
               fontSize: 'var(--font-size-sm)',
             }}
           >
-            [Esc] Cerrar
+            Cerrar (Esc)
           </button>
         </div>
 
