@@ -113,3 +113,17 @@ test('venta → /CONFIG → Esc → la barra de comandos recupera el foco', asyn
 
   await expect(commandBar).toBeFocused();
 });
+
+test('venta → /DIAGNOSTICO → Esc → la barra de comandos recupera el foco', async ({ page }) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+
+  await commandBar.fill('/DIAGNOSTICO');
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Diagnóstico de sincronización' })).toBeVisible();
+  await expect(page.getByText('Sin probar').or(page.getByText(/Probada:/))).toBeVisible();
+
+  await page.keyboard.press('Escape');
+
+  await expect(commandBar).toBeFocused();
+});

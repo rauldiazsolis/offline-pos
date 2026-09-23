@@ -115,7 +115,7 @@ describe('/DEMO_RESET (Ciclo 8; comando del conector rest-demo desde la Etapa 2c
 });
 
 describe('availableCommands (Etapa 2c)', () => {
-  const CORE = ['COBRAR', 'CAJA', 'RESUMEN', 'ANULAR', 'DESCARTAR', 'CONFIG', 'SINCRONIZAR'];
+  const CORE = ['COBRAR', 'CAJA', 'RESUMEN', 'ANULAR', 'DESCARTAR', 'CONFIG', 'SINCRONIZAR', 'DIAGNOSTICO'];
 
   afterEach(() => {
     activeConnectorTypeSignal.value = null;
