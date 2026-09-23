@@ -392,6 +392,11 @@ function applyPhrase(model: WizardModel): string {
     return 'Se guarda la sucursal, el punto de venta y el locale.';
   }
   const host = formHost();
+  const localStep = model.steps.find((step) => step.id === 'local-data');
+  if (localStep?.status === 'skipped' && localStep.skipReason === 'no-user-data') {
+    // Nada propio que perder (instalación, identidad perdida, o solo catálogo ajeno).
+    return `Se conecta a ${host} y se cargan sus productos y clientes.`;
+  }
   if (action.local === 'wipe') {
     return `Se conecta a ${host} y se borran los datos locales.`;
   }
