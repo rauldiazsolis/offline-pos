@@ -7,7 +7,11 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal, demoResetInProgressSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { confirmDemoReset, enterDemoResetScreen, exitDemoResetScreen } from './demo-reset-controller.ts';
+import {
+  confirmDemoReset,
+  enterDemoResetScreen,
+  exitDemoResetScreen,
+} from './demo-reset-controller.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -34,7 +38,6 @@ describe('enterDemoResetScreen / exitDemoResetScreen', () => {
     expect(activeScreenSignal.value).toBe('sale');
     await expect(db.products.count()).resolves.toBe(0);
   });
-
 });
 
 describe('confirmDemoReset', () => {
@@ -45,7 +48,11 @@ describe('confirmDemoReset', () => {
       lines: [{ kind: 'freeform', description: 'algo', qty: 1, unitPrice: 10 }],
     };
     cartSelectionIndexSignal.value = 0;
-    attachedCustomerSignal.value = { id: 'c1', name: 'Juan', createdAt: '2026-01-01T00:00:00.000Z' };
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Juan',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
 
     await confirmDemoReset();
 

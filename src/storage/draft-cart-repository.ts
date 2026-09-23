@@ -26,5 +26,8 @@ export async function loadDraftCart(): Promise<{ cart: Cart; customer?: Customer
   if (draft === undefined) {
     return undefined;
   }
-  return { cart: draft.cart, ...(draft.customer !== undefined ? { customer: draft.customer } : {}) };
+  return {
+    cart: draft.cart,
+    ...(draft.customer !== undefined ? { customer: draft.customer } : {}),
+  };
 }

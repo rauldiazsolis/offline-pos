@@ -199,7 +199,8 @@ components:
         name: { type: string }
         document: { type: string }
         phone: { type: string }
-        creditLimit: { type: number, description: Cuenta corriente, opcional — ver §6 del doc de diseño. }
+        creditLimit:
+          { type: number, description: Cuenta corriente, opcional — ver §6 del doc de diseño. }
         margin: { type: number }
         balance: { type: number }
         updatedAt: { type: string, format: date-time }
@@ -247,7 +248,12 @@ components:
       properties:
         method: { type: string, enum: [cash, debit, credit, transfer, qr, account] }
         amount: { type: number }
-        reference: { type: string, description: Para method=account con red, el holdId del bloqueo aprobado (§5). }
+        reference:
+          {
+            type: string,
+            description: Para method=account con red,
+            el holdId del bloqueo aprobado (§5).,
+          }
 
     Sale:
       type: object

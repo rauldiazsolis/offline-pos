@@ -26,7 +26,16 @@ beforeEach(async () => {
     findByBarcodeOrSku: () => undefined,
     getProduct: (productId) =>
       productId === 'p1'
-        ? { id: 'p1', sku: 'SKU-1', barcodes: ['7791234567890'], name: 'Arroz 1kg', price: 100, taxRate: 0.21, category: 'almacen', tracksStock: true }
+        ? {
+            id: 'p1',
+            sku: 'SKU-1',
+            barcodes: ['7791234567890'],
+            name: 'Arroz 1kg',
+            price: 100,
+            taxRate: 0.21,
+            category: 'almacen',
+            tracksStock: true,
+          }
         : undefined,
     getStock: () => Promise.resolve(undefined),
   });
@@ -34,7 +43,9 @@ beforeEach(async () => {
     search: () => [],
     listRecent: () => [],
     getCustomer: (customerId) =>
-      customerId === 'c1' ? { id: 'c1', name: 'Paula Torres', createdAt: '2026-01-01T00:00:00.000Z' } : undefined,
+      customerId === 'c1'
+        ? { id: 'c1', name: 'Paula Torres', createdAt: '2026-01-01T00:00:00.000Z' }
+        : undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
   });
   activeScreenSignal.value = 'cash-summary';

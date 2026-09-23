@@ -30,8 +30,14 @@ describe('draft cart repository', () => {
   });
 
   it('guarda y recupera el carrito junto con el cliente adjunto', async () => {
-    const cart: Cart = { lines: [{ kind: 'freeform', description: 'Envío', qty: 1, unitPrice: 50 }] };
-    const customer: Customer = { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' };
+    const cart: Cart = {
+      lines: [{ kind: 'freeform', description: 'Envío', qty: 1, unitPrice: 50 }],
+    };
+    const customer: Customer = {
+      id: 'c1',
+      name: 'Ana García',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
 
     await saveDraftCart({ cart, customer });
 
@@ -39,7 +45,9 @@ describe('draft cart repository', () => {
   });
 
   it('un save posterior reemplaza el draft anterior (no acumula filas)', async () => {
-    await saveDraftCart({ cart: { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 10 }] } });
+    await saveDraftCart({
+      cart: { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 10 }] },
+    });
     await saveDraftCart({ cart: { lines: [] } });
 
     expect(await loadDraftCart()).toEqual({ cart: { lines: [] } });

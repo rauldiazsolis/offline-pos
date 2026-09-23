@@ -90,7 +90,8 @@ export function CommandBarInput() {
   // (`updateCommandBarBuffer`), así que seguir tipeando reabre el overlay
   // que corresponda a lo nuevo.
   const showOverlay =
-    !overlayDismissedSignal.value && (hasError || hasCommandResults || hasCustomerResults || hasSearchResults);
+    !overlayDismissedSignal.value &&
+    (hasError || hasCommandResults || hasCustomerResults || hasSearchResults);
 
   // updateCommandBarBuffer (no tocar los signals directo): además de
   // actualizar el buffer, resetea/reindexa la selección de las tres listas

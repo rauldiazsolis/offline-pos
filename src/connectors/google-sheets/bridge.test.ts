@@ -506,8 +506,8 @@ describe('cursor de pull (#87)', () => {
     productos?.getRange(2, 5).setValue(9999); // fila de p-001, columna Precio
 
     const second = pullBatch(call, { products: cursor });
-    const items = (second.data as { products: { items: { id: string; price: number }[] } })
-      .products.items;
+    const items = (second.data as { products: { items: { id: string; price: number }[] } }).products
+      .items;
 
     expect(items).toEqual([expect.objectContaining({ id: 'p-001', price: 9999 })]);
   });
@@ -520,7 +520,11 @@ describe('cursor de pull (#87)', () => {
 
     call(
       'pushBatch',
-      { events: [{ type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } }] },
+      {
+        events: [
+          { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
+        ],
+      },
       'lot-1',
     );
 

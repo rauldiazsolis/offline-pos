@@ -41,7 +41,8 @@ export function ScrollIndicatorBar({
     return null;
   }
   const railColor = variant === 'light' ? 'var(--color-border)' : 'var(--color-chrome-border)';
-  const whiskerColor = variant === 'light' ? 'var(--color-text-muted)' : 'var(--color-chrome-text-muted)';
+  const whiskerColor =
+    variant === 'light' ? 'var(--color-text-muted)' : 'var(--color-chrome-text-muted)';
   const opacity = variant === 'light' ? 1 : 0.6;
   const whiskerStyle = {
     position: 'absolute' as const,

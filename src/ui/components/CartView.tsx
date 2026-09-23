@@ -281,7 +281,11 @@ export function CartView(): JSX.Element {
         </div>
         {/* topOffset corre el indicador (bigotes incluidos) debajo del
             header sticky de la tabla — ver ScrollIndicatorBar.tsx. */}
-        <ScrollIndicatorBar thumb={scrollThumb} variant="light" topOffset="var(--cart-table-head-h)" />
+        <ScrollIndicatorBar
+          thumb={scrollThumb}
+          variant="light"
+          topOffset="var(--cart-table-head-h)"
+        />
       </div>
       <TotalsCard cart={cart} totals={totals} />
     </div>

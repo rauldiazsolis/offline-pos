@@ -1,6 +1,13 @@
-import { calculateCashSessionSummary, type CashSession, type CashSessionSummary } from '../domain/cash-session.ts';
+import {
+  calculateCashSessionSummary,
+  type CashSession,
+  type CashSessionSummary,
+} from '../domain/cash-session.ts';
 import type { Sale } from '../domain/sale.ts';
-import { getCurrentOpenCashSession, getMostRecentClosedCashSession } from './cash-session-repository.ts';
+import {
+  getCurrentOpenCashSession,
+  getMostRecentClosedCashSession,
+} from './cash-session-repository.ts';
 import { db } from './db.ts';
 
 export type CashSummaryContext = {
@@ -21,7 +28,9 @@ export async function getCashSummaryContext(): Promise<CashSummaryContext | unde
   if (session === undefined) {
     return undefined;
   }
-  const sales = (await db.sales.bulkGet(session.sales)).filter((sale): sale is Sale => sale !== undefined);
+  const sales = (await db.sales.bulkGet(session.sales)).filter(
+    (sale): sale is Sale => sale !== undefined,
+  );
   return {
     session,
     summary: calculateCashSessionSummary(session, sales),

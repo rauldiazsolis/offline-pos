@@ -64,7 +64,11 @@ describe('/DESCARTAR (Ciclo 8, sin confirmación)', () => {
       lines: [{ kind: 'freeform', description: 'regalo', qty: 1, unitPrice: 50 }],
       globalAdjustmentPercentage: 10,
     };
-    attachedCustomerSignal.value = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Juan Pérez',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
     cartSelectionIndexSignal.value = 0;
   });
 
@@ -115,7 +119,16 @@ describe('/DEMO_RESET (Ciclo 8; comando del conector rest-demo desde la Etapa 2c
 });
 
 describe('availableCommands (Etapa 2c)', () => {
-  const CORE = ['COBRAR', 'CAJA', 'RESUMEN', 'ANULAR', 'DESCARTAR', 'CONFIG', 'SINCRONIZAR', 'DIAGNOSTICO'];
+  const CORE = [
+    'COBRAR',
+    'CAJA',
+    'RESUMEN',
+    'ANULAR',
+    'DESCARTAR',
+    'CONFIG',
+    'SINCRONIZAR',
+    'DIAGNOSTICO',
+  ];
 
   afterEach(() => {
     activeConnectorTypeSignal.value = null;

@@ -81,10 +81,15 @@ function filterSales(sales: Sale[], query: string): Sale[] {
   if (query.trim() === '') return sales;
   const index = new Index({ tokenize: 'forward' });
   for (const sale of sales) {
-    const customerName = sale.customerId !== undefined ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '') : '';
+    const customerName =
+      sale.customerId !== undefined
+        ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '')
+        : '';
     const lineNames = sale.lines.map(lineLabel).join(' ');
     const lineCodes = sale.lines
-      .map((line) => (line.kind === 'product' ? getCatalogRepository().getProduct(line.productId) : undefined))
+      .map((line) =>
+        line.kind === 'product' ? getCatalogRepository().getProduct(line.productId) : undefined,
+      )
       .filter((p): p is NonNullable<typeof p> => p !== undefined)
       .map((p) => `${p.sku} ${p.barcodes.join(' ')}`)
       .join(' ');
@@ -114,7 +119,10 @@ function TicketRow({
   nav: ReturnType<typeof useTicketListNavigation>;
   onSelect: (index: number) => void;
 }) {
-  const customer = sale.customerId !== undefined ? getCustomerRepository().getCustomer(sale.customerId) : undefined;
+  const customer =
+    sale.customerId !== undefined
+      ? getCustomerRepository().getCustomer(sale.customerId)
+      : undefined;
   const isSelected = index === selectedTicketIndexSignal.value;
   return (
     <div
@@ -145,21 +153,36 @@ function TicketRow({
           </span>
         </div>
         {customer !== undefined && (
-          <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+          <p
+            style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}
+          >
             <b style={{ color: 'var(--color-text)' }}>{highlightMatches(customer.name, query)}</b>
           </p>
         )}
       </div>
       <div style={{ padding: 'var(--space-1) var(--space-3)' }}>
         {sale.lines.map((line, lineIndex) => (
-          <div key={lineIndex} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 'var(--space-2)' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>{formatQuantity(line.qty)}x</span>
+          <div
+            key={lineIndex}
+            style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 'var(--space-2)' }}
+          >
+            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+              {formatQuantity(line.qty)}x
+            </span>
             <span>{highlightMatches(lineLabel(line), query)}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(line.unitPrice * line.qty)}</span>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
+              {formatMoney(line.unitPrice * line.qty)}
+            </span>
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-1) var(--space-3) var(--space-3)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: 'var(--space-1) var(--space-3) var(--space-3)',
+        }}
+      >
         <span>{sale.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(', ')}</span>
         <span class="ticket__total" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
           {formatMoney(sale.total)}
@@ -190,7 +213,14 @@ function TicketsTab({
   onSelect: (index: number) => void;
 }) {
   const rows = filtered.map((sale, index) => (
-    <TicketRow key={sale.id} sale={sale} index={index} query={query} nav={nav} onSelect={onSelect} />
+    <TicketRow
+      key={sale.id}
+      sale={sale}
+      index={index}
+      query={query}
+      nav={nav}
+      onSelect={onSelect}
+    />
   ));
 
   // `nav.containerRef` solo toca `.current` cuando React lo invoca (montaje/desmontaje) o dentro
@@ -209,7 +239,10 @@ function TicketsTab({
   );
 }
 
-function sortedProducts(sales: Sale[], filter: string): (ProductQuantity & { name: string; sku: string })[] {
+function sortedProducts(
+  sales: Sale[],
+  filter: string,
+): (ProductQuantity & { name: string; sku: string })[] {
   const quantities = calculateProductQuantities(sales).map((pq) => {
     const product = getCatalogRepository().getProduct(pq.productId);
     return { ...pq, name: product?.name ?? pq.productId, sku: product?.sku ?? '' };
@@ -224,7 +257,9 @@ function sortedProducts(sales: Sale[], filter: string): (ProductQuantity & { nam
   }
   const rankedIds = index.search(filter).map(String);
   const byId = new Map(quantities.map((q) => [q.productId, q]));
-  return rankedIds.map((id) => byId.get(id)).filter((q): q is (typeof quantities)[number] => q !== undefined);
+  return rankedIds
+    .map((id) => byId.get(id))
+    .filter((q): q is (typeof quantities)[number] => q !== undefined);
 }
 
 function ProductsTab({
@@ -244,7 +279,9 @@ function ProductsTab({
         <thead style={{ position: 'sticky', top: 0, background: 'var(--color-bg)' }}>
           <tr>
             <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Código</th>
-            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Producto</th>
+            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>
+              Producto
+            </th>
             <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Cant.</th>
           </tr>
         </thead>
@@ -259,11 +296,27 @@ function ProductsTab({
               }}
               style={rowStyle(index === selectedProductIndexSignal.value)}
             >
-              <td style={{ padding: 'var(--space-1) var(--space-3)', fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+              <td
+                style={{
+                  padding: 'var(--space-1) var(--space-3)',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
                 {highlightMatches(p.sku, query)}
               </td>
-              <td style={{ padding: 'var(--space-1) var(--space-3)' }}>{highlightMatches(p.name, query)}</td>
-              <td style={{ padding: 'var(--space-1) var(--space-3)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatQuantity(p.qty)}</td>
+              <td style={{ padding: 'var(--space-1) var(--space-3)' }}>
+                {highlightMatches(p.name, query)}
+              </td>
+              <td
+                style={{
+                  padding: 'var(--space-1) var(--space-3)',
+                  textAlign: 'right',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {formatQuantity(p.qty)}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -290,7 +343,9 @@ function PaymentsTab({
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>Medio de pago</th>
+            <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>
+              Medio de pago
+            </th>
             <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Monto</th>
           </tr>
         </thead>
@@ -307,7 +362,15 @@ function PaymentsTab({
               <td style={{ padding: 'var(--space-1) var(--space-3)', fontWeight: 600 }}>
                 {highlightMatches(PAYMENT_METHOD_LABELS[method], query)}
               </td>
-              <td style={{ padding: 'var(--space-1) var(--space-3)', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>{formatMoney(totalsByMethod[method])}</td>
+              <td
+                style={{
+                  padding: 'var(--space-1) var(--space-3)',
+                  textAlign: 'right',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {formatMoney(totalsByMethod[method])}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -335,10 +398,16 @@ export function CashSummaryScreen() {
   // React, los signals de filtro son "valores externos" y sugiere sacarlos de las deps, pero eso
   // rompería la memoización (se recalcularía siempre con el texto del filtro desactualizado).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const filteredTickets = useMemo(() => filterSales(sales, ticketFilterSignal.value), [sales, ticketFilterSignal.value]);
+  const filteredTickets = useMemo(
+    () => filterSales(sales, ticketFilterSignal.value),
+    [sales, ticketFilterSignal.value],
+  );
   const ticketsNav = useTicketListNavigation(selectedTicketIndexSignal, filteredTickets.length);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- ver comentario arriba.
-  const products = useMemo(() => sortedProducts(sales, productFilterSignal.value), [sales, productFilterSignal.value]);
+  const products = useMemo(
+    () => sortedProducts(sales, productFilterSignal.value),
+    [sales, productFilterSignal.value],
+  );
   const productsNav = useIndexListNavigation(selectedProductIndexSignal, products.length);
   const paymentsNav = useIndexListNavigation(selectedPaymentIndexSignal, ALL_METHODS.length);
 
@@ -347,11 +416,23 @@ export function CashSummaryScreen() {
   }
 
   const { summary, isClosed } = context;
-  const otherPayments = NON_CASH_METHODS.reduce((sum, method) => sum + summary.totalsByMethod[method], 0);
+  const otherPayments = NON_CASH_METHODS.reduce(
+    (sum, method) => sum + summary.totalsByMethod[method],
+    0,
+  );
 
   const filterValue =
-    tab === 'products' ? productFilterSignal.value : tab === 'payments' ? paymentFilterSignal.value : ticketFilterSignal.value;
-  const updateFilter = tab === 'products' ? updateProductFilter : tab === 'payments' ? updatePaymentFilter : updateTicketFilter;
+    tab === 'products'
+      ? productFilterSignal.value
+      : tab === 'payments'
+        ? paymentFilterSignal.value
+        : ticketFilterSignal.value;
+  const updateFilter =
+    tab === 'products'
+      ? updateProductFilter
+      : tab === 'payments'
+        ? updatePaymentFilter
+        : updateTicketFilter;
 
   const focusFilter = () => {
     filterRef.current?.focus();
@@ -405,14 +486,19 @@ export function CashSummaryScreen() {
     if (event.key === 'Tab') {
       event.preventDefault();
       const currentIdx = TAB_ORDER.indexOf(tab);
-      const nextIdx = (currentIdx + (event.shiftKey ? -1 : 1) + TAB_ORDER.length) % TAB_ORDER.length;
+      const nextIdx =
+        (currentIdx + (event.shiftKey ? -1 : 1) + TAB_ORDER.length) % TAB_ORDER.length;
       const nextTab = TAB_ORDER[nextIdx];
       if (nextTab !== undefined) setCashSummaryTab(nextTab);
       return;
     }
 
     const navHandled =
-      tab === 'tickets' ? ticketsNav.handleKeyDown(event) : tab === 'products' ? productsNav.handleKeyDown(event) : paymentsNav.handleKeyDown(event);
+      tab === 'tickets'
+        ? ticketsNav.handleKeyDown(event)
+        : tab === 'products'
+          ? productsNav.handleKeyDown(event)
+          : paymentsNav.handleKeyDown(event);
     if (navHandled) return;
 
     // Cualquier otro elemento clickeable de la pantalla (botón de pestaña, "Cerrar", una fila) es
@@ -461,7 +547,9 @@ export function CashSummaryScreen() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Resumen del turno</h1>
             {isClosed && (
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-chrome-text-muted)' }}>
+              <span
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-chrome-text-muted)' }}
+              >
                 Turno cerrado
               </span>
             )}
@@ -493,7 +581,13 @@ export function CashSummaryScreen() {
             ref={filterRef}
             type="text"
             aria-label="Buscar"
-            placeholder={tab === 'products' ? 'Buscar producto' : tab === 'payments' ? 'Buscar medio de pago' : 'Buscar ticket, cliente o producto'}
+            placeholder={
+              tab === 'products'
+                ? 'Buscar producto'
+                : tab === 'payments'
+                  ? 'Buscar medio de pago'
+                  : 'Buscar ticket, cliente o producto'
+            }
             value={filterValue}
             onInput={handleFilterInput}
             style={{
@@ -521,14 +615,36 @@ export function CashSummaryScreen() {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr clamp(240px, 25%, 320px)', minHeight: 0 }}>
+      <div
+        style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: '1fr clamp(240px, 25%, 320px)',
+          minHeight: 0,
+        }}
+      >
         <div data-testid="cash-summary-tab-content" style={{ minHeight: 0, overflow: 'hidden' }}>
           {tab === 'tickets' && (
-            <TicketsTab filtered={filteredTickets} query={ticketFilterSignal.value} nav={ticketsNav} onSelect={selectTicket} />
+            <TicketsTab
+              filtered={filteredTickets}
+              query={ticketFilterSignal.value}
+              nav={ticketsNav}
+              onSelect={selectTicket}
+            />
           )}
-          {tab === 'products' && <ProductsTab products={products} query={productFilterSignal.value} onSelect={selectProduct} />}
+          {tab === 'products' && (
+            <ProductsTab
+              products={products}
+              query={productFilterSignal.value}
+              onSelect={selectProduct}
+            />
+          )}
           {tab === 'payments' && (
-            <PaymentsTab totalsByMethod={summary.totalsByMethod} query={paymentFilterSignal.value} onSelect={selectPayment} />
+            <PaymentsTab
+              totalsByMethod={summary.totalsByMethod}
+              query={paymentFilterSignal.value}
+              onSelect={selectPayment}
+            />
           )}
         </div>
         <div
@@ -544,7 +660,14 @@ export function CashSummaryScreen() {
         >
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Total recaudado</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>
+            <p
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--font-size-lg)',
+                fontWeight: 700,
+              }}
+            >
               {formatMoney(summary.totalCollected)}
             </p>
           </div>
@@ -566,11 +689,15 @@ export function CashSummaryScreen() {
           </div>
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Efectivo</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>{formatMoney(summary.totalsByMethod.cash)}</p>
+            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
+              {formatMoney(summary.totalsByMethod.cash)}
+            </p>
           </div>
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Otros pagos</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>{formatMoney(otherPayments)}</p>
+            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
+              {formatMoney(otherPayments)}
+            </p>
           </div>
         </div>
       </div>

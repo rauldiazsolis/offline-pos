@@ -67,7 +67,9 @@ test('abrir un turno, vender, cerrarlo con arqueo y encolar el evento de outbox'
   await closingInput.fill('1700'); // 500 de apertura + 1200 de la venta en efectivo, sin diferencia
   await closingInput.press('Enter');
   await expect(
-    page.getByText('¿Cerrar el turno con este efectivo contado? Enter confirma, Esc vuelve a editar.'),
+    page.getByText(
+      '¿Cerrar el turno con este efectivo contado? Enter confirma, Esc vuelve a editar.',
+    ),
   ).toBeVisible();
 
   await page.keyboard.press('Enter'); // confirma el cierre

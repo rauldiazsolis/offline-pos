@@ -17,7 +17,11 @@ import { activeScreenSignal } from '../state/screen.ts';
 export async function triggerCashSummary(): Promise<void> {
   const context = await getCashSummaryContext();
   if (context === undefined) {
-    commandBarErrorSignal.value = describeError({ ok: false, error: 'cash-session/none-ever', meta: undefined });
+    commandBarErrorSignal.value = describeError({
+      ok: false,
+      error: 'cash-session/none-ever',
+      meta: undefined,
+    });
     return;
   }
   cashSummaryContextSignal.value = context;

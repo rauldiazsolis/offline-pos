@@ -36,7 +36,8 @@ const rowStyle = { display: 'flex', justifyContent: 'space-between' };
 const STEP_LABELS: Record<string, string> = {
   opening: 'Monto de apertura del turno',
   open: 'Efectivo contado para cerrar el turno',
-  'confirming-close': '¿Cerrar el turno con este efectivo contado? Enter confirma, Esc vuelve a editar.',
+  'confirming-close':
+    '¿Cerrar el turno con este efectivo contado? Enter confirma, Esc vuelve a editar.',
   closed: 'Turno cerrado. Enter o Esc vuelve a la venta.',
 };
 
@@ -87,7 +88,9 @@ export function CashSessionScreen() {
   // no hace falta previsualizar nada.
   const countedPreview = parseNonNegativeAmount(cashBufferSignal.value);
   const differencePreview =
-    countedPreview !== undefined && summary !== undefined ? countedPreview - summary.expectedCash : undefined;
+    countedPreview !== undefined && summary !== undefined
+      ? countedPreview - summary.expectedCash
+      : undefined;
   const showArqueo = step === 'confirming-close' && countedPreview !== undefined;
 
   return (
@@ -142,7 +145,9 @@ export function CashSessionScreen() {
             <>
               <div style={rowStyle}>
                 <span>Efectivo contado</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(countedPreview)}</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {formatMoney(countedPreview)}
+                </span>
               </div>
               <div
                 style={{

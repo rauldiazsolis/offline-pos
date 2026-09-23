@@ -27,7 +27,11 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/sales$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
-      sendJson(res, 200, listPayloads(ctx.db, 'SELECT payload FROM sales ORDER BY created_at DESC'));
+      sendJson(
+        res,
+        200,
+        listPayloads(ctx.db, 'SELECT payload FROM sales ORDER BY created_at DESC'),
+      );
     },
   },
   {
@@ -66,14 +70,20 @@ export const panelRoutes: RouteDef[] = [
         .prepare(
           'SELECT id, customer_id, amount, status, created_at FROM account_holds ORDER BY created_at DESC',
         )
-        .all() as { id: string; customer_id: string; amount: number; status: string; created_at: string }[];
+        .all() as {
+        id: string;
+        customer_id: string;
+        amount: number;
+        status: string;
+        created_at: string;
+      }[];
       sendJson(
         res,
         200,
         rows.map((row) => {
-          const customerRow = ctx.db.prepare('SELECT payload FROM customers WHERE id = ?').get(row.customer_id) as
-            | { payload: string }
-            | undefined;
+          const customerRow = ctx.db
+            .prepare('SELECT payload FROM customers WHERE id = ?')
+            .get(row.customer_id) as { payload: string } | undefined;
           const customerName =
             customerRow === undefined
               ? row.customer_id

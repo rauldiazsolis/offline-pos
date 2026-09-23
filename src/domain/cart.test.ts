@@ -226,7 +226,10 @@ describe('adjustFreeformLineQuantity', () => {
   });
 
   it('rechaza si no hay ninguna línea con esa descripción exacta', () => {
-    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Otra cosa', qty: 1 });
+    const result = adjustFreeformLineQuantity(cartWithFreeform, {
+      description: 'Otra cosa',
+      qty: 1,
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

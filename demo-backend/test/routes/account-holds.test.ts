@@ -27,7 +27,13 @@ beforeEach(async () => {
 
   db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
     'cust-01',
-    JSON.stringify({ id: 'cust-01', name: 'Ana García', creditLimit: 5000, margin: 1000, balance: 0 }),
+    JSON.stringify({
+      id: 'cust-01',
+      name: 'Ana García',
+      creditLimit: 5000,
+      margin: 1000,
+      balance: 0,
+    }),
     'seed',
     '2026-01-01T00:00:00.000Z',
   );
@@ -65,7 +71,9 @@ describe('POST /account-holds', () => {
     expect(body.approved).toBe(true);
     expect(typeof body.holdId).toBe('string');
 
-    const rows = db.prepare('SELECT status FROM account_holds WHERE customer_id = ?').all('cust-01');
+    const rows = db
+      .prepare('SELECT status FROM account_holds WHERE customer_id = ?')
+      .all('cust-01');
     expect(rows).toEqual([{ status: 'pending' }]);
   });
 
@@ -118,7 +126,9 @@ describe('POST /account-holds', () => {
     });
     expect(await first.json()).toEqual(await second.json());
 
-    const rows = db.prepare('SELECT COUNT(*) as count FROM account_holds').get() as { count: number };
+    const rows = db.prepare('SELECT COUNT(*) as count FROM account_holds').get() as {
+      count: number;
+    };
     expect(rows.count).toBe(1);
   });
 });

@@ -85,7 +85,9 @@ describe('describeError', () => {
         error: 'sync/empty-snapshot',
         meta: { tables: ['products', 'customers'] },
       }),
-    ).toBe('El sistema externo devolvió vacío: productos, clientes. Se conservaron los datos locales.');
+    ).toBe(
+      'El sistema externo devolvió vacío: productos, clientes. Se conservaron los datos locales.',
+    );
   });
 
   it('sync/reconcile-failed incluye el motivo', () => {

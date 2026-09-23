@@ -37,7 +37,9 @@ describe('startCartPersistence', () => {
     const customer = { id: 'c1', name: 'Ana García', createdAt: '2026-01-01T00:00:00.000Z' };
 
     attachedCustomerSignal.value = customer;
-    cartSignal.value = { lines: [{ kind: 'freeform', description: 'Envío', qty: 1, unitPrice: 50 }] };
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'Envío', qty: 1, unitPrice: 50 }],
+    };
 
     await vi.waitFor(async () => {
       expect(await loadDraftCart()).toEqual({ cart: cartSignal.value, customer });

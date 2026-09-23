@@ -45,7 +45,10 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
       return { kind: 'global-adjustment', percentage: 0 };
     }
     if (adjustmentMatch[1] !== undefined) {
-      return { kind: 'global-adjustment', percentage: adjustmentMatch[1] === '-' ? -magnitude : magnitude };
+      return {
+        kind: 'global-adjustment',
+        percentage: adjustmentMatch[1] === '-' ? -magnitude : magnitude,
+      };
     }
   }
   // Mientras el buffer es "<signo><dígitos>" sin el "%" todavía, es ambiguo

@@ -135,7 +135,11 @@ export function calculateCashSessionSummary(
     expectedCash,
   };
   return session.closingAmount !== undefined
-    ? { ...base, countedCash: session.closingAmount, difference: session.closingAmount - expectedCash }
+    ? {
+        ...base,
+        countedCash: session.closingAmount,
+        difference: session.closingAmount - expectedCash,
+      }
     : base;
 }
 

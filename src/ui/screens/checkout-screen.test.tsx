@@ -54,7 +54,11 @@ describe('CheckoutScreen', () => {
   });
 
   it('el campo Cuenta corriente se habilita con un cliente adjunto', () => {
-    attachedCustomerSignal.value = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' };
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Juan Pérez',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
     render(<CheckoutScreen />);
     expect(screen.getByLabelText('Cuenta corriente')).toHaveProperty('disabled', false);
   });

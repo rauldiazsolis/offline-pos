@@ -22,7 +22,10 @@ const batchLotStatusSchema = z.union([
 
 const pullBatchResponseSchema = z.object({
   products: z.object({ items: z.array(productSchema), nextCursor: z.string().optional() }),
-  customers: z.object({ items: z.array(connectorCustomerSchema), nextCursor: z.string().optional() }),
+  customers: z.object({
+    items: z.array(connectorCustomerSchema),
+    nextCursor: z.string().optional(),
+  }),
   stock: z.array(stockItemSchema),
   lots: z.record(z.string(), batchLotStatusSchema),
 });

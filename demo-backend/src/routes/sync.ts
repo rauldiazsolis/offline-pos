@@ -20,10 +20,12 @@ type CustomerAccountPayload = {
   balance?: number;
 };
 
-function getCustomerPayload(db: DatabaseSync, customerId: string): CustomerAccountPayload | undefined {
+function getCustomerPayload(
+  db: DatabaseSync,
+  customerId: string,
+): CustomerAccountPayload | undefined {
   const row = db.prepare('SELECT payload FROM customers WHERE id = ?').get(customerId) as
-    | { payload: string }
-    | undefined;
+    { payload: string } | undefined;
   return row === undefined ? undefined : (JSON.parse(row.payload) as CustomerAccountPayload);
 }
 
@@ -73,10 +75,9 @@ function applyBatchEvent(db: DatabaseSync, event: OutboxBatchItem, now: string):
             hold.customer_id,
           );
         }
-        db.prepare("UPDATE account_holds SET status = 'confirmed', confirmed_at = ? WHERE id = ?").run(
-          now,
-          event.holdId,
-        );
+        db.prepare(
+          "UPDATE account_holds SET status = 'confirmed', confirmed_at = ? WHERE id = ?",
+        ).run(now, event.holdId);
       }
       return;
     }
@@ -109,7 +110,9 @@ function pullResource(
     since === undefined
       ? db.prepare(`SELECT payload, updated_at FROM ${table} ORDER BY updated_at ASC`).all()
       : db
-          .prepare(`SELECT payload, updated_at FROM ${table} WHERE updated_at > ? ORDER BY updated_at ASC`)
+          .prepare(
+            `SELECT payload, updated_at FROM ${table} WHERE updated_at > ? ORDER BY updated_at ASC`,
+          )
           .all(since)
   ) as ResourceRow[];
   const last = rows.at(-1);
@@ -169,9 +172,9 @@ export const syncRoutes: RouteDef[] = [
 
       const lots: Record<string, { status: string; issues?: string[] }> = {};
       for (const lotId of body.pendingLotIds) {
-        const row = ctx.db.prepare('SELECT status, issues FROM push_lots WHERE id = ?').get(lotId) as
-          | { status: string; issues: string | null }
-          | undefined;
+        const row = ctx.db
+          .prepare('SELECT status, issues FROM push_lots WHERE id = ?')
+          .get(lotId) as { status: string; issues: string | null } | undefined;
         if (row !== undefined) {
           lots[lotId] =
             row.issues !== null

@@ -98,7 +98,9 @@ export function addFreeformLine(
 }
 
 function findFreeformLineIndex(cart: Cart, description: string): number {
-  return cart.lines.findIndex((line) => line.kind === 'freeform' && line.description === description);
+  return cart.lines.findIndex(
+    (line) => line.kind === 'freeform' && line.description === description,
+  );
 }
 
 /**

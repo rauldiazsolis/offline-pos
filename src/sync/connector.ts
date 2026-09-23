@@ -50,9 +50,7 @@ export type OutboxBatchItem = OutboxEventPayload & { id: string };
  * `pending` no se sabe todavía si va a tener problemas.
  */
 export type BatchLotStatus =
-  | { status: 'pending' }
-  | { status: 'ok' }
-  | { status: 'issues'; issues: string[] };
+  { status: 'pending' } | { status: 'ok' } | { status: 'issues'; issues: string[] };
 
 export type PullBatchParams = {
   /** Cursor por recurso — ausente pide la foto completa de ese recurso (todo o nada, sin paginar). */

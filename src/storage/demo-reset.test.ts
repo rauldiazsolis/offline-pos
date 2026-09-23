@@ -71,19 +71,29 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: llama primero a POST /_demo/reset del backend antes de borrar nada local', async () => {
-    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({
+      type: 'rest-demo',
+      baseUrl: 'http://localhost:4000',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
     const fetchMock = fetchRouter();
     vi.stubGlobal('fetch', fetchMock);
 
     await demoReset();
 
-    const resetCall = fetchMock.mock.calls.find(([url]) => new URL(url).pathname === '/_demo/reset');
+    const resetCall = fetchMock.mock.calls.find(
+      ([url]) => new URL(url).pathname === '/_demo/reset',
+    );
     expect(resetCall).not.toBeUndefined();
     expect(resetCall?.[1]).toMatchObject({ method: 'POST' });
   });
 
   it('si POST /_demo/reset falla, no borra nada local y devuelve el error', async () => {
-    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({
+      type: 'rest-demo',
+      baseUrl: 'http://localhost:4000',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
     const created = await createCustomerLocally('Cliente de prueba');
     if (!created.ok) throw new Error('setup falló');
     vi.stubGlobal(
@@ -98,7 +108,11 @@ describe('demoReset', () => {
   });
 
   it('con /CONFIG: dispara un resync después de borrar, repoblando desde el backend', async () => {
-    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({
+      type: 'rest-demo',
+      baseUrl: 'http://localhost:4000',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
     vi.stubGlobal(
       'fetch',
       fetchRouter({
@@ -142,14 +156,26 @@ describe('demoReset', () => {
   });
 
   it('no toca la configuración de /CONFIG (URL, API key, locale)', async () => {
-    saveSyncConfig({ type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' });
+    saveSyncConfig({
+      type: 'rest-demo',
+      baseUrl: 'http://localhost:4000',
+      apiKey: 'clave-1',
+      locale: 'es-AR',
+      verifiedAt: '2026-01-01T00:00:00.000Z',
+    });
     vi.stubGlobal('fetch', fetchRouter());
 
     await demoReset();
 
     expect(loadSyncConfig()).toEqual({
       ok: true,
-      value: { type: 'rest-demo', baseUrl: 'http://localhost:4000', apiKey: 'clave-1', locale: 'es-AR', verifiedAt: '2026-01-01T00:00:00.000Z' },
+      value: {
+        type: 'rest-demo',
+        baseUrl: 'http://localhost:4000',
+        apiKey: 'clave-1',
+        locale: 'es-AR',
+        verifiedAt: '2026-01-01T00:00:00.000Z',
+      },
     });
   });
 
