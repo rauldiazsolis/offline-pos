@@ -4,13 +4,14 @@ import { loadDraftCart } from '../storage/draft-cart-repository.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { startSyncEngine } from '../sync/engine.ts';
+import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCatalogRepository } from './state/catalog.ts';
 import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
-import { resetConfigForm } from './state/sync-config.ts';
+import { identityResetSignal, resetConfigForm } from './state/sync-config.ts';
 
 /**
  * Arma los repositorios antes del primer render y arranca el motor de sync.
@@ -30,6 +31,11 @@ import { resetConfigForm } from './state/sync-config.ts';
  * `e2e/helpers.ts::seedCatalog`.
  */
 export async function bootstrap(): Promise<void> {
+  // Etapa 2 (#97): antes que nada — sin id, lo local se borra y no hay que
+  // cargar repositorios ni la venta en curso de datos que ya no sirven.
+  const identity = await resolveDeviceIdentity();
+  identityResetSignal.value = identity.status === 'created' && identity.wipedLocalData;
+
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
   setCustomerRepository(await loadCustomerRepository());

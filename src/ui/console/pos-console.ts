@@ -5,7 +5,7 @@ import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
 import { collectDiagnostics, type SyncDiagnostics } from '../../sync/diagnostics.ts';
 import { syncNow } from '../../sync/engine.ts';
-import { getDeviceId } from '../../sync/terminal-identity.ts';
+import { peekDeviceId } from '../../sync/terminal-identity.ts';
 import { exportLocalData, resetTerminal, type LocalDataDump } from '../../sync/terminal-data.ts';
 import { describeError } from '../errors.ts';
 import { formatAwaitingLotStatus, formatLotIssue } from '../format-lot.ts';
@@ -24,7 +24,7 @@ export type PosConsoleDeps = {
   listPendingOutbox: () => Promise<OutboxEvent[]>;
   exportLocalData: () => Promise<LocalDataDump>;
   resetTerminal: () => Promise<Result<void>>;
-  getDeviceId: () => string;
+  getDeviceId: () => string | null;
   download: (filename: string, content: string) => void;
   reload: () => void;
   console: Pick<Console, 'log' | 'info' | 'error' | 'table'>;
@@ -56,7 +56,7 @@ export type PosConsole = {
   outbox: () => Promise<OutboxEvent[]>;
   export: () => Promise<LocalDataDump>;
   reset: () => Promise<void>;
-  deviceId: () => string;
+  deviceId: () => string | null;
 };
 
 const HELP: { metodo: string; descripcion: string }[] = [
@@ -77,7 +77,10 @@ const HELP: { metodo: string; descripcion: string }[] = [
     descripcion:
       'Descarga un JSON con todos los datos locales (credenciales ocultas), para soporte.',
   },
-  { metodo: 'pos.deviceId()', descripcion: 'Id de dispositivo de esta terminal.' },
+  {
+    metodo: 'pos.deviceId()',
+    descripcion: 'Id de dispositivo de esta terminal (null antes del arranque).',
+  },
   {
     metodo: 'pos.reset()',
     descripcion: 'Borra TODO lo local, incluida la config de /CONFIG, y recarga. Sin confirmación.',
@@ -206,7 +209,7 @@ export function installPosConsole(): void {
     listPendingOutbox,
     exportLocalData: () => exportLocalData(),
     resetTerminal,
-    getDeviceId,
+    getDeviceId: peekDeviceId,
     download: downloadFile,
     reload: () => {
       window.location.reload();

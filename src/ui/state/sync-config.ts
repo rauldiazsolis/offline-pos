@@ -67,3 +67,9 @@ export function resetConfigForm(saved?: SyncConfig): void {
   configPhaseSignal.value = 'editing';
   configConfirmationSignal.value = null;
 }
+
+/**
+ * Etapa 2 (#97): el arranque encontró la terminal sin id de dispositivo y
+ * borró sus datos. El paso 1 del wizard lo avisa; se apaga al aplicar.
+ */
+export const identityResetSignal = signal(false);

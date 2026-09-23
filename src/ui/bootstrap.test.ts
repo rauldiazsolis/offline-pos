@@ -2,9 +2,14 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../storage/db.ts';
 import { saveSyncConfig } from '../sync/config.ts';
+import { DEVICE_ID_KEY, setDeviceIdForTests } from '../sync/terminal-identity.ts';
 import { bootstrap } from './bootstrap.ts';
 import { activeConnectorTypeSignal, connectionStateSignal } from './state/sync.ts';
-import { configFieldValuesSignal, configTypeSignal } from './state/sync-config.ts';
+import {
+  configFieldValuesSignal,
+  configTypeSignal,
+  identityResetSignal,
+} from './state/sync-config.ts';
 
 // Con una config activa, `startSyncEngine` arrancaría un ciclo real que sigue
 // corriendo después de que el test cierra la base; se neutraliza solo el arranque.
@@ -14,6 +19,9 @@ vi.mock('../sync/engine.ts', async (importOriginal) => ({
 }));
 
 beforeEach(async () => {
+  // Terminal con identidad: sin esto `resolveDeviceIdentity` trataría cada
+  // test como una terminal que perdió su id y borraría la config sembrada.
+  localStorage.setItem(DEVICE_ID_KEY, 'test-device-id');
   await db.open();
 });
 
@@ -24,6 +32,22 @@ afterEach(async () => {
 });
 
 describe('bootstrap', () => {
+  it('sin id de dispositivo con datos: borra y prende el aviso de identidad', async () => {
+    setDeviceIdForTests(undefined);
+    localStorage.removeItem(DEVICE_ID_KEY);
+    await db.sales.put({
+      id: 's1',
+      lines: [],
+      payments: [],
+      total: 0,
+      status: 'closed',
+      createdAt: 'x',
+    });
+    await bootstrap();
+    expect(await db.sales.count()).toBe(0);
+    expect(identityResetSignal.value).toBe(true);
+  });
+
   it('no siembra catálogo ni clientes localmente — una terminal nueva arranca vacía hasta el primer sync', async () => {
     await bootstrap();
 
