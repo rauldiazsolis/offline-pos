@@ -384,6 +384,10 @@ describe('CommandBarInput', () => {
   });
 
   it('"/COB" (sin ambigüedad) + Enter ejecuta el comando directo, sin tocar flechas', async () => {
+    // Etapa 2 de #94: /COBRAR necesita algo que cobrar.
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'regalo', qty: 1, unitPrice: 50 }],
+    };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 
@@ -400,6 +404,10 @@ describe('CommandBarInput', () => {
   // issue #40 (Ciclo 8): la fila 0 se preselecciona por default, igual que
   // producto/cliente — Enter sin navegar ejecuta directo el primer match.
   it('"/CO" (ambiguo) + Enter sin navegar ejecuta directo el primer match (COBRAR)', async () => {
+    // Etapa 2 de #94: /COBRAR necesita algo que cobrar.
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'regalo', qty: 1, unitPrice: 50 }],
+    };
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
 

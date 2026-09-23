@@ -2,13 +2,23 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
-import { commandBarBufferSignal, commandBarErrorSignal } from '../state/command-bar.ts';
+import {
+  commandBarBufferSignal,
+  commandBarErrorSignal,
+  commandResultsSignal,
+  effectiveCommandIndexSignal,
+} from '../state/command-bar.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
-import { submitCommandBar, triggerCheckout } from './command-bar-controller.ts';
+import {
+  moveSelection,
+  submitCommandBar,
+  triggerCheckout,
+  updateCommandBarBuffer,
+} from './command-bar-controller.ts';
 import { syncNow } from '../../sync/engine.ts';
 import { availableCommands } from './commands.ts';
 
@@ -23,7 +33,11 @@ beforeEach(async () => {
   activeScreenSignal.value = 'sale';
   commandBarErrorSignal.value = null;
   cartSignal.value = { lines: [] };
+  attachedCustomerSignal.value = undefined;
+  updateCommandBarBuffer('');
 });
+
+const freeformLine = { kind: 'freeform' as const, description: 'regalo', qty: 1, unitPrice: 50 };
 
 afterEach(async () => {
   db.close();
@@ -31,6 +45,10 @@ afterEach(async () => {
 });
 
 describe('triggerCheckout (Fase 6: gate de turno de caja)', () => {
+  beforeEach(() => {
+    cartSignal.value = { lines: [freeformLine] };
+  });
+
   it('sin turno abierto, muestra un error y no cambia de pantalla', async () => {
     await triggerCheckout();
 
@@ -45,6 +63,66 @@ describe('triggerCheckout (Fase 6: gate de turno de caja)', () => {
 
     expect(activeScreenSignal.value).toBe('checkout');
     expect(commandBarErrorSignal.value).toBeNull();
+  });
+});
+
+describe('comandos habilitados (Etapa 2 de #94)', () => {
+  it('con carrito vacío y sin cliente, "/" no preselecciona /COBRAR y Enter no hace nada', () => {
+    updateCommandBarBuffer('/');
+    expect(commandResultsSignal.value[0]).toMatchObject({
+      name: 'COBRAR',
+      availability: { enabled: false },
+    });
+    expect(effectiveCommandIndexSignal.value).toBeNull();
+    submitCommandBar();
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(commandBarErrorSignal.value).toBeNull();
+  });
+
+  it('"/COBRAR" completo + Enter muestra el motivo', () => {
+    updateCommandBarBuffer('/COBRAR');
+    submitCommandBar();
+    expect(commandBarErrorSignal.value).toBe(
+      '/COBRAR no está disponible: sin artículos ni cliente.',
+    );
+  });
+
+  it('↓ saltea los deshabilitados', () => {
+    updateCommandBarBuffer('/');
+    moveSelection(1);
+    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe('CAJA');
+    moveSelection(-1);
+    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe('CAJA');
+  });
+
+  it('con un artículo, /COBRAR vuelve a preseleccionarse', () => {
+    cartSignal.value = { lines: [freeformLine] };
+    updateCommandBarBuffer('/');
+    expect(effectiveCommandIndexSignal.value).toBe(0);
+  });
+
+  it('con cliente y sin artículos, /COBRAR está habilitado', () => {
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Juan Pérez',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    updateCommandBarBuffer('/');
+    expect(commandResultsSignal.value[0]?.availability.enabled).toBe(true);
+  });
+
+  it('Ctrl+Enter (triggerCheckout) con /COBRAR deshabilitado muestra el motivo', async () => {
+    await triggerCheckout();
+    expect(commandBarErrorSignal.value).toBe(
+      '/COBRAR no está disponible: sin artículos ni cliente.',
+    );
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('un comando que no existe sigue siendo "Comando desconocido"', () => {
+    updateCommandBarBuffer('/NOEXISTE');
+    submitCommandBar();
+    expect(commandBarErrorSignal.value).toBe('Comando desconocido: /NOEXISTE');
   });
 });
 

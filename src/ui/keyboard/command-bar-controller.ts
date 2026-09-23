@@ -22,6 +22,7 @@ import {
   commandBarErrorSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
+  effectiveCommandIndexSignal,
   customerResultsSignal,
   customerSelectionIndexSignal,
   overlayDismissedSignal,
@@ -42,6 +43,7 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
+import { commandAvailability, disabledCommandMessage } from './commands.ts';
 import { parseCommandBar } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { syncNow } from '../../sync/engine.ts';
@@ -236,6 +238,13 @@ async function addByCode(code: string, qty: number): Promise<void> {
  */
 export async function triggerCheckout(): Promise<void> {
   await pendingBarOperation;
+  // Etapa 2 de #94: sin nada que cobrar, el motivo en el slot de error — el
+  // mismo que muestra la fila atenuada de /COBRAR en el menú de "/".
+  const availability = commandAvailability('COBRAR');
+  if (!availability.enabled) {
+    commandBarErrorSignal.value = disabledCommandMessage('COBRAR', availability.reason);
+    return;
+  }
   const openSession = await getCurrentOpenCashSession();
   if (openSession === undefined) {
     commandBarErrorSignal.value = describeError({
@@ -349,15 +358,32 @@ export function submitCommandBar(): void {
       return;
     }
     case 'command': {
-      // Issue #3, unificado con search/customer en el issue #40 (Ciclo 8,
-      // ver `commandSelectionIndexSignal` en `ui/state/command-bar.ts` para
-      // el porqué): la fila 0 ya se preselecciona por default, así que Enter
-      // sin tocar ↑/↓ ejecuta directo el primer match del filtro.
+      // Issue #3, unificado con search/customer en el issue #40 (Ciclo 8):
+      // Enter sin tocar ↑/↓ ejecuta la fila preseleccionada — que desde la
+      // Etapa 2 de #94 existe solo si la fila 0 está habilitada (ver
+      // `defaultCommandIndexSignal` en `ui/state/command-bar.ts`).
       const results = commandResultsSignal.value;
-      const index = commandSelectionIndexSignal.value ?? 0;
-      const selected = results[index];
+      const index = effectiveCommandIndexSignal.value;
+      const selected = index === null ? undefined : results[index];
       if (selected === undefined) {
-        commandBarErrorSignal.value = `Comando desconocido: /${parsed.name}`;
+        const exact = results.find((command) => command.name === parsed.name);
+        if (exact !== undefined && !exact.availability.enabled) {
+          commandBarErrorSignal.value = disabledCommandMessage(
+            exact.name,
+            exact.availability.reason,
+          );
+          return;
+        }
+        if (results.length === 0) {
+          commandBarErrorSignal.value = `Comando desconocido: /${parsed.name}`;
+        }
+        return;
+      }
+      if (!selected.availability.enabled) {
+        commandBarErrorSignal.value = disabledCommandMessage(
+          selected.name,
+          selected.availability.reason,
+        );
         return;
       }
       runCommand(selected.name, parsed.args);
@@ -443,6 +469,23 @@ function moveSelectionOver(
  * ↑/↓: sobre el carrito (barra vacía), sobre resultados de producto o de
  * cliente (`@<query>`), o sobre el menú de comandos filtrado (`/<prefijo>`).
  */
+/**
+ * ↑/↓ en el menú de "/" (Etapa 2 de #94): saltea los comandos deshabilitados;
+ * sin otro habilitado en esa dirección, no se mueve. Parte de la fila que
+ * Enter ejecutaría (la preselección cuenta como elegida, como
+ * `assumeFirstSelected` en las otras listas).
+ */
+function moveCommandSelection(direction: 1 | -1): void {
+  const results = commandResultsSignal.value;
+  const start = effectiveCommandIndexSignal.value ?? (direction === 1 ? -1 : results.length);
+  for (let i = start + direction; i >= 0 && i < results.length; i += direction) {
+    if (results[i]?.availability.enabled === true) {
+      commandSelectionIndexSignal.value = i;
+      return;
+    }
+  }
+}
+
 export function moveSelection(direction: 1 | -1): void {
   const parsed = parsedSignal.value;
 
@@ -453,9 +496,7 @@ export function moveSelection(direction: 1 | -1): void {
     return;
   }
   if (parsed.kind === 'command') {
-    moveSelectionOver(commandResultsSignal.value.length, commandSelectionIndexSignal, direction, {
-      assumeFirstSelected: true,
-    });
+    moveCommandSelection(direction);
     return;
   }
 
