@@ -1268,6 +1268,7 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
       taxRate: 0.21,
       category: 'x',
       tracksStock: false,
+      createdAt: now,
     };
   }
 
@@ -1288,7 +1289,12 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
         const failing = state.failCustomers === true;
         const response = {
           products: { items: state.products, nextCursor: 'cur-p' },
-          customers: failing ? undefined : { items: state.customers, nextCursor: 'cur-c' },
+          customers: failing
+            ? undefined
+            : {
+                items: state.customers.map((customer) => ({ createdAt: now, ...customer })),
+                nextCursor: 'cur-c',
+              },
           stock: [],
           lots: {},
         };
