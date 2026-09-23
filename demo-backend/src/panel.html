@@ -10,6 +10,7 @@
       table { border-collapse: collapse; width: 100%; }
       th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
       button { padding: 0.5rem 1rem; cursor: pointer; }
+      td button { padding: 0.2rem 0.6rem; }
       #reset-status { margin-left: 1rem; color: #555; }
     </style>
   </head>
@@ -19,12 +20,29 @@
     <span id="reset-status"></span>
 
     <section>
-      <h2>Ventas sincronizadas</h2>
-      <table id="sales-table"><thead><tr><th>id</th><th>total</th><th>status</th></tr></thead><tbody></tbody></table>
+      <h2>Lotes de push</h2>
+      <label><input type="checkbox" id="delay-lots" /> Demorar lotes nuevos (quedan en cola hasta avanzarlos a mano)</label>
+      <table id="lots-table"><thead><tr><th>id</th><th>dispositivo</th><th>eventos</th><th>estado</th><th>avisos</th><th></th></tr></thead><tbody></tbody></table>
     </section>
     <section>
-      <h2>Turnos de caja cerrados</h2>
-      <table id="cash-sessions-table"><thead><tr><th>id</th><th>openingAmount</th><th>closingAmount</th></tr></thead><tbody></tbody></table>
+      <h2>Productos</h2>
+      <table id="catalog-products-table"><thead><tr><th>id</th><th>nombre</th><th>alta</th><th>bloqueo</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Clientes</h2>
+      <table id="catalog-customers-table"><thead><tr><th>id</th><th>nombre</th><th>alta</th><th>bloqueo</th><th></th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Ventas sincronizadas</h2>
+      <table id="sales-table"><thead><tr><th>id</th><th>total</th><th>status</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Movimientos de caja</h2>
+      <table id="cash-movements-table"><thead><tr><th>id</th><th>sentido</th><th>monto</th><th>concepto</th><th>origen</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Cobranzas</h2>
+      <table id="customer-payments-table"><thead><tr><th>id</th><th>cliente</th><th>total</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Clientes creados desde el POS</h2>
@@ -40,6 +58,10 @@
     </section>
 
     <script>
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+      }
+
       async function loadTable(url, tbodyId, rowFn) {
         const response = await fetch(url);
         const rows = await response.json();
@@ -47,18 +69,65 @@
         tbody.innerHTML = rows.map(rowFn).join('');
       }
 
+      async function post(url, body, method = 'POST') {
+        await fetch(url, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+        refresh();
+      }
+
       async function releaseHold(holdId) {
         await fetch(`/_demo/api/account-holds/${holdId}`, { method: 'DELETE' });
         refresh();
       }
       window.releaseHold = releaseHold;
+      window.startLot = (id) => post(`/_demo/api/lots/${id}/start`);
+      window.finishLot = (id, withIssue) => {
+        const issue = withIssue ? prompt('Texto del aviso') : undefined;
+        if (withIssue && issue === null) return;
+        post(`/_demo/api/lots/${id}/finish`, issue ? { issue } : {});
+      };
+      window.block = (kind, id) => {
+        const reason = prompt('Motivo del bloqueo (puede quedar vacío)');
+        if (reason === null) return;
+        post(`/_demo/api/catalog/${kind}/${id}/block`, { reason });
+      };
+      window.unblock = (kind, id) => post(`/_demo/api/catalog/${kind}/${id}/block`, undefined, 'DELETE');
 
-      function refresh() {
-        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status}</td></tr>`);
-        loadTable('/_demo/api/cash-sessions', 'cash-sessions-table', (c) => `<tr><td>${c.id}</td><td>${c.openingAmount}</td><td>${c.closingAmount ?? ''}</td></tr>`);
-        loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${c.name}</td></tr>`);
-        loadTable('/_demo/api/customer-accounts', 'customer-accounts-table', (a) => `<tr><td>${a.id}</td><td>${a.name}</td><td>${a.creditLimit}</td><td>${a.margin}</td><td>${a.balance}</td><td>${a.available}</td></tr>`);
-        loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.id}</td><td>${h.customerName}</td><td>${h.amount}</td><td>${h.status}</td><td>${h.createdAt}</td><td>${h.status === 'pending' ? `<button onclick="releaseHold('${h.id}')">Liberar</button>` : ''}</td></tr>`);
+      const delay = document.getElementById('delay-lots');
+      delay.addEventListener('change', () => post('/_demo/api/settings', { delayLots: delay.checked }, 'PUT'));
+
+      function lotActions(l) {
+        const finish = `<button onclick="finishLot('${l.id}', false)">Terminar OK</button> <button onclick="finishLot('${l.id}', true)">Terminar con aviso</button>`;
+        if (l.status === 'queued') return `<button onclick="startLot('${l.id}')">Empezar</button> ${finish}`;
+        if (l.status === 'processing') return finish;
+        return '';
+      }
+      function lotIssues(l) {
+        return l.issues.map((i) => escapeHtml(i.message + (i.eventId ? ` (${i.eventId})` : ''))).join('; ');
+      }
+      function catalogRow(kind) {
+        return (item) => {
+          const blocked = item.blocked ? `Bloqueado: ${escapeHtml(item.blocked.reason || '(sin motivo)')}` : '';
+          const action = item.blocked
+            ? `<button onclick="unblock('${kind}', '${item.id}')">Desbloquear</button>`
+            : `<button onclick="block('${kind}', '${item.id}')">Bloquear</button>`;
+          return `<tr><td>${item.id}</td><td>${escapeHtml(item.name)}</td><td>${item.createdAt ?? ''}</td><td>${blocked}</td><td>${action}</td></tr>`;
+        };
+      }
+      function identity(row) {
+        return `<td>${row.deviceId ?? ''}</td><td>${escapeHtml(row.branch)}</td><td>${escapeHtml(row.pointOfSale)}</td>`;
+      }
+
+      async function refresh() {
+        delay.checked = (await (await fetch('/_demo/api/settings')).json()).delayLots;
+        loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
+        loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
+        loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));
+        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status}</td>${identity(s)}</tr>`);
+        loadTable('/_demo/api/cash-movements', 'cash-movements-table', (m) => `<tr><td>${m.id}</td><td>${m.direction}</td><td>${m.amount}</td><td>${escapeHtml(m.concept)}</td><td>${m.source}</td>${identity(m)}</tr>`);
+        loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.customerId}</td><td>${p.total}</td>${identity(p)}</tr>`);
+        loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td></tr>`);
+        loadTable('/_demo/api/customer-accounts', 'customer-accounts-table', (a) => `<tr><td>${a.id}</td><td>${escapeHtml(a.name)}</td><td>${a.creditLimit}</td><td>${a.margin}</td><td>${a.balance}</td><td>${a.available}</td></tr>`);
+        loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.id}</td><td>${escapeHtml(h.customerName)}</td><td>${h.amount}</td><td>${h.status}</td><td>${h.createdAt}</td><td>${h.status === 'pending' ? `<button onclick="releaseHold('${h.id}')">Liberar</button>` : ''}</td></tr>`);
       }
 
       document.getElementById('reset-btn').addEventListener('click', async () => {
@@ -70,6 +139,8 @@
       });
 
       refresh();
+      // Auto-refresh para ver llegar los lotes sin recargar la página.
+      setInterval(refresh, 3000);
     </script>
   </body>
 </html>

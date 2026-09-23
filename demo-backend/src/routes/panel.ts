@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
-import { sendJson } from '../http-helpers.ts';
+import { readJsonBody, sendJson } from '../http-helpers.ts';
+import { finishLot, isDelayEnabled, listLots, setDelayEnabled, startLot } from '../lots.ts';
 import type { RouteDef } from '../router.ts';
 
 const panelHtmlPath = fileURLToPath(new URL('../panel.html', import.meta.url));
@@ -11,6 +12,56 @@ function listPayloads(db: DatabaseSync, sql: string): unknown[] {
   const rows = db.prepare(sql).all() as { payload: string }[];
   return rows.map((row) => JSON.parse(row.payload) as unknown);
 }
+
+/** Payload de cada evento más la identidad con que llegó (dispositivo del lote, origen del evento). */
+function listWithIdentity(
+  db: DatabaseSync,
+  table: 'sales' | 'cash_movements' | 'customer_payments',
+): unknown[] {
+  const rows = db
+    .prepare(
+      `SELECT payload, device_id, branch, point_of_sale FROM ${table} ORDER BY created_at DESC`,
+    )
+    .all() as {
+    payload: string;
+    device_id: string | null;
+    branch: string | null;
+    point_of_sale: string | null;
+  }[];
+  return rows.map((row) => ({
+    ...(JSON.parse(row.payload) as Record<string, unknown>),
+    deviceId: row.device_id,
+    branch: row.branch,
+    pointOfSale: row.point_of_sale,
+  }));
+}
+
+/** Bloqueo informativo (contrato v3): toca el payload y `updated_at`, así viaja en el pull por delta. */
+function setBlocked(
+  db: DatabaseSync,
+  table: 'products' | 'customers',
+  id: string,
+  blocked: { reason: string } | undefined,
+): void {
+  const row = db.prepare(`SELECT payload FROM ${table} WHERE id = ?`).get(id) as
+    { payload: string } | undefined;
+  if (row === undefined) {
+    return;
+  }
+  const { blocked: _previous, ...rest } = JSON.parse(row.payload) as Record<string, unknown>;
+  const payload = blocked === undefined ? rest : { ...rest, blocked };
+  db.prepare(`UPDATE ${table} SET payload = ?, updated_at = ? WHERE id = ?`).run(
+    JSON.stringify(payload),
+    new Date().toISOString(),
+    id,
+  );
+}
+
+function catalogKind(params: Record<string, string>): 'products' | 'customers' {
+  return params.kind === 'products' ? 'products' : 'customers';
+}
+
+const BLOCK_PATTERN = /^\/_demo\/api\/catalog\/(?<kind>products|customers)\/(?<id>[^/]+)\/block$/;
 
 export const panelRoutes: RouteDef[] = [
   {
@@ -27,23 +78,119 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/sales$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
-      sendJson(
-        res,
-        200,
-        listPayloads(ctx.db, 'SELECT payload FROM sales ORDER BY created_at DESC'),
-      );
+      sendJson(res, 200, listWithIdentity(ctx.db, 'sales'));
     },
   },
   {
     method: 'GET',
-    pattern: /^\/_demo\/api\/cash-sessions$/,
+    pattern: /^\/_demo\/api\/cash-movements$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
+      sendJson(res, 200, listWithIdentity(ctx.db, 'cash_movements'));
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/_demo\/api\/customer-payments$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      sendJson(res, 200, listWithIdentity(ctx.db, 'customer_payments'));
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/_demo\/api\/settings$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db) });
+    },
+  },
+  {
+    method: 'PUT',
+    pattern: /^\/_demo\/api\/settings$/,
+    requiresAuth: false,
+    handler: async (req, res, ctx) => {
+      const body = (await readJsonBody(req)) as { delayLots?: boolean } | undefined;
+      setDelayEnabled(ctx.db, body?.delayLots === true);
+      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db) });
+    },
+  },
+  {
+    // Lotes de push (contrato v3): con "Demorar lotes nuevos" prendido quedan `queued` hasta que el
+    // operador los avance acá, para poder ver en el POS los estados en curso.
+    method: 'GET',
+    pattern: /^\/_demo\/api\/lots$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      sendJson(res, 200, listLots(ctx.db));
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/_demo\/api\/lots\/(?<id>[^/]+)\/start$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      startLot(ctx.db, ctx.params.id ?? '', new Date().toISOString());
+      sendJson(res, 200, {});
+    },
+  },
+  {
+    method: 'POST',
+    pattern: /^\/_demo\/api\/lots\/(?<id>[^/]+)\/finish$/,
+    requiresAuth: false,
+    handler: async (req, res, ctx) => {
+      const body = (await readJsonBody(req)) as { issue?: string } | undefined;
+      finishLot(ctx.db, ctx.params.id ?? '', new Date().toISOString(), body?.issue);
+      sendJson(res, 200, {});
+    },
+  },
+  {
+    method: 'GET',
+    pattern: /^\/_demo\/api\/catalog\/(?<kind>products|customers)$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      const rows = ctx.db
+        .prepare(`SELECT payload FROM ${catalogKind(ctx.params)} ORDER BY id`)
+        .all() as { payload: string }[];
       sendJson(
         res,
         200,
-        listPayloads(ctx.db, 'SELECT payload FROM cash_sessions ORDER BY created_at DESC'),
+        rows.map((row) => {
+          const item = JSON.parse(row.payload) as {
+            id: string;
+            name: string;
+            createdAt?: string;
+            blocked?: { reason: string };
+          };
+          return {
+            id: item.id,
+            name: item.name,
+            createdAt: item.createdAt,
+            ...(item.blocked !== undefined ? { blocked: item.blocked } : {}),
+          };
+        }),
       );
+    },
+  },
+  {
+    method: 'POST',
+    pattern: BLOCK_PATTERN,
+    requiresAuth: false,
+    handler: async (req, res, ctx) => {
+      const body = (await readJsonBody(req)) as { reason?: string } | undefined;
+      setBlocked(ctx.db, catalogKind(ctx.params), ctx.params.id ?? '', {
+        reason: body?.reason ?? '',
+      });
+      sendJson(res, 200, {});
+    },
+  },
+  {
+    method: 'DELETE',
+    pattern: BLOCK_PATTERN,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      setBlocked(ctx.db, catalogKind(ctx.params), ctx.params.id ?? '', undefined);
+      sendJson(res, 200, {});
     },
   },
   {
