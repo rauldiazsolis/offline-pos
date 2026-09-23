@@ -150,3 +150,43 @@
 .command-bar-overlay-scroll::-webkit-scrollbar {
   display: none;
 }
+
+/*
+ * Spinner (Etapa 2 de #94): actividad mientras se espera a un servicio
+ * (prueba de conexión, envío previo al borrado, aplicar). Con
+ * `prefers-reduced-motion` queda quieto: un cuarto del borde marcado.
+ */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spinner-turn 0.8s linear infinite;
+  vertical-align: -0.15em;
+}
+
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/*
+ * Wizard de /CONFIG (Etapa 2 de #94). El hover es decorativo: nunca mueve la
+ * selección (Enter sigue actuando sobre lo elegido con el teclado).
+ */
+.wizard-step-button:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.wizard-option:hover {
+  border-color: var(--color-accent);
+}
