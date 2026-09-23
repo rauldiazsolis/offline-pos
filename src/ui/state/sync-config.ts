@@ -3,8 +3,9 @@ import type { LocalDataSummary } from '../../storage/local-data.ts';
 import type { SyncConfig } from '../../sync/config.ts';
 import { toFieldValues, type ConnectorType } from '../../sync/connector-registry.ts';
 
-/** Valores de los campos de cada conector, como strings (lo que se tipea). */
-export type ConfigFormValues = Record<ConnectorType, Record<string, string>>;
+import type { ConfigFormValues } from '../keyboard/config-wizard-model.ts';
+
+export type { ConfigFormValues };
 
 /** Sin valores por omisión (Etapa 2b): todo arranca vacío; los ejemplos son `placeholder`s. */
 function blankFormValues(): ConfigFormValues {
