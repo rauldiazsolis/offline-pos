@@ -25,8 +25,19 @@ export const configTypeSignal = signal<ConnectorType | null>(null);
  * cargó en el otro, y solo los campos del tipo activo llegan a guardarse.
  */
 export const configFieldValuesSignal = signal<ConfigFormValues>(blankFormValues());
-/** `locale` es config de terminal (no de conector): un solo valor, visible una vez elegido un tipo. */
-export const configLocaleSignal = signal('');
+/**
+ * Campos de terminal (no de un conector): locale, sucursal y punto de venta
+ * (estos dos estampados en cada evento al encolarlo, contrato v3 — #96). Un
+ * solo valor cada uno, fuera de la unión por `type`, visibles una vez elegido
+ * un tipo y siempre al final de /CONFIG.
+ */
+export type TerminalFieldKey = 'locale' | 'branch' | 'pointOfSale';
+
+export const configTerminalSignal = signal<Record<TerminalFieldKey, string>>({
+  locale: '',
+  branch: '',
+  pointOfSale: '',
+});
 export const configErrorSignal = signal<string | null>(null);
 /** Clave del campo al que apunta el error, para enfocarlo y seleccionarlo (`data-config-field`). */
 export const configErrorFieldSignal = signal<string | null>(null);
@@ -36,7 +47,7 @@ export const configConfirmationSignal = signal<LocalDataSummary | null>(null);
 
 /**
  * Deja el formulario en su estado inicial. Con `saved`, precarga esa config
- * (tipo, campos y locale) — así reconfigurar un solo dato no obliga a
+ * (tipo, campos y config de terminal) — así reconfigurar un solo dato no obliga a
  * retipear los demás; sin ella (terminal nueva), todo vacío y sin tipo.
  */
 export function resetConfigForm(saved?: SyncConfig): void {
@@ -46,7 +57,11 @@ export function resetConfigForm(saved?: SyncConfig): void {
   }
   configTypeSignal.value = saved?.type ?? null;
   configFieldValuesSignal.value = values;
-  configLocaleSignal.value = saved?.locale ?? '';
+  configTerminalSignal.value = {
+    locale: saved?.locale ?? '',
+    branch: saved?.branch ?? '',
+    pointOfSale: saved?.pointOfSale ?? '',
+  };
   configErrorSignal.value = null;
   configErrorFieldSignal.value = null;
   configPhaseSignal.value = 'editing';

@@ -9,7 +9,7 @@ import {
   confirmConfigChange,
   handleConfigEscape,
   setConfigField,
-  setConfigLocale,
+  setConfigTerminalField,
   setConfigType,
   submitConfig,
 } from '../keyboard/config-controller.ts';
@@ -18,10 +18,11 @@ import {
   configErrorFieldSignal,
   configErrorSignal,
   configFieldValuesSignal,
-  configLocaleSignal,
+  configTerminalSignal,
   configPhaseSignal,
   configTypeSignal,
   type ConfigPhase,
+  type TerminalFieldKey,
 } from '../state/sync-config.ts';
 import { connectionStateSignal } from '../state/sync.ts';
 
@@ -69,13 +70,24 @@ const buttonStyle = {
   whiteSpace: 'nowrap' as const,
 };
 
-/** `locale` es config de terminal, no de un conector: vive aparte y va siempre al final. */
-const LOCALE_FIELD: ConfigField = {
-  key: 'locale',
-  label: 'Locale (ej. es-AR — en blanco usa el del navegador)',
-  optional: true,
-  placeholder: 'es-AR',
-};
+/**
+ * Config de terminal, no de un conector: vive aparte y va siempre al final.
+ * Sucursal y punto de venta se estampan en cada evento al encolarlo (contrato
+ * v3, #96); opcionales hasta la Etapa 2 (#97).
+ */
+const TERMINAL_FIELDS: ConfigField[] = [
+  { key: 'branch', label: 'Sucursal', optional: true, placeholder: 'Casa central' },
+  { key: 'pointOfSale', label: 'Punto de venta', optional: true, placeholder: 'Caja 1' },
+  {
+    key: 'locale',
+    label: 'Locale (ej. es-AR — en blanco usa el del navegador)',
+    optional: true,
+    placeholder: 'es-AR',
+  },
+];
+
+const isTerminalField = (key: string): key is TerminalFieldKey =>
+  key === 'locale' || key === 'branch' || key === 'pointOfSale';
 
 function fieldLabel(field: ConfigField): string {
   return field.optional ? `${field.label} (opcional)` : field.label;
@@ -209,7 +221,7 @@ export function ConfigScreen() {
   };
 
   const values = type === null ? undefined : configFieldValuesSignal.value[type];
-  const visibleFields = type === null ? [] : [...connectorFields(type), LOCALE_FIELD];
+  const visibleFields = type === null ? [] : [...connectorFields(type), ...TERMINAL_FIELDS];
   const confirmation = configConfirmationSignal.value;
 
   return (
@@ -246,8 +258,11 @@ export function ConfigScreen() {
             </label>
 
             {visibleFields.map((field) => {
-              const isLocale = field.key === 'locale';
-              const value = isLocale ? configLocaleSignal.value : (values?.[field.key] ?? '');
+              const terminalKey = isTerminalField(field.key) ? field.key : undefined;
+              const value =
+                terminalKey !== undefined
+                  ? configTerminalSignal.value[terminalKey]
+                  : (values?.[field.key] ?? '');
               return (
                 <label key={`${type ?? ''}:${field.key}`} style={fieldStyle}>
                   <span>{fieldLabel(field)}</span>
@@ -257,8 +272,8 @@ export function ConfigScreen() {
                     readOnly={!editing}
                     placeholder={field.placeholder}
                     onInput={(event) => {
-                      if (isLocale) {
-                        setConfigLocale(event.currentTarget.value);
+                      if (terminalKey !== undefined) {
+                        setConfigTerminalField(terminalKey, event.currentTarget.value);
                       } else {
                         setConfigField(field.key, event.currentTarget.value);
                       }

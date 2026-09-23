@@ -5,8 +5,10 @@ import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
 import { collectDiagnostics, type SyncDiagnostics } from '../../sync/diagnostics.ts';
 import { syncNow } from '../../sync/engine.ts';
+import { getDeviceId } from '../../sync/terminal-identity.ts';
 import { exportLocalData, resetTerminal, type LocalDataDump } from '../../sync/terminal-data.ts';
 import { describeError } from '../errors.ts';
+import { formatAwaitingLotStatus, formatLotIssue } from '../format-lot.ts';
 import type { SyncLogEntry } from '../state/sync.ts';
 
 /**
@@ -22,6 +24,7 @@ export type PosConsoleDeps = {
   listPendingOutbox: () => Promise<OutboxEvent[]>;
   exportLocalData: () => Promise<LocalDataDump>;
   resetTerminal: () => Promise<Result<void>>;
+  getDeviceId: () => string;
   download: (filename: string, content: string) => void;
   reload: () => void;
   console: Pick<Console, 'log' | 'info' | 'error' | 'table'>;
@@ -30,6 +33,7 @@ export type PosConsoleDeps = {
 /** Lo que muestra `/DIAGNOSTICO`, en texto plano — mismos datos (`collectDiagnostics`), mismas traducciones. */
 export type PosStatus = {
   conexion: { tipo: string; origen: string; probada: string | null } | { error: string };
+  dispositivo: string;
   cerrojo: 'ocupado' | 'libre';
   red: 'online' | 'offline';
   ultimoPush: {
@@ -41,7 +45,7 @@ export type PosStatus = {
   ultimoPullOk: string | null;
   errorDeSync: string | null;
   issuesDelBackend: string[] | null;
-  lotesEnEspera: { id: string; enviado: string }[];
+  lotesEnEspera: { id: string; enviado: string; estado: string }[];
   log: { hora: string; tipo: SyncLogEntry['kind']; request: unknown; resultado: string }[];
 };
 
@@ -52,6 +56,7 @@ export type PosConsole = {
   outbox: () => Promise<OutboxEvent[]>;
   export: () => Promise<LocalDataDump>;
   reset: () => Promise<void>;
+  deviceId: () => string;
 };
 
 const HELP: { metodo: string; descripcion: string }[] = [
@@ -72,6 +77,7 @@ const HELP: { metodo: string; descripcion: string }[] = [
     descripcion:
       'Descarga un JSON con todos los datos locales (credenciales ocultas), para soporte.',
   },
+  { metodo: 'pos.deviceId()', descripcion: 'Id de dispositivo de esta terminal.' },
   {
     metodo: 'pos.reset()',
     descripcion: 'Borra TODO lo local, incluida la config de /CONFIG, y recarga. Sin confirmación.',
@@ -95,6 +101,7 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
           probada: config.value.verifiedAt ?? null,
         }
       : { error: describeError(config) },
+    dispositivo: diagnostics.deviceId,
     cerrojo: diagnostics.lockHeld ? 'ocupado' : 'libre',
     red: diagnostics.online ? 'online' : 'offline',
     ultimoPush:
@@ -109,8 +116,12 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
     ultimoPullOk: diagnostics.lastSyncedAt,
     errorDeSync:
       diagnostics.lastSyncFailure === null ? null : describeError(diagnostics.lastSyncFailure),
-    issuesDelBackend: diagnostics.pushLotIssues,
-    lotesEnEspera: diagnostics.awaitingLots.map((lot) => ({ id: lot.id, enviado: lot.sentAt })),
+    issuesDelBackend: diagnostics.pushLotIssues?.map(formatLotIssue) ?? null,
+    lotesEnEspera: diagnostics.awaitingLots.map((lot) => ({
+      id: lot.id,
+      enviado: lot.sentAt,
+      estado: formatAwaitingLotStatus(lot),
+    })),
     log: diagnostics.log.map((entry) => ({
       hora: entry.at,
       tipo: entry.kind,
@@ -164,6 +175,7 @@ export function createPosConsole(deps: PosConsoleDeps): PosConsole {
       deps.console.info('Datos locales borrados. Recargando…');
       deps.reload();
     },
+    deviceId: () => deps.getDeviceId(),
   };
 }
 
@@ -194,6 +206,7 @@ export function installPosConsole(): void {
     listPendingOutbox,
     exportLocalData: () => exportLocalData(),
     resetTerminal,
+    getDeviceId,
     download: downloadFile,
     reload: () => {
       window.location.reload();
