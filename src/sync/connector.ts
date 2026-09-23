@@ -108,7 +108,7 @@ export type PullBatchResult = {
   lots: Record<string, BatchLotStatus>;
 };
 
-const pullResultSchema = <T extends z.ZodType>(itemSchema: T) =>
+export const pullResultSchema = <T extends z.ZodType>(itemSchema: T) =>
   z.object({ items: z.array(itemSchema), nextCursor: z.string().optional() });
 
 /** Respuesta de `/sync/pull` — compartida por los conectores que hablan el contrato tal cual. */
