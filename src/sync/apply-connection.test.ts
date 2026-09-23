@@ -34,8 +34,8 @@ const snapshot: ProbeSnapshot = {
   products: [product],
   stock: [{ productId: 'p1', quantity: 5, updatedAt: now }],
   customers: [
-    { id: 'c1', name: 'Ana' },
-    { id: 'c2', name: 'Beto', creditLimit: 100, margin: 10, balance: 5 },
+    { id: 'c1', name: 'Ana', createdAt: now },
+    { id: 'c2', name: 'Beto', createdAt: now, creditLimit: 100, margin: 10, balance: 5 },
   ],
   cursors: { products: 'cur-p', customers: 'cur-c' },
 };

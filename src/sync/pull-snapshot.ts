@@ -2,6 +2,7 @@ import type { Product } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import type { StockItem } from '../domain/stock.ts';
 import type { Connector, ConnectorCustomer, PullBatchResult } from './connector.ts';
+import { getDeviceId } from './terminal-identity.ts';
 
 /** Lo que trae un pull completo (la prueba de conexión y el refresco periódico): todo en memoria, nada tocó IndexedDB todavía. */
 export type ProbeSnapshot = {
@@ -48,7 +49,11 @@ export function toProbeSnapshot(result: PullBatchResult): ProbeSnapshot {
  * sin lotes de interés — un candidato nuevo nunca tiene lotes de push en vuelo contra él.
  */
 export async function pullEverything(connector: Connector): Promise<Result<ProbeSnapshot>> {
-  const result = await connector.pullBatch({ cursors: {}, pendingLotIds: [] });
+  const result = await connector.pullBatch({
+    deviceId: getDeviceId(),
+    cursors: {},
+    pendingLotIds: [],
+  });
   if (!result.ok) {
     return result;
   }

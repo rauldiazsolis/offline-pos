@@ -6,7 +6,7 @@ import {
   clearPushLotState,
   getAwaitingLots,
   getCurrentPushLot,
-  resolveAwaitingLots,
+  updateAwaitingLots,
   setCurrentPushLot,
 } from './push-lot.ts';
 
@@ -43,13 +43,17 @@ describe('lotes esperando resolución', () => {
     expect(getAwaitingLots().map((l) => l.id)).toEqual(['lot-1', 'lot-2']);
   });
 
-  it('resolveAwaitingLots saca solo los ids resueltos', () => {
-    addAwaitingLot({ id: 'lot-1', sentAt: '2026-01-01T00:00:00.000Z' });
-    addAwaitingLot({ id: 'lot-2', sentAt: '2026-01-01T00:01:00.000Z' });
+  it('updateAwaitingLots saca los resueltos y anota el estado de los que siguen en curso', () => {
+    addAwaitingLot({ id: 'a', sentAt: '2026-01-01T00:00:00.000Z' });
+    addAwaitingLot({ id: 'b', sentAt: '2026-01-01T00:01:00.000Z' });
+    addAwaitingLot({ id: 'c', sentAt: '2026-01-01T00:02:00.000Z' });
 
-    resolveAwaitingLots(new Set(['lot-1']));
+    updateAwaitingLots(new Set(['a']), { b: 'processing' });
 
-    expect(getAwaitingLots().map((l) => l.id)).toEqual(['lot-2']);
+    expect(getAwaitingLots()).toEqual([
+      { id: 'b', sentAt: '2026-01-01T00:01:00.000Z', lastStatus: 'processing' },
+      { id: 'c', sentAt: '2026-01-01T00:02:00.000Z' },
+    ]);
   });
 
   it('sin tope: el POS no tiene autoridad para decidir dejar de rastrear un lote (a discutir más adelante una pantalla/indicador para el humano)', () => {

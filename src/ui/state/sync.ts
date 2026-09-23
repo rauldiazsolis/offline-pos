@@ -1,6 +1,7 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
+import type { LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 
 /**
@@ -86,9 +87,9 @@ export function setLocalCatalogCounts(counts: LocalCatalogCounts | null): void {
  * muestra al humano (ver spec, "el backend nunca rechaza"). `null` = nada
  * que avisar. Se limpia solo cuando un pull posterior no trae issues nuevos.
  */
-export const pushLotIssuesSignal = signal<string[] | null>(null);
+export const pushLotIssuesSignal = signal<LotIssue[] | null>(null);
 
-export function setPushLotIssues(issues: string[] | null): void {
+export function setPushLotIssues(issues: LotIssue[] | null): void {
   pushLotIssuesSignal.value = issues;
 }
 
