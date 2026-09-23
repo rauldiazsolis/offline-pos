@@ -1,0 +1,15 @@
+# Finales de línea LF en todo el repo (Prettier espera LF; en Windows
+# core.autocrlf=true haría el checkout con CRLF).
+* text=auto eol=lf
+
+# Binarios: nunca tocar.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
