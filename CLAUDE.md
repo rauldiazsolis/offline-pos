@@ -150,6 +150,20 @@ procesó podría reconciliar contra un estado que ese push todavía no reflejó.
 con `issues` no bloquea nada (el POS nunca se autobloquea) — solo se muestra al humano vía
 `pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`).
 
+**Log de intentos y `/DIAGNOSTICO`**: un usuario probando el conector de Sheets contra un
+despliegue real se topó con un error de sync sin poder ver el detalle (la Console del navegador no
+mostraba nada, solo la pestaña Network). `sync/engine.ts::logSyncAttempt` registra cada llamada real
+a `connector.pushBatch`/`pullBatch` — `request`/`result` son literalmente lo que el call site ya
+tiene en la mano, sin resumir, para poder correlacionar con Network — en `syncLogSignal`
+(`ui/state/sync.ts`, tope de 20, más nuevo primero, sin persistir). Un ciclo exitoso no toca la
+consola; un fallo real (`sync/request-failed`, `sync/remote-error`, etc.) hace `console.error`; el
+descarte por lote `pending` (comportamiento esperado de la regla de arriba, no un problema) hace
+`console.info`; un lote resuelto con `issues` hace `console.warn`. `/DIAGNOSTICO` (comando core,
+`ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
+motor (`sync/engine.ts::isSyncLockHeld`) y los lotes en espera — de solo lectura, mismo patrón de
+teclado que `/RESUMEN`; la barra de estado sigue sin ser interactiva (decisión que se mantiene, ver
+"Barra de estado" más abajo).
+
 **Cadencias independientes (#87)**: push cada `PUSH_INTERVAL_MS` (10-15 min) + al arrancar + por
 cada evento nuevo del outbox (debounced 2 s) + al vencer el backoff del lote fallido; pull cada
 `PULL_SAFETY_NET_INTERVAL_MS` (15 min) + al arrancar + un rato (`PULL_DELAY_AFTER_PUSH_MS`, 2 min)
@@ -449,10 +463,12 @@ conexión** (pull completo en memoria) y, si cambia el origen y hay datos del us
 el borrado de lo local antes de aplicar, ver "Ciclo de vida de la conexión" — Etapas 2 y 2b del epic
 #66, cierra #56), `/SINCRONIZAR` (fuerza push y pull ya, RF-12 "bajo demanda" — ver "Patrón outbox"
 más arriba; no cambia de pantalla, el feedback es la barra de
-estado) y `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
-abajo). `/CUENTA` (Fase 3) es distinto: solo existe dentro de la pantalla de cobro, no en la barra de
-comandos principal — por eso no está en `commands.ts`. Cobra el saldo restante a cuenta corriente
-contra el cliente adjunto con `@`.
+estado), `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
+abajo) y `/DIAGNOSTICO` (pantalla de solo lectura sobre el estado de sincronización — conexión
+actual, cerrojo del motor, último push/pull, lotes de push en espera y el log reciente de intentos,
+ver "Patrón outbox" más arriba para el detalle del log). `/CUENTA` (Fase 3) es distinto: solo existe
+dentro de la pantalla de cobro, no en la barra de comandos principal — por eso no está en
+`commands.ts`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
 
 **Turno de caja obligatorio para cobrar (Fase 6)**: `/CAJA` abre (pide el monto de apertura) o
 cierra (pide el efectivo contado) el turno — con uno ya abierto, entra directo al resumen en vez de
@@ -1086,6 +1102,15 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   parcialmente el issue #13 (ver "Connector API" más arriba) — la mitad de esa issue sobre
   notificación asíncrona de discrepancias de negocio (ej. descuadre de stock) sigue sin diseñarse,
   se re-scopeó ahí mismo.
+
+- Observabilidad de sync y `/DIAGNOSTICO`: un usuario probando el conector de Sheets contra un
+  despliegue real de `bridge.gs` se topó con un error de sync sin poder ver el detalle — la Console
+  del navegador no mostraba nada, solo la pestaña Network. Log de los últimos 20 intentos reales de
+  push/pull (`syncLogSignal`) más `console.error`/`warn`/`info` según el resultado, y un comando
+  nuevo de solo lectura para verlo sin DevTools — ver "Patrón outbox" más arriba para el detalle
+  completo. Clasificado como trabajo *bounded* (brainstorming): apoya en patrones ya existentes
+  (`ui/errors.ts`, los signals de `ui/state/sync.ts`, comando+pantalla de `/RESUMEN`), sin spec
+  aparte.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
