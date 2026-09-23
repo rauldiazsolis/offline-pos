@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { openDb } from '../src/db.ts';
+/// <reference types="node" />
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { openDb, SCHEMA_VERSION } from '../src/db.ts';
 
 describe('openDb', () => {
   it('crea todas las tablas del schema sobre una base en memoria', () => {
@@ -14,8 +19,10 @@ describe('openDb', () => {
       [
         'account_hold_attempts',
         'account_holds',
-        'cash_sessions',
+        'cash_movements',
+        'customer_payments',
         'customers',
+        'demo_settings',
         'idempotency_keys',
         'products',
         'push_lots',
@@ -46,5 +53,53 @@ describe('openDb', () => {
     expect(JSON.parse(row.payload)).toEqual({ name: 'Test' });
 
     db.close();
+  });
+
+  it('una base con otra versión de schema se recrea vacía', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'demo-db-'));
+    const path = join(dir, 'demo.sqlite');
+    try {
+      const old = new DatabaseSync(path);
+      old.exec(
+        'CREATE TABLE cash_sessions (id TEXT PRIMARY KEY, payload TEXT NOT NULL, created_at TEXT NOT NULL);',
+      );
+      old.exec("INSERT INTO cash_sessions VALUES ('cs1', '{}', 'x')");
+      old.close();
+
+      const db = openDb(path);
+      const names = (
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
+          name: string;
+        }[]
+      ).map((table) => table.name);
+      const version = db.prepare('PRAGMA user_version').get() as { user_version: number };
+      db.close();
+
+      expect(names).not.toContain('cash_sessions');
+      expect(names).toContain('push_lots');
+      expect(version.user_version).toBe(SCHEMA_VERSION);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('una base ya en la versión actual conserva sus datos al reabrirse', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'demo-db-'));
+    const path = join(dir, 'demo.sqlite');
+    try {
+      const first = openDb(path);
+      first
+        .prepare('INSERT INTO products (id, payload, updated_at) VALUES (?, ?, ?)')
+        .run('p1', '{}', 'x');
+      first.close();
+
+      const again = openDb(path);
+      const count = again.prepare('SELECT COUNT(*) AS c FROM products').get() as { c: number };
+      again.close();
+
+      expect(count.c).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
