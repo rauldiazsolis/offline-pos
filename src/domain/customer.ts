@@ -9,6 +9,11 @@ export type Customer = {
   document?: string;
   phone?: string;
   createdAt: string; // ISO 8601
+  /**
+   * Bloqueo informativo que declara el backend (contrato v3, #96): nunca
+   * impide operar — el POS lo muestra (desde la Etapa 4) y el usuario decide.
+   */
+  blocked?: { reason: string };
 };
 
 /**
@@ -100,11 +105,17 @@ export function canChargeOffline(account: CustomerAccount, amount: number): bool
  * salvo que declare `unrestricted: true` (Etapa 3, #69): ahí sí se arma la
  * cuenta, completando en `0` lo que falte (valores que quedan sin usar, no
  * es "inventar crédito" — es declarar que esos números no aplican).
+ *
+ * `createdAt` es la fecha de alta real que manda el backend (contrato v3,
+ * #96) — antes era la hora del pull, lo que dejaba sin sentido "Alta:
+ * <fecha>" en la lista de `@`. `params.now` queda solo como `updatedAt` por
+ * defecto de la cuenta.
  */
 export function splitConnectorCustomer(
   raw: {
     id: string;
     name: string;
+    createdAt: string;
     // `| undefined` explícito (no solo `?`) porque esto recibe directamente
     // un `ConnectorCustomer` inferido de Zod, que con `exactOptionalPropertyTypes`
     // tipa sus opcionales como `T | undefined`, no como ausencia pura.
@@ -115,6 +126,7 @@ export function splitConnectorCustomer(
     balance?: number | undefined;
     updatedAt?: string | undefined;
     unrestricted?: boolean | undefined;
+    blocked?: { reason: string } | undefined;
   },
   params: { now: string },
 ): { customer: Customer; account?: CustomerAccount } {
@@ -123,7 +135,8 @@ export function splitConnectorCustomer(
     name: raw.name,
     ...(raw.document !== undefined ? { document: raw.document } : {}),
     ...(raw.phone !== undefined ? { phone: raw.phone } : {}),
-    createdAt: params.now,
+    createdAt: raw.createdAt,
+    ...(raw.blocked !== undefined ? { blocked: { reason: raw.blocked.reason } } : {}),
   };
 
   const hasFullCreditData =

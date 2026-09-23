@@ -14,6 +14,10 @@ export const productSchema = z.object({
   taxRate: z.number().min(0).max(1),
   category: z.string(),
   tracksStock: z.boolean(),
+  // Contrato v3 (#96): fecha de alta real y bloqueo informativo (se muestra desde la Etapa 4).
+  // Opcionales acá porque el fixture local de catálogo no los trae; el pull los exige.
+  createdAt: z.string().optional(),
+  blocked: z.object({ reason: z.string() }).optional(),
 });
 
 export type Product = z.infer<typeof productSchema>;
