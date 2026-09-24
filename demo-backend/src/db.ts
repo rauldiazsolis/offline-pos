@@ -11,7 +11,9 @@ import { DatabaseSync } from 'node:sqlite';
  * disponible de un cliente restando los holds `pending` de otros cobros en
  * curso), `push_lots` (cada lote de `/sync/push` con sus eventos: se recibe
  * `queued` y se procesa aparte, ver `lots.ts`) y `demo_settings` (la demora
- * de lotes del panel). Cada evento guarda el dispositivo del lote y la
+ * de lotes, el modo mantenimiento y "simular contrato 3.0.0" del panel —
+ * `settings.ts`). Una anulación es una venta más (`voidsSaleId`, 4.0.0 — #99),
+ * sin tabla propia. Cada evento guarda el dispositivo del lote y la
  * sucursal/punto de venta de su origen. El payload de cada recurso se guarda
  * como JSON crudo (`payload TEXT`) en vez de columnas por campo — este es un
  * backend de demostración, no necesita un mapeo relacional completo para
@@ -39,15 +41,6 @@ CREATE TABLE IF NOT EXISTS customers (
 );
 CREATE TABLE IF NOT EXISTS sales (
   id TEXT PRIMARY KEY,
-  payload TEXT NOT NULL,
-  device_id TEXT,
-  branch TEXT,
-  point_of_sale TEXT,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS sale_voids (
-  id TEXT PRIMARY KEY,
-  sale_id TEXT NOT NULL,
   payload TEXT NOT NULL,
   device_id TEXT,
   branch TEXT,
@@ -116,7 +109,7 @@ CREATE TABLE IF NOT EXISTS demo_settings (
 `;
 
 /** Subir cuando cambia el schema: una base vieja se recrea vacía (es una demo) y el arranque resiembra. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Abre (creando el directorio del archivo si hace falta) y aplica el schema — idempotente. Una base

@@ -26,7 +26,6 @@ describe('openDb', () => {
         'idempotency_keys',
         'products',
         'push_lots',
-        'sale_voids',
         'sales',
         'stock',
         'stock_movements',

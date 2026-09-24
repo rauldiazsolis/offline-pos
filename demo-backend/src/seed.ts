@@ -65,7 +65,6 @@ export function resetToSeed(db: DatabaseSync, now: string): void {
     DELETE FROM stock;
     DELETE FROM customers;
     DELETE FROM sales;
-    DELETE FROM sale_voids;
     DELETE FROM stock_movements;
     DELETE FROM cash_movements;
     DELETE FROM customer_payments;

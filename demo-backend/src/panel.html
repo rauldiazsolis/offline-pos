@@ -22,6 +22,13 @@
     <section>
       <h2>Lotes de push</h2>
       <label><input type="checkbox" id="delay-lots" /> Demorar lotes nuevos (quedan en cola hasta avanzarlos a mano)</label>
+      <p>
+        <label><input type="checkbox" id="maintenance" /> Modo mantenimiento</label>
+        <input type="text" id="maintenance-message" placeholder="Mensaje (opcional)" />
+      </p>
+      <p>
+        <label><input type="checkbox" id="simulate-contract3" /> Simular contrato 3.0.0 (/info informa 3.0.0 y push/pull responden 409)</label>
+      </p>
       <table id="lots-table"><thead><tr><th>id</th><th>dispositivo</th><th>eventos</th><th>estado</th><th>avisos</th><th></th></tr></thead><tbody></tbody></table>
     </section>
     <section>
@@ -34,7 +41,7 @@
     </section>
     <section>
       <h2>Ventas sincronizadas</h2>
-      <table id="sales-table"><thead><tr><th>id</th><th>total</th><th>status</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+      <table id="sales-table"><thead><tr><th>id</th><th>total</th><th>status</th><th>anula a</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Movimientos de caja</h2>
@@ -94,6 +101,14 @@
 
       const delay = document.getElementById('delay-lots');
       delay.addEventListener('change', () => post('/_demo/api/settings', { delayLots: delay.checked }, 'PUT'));
+      const maintenance = document.getElementById('maintenance');
+      const maintenanceMessage = document.getElementById('maintenance-message');
+      const saveMaintenance = () =>
+        post('/_demo/api/settings', { maintenance: { enabled: maintenance.checked, message: maintenanceMessage.value } }, 'PUT');
+      maintenance.addEventListener('change', saveMaintenance);
+      maintenanceMessage.addEventListener('change', saveMaintenance);
+      const simulateContract3 = document.getElementById('simulate-contract3');
+      simulateContract3.addEventListener('change', () => post('/_demo/api/settings', { simulateContract3: simulateContract3.checked }, 'PUT'));
 
       function lotActions(l) {
         const finish = `<button onclick="finishLot('${l.id}', false)">Terminar OK</button> <button onclick="finishLot('${l.id}', true)">Terminar con aviso</button>`;
@@ -118,11 +133,15 @@
       }
 
       async function refresh() {
-        delay.checked = (await (await fetch('/_demo/api/settings')).json()).delayLots;
+        const settings = await (await fetch('/_demo/api/settings')).json();
+        delay.checked = settings.delayLots;
+        maintenance.checked = settings.maintenance.enabled;
+        if (document.activeElement !== maintenanceMessage) maintenanceMessage.value = settings.maintenance.message;
+        simulateContract3.checked = settings.simulateContract3;
         loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
         loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));
-        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status}</td>${identity(s)}</tr>`);
+        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.total}</td><td>${s.status ?? ''}</td><td>${s.voidsSaleId ?? ''}</td>${identity(s)}</tr>`);
         loadTable('/_demo/api/cash-movements', 'cash-movements-table', (m) => `<tr><td>${m.id}</td><td>${m.direction}</td><td>${m.amount}</td><td>${escapeHtml(m.concept)}</td><td>${m.source}</td>${identity(m)}</tr>`);
         loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.customerId}</td><td>${p.total}</td>${identity(p)}</tr>`);
         loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td></tr>`);
