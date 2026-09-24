@@ -45,10 +45,12 @@ const overlayStyle = {
   background: 'var(--color-surface)',
 };
 
+// Alto fijo (no el del contenido de cada paso): la columna de pasos y el pie
+// quedan siempre en el mismo lugar; solo el contenido del paso scrollea.
 const dialogStyle = {
   width: '100%',
   maxWidth: '860px',
-  maxHeight: '100%',
+  height: 'min(640px, 100%)',
   minHeight: 0,
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
@@ -60,14 +62,6 @@ const dialogStyle = {
   color: 'var(--color-text)',
   fontFamily: 'var(--font-sans)',
   outline: 'none',
-};
-
-const buttonStyle = {
-  padding: 'var(--space-2) var(--space-3)',
-  borderRadius: 'var(--radius-md)',
-  whiteSpace: 'nowrap' as const,
-  fontSize: 'var(--font-size-base)',
-  cursor: 'pointer',
 };
 
 function statusMark(status: WizardModel['steps'][number]['status']): string {
@@ -141,7 +135,12 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                 <span
                   aria-hidden="true"
                   style={{
-                    color: step.status === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
+                    color:
+                      step.status === 'error'
+                        ? 'var(--color-danger)'
+                        : step.status === 'skipped'
+                          ? 'var(--color-text-muted)'
+                          : 'var(--color-success)',
                     fontWeight: 'bold',
                   }}
                 >
@@ -205,17 +204,17 @@ function Footer(props: {
   if (async === 'confirming-wipe') {
     buttons = (
       <>
-        <button type="button" onClick={backFromWipeConfirmation} style={buttonStyle}>
+        <button type="button" onClick={backFromWipeConfirmation} class="btn">
           Volver (Esc)
         </button>
-        <button type="button" onClick={() => void confirmWipe()} style={buttonStyle}>
+        <button type="button" class="btn btn-danger" onClick={() => void confirmWipe()}>
           Borrar y cambiar (Enter)
         </button>
       </>
     );
   } else if (async === 'probing') {
     buttons = (
-      <button type="button" onClick={handleWizardEscape} style={buttonStyle}>
+      <button type="button" onClick={handleWizardEscape} class="btn">
         Cancelar prueba (Esc)
       </button>
     );
@@ -227,11 +226,11 @@ function Footer(props: {
           onClick={() => {
             jumpToStep('connector');
           }}
-          style={buttonStyle}
+          class="btn"
         >
           Corregir datos (Alt+3)
         </button>
-        <button type="button" onClick={retryProbe} style={buttonStyle}>
+        <button type="button" class="btn btn-primary" onClick={retryProbe}>
           Reintentar (Enter)
         </button>
       </>
@@ -240,7 +239,7 @@ function Footer(props: {
     buttons = (
       <>
         {!required && (
-          <button type="button" onClick={handleWizardEscape} disabled={busy} style={buttonStyle}>
+          <button type="button" onClick={handleWizardEscape} disabled={busy} class="btn">
             Cancelar (Esc)
           </button>
         )}
@@ -248,7 +247,7 @@ function Footer(props: {
           type="button"
           onClick={goBack}
           disabled={busy || step === WIZARD_STEPS[0]}
-          style={buttonStyle}
+          class="btn"
         >
           Atrás (Alt+←)
         </button>
@@ -257,12 +256,12 @@ function Footer(props: {
             type="button"
             onClick={() => void applyWizard()}
             disabled={busy}
-            style={buttonStyle}
+            class="btn btn-primary"
           >
             Aplicar (Enter)
           </button>
         ) : (
-          <button type="button" onClick={advance} disabled={busy} style={buttonStyle}>
+          <button type="button" class="btn btn-primary" onClick={advance} disabled={busy}>
             Siguiente (Enter)
           </button>
         )}
@@ -362,8 +361,13 @@ export function ConfigScreen() {
       }
     }
     if (event.key === 'Enter') {
-      // Un botón enfocado con Tab se activa solo (nativo): no duplicar.
-      if (event.target instanceof HTMLButtonElement) {
+      // Un botón enfocado se activa solo con Enter (nativo): no duplicar. La
+      // excepción son las opciones de "Datos locales": ahí Enter confirma la
+      // opción enfocada y avanza, igual que con el foco en el diálogo.
+      if (
+        event.target instanceof HTMLButtonElement &&
+        !event.target.hasAttribute('data-enter-advances')
+      ) {
         return;
       }
       event.preventDefault();

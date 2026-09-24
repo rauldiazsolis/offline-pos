@@ -17,6 +17,8 @@
   --color-danger: #dc2626;
   --color-success: #16a34a;
   --color-focus-ring: #2563eb;
+  /* texto de ejemplo de un campo vacío: bien distinto de un dato cargado */
+  --color-placeholder: #a1a1aa;
 
   /* "chrome" oscuro — barra de comandos y barra de estado (pase de diseño,
      ver CLAUDE.md). El resto de la app (carrito, pantallas de tarea) sigue
@@ -56,6 +58,77 @@
 *:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+/*
+ * Cursor (Etapa 2 de #94): la flecha por defecto en toda la app — sin esto el
+ * navegador muestra el cursor de texto sobre cualquier texto, aunque no se
+ * pueda editar ni seleccionar nada útil (barra de estado, tarjetas). El de
+ * texto solo en los campos editables; la mano en lo clickeable.
+ */
+body {
+  cursor: default;
+}
+
+input,
+textarea {
+  cursor: text;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/*
+ * Botones (Etapa 2 de #94): la acción principal de cada estado se destaca
+ * (fondo de acento) — la que dispara Enter; la destructiva, en rojo. El
+ * resto, secundarios. Una sola convención en todas las pantallas.
+ */
+.btn {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.btn:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled {
+  color: #ffffff;
 }
 
 /*
@@ -191,6 +264,12 @@
   border-color: var(--color-accent);
 }
 
+/* Texto de ejemplo de los campos del wizard: gris claro y en cursiva, que no pase por un dato. */
+.wizard-input::placeholder {
+  color: var(--color-placeholder);
+  font-style: italic;
+}
+
 /*
  * Filas de los overlays de la barra de comandos (Etapa 2 de #94): clickeables.
  * El hover es decorativo — nunca mueve la selección; Enter sigue ejecutando la
@@ -206,4 +285,13 @@
 
 .command-bar-row[aria-disabled='true'] {
   cursor: default;
+}
+
+/* Barra de estado: un click abre /DIAGNOSTICO (Etapa 2 de #94). */
+.status-bar {
+  cursor: pointer;
+}
+
+.status-bar:hover {
+  color: var(--color-chrome-text);
 }

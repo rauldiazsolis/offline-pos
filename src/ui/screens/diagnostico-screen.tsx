@@ -79,16 +79,7 @@ export function DiagnosticoScreen() {
         <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
           Diagnóstico de sincronización
         </h1>
-        <button
-          type="button"
-          onClick={exitDiagnosticoScreen}
-          style={{
-            padding: 'var(--space-2) var(--space-3)',
-            borderRadius: 'var(--radius-md)',
-            whiteSpace: 'nowrap',
-            cursor: 'pointer',
-          }}
-        >
+        <button type="button" class="btn" onClick={exitDiagnosticoScreen}>
           Cerrar (Esc)
         </button>
       </div>

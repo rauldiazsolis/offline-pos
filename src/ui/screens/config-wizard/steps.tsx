@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ConfigField } from '../../../connectors/config-field.ts';
 import type { LocalDataSummary } from '../../../storage/local-data.ts';
 import { PROBE_TIMEOUT_MS } from '../../../sync/connection.ts';
@@ -86,9 +86,9 @@ const noticeStyle = (color: string) => ({
 });
 
 const TERMINAL_FIELDS: (ConfigField & { key: TerminalFieldKey })[] = [
-  { key: 'branch', label: 'Sucursal', optional: false, placeholder: 'Casa central' },
-  { key: 'pointOfSale', label: 'Punto de venta', optional: false, placeholder: 'Caja 1' },
-  { key: 'locale', label: 'Locale', optional: true, placeholder: 'es-AR' },
+  { key: 'branch', label: 'Sucursal', optional: false, placeholder: 'ej. Casa central' },
+  { key: 'pointOfSale', label: 'Punto de venta', optional: false, placeholder: 'ej. Caja 1' },
+  { key: 'locale', label: 'Locale', optional: true, placeholder: 'ej. es-AR' },
 ];
 
 export function fieldLabel(field: ConfigField): string {
@@ -113,6 +113,7 @@ function TextField(props: {
         onInput={(event) => {
           props.onInput(event.currentTarget.value);
         }}
+        class="wizard-input"
         data-config-field={props.field.key}
         data-step-autofocus={props.autofocus ? '' : undefined}
         aria-label={fieldLabel(props.field)}
@@ -159,21 +160,40 @@ function TerminalStep() {
   );
 }
 
+/**
+ * Grupo de opciones tipo radio (Etapa 2 de #94): el foco está en la opción
+ * elegida (o en la primera, si no hay ninguna) y la sigue cuando ↑/↓ cambian la
+ * elección — así siempre se ve dónde está el foco. Solo la opción enfocada
+ * entra en el orden de Tab.
+ */
+function useFocusFollowsChoice(chosenIndex: number) {
+  const groupRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const group = groupRef.current;
+    if (group === null || !group.contains(document.activeElement)) {
+      return;
+    }
+    group.querySelectorAll<HTMLButtonElement>('button')[Math.max(chosenIndex, 0)]?.focus();
+  }, [chosenIndex]);
+  return groupRef;
+}
+
+const groupStyle = { display: 'flex', flexDirection: 'column' as const, gap: 'var(--space-2)' };
+
 function TypeStep() {
   const selected = configTypeSignal.value;
+  const chosenIndex = CONNECTOR_TYPES.findIndex((info) => info.type === selected);
+  const focusIndex = Math.max(chosenIndex, 0);
+  const groupRef = useFocusFollowsChoice(chosenIndex);
   return (
-    <div
-      role="group"
-      aria-label="Tipo de conexión"
-      tabIndex={-1}
-      data-step-autofocus=""
-      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', outline: 'none' }}
-    >
-      {CONNECTOR_TYPES.map((info) => (
+    <div ref={groupRef} role="group" aria-label="Tipo de conexión" style={groupStyle}>
+      {CONNECTOR_TYPES.map((info, index) => (
         <button
           key={info.type}
           type="button"
           class="wizard-option"
+          tabIndex={index === focusIndex ? 0 : -1}
+          data-step-autofocus={index === focusIndex ? '' : undefined}
           aria-pressed={selected === info.type}
           onClick={() => {
             chooseConnectorType(info.type);
@@ -322,27 +342,25 @@ function LocalDataStep({ model }: { model: WizardModel }) {
     return <WipeConfirmation summary={wipeSummary} />;
   }
   const choice = localChoiceSignal.value;
+  return <LocalDataOptions choice={choice} model={model} pending={pending} />;
+}
+
+function LocalDataOptions(props: { choice: 'keep' | 'wipe'; model: WizardModel; pending: number }) {
+  const { choice, model, pending } = props;
+  const groupRef = useFocusFollowsChoice(choice === 'keep' ? 0 : 1);
   return (
     <>
       <p style={muted}>
         Esta terminal tiene ventas o movimientos propios. ¿Qué hacemos con ellos al cambiar de
         conexión?
       </p>
-      <div
-        role="group"
-        aria-label="Datos locales"
-        tabIndex={-1}
-        data-step-autofocus=""
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 'var(--space-2)',
-          outline: 'none',
-        }}
-      >
+      <div ref={groupRef} role="group" aria-label="Datos locales" style={groupStyle}>
         <button
           type="button"
           class="wizard-option"
+          tabIndex={choice === 'keep' ? 0 : -1}
+          data-step-autofocus={choice === 'keep' ? '' : undefined}
+          data-enter-advances=""
           aria-pressed={choice === 'keep'}
           aria-label="Mantener los datos locales"
           onClick={() => {
@@ -359,6 +377,9 @@ function LocalDataStep({ model }: { model: WizardModel }) {
         <button
           type="button"
           class="wizard-option"
+          tabIndex={choice === 'wipe' ? 0 : -1}
+          data-step-autofocus={choice === 'wipe' ? '' : undefined}
+          data-enter-advances=""
           aria-pressed={choice === 'wipe'}
           aria-label="Borrar los datos locales"
           onClick={() => {

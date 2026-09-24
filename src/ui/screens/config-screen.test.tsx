@@ -5,6 +5,7 @@ import { db } from '../../storage/db.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
 import {
   enterConfigScreen,
+  goToStep,
   jumpToStep,
   openRequiredWizard,
   setConfigField,
@@ -15,6 +16,7 @@ import { connectionStateSignal } from '../state/sync.ts';
 import {
   configTerminalSignal,
   identityResetSignal,
+  localChoiceSignal,
   wizardStepSignal,
 } from '../state/sync-config.ts';
 import { ConfigScreen } from './config-screen.tsx';
@@ -268,5 +270,110 @@ describe('ConfigScreen — terminal activa', () => {
     render(<ConfigScreen />);
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar (Esc)' }));
     expect(activeScreenSignal.value).toBe('sale');
+  });
+});
+
+describe('ConfigScreen — correcciones de la prueba manual', () => {
+  beforeEach(async () => {
+    connectionStateSignal.value = 'unconfigured';
+    await openRequiredWizard();
+  });
+
+  it('Tipo de conexión: el foco va a una opción y sigue a ↑/↓', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    render(<ConfigScreen />);
+    await act(() => {
+      jumpToStep('type');
+    });
+    // Sin tipo elegido, el foco está en la primera opción (nunca en un contenedor invisible).
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^REST genérico/ }));
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    const demo = screen.getByRole('button', { name: /^REST \(minibackend de demo\)/ });
+    expect(demo.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(demo);
+  });
+
+  it('los ejemplos de los campos dicen "ej. …"', () => {
+    render(<ConfigScreen />);
+    expect(screen.getByLabelText('Sucursal').getAttribute('placeholder')).toBe('ej. Casa central');
+    expect(screen.getByLabelText('Punto de venta').getAttribute('placeholder')).toBe('ej. Caja 1');
+  });
+
+  it('la acción principal se ve como tal', () => {
+    render(<ConfigScreen />);
+    expect(screen.getByRole('button', { name: 'Siguiente (Enter)' }).className).toContain(
+      'btn-primary',
+    );
+    expect(screen.getByRole('button', { name: 'Atrás (Alt+←)' }).className).not.toContain(
+      'btn-primary',
+    );
+  });
+});
+
+describe('ConfigScreen — pasos salteados y Datos locales', () => {
+  beforeEach(() => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'http://a.test',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+      verifiedAt: '2026-09-23T14:02:00.000Z',
+    });
+    connectionStateSignal.value = 'active';
+  });
+
+  it('un paso salteado explica por qué no hace falta', async () => {
+    enterConfigScreen();
+    render(<ConfigScreen />);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/No hace falta: la conexión no cambió \(probada el/).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('Datos locales: el foco está en la opción elegida y Enter sobre ella avanza a Revisar', async () => {
+    stubRestBackend();
+    await db.sales.put({
+      id: 's1',
+      lines: [],
+      payments: [],
+      total: 0,
+      status: 'closed',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    enterConfigScreen();
+    render(<ConfigScreen />);
+    await act(() => {
+      goToStep('connector');
+      setConfigField('baseUrl', 'http://b.test');
+      goToStep('probe');
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Conexión OK/)).not.toBeNull();
+    });
+    await act(() => {
+      goToStep('local-data');
+    });
+    const keep = await screen.findByRole('button', { name: 'Mantener los datos locales' });
+    expect(document.activeElement).toBe(keep);
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    const wipe = screen.getByRole('button', { name: 'Borrar los datos locales' });
+    expect(localChoiceSignal.value).toBe('wipe');
+    expect(document.activeElement).toBe(wipe);
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowUp' });
+    });
+    await act(() => {
+      fireEvent.keyDown(keep, { key: 'Enter' });
+    });
+    expect(wizardStepSignal.value).toBe('review');
   });
 });

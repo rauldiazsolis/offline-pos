@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/preact';
+import { fireEvent, render, screen } from '@testing-library/preact';
+import { activeScreenSignal } from '../state/screen.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import {
@@ -105,5 +106,14 @@ describe('StatusBar', () => {
     render(<StatusBar />);
 
     expect(screen.getByText(/· 120 productos · 22 clientes$/)).not.toBeNull();
+  });
+});
+
+describe('StatusBar — click (Etapa 2 de #94)', () => {
+  it('un click abre /DIAGNOSTICO', () => {
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+    fireEvent.click(screen.getByTitle('Ver diagnóstico de sincronización (/DIAGNOSTICO)'));
+    expect(activeScreenSignal.value).toBe('diagnostico');
   });
 });

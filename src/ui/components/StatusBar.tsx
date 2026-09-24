@@ -1,4 +1,5 @@
 import { describeError } from '../errors.ts';
+import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import {
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -9,8 +10,12 @@ import {
 } from '../state/sync.ts';
 
 /**
- * Barra de estado (extremo opuesto a la barra de comandos, nunca interactiva
- * — ver "UX keyboard-first" en CLAUDE.md). Lee solo los signals de
+ * Barra de estado (extremo opuesto a la barra de comandos). Hasta la Etapa 2
+ * de #94 era a propósito no interactiva; desde ahí un click abre
+ * `/DIAGNOSTICO` — lo mismo que el comando, patrón teclado + mouse (ver
+ * "Teclado y mouse" en CLAUDE.md). No entra en el orden de Tab: el teclado
+ * sigue llegando por `/DIAGNOSTICO`, y el click no le saca el foco a la barra
+ * de comandos (`keepFocusOnMouseDown` en la pantalla de venta). Lee solo los signals de
  * `state/sync.ts` — no toca `navigator.onLine` directo, eso ya lo resuelve
  * `sync/engine.ts`. Los 4 textos son los de §7 del doc de diseño.
  */
@@ -68,6 +73,9 @@ function statusText(): string {
 export function StatusBar() {
   return (
     <div
+      class="status-bar"
+      title="Ver diagnóstico de sincronización (/DIAGNOSTICO)"
+      onClick={enterDiagnosticoScreen}
       style={{
         display: 'flex',
         alignItems: 'center',

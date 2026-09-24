@@ -4,13 +4,6 @@ import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { confirmDemoReset, exitDemoResetScreen } from '../keyboard/demo-reset-controller.ts';
 import { demoResetErrorSignal, demoResetInProgressSignal } from '../state/demo-reset.ts';
 
-const buttonStyle = {
-  padding: 'var(--space-2) var(--space-3)',
-  borderRadius: 'var(--radius-md)',
-  whiteSpace: 'nowrap' as const,
-  cursor: 'pointer',
-};
-
 /**
  * `/DEMO_RESET` (Ciclo 8, retoma el issue #36): pantalla de confirmación
  * dedicada, mismo patrón que `/ANULAR` — a diferencia de esa, es un solo
@@ -88,19 +81,14 @@ export function DemoResetScreen() {
         )}
       </div>
       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-        <button
-          type="button"
-          onClick={exitDemoResetScreen}
-          disabled={inProgress}
-          style={buttonStyle}
-        >
+        <button type="button" class="btn" onClick={exitDemoResetScreen} disabled={inProgress}>
           Cancelar (Esc)
         </button>
         <button
           type="button"
+          class="btn btn-danger"
           onClick={() => void confirmDemoReset()}
           disabled={inProgress}
-          style={buttonStyle}
         >
           Reiniciar demo (Enter)
         </button>

@@ -20,13 +20,6 @@ import {
   voidableSalesSignal,
 } from '../state/void-sale.ts';
 
-const buttonStyle = {
-  padding: 'var(--space-2) var(--space-3)',
-  borderRadius: 'var(--radius-md)',
-  whiteSpace: 'nowrap' as const,
-  cursor: 'pointer',
-};
-
 /**
  * `/ANULAR`: mismo patrón lista→↑↓→Enter que la búsqueda de productos, sobre
  * las últimas ventas cerradas. Confirmación explícita antes de anular
@@ -131,10 +124,10 @@ export function VoidSaleScreen() {
             ¿Anular esta venta? Enter confirma, Esc cancela.
           </p>
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-            <button type="button" onClick={cancelVoidConfirmation} style={buttonStyle}>
+            <button type="button" class="btn" onClick={cancelVoidConfirmation}>
               Volver (Esc)
             </button>
-            <button type="button" onClick={() => void confirmVoid()} style={buttonStyle}>
+            <button type="button" class="btn btn-danger" onClick={() => void confirmVoid()}>
               Anular (Enter)
             </button>
           </div>
@@ -174,7 +167,7 @@ export function VoidSaleScreen() {
       </div>
       {!voidConfirmingSignal.value && (
         <div>
-          <button type="button" onClick={exitVoidScreen} style={buttonStyle}>
+          <button type="button" class="btn" onClick={exitVoidScreen}>
             Volver a la venta (Esc)
           </button>
         </div>

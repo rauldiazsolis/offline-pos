@@ -91,4 +91,14 @@ test.describe('pantalla de venta', () => {
     await expect(commandBar).toHaveValue('/');
     await expect(commandBar).toBeFocused();
   });
+
+  test('click en la barra de estado abre /DIAGNOSTICO', async ({ page }) => {
+    await page.getByTitle('Ver diagnóstico de sincronización (/DIAGNOSTICO)').click();
+
+    await expect(
+      page.getByRole('heading', { name: 'Diagnóstico de sincronización' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Cerrar (Esc)' }).click();
+    await expect(page.getByLabel('Barra de comandos')).toBeFocused();
+  });
 });

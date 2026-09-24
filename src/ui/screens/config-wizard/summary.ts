@@ -81,7 +81,9 @@ export function stepSummary(id: WizardStepId, model: WizardModel): string {
     case 'probe': {
       if (step?.status === 'skipped') {
         const verifiedAt = savedConfigSignal.value?.verifiedAt;
-        return verifiedAt === undefined ? 'Ya probada' : `Ya probada el ${formatDate(verifiedAt)}`;
+        return verifiedAt === undefined
+          ? 'No hace falta: la conexión no cambió'
+          : `No hace falta: la conexión no cambió (probada el ${formatDate(verifiedAt)})`;
       }
       const outcome = probeOutcomeSignal.value;
       if (outcome === null || outcome.key !== model.connectionKey) {
@@ -100,8 +102,8 @@ export function stepSummary(id: WizardStepId, model: WizardModel): string {
     case 'local-data':
       if (step?.status === 'skipped') {
         return step.skipReason === 'no-user-data'
-          ? 'Sin datos locales para conservar'
-          : 'Sin cambios de conexión';
+          ? 'No hace falta: no hay ventas ni pendientes'
+          : 'No hace falta: la conexión no cambió';
       }
       return localChoiceSignal.value === 'keep' ? 'Mantener' : 'Borrar';
     case 'review':

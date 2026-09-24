@@ -143,18 +143,14 @@ export function ReceiptScreen() {
       <div class="receipt-no-print" style={{ display: 'flex', gap: 'var(--space-3)' }}>
         <button
           type="button"
+          class="btn btn-primary"
           onClick={() => {
             window.print();
           }}
-          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
         >
           Imprimir (Enter)
         </button>
-        <button
-          type="button"
-          onClick={continueToSale}
-          style={{ padding: 'var(--space-2) var(--space-3)', borderRadius: 'var(--radius-md)' }}
-        >
+        <button type="button" class="btn" onClick={continueToSale}>
           Continuar (Esc)
         </button>
       </div>
