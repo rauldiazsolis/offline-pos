@@ -30,6 +30,7 @@ const diagnostics: SyncDiagnostics = {
   lastSyncedAt: null,
   lastSyncFailure: null,
   lastPullApplication: { kind: 'retained', lotIds: ['LOT-A'] },
+  lastCleanup: undefined,
   pushLotIssues: [{ message: 'Stock negativo', eventId: 'm1' }],
   deviceId: 'dev-1',
   log: [],
@@ -57,6 +58,12 @@ describe('DiagnosticoScreen (contrato v3)', () => {
     expect(screen.getByText(/Stock y saldos retenidos: lote LOT-A procesando/)).not.toBeNull();
     expect(screen.getByText(/LOT-B .*en cola · 2 eventos/)).not.toBeNull();
     expect(screen.getByText(/No recibido por el backend/)).not.toBeNull();
+  });
+
+  it('muestra la sección de limpieza', () => {
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Limpieza de datos locales')).not.toBeNull();
+    expect(screen.getByText('Todavía no corrió')).not.toBeNull();
   });
 });
 

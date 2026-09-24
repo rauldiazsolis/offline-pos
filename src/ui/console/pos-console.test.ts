@@ -22,6 +22,7 @@ const diagnostics: SyncDiagnostics = {
   lastSyncedAt: '2026-09-23T11:05:00.000Z',
   lastSyncFailure: null,
   lastPullApplication: null,
+  lastCleanup: undefined,
   pushLotIssues: null,
   deviceId: 'dev-1',
   log: [
@@ -161,6 +162,13 @@ describe('pull con eventos reaplicados (#98)', () => {
     const status = pos.status();
     expect(status.ultimoPullAplicado).toBe('Aplicado completo');
     expect(status.ultimoPush?.noRecibido).toBe('2026-09-23T10:00:30.000Z');
+  });
+
+  it('status() incluye la última limpieza y el ancla', () => {
+    expect(createPosConsole(fakeDeps()).status().limpieza).toEqual({
+      ultima: 'Todavía no corrió',
+      ancla: 'Sin turnos cerrados',
+    });
   });
 });
 

@@ -4,7 +4,12 @@ import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
 import { collectDiagnostics } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
-import { formatAwaitingLotStatus, formatLotIssue, formatPullApplication } from '../format-lot.ts';
+import {
+  formatAwaitingLotStatus,
+  formatCleanup,
+  formatLotIssue,
+  formatPullApplication,
+} from '../format-lot.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
@@ -55,6 +60,7 @@ export function DiagnosticoScreen() {
 
   const diagnostics = collectDiagnostics();
   const { config: configResult, currentLot, awaitingLots, log } = diagnostics;
+  const cleanup = formatCleanup(diagnostics.lastCleanup);
 
   return (
     <div
@@ -181,6 +187,12 @@ export function DiagnosticoScreen() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div style={cardStyle}>
+        <p style={labelStyle}>Limpieza de datos locales</p>
+        <p style={{ margin: 0 }}>{cleanup.last}</p>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{cleanup.anchor}</p>
       </div>
 
       <div style={{ ...cardStyle, flex: 1, minHeight: 0 }}>

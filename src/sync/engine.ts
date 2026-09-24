@@ -31,6 +31,7 @@ import {
   syncPausedSignal,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
+import { runCleanupIfDue } from './cleanup-schedule.ts';
 import type { Connector, LotIssue, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
@@ -413,31 +414,32 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * **solo mientras dura este request** (nunca durante todo el intervalo entre
  * ciclos), respeta `/CONFIG` abierto, chequea red y config activa. `run`
  * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
- * ni `runPullCycle` necesitan saber de dónde salió.
+ * ni `runPullCycle` necesitan saber de dónde salió. Devuelve lo que devuelve
+ * `run`, o `undefined` si el ciclo no corrió (pausado, cerrojo, sin red o sin config).
  */
-async function withConnectorCycle(
-  run: (connector: Connector, now: string, config: SyncConfig) => Promise<void>,
-): Promise<void> {
+async function withConnectorCycle<T>(
+  run: (connector: Connector, now: string, config: SyncConfig) => Promise<T>,
+): Promise<T | undefined> {
   if (syncPausedSignal.value) {
-    return;
+    return undefined;
   }
   const release = tryAcquireSyncLock();
   if (release === undefined) {
-    return;
+    return undefined;
   }
   try {
     if (!navigator.onLine) {
       setSyncStatus('offline');
-      return;
+      return undefined;
     }
     const configResult = loadSyncConfig();
     if (!configResult.ok || configResult.value.verifiedAt === undefined) {
       setSyncConfigured(false);
-      return;
+      return undefined;
     }
     setSyncConfigured(true);
     const connector = createConnector(configResult.value);
-    await run(connector, new Date().toISOString(), configResult.value);
+    return await run(connector, new Date().toISOString(), configResult.value);
   } finally {
     release();
   }
@@ -468,8 +470,16 @@ export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): P
  * `BatchLotStatus` no distingue severidad — más conservador, nunca se autobloquea, solo adelanta
  * la reconciliación completa.
  */
+/** Limpieza a 7 días (#98): nunca con `/CONFIG` abierto; el cerrojo lo toma ella misma. */
+async function maybeRunCleanup(): Promise<void> {
+  if (syncPausedSignal.value) {
+    return;
+  }
+  await runCleanupIfDue({ now: new Date().toISOString(), acquireLock: tryAcquireSyncLock });
+}
+
 export async function runPullCycleNow(options: { full?: boolean } = {}): Promise<void> {
-  await withConnectorCycle(async (connector, now, config) => {
+  const pulled = await withConnectorCycle(async (connector, now, config) => {
     const full =
       options.full === true ||
       isFullRefreshDue({
@@ -478,11 +488,16 @@ export async function runPullCycleNow(options: { full?: boolean } = {}): Promise
         now,
         doneThisSession: fullRefreshDoneThisSession,
       });
-    await runPullCycle(connector, now, { full });
+    const result = await runPullCycle(connector, now, { full });
     if (!full && pushLotIssuesSignal.value !== null) {
       await runPullCycle(connector, now, { full: true });
     }
+    return result.ok;
   });
+  // Después de soltar el cerrojo del pull: la limpieza lo toma por su cuenta.
+  if (pulled === true) {
+    await maybeRunCleanup();
+  }
 }
 
 /** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
@@ -591,7 +606,8 @@ export async function runPushThenPull(options: { full?: boolean } = {}): Promise
  */
 export function startSyncEngine(): () => void {
   resetFullRefreshSession();
-  void runPushThenPull();
+  // Al arrancar: la limpieza corre aunque no haya red (no depende del backend).
+  void runPushThenPull().then(maybeRunCleanup);
   const pushInterval = setInterval(() => void runPushCycle(), PUSH_INTERVAL_MS);
   const pullInterval = setInterval(() => void runPullCycleNow(), PULL_SAFETY_NET_INTERVAL_MS);
   const onOnline = (): void => {

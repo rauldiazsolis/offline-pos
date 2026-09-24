@@ -17,6 +17,7 @@ import {
   syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
+import { getLastCleanup } from './cleanup-schedule.ts';
 import { saveSyncConfig } from './config.ts';
 import type { BatchLotStatus } from './connector.ts';
 import {
@@ -1029,6 +1030,44 @@ describe('runPullCycleNow', () => {
 
     expect(syncConfiguredSignal.value).toBe(true);
     expect(syncStatusSignal.value).toBe('online-idle');
+  });
+
+  it('después de un pull exitoso corre la limpieza (como mucho una vez cada 24 h)', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () =>
+            Promise.resolve({
+              products: { items: [] },
+              customers: { items: [] },
+              stock: [],
+              lots: {},
+            }),
+        } as Response),
+      ),
+    );
+
+    await runPullCycleNow();
+
+    expect(getLastCleanup()).not.toBeUndefined();
+  });
+
+  it('un pull que falla no dispara la limpieza', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('Failed to fetch'))),
+    );
+
+    await runPullCycleNow();
+
+    expect(getLastCleanup()).toBeUndefined();
   });
 
   it('la primera vez de la sesión es una foto completa: sin cursores en el body', async () => {

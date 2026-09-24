@@ -8,7 +8,12 @@ import { syncNow } from '../../sync/engine.ts';
 import { peekDeviceId } from '../../sync/terminal-identity.ts';
 import { exportLocalData, resetTerminal, type LocalDataDump } from '../../sync/terminal-data.ts';
 import { describeError } from '../errors.ts';
-import { formatAwaitingLotStatus, formatLotIssue, formatPullApplication } from '../format-lot.ts';
+import {
+  formatAwaitingLotStatus,
+  formatCleanup,
+  formatLotIssue,
+  formatPullApplication,
+} from '../format-lot.ts';
 import type { SyncLogEntry } from '../state/sync.ts';
 
 /**
@@ -50,6 +55,8 @@ export type PosStatus = {
   errorDeSync: string | null;
   issuesDelBackend: string[] | null;
   lotesEnEspera: { id: string; enviado: string; estado: string }[];
+  /** Última limpieza de datos locales y ancla del arqueo (#98). */
+  limpieza: { ultima: string; ancla: string };
   log: { hora: string; tipo: SyncLogEntry['kind']; request: unknown; resultado: string }[];
 };
 
@@ -134,6 +141,9 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
       enviado: lot.sentAt,
       estado: formatAwaitingLotStatus(lot),
     })),
+    limpieza: (({ last, anchor }) => ({ ultima: last, ancla: anchor }))(
+      formatCleanup(diagnostics.lastCleanup),
+    ),
     log: diagnostics.log.map((entry) => ({
       hora: entry.at,
       tipo: entry.kind,

@@ -1,3 +1,4 @@
+import type { CleanupRecord } from '../sync/cleanup-schedule.ts';
 import type { LotIssue } from '../sync/connector.ts';
 import type { PullApplication } from '../sync/pull-rule.ts';
 import type { AwaitingLot } from '../sync/push-lot.ts';
@@ -36,4 +37,23 @@ export function formatPullApplication(application: PullApplication): string {
 /** Un aviso del backend sobre un lote, con el evento al que se refiere si lo informó. */
 export function formatLotIssue(issue: LotIssue): string {
   return issue.eventId !== undefined ? `${issue.message} (evento ${issue.eventId})` : issue.message;
+}
+
+/** Última limpieza de datos locales y ancla del arqueo (#98) — `/DIAGNOSTICO` y `pos.status()`. */
+export function formatCleanup(record: CleanupRecord | undefined): { last: string; anchor: string } {
+  if (record === undefined) {
+    return { last: 'Todavía no corrió', anchor: 'Sin turnos cerrados' };
+  }
+  const { counts } = record;
+  const movements = counts.stockMovements + counts.accountMovements;
+  return {
+    last:
+      `${new Date(record.at).toLocaleString()} — ${String(counts.sales)} ventas, ` +
+      `${String(movements)} movimientos, ${String(counts.outbox)} eventos, ` +
+      `${String(counts.cashSessions)} turnos`,
+    anchor:
+      record.anchorClosedAt !== undefined
+        ? `Último turno cerrado: ${new Date(record.anchorClosedAt).toLocaleString()}`
+        : 'Sin turnos cerrados',
+  };
 }

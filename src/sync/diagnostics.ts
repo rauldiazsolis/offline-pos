@@ -8,6 +8,7 @@ import {
   syncLogSignal,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
+import { getLastCleanup, type CleanupRecord } from './cleanup-schedule.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import type { LotIssue } from './connector.ts';
 import { isSyncLockHeld } from './engine.ts';
@@ -35,6 +36,8 @@ export type SyncDiagnostics = {
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
   deviceId: string;
   log: SyncLogEntry[];
+  /** Última limpieza de datos locales (#98); ausente si todavía no corrió. */
+  lastCleanup: CleanupRecord | undefined;
 };
 
 export function collectDiagnostics(): SyncDiagnostics {
@@ -50,5 +53,6 @@ export function collectDiagnostics(): SyncDiagnostics {
     pushLotIssues: pushLotIssuesSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,
+    lastCleanup: getLastCleanup(),
   };
 }
