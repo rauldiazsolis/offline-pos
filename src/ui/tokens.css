@@ -264,6 +264,18 @@ button:not(:disabled) {
   border-color: var(--color-accent);
 }
 
+/*
+ * Campo de texto enfocado: siempre visible, con `:focus` y no solo
+ * `:focus-visible` — Chromium no marca `:focus-visible` cuando el foco se
+ * pone por código antes de cualquier interacción (el primer campo de un
+ * paso al cargar la página), y el campo quedaba enfocado sin que se note.
+ */
+.wizard-input:focus {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: 0;
+  border-color: var(--color-focus-ring);
+}
+
 /* Texto de ejemplo de los campos del wizard: gris claro y en cursiva, que no pase por un dato. */
 .wizard-input::placeholder {
   color: var(--color-placeholder);

@@ -120,6 +120,8 @@ test('sin config guardada abre el wizard en Terminal y no hay forma de salir', a
     'step',
   );
   await expect(page.getByLabel('Sucursal')).toBeFocused();
+  // El foco se ve apenas carga, sin haber tocado una tecla (anillo del campo enfocado).
+  await expect(page.getByLabel('Sucursal')).toHaveCSS('outline-style', 'solid');
   await expect(page.getByLabel('Barra de comandos')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Cancelar (Esc)' })).toHaveCount(0);
 
