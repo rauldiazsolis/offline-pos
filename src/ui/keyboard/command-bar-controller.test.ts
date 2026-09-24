@@ -16,7 +16,9 @@ import { activeConnectorTypeSignal } from '../state/sync.ts';
 import {
   activateCommandBarRow,
   moveSelection,
+  selectCartLine,
   submitCommandBar,
+  submitEmptyCommandBar,
   triggerCheckout,
   updateCommandBarBuffer,
 } from './command-bar-controller.ts';
@@ -243,5 +245,55 @@ describe('availableCommands (Etapa 2c)', () => {
 
     activeConnectorTypeSignal.value = 'rest';
     expect(availableCommands().map((command) => command.name)).not.toContain('DEMO_RESET');
+  });
+});
+
+describe('Enter con la barra vacía (#99)', () => {
+  it('con líneas y turno abierto abre Cobro', async () => {
+    await openCashSessionAndPersist({ openingAmount: 0 });
+    cartSignal.value = { lines: [freeformLine] };
+
+    await submitEmptyCommandBar();
+
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('con una línea seleccionada igual abre Cobro', async () => {
+    await openCashSessionAndPersist({ openingAmount: 0 });
+    cartSignal.value = { lines: [freeformLine] };
+    cartSelectionIndexSignal.value = 0;
+
+    await submitEmptyCommandBar();
+
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('sin líneas y con cliente avisa que la cobranza sin venta llega después', async () => {
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+
+    await submitEmptyCommandBar();
+
+    expect(commandBarErrorSignal.value).toBe('Cobranza sin venta: llega en una próxima versión.');
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('sin líneas ni cliente no hace nada', async () => {
+    await submitEmptyCommandBar();
+
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+});
+
+describe('selectCartLine (click en el carrito, #99)', () => {
+  it('selecciona la fila y no cambia nada con un índice fuera de rango', () => {
+    cartSignal.value = { lines: [freeformLine, { ...freeformLine, description: 'otro' }] };
+    cartSelectionIndexSignal.value = null;
+
+    selectCartLine(1);
+    expect(cartSelectionIndexSignal.value).toBe(1);
+
+    selectCartLine(5);
+    expect(cartSelectionIndexSignal.value).toBe(1);
   });
 });

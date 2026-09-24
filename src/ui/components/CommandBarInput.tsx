@@ -7,6 +7,7 @@ import {
   removeSelectedCartLine,
   setSelectedCartLineQuantity,
   submitCommandBar,
+  submitEmptyCommandBar,
   triggerCheckout,
   updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
@@ -144,10 +145,18 @@ export function CommandBarInput() {
       event.preventDefault();
       const buffer = commandBarBufferSignal.value;
 
+      // Barra vacía (#99): Enter abre Cobro si hay algo que cobrar, igual
+      // que Ctrl+Enter — va antes que la línea seleccionada, que necesita un
+      // número para cambiar su cantidad.
+      if (buffer === '') {
+        void submitEmptyCommandBar();
+        return;
+      }
+
       // Con una línea del carrito seleccionada (↑/↓ previo), una cantidad +
       // Enter reemplaza la de la línea en vez de buscarse como código de
       // barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`).
-      if (cartSelectionIndexSignal.value !== null && buffer !== '') {
+      if (cartSelectionIndexSignal.value !== null) {
         const parsedQty = parseQuantityText(buffer);
         if (parsedQty.ok) {
           void setSelectedCartLineQuantity(parsedQty.qty);

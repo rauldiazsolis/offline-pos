@@ -8,6 +8,7 @@ import type { Cart } from '../../domain/cart.ts';
 import { formatMoney, formatQuantity } from '../format.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
+import { selectCartLine } from '../keyboard/command-bar-controller.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
@@ -160,8 +161,14 @@ function CartTable({
             <tr
               key={index}
               ref={rowRef(index)}
+              // Click = seleccionar (#99), lo mismo que llegar con ↑/↓; el
+              // foco se queda en la barra (`keepFocusOnMouseDown` de la venta).
+              onClick={() => {
+                selectCartLine(index);
+              }}
               style={{
                 background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+                cursor: 'pointer',
               }}
             >
               <td style={bodyCellStyle}>{formatQuantity(line.qty)}</td>

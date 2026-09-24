@@ -286,6 +286,30 @@ export async function triggerCheckout(): Promise<void> {
   clearBuffer();
 }
 
+/**
+ * Enter con la barra vacía (#99): con líneas abre Cobro (aunque haya una
+ * línea seleccionada — cambiar su cantidad necesita un número en la barra).
+ * Sin líneas y con cliente, la cobranza sin venta llega en la Etapa 6
+ * (#101); sin nada, no hace nada: Enter sobre la barra vacía es un gesto
+ * reflejo y un error molestaría.
+ */
+export function submitEmptyCommandBar(): Promise<void> {
+  if (cartSignal.value.lines.length > 0) {
+    return triggerCheckout();
+  }
+  if (attachedCustomerSignal.value !== undefined) {
+    commandBarErrorSignal.value = 'Cobranza sin venta: llega en una próxima versión.';
+  }
+  return Promise.resolve();
+}
+
+/** Click en una fila del carrito (#99): lo mismo que llegar con ↑/↓. */
+export function selectCartLine(index: number): void {
+  if (index >= 0 && index < cartSignal.value.lines.length) {
+    cartSelectionIndexSignal.value = index;
+  }
+}
+
 function triggerVoid(): void {
   activeScreenSignal.value = 'void';
   clearBuffer();
