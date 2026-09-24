@@ -59,4 +59,11 @@ describe('formatQuantity', () => {
     // `double`), así que se construye en runtime, que es como aparece en la práctica.
     expect(formatQuantity(Number('5.9500000000000005'))).toBe('5.95');
   });
+
+  it('con el separador decimal del locale y con signo (#99)', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
+    expect(formatQuantity(1.5)).toBe('1,5');
+    expect(formatQuantity(-2)).toBe('-2');
+  });
 });

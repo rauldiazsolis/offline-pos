@@ -5,7 +5,7 @@ import type { Customer } from '../../domain/customer.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
-import { formatMoney } from '../format.ts';
+import { formatMoney, formatQuantity } from '../format.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
@@ -164,7 +164,7 @@ function CartTable({
                 background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
               }}
             >
-              <td style={bodyCellStyle}>{line.qty}</td>
+              <td style={bodyCellStyle}>{formatQuantity(line.qty)}</td>
               <td style={bodyCellStyle}>
                 <div>{lineLabel(line)}</div>
                 {code !== undefined && (

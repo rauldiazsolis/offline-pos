@@ -18,6 +18,24 @@ export type ParsedCommand =
   | { kind: 'search'; query: string; qty: number }
   | { kind: 'parse-error'; message: string };
 
+const QUANTITY_PATTERN = /^-?\d+(?:[.,]\d+)?$/;
+/** Mensaje del slot para una cantidad con más de 3 decimales (prefijo o número + Enter). */
+export const TOO_MANY_DECIMALS_MESSAGE = 'Hasta 3 decimales en la cantidad';
+
+/** Cantidad tipeada (#99): con signo, separador `,` o `.`, hasta 3 decimales. */
+export function parseQuantityText(
+  raw: string,
+): { ok: true; qty: number } | { ok: false; reason: 'not-a-quantity' | 'too-many-decimals' } {
+  if (!QUANTITY_PATTERN.test(raw)) {
+    return { ok: false, reason: 'not-a-quantity' };
+  }
+  const decimals = raw.split(/[.,]/)[1] ?? '';
+  if (decimals.length > 3) {
+    return { ok: false, reason: 'too-many-decimals' };
+  }
+  return { ok: true, qty: Number(raw.replace(',', '.')) };
+}
+
 export function parseCommandBar(buffer: string, options: { finalizing: boolean }): ParsedCommand {
   const { finalizing } = options;
 
@@ -67,9 +85,19 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
   // El prefijo de cantidad se resuelve antes que la línea libre y que
   // código/búsqueda — regla 4 aplica "antes de cualquier búsqueda", y una
   // línea libre también cuenta: "3*regalo$100" es 3 unidades a $100 c/u
-  // ($300), no la descripción literal "3*regalo".
-  const quantityMatch = /^(-?\d+)\*(.*)$/.exec(buffer);
-  const qty = quantityMatch ? Number.parseInt(quantityMatch[1] ?? '1', 10) : 1;
+  // ($300), no la descripción literal "3*regalo". Desde #99 la cantidad
+  // lleva signo y hasta 3 decimales (`1,5*queso`, `-2*coca`).
+  const quantityMatch = /^(-?\d+(?:[.,]\d+)?)\*(.*)$/.exec(buffer);
+  let qty = 1;
+  if (quantityMatch) {
+    const parsedQty = parseQuantityText(quantityMatch[1] ?? '1');
+    if (!parsedQty.ok) {
+      return finalizing
+        ? { kind: 'parse-error', message: TOO_MANY_DECIMALS_MESSAGE }
+        : { kind: 'typing' };
+    }
+    qty = parsedQty.qty;
+  }
   const rest = quantityMatch ? (quantityMatch[2] ?? '') : buffer;
 
   if (rest === '') {

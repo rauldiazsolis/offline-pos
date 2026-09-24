@@ -16,6 +16,7 @@ import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { formatDate, formatMoney } from '../format.ts';
+import { parseQuantityText, TOO_MANY_DECIMALS_MESSAGE } from '../keyboard/parse-command-bar.ts';
 import { cartSelectionIndexSignal } from '../state/cart.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
@@ -31,8 +32,6 @@ import {
   searchResultsSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
-
-const ONLY_DIGITS = /^\d+$/;
 
 /**
  * El único input siempre enfocado durante la operación normal (ver
@@ -145,12 +144,20 @@ export function CommandBarInput() {
       event.preventDefault();
       const buffer = commandBarBufferSignal.value;
 
-      // Con una línea del carrito seleccionada (↑/↓ previo), un número + Enter
-      // reemplaza su cantidad en vez de buscarse como código de barras.
-      if (cartSelectionIndexSignal.value !== null && ONLY_DIGITS.test(buffer)) {
-        void setSelectedCartLineQuantity(Number.parseInt(buffer, 10));
-        commandBarBufferSignal.value = '';
-        return;
+      // Con una línea del carrito seleccionada (↑/↓ previo), una cantidad +
+      // Enter reemplaza la de la línea en vez de buscarse como código de
+      // barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`).
+      if (cartSelectionIndexSignal.value !== null && buffer !== '') {
+        const parsedQty = parseQuantityText(buffer);
+        if (parsedQty.ok) {
+          void setSelectedCartLineQuantity(parsedQty.qty);
+          commandBarBufferSignal.value = '';
+          return;
+        }
+        if (parsedQty.reason === 'too-many-decimals') {
+          commandBarErrorSignal.value = TOO_MANY_DECIMALS_MESSAGE;
+          return;
+        }
       }
 
       submitCommandBar();

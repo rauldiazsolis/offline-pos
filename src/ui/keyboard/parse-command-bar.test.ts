@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../../sync/config.ts';
-import { parseCommandBar } from './parse-command-bar.ts';
+import { parseCommandBar, parseQuantityText } from './parse-command-bar.ts';
 
 const live = (buffer: string) => parseCommandBar(buffer, { finalizing: false });
 const enter = (buffer: string) => parseCommandBar(buffer, { finalizing: true });
@@ -194,5 +194,50 @@ describe('parseCommandBar', () => {
     it('sigue siendo búsqueda al confirmar', () => {
       expect(enter('coca')).toEqual({ kind: 'search', query: 'coca', qty: 1 });
     });
+  });
+});
+
+describe('cantidades (#99)', () => {
+  it('prefijo con decimales y coma o punto', () => {
+    expect(parseCommandBar('1,5*queso', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'queso',
+      qty: 1.5,
+    });
+    expect(parseCommandBar('0.250*queso', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'queso',
+      qty: 0.25,
+    });
+  });
+
+  it('prefijo negativo y línea libre negativa', () => {
+    expect(parseCommandBar('-2*coca', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'coca',
+      qty: -2,
+    });
+    expect(parseCommandBar('-1*regalo$100', { finalizing: true })).toEqual({
+      kind: 'freeform-line',
+      description: 'regalo',
+      amount: 100,
+      qty: -1,
+    });
+  });
+
+  it('más de 3 decimales en el prefijo es error al confirmar, y sigue tipeando mientras tanto', () => {
+    expect(parseCommandBar('1,2345*queso', { finalizing: true })).toEqual({
+      kind: 'parse-error',
+      message: 'Hasta 3 decimales en la cantidad',
+    });
+    expect(parseCommandBar('1,2345*queso', { finalizing: false })).toEqual({ kind: 'typing' });
+  });
+
+  it('parseQuantityText', () => {
+    expect(parseQuantityText('-2')).toEqual({ ok: true, qty: -2 });
+    expect(parseQuantityText('1,5')).toEqual({ ok: true, qty: 1.5 });
+    expect(parseQuantityText('0')).toEqual({ ok: true, qty: 0 });
+    expect(parseQuantityText('1,2345')).toEqual({ ok: false, reason: 'too-many-decimals' });
+    expect(parseQuantityText('abc')).toEqual({ ok: false, reason: 'not-a-quantity' });
   });
 });

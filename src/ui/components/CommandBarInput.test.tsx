@@ -681,6 +681,37 @@ describe('CommandBarInput', () => {
       });
     });
 
+    it('una cantidad con signo o decimales + Enter reemplaza la de la línea seleccionada (#99)', () => {
+      cartSignal.value = {
+        lines: [{ kind: 'freeform', description: 'Queso', qty: 1, unitPrice: 100 }],
+      };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '1,5' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(cartSignal.value.lines[0]?.qty).toBe(1.5);
+
+      fireEvent.input(input, { target: { value: '-2' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(cartSignal.value.lines[0]?.qty).toBe(-2);
+    });
+
+    it('más de 3 decimales sobre la línea seleccionada es un error en el slot (#99)', () => {
+      cartSignal.value = {
+        lines: [{ kind: 'freeform', description: 'Queso', qty: 1, unitPrice: 100 }],
+      };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '1,2345' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(commandBarErrorSignal.value).toBe('Hasta 3 decimales en la cantidad');
+      expect(cartSignal.value.lines[0]?.qty).toBe(1);
+    });
+
     it('Supr sobre una línea del medio selecciona la que se corrió a ese índice', () => {
       cartSignal.value = {
         lines: [
