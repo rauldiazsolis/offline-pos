@@ -185,7 +185,7 @@ export async function pushPendingLot(
   if (result.ok) {
     await db.outbox.bulkPut(events.map(markSynced));
     clearCurrentPushLot();
-    addAwaitingLot({ id: lot.id, sentAt: now });
+    addAwaitingLot({ id: lot.id, sentAt: now, eventIds: lot.eventIds });
     return { attempted: events.length, failed: false };
   }
 

@@ -36,8 +36,17 @@ export function clearCurrentPushLot(): void {
   }
 }
 
-/** `lastStatus`: último estado en curso que informó el backend (contrato v3); ausente = sin informar. */
-export type AwaitingLot = { id: string; sentAt: string; lastStatus?: 'queued' | 'processing' };
+/**
+ * `lastStatus`: último estado en curso que informó el backend (contrato v3); ausente = sin informar.
+ * `eventIds`: los eventos exactos del lote, para reaplicarlos mientras esté `queued` (#98) y para
+ * que la limpieza no los borre; ausente en lotes guardados antes de la Etapa 3.
+ */
+export type AwaitingLot = {
+  id: string;
+  sentAt: string;
+  lastStatus?: 'queued' | 'processing';
+  eventIds?: string[];
+};
 
 export function getAwaitingLots(): AwaitingLot[] {
   try {

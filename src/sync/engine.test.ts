@@ -152,12 +152,14 @@ describe('pushPendingLot', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('tras el ack, agrega el lote a la lista de espera de resolución', async () => {
+  it('tras el ack, agrega el lote a la lista de espera con sus eventos', async () => {
     await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
 
     await pushPendingLot(fakeConnector({ pushBatch: () => Promise.resolve(ok(undefined)) }), now);
 
-    expect(getAwaitingLots()).toHaveLength(1);
+    const awaiting = getAwaitingLots();
+    expect(awaiting).toHaveLength(1);
+    expect(awaiting[0]?.eventIds).toEqual(['sale-1']);
   });
 
   it('un fallo de red deja los eventos pending y guarda el lote con backoff, sin agregarlo a la espera', async () => {
