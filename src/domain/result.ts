@@ -31,6 +31,7 @@ export type ErrorMeta = {
   'sale/empty-cart': undefined;
   'sale/invalid-payment-amount': { index: number };
   'sale/insufficient-payment': { total: number; paid: number };
+  'sale/refund-amount-mismatch': { total: number; tendered: number };
   'sale/non-cash-exceeds-total': { nonCashTotal: number; total: number };
   'sale/not-closed': { status: Sale['status'] };
   'sale/already-voided': undefined;

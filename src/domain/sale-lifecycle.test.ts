@@ -243,3 +243,57 @@ describe('buildStockMovementsForSale', () => {
     expect(movements).toEqual([]);
   });
 });
+
+describe('closeSale con total 0 o negativo (#99)', () => {
+  it('cierra un ticket negativo con pagos negativos que suman exacto', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: -500 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r.ok && r.value.total).toBe(-500);
+  });
+
+  it('rechaza un pago con signo distinto al total', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: 500 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r).toMatchObject({ ok: false, error: 'sale/invalid-payment-amount' });
+  });
+
+  it('rechaza pagos negativos que no suman exactamente el total', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: -400 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r).toMatchObject({ ok: false, error: 'sale/refund-amount-mismatch' });
+  });
+
+  it('cierra un ticket en 0 sin pagos y rechaza uno con pagos', () => {
+    const cart = {
+      lines: [
+        { kind: 'freeform' as const, description: 'a', qty: 1, unitPrice: 100 },
+        { kind: 'freeform' as const, description: 'b', qty: -1, unitPrice: 100 },
+      ],
+    };
+    expect(closeSale({ cart, payments: [], id: 's1', createdAt: 'now' }).ok).toBe(true);
+    expect(
+      closeSale({ cart, payments: [{ method: 'cash', amount: 10 }], id: 's1', createdAt: 'now' }),
+    ).toMatchObject({ ok: false, error: 'sale/invalid-payment-amount' });
+  });
+});

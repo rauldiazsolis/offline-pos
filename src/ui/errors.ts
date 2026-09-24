@@ -1,4 +1,5 @@
 import type { Failure } from '../domain/result.ts';
+import { formatMoney } from './format.ts';
 
 /**
  * Traductor central de errores de negocio a mensajes para el cajero. Switch
@@ -31,6 +32,10 @@ export function describeError(failure: Failure): string {
       return 'Uno de los pagos tiene un monto inválido.';
     case 'sale/insufficient-payment':
       return `Falta pagar ${String(failure.meta.total - failure.meta.paid)}.`;
+    case 'sale/refund-amount-mismatch':
+      return failure.meta.total === 0
+        ? 'El ticket está en $0: no hay nada que cobrar ni devolver.'
+        : `Lo que se devuelve (${formatMoney(failure.meta.tendered)}) tiene que ser exactamente ${formatMoney(Math.abs(failure.meta.total))}.`;
     case 'sale/non-cash-exceeds-total':
       return `No se puede dar vuelto con un medio distinto a efectivo (excedente ${String(failure.meta.nonCashTotal - failure.meta.total)}).`;
     case 'sale/not-closed':

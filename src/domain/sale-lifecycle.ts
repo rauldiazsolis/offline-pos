@@ -1,13 +1,18 @@
 import type { Cart } from './cart.ts';
 import { err, ok, type Result } from './result.ts';
+import { roundAmount } from './rounding.ts';
 import type { Payment, Sale, SaleLine } from './sale.ts';
 import { calculateTotals } from './totals.ts';
 import type { StockMovement } from './stock.ts';
 
 /**
- * Cierra una venta a partir de un carrito y los pagos registrados. No
- * re-valida stock: ya se validó al armar cada línea del carrito (Fase 1 es
- * una sola terminal sin escritores concurrentes).
+ * Cierra una venta a partir de un carrito y los pagos registrados. Nunca
+ * valida stock: la falta de stock es una advertencia, no un bloqueo (#99).
+ *
+ * El total puede ser 0 o negativo (#99: devoluciones). Todos los pagos
+ * llevan el signo del total: con total > 0 cubren el total (el vuelto ya
+ * viene descontado, `resolveTender`); con total < 0 suman exactamente el
+ * total; con total 0 no hay pagos.
  *
  * `customerId` (Fase 3) es obligatorio si algún pago es `'account'` — cuenta
  * corriente siempre necesita saber a quién se le carga la venta.
@@ -25,8 +30,13 @@ export function closeSale(params: {
     return err('sale/empty-cart', undefined);
   }
 
+  const { total } = calculateTotals(cart);
+  const sign = Math.sign(total);
   const invalidPaymentIndex = payments.findIndex(
-    (payment) => !Number.isFinite(payment.amount) || payment.amount <= 0,
+    (payment) =>
+      !Number.isFinite(payment.amount) ||
+      payment.amount === 0 ||
+      Math.sign(payment.amount) !== sign,
   );
   if (invalidPaymentIndex !== -1) {
     return err('sale/invalid-payment-amount', { index: invalidPaymentIndex });
@@ -36,10 +46,12 @@ export function closeSale(params: {
     return err('account/no-customer-attached', undefined);
   }
 
-  const { total } = calculateTotals(cart);
-  const paid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-  if (paid < total) {
+  const paid = roundAmount(payments.reduce((sum, payment) => sum + payment.amount, 0));
+  if (total > 0 && paid < total) {
     return err('sale/insufficient-payment', { total, paid });
+  }
+  if (total < 0 && paid !== total) {
+    return err('sale/refund-amount-mismatch', { total, tendered: Math.abs(paid) });
   }
 
   return ok({
