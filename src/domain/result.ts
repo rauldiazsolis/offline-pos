@@ -66,6 +66,8 @@ export type ErrorMeta = {
   // storage/reconcile.ts (foto completa del catálogo)
   'sync/empty-snapshot': { tables: ('products' | 'stock' | 'customers')[] };
   'sync/reconcile-failed': { message: string };
+  // storage/local-cleanup.ts (limpieza a 7 días, #98)
+  'storage/cleanup-failed': { message: string };
 
   // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
   'account/hold-rejected': { reasonCode: string };
