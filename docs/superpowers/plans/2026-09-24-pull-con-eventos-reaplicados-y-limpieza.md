@@ -2868,7 +2868,7 @@ eventos del POS (#98) no hace nada con este conector."
   ventas borradas), `accountMovements` sin venta se conservan.
 - En "Barra de estado": el sufijo "· stock y saldos en espera del backend" en `online-idle`.
 - En "Estado del proyecto": entrada nueva para la Etapa 3 del epic #94 (issue #98, spec y plan de
-  esta etapa), con la desviación del plan (`accountMovements` sin `saleId`) y la issue `backlog` del
+  esta etapa), con la desviación del plan (`accountMovements` sin `saleId`) y la issue `backlog` #113 del
   cálculo por ítem.
 
 - [ ] **Step 6: Verificar y commitear**

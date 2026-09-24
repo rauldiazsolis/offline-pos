@@ -281,7 +281,7 @@ App + minibackend + panel `/_demo` con "Demorar lotes nuevos" encendido:
 ## Fuera de alcance
 
 - Cálculo por ítem de stock y saldo con un lote `processing`, y marcas propias del POS sobre productos
-  o clientes dudosos: se anota como issue `backlog` (surgió en la sesión; el criterio simple alcanza
+  o clientes dudosos: issue `backlog` #113 (surgió en la sesión; el criterio simple alcanza
   por ahora).
 - Mostrar bloqueos en búsqueda, carrito y cobro (Etapa 4, #99).
 - Sin turnos: el ancla pasa al último arqueo y se suman las estadísticas de conceptos (Etapa 5, #100).
