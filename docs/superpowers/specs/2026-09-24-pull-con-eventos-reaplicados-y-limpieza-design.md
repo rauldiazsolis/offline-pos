@@ -159,10 +159,14 @@ Lo que tenga más de 7 días (`createdAt`) **y** esté sincronizado:
   (hacen falta para reaplicar).
 - **Ventas** cuyo evento `sale` no está pendiente (está `synced`, o ya se borró — lo pendiente nunca se
   borra, así que ausente implica sincronizado) y, si fue anulada, cuya anulación tampoco está pendiente.
-- **`stockMovements` y `accountMovements`**: los que tienen `saleId` siguen a su venta (se borran con
-  ella). Un `stockMovement` sin venta sigue a su propio evento con el mismo criterio que las ventas; un
-  `accountMovement` sin venta no tiene evento propio y se conserva (hoy no existen; la Etapa 6 define
-  su regla cuando genere cobranzas).
+- **`stockMovements` y `accountMovements`**: registros **independientes** de su venta — el `saleId` es
+  solo auditoría. Se borran por su propia edad: un `stockMovement` cuando su evento no está pendiente;
+  un `accountMovement` (no tiene evento propio, viaja dentro del evento `sale`) cuando ese evento no está
+  pendiente. Se conservan mientras su venta sea parte del ancla. Un `accountMovement` sin venta se
+  conserva (hoy no existen; la Etapa 6 define su regla cuando genere cobranzas). Surgió al implementar:
+  con la regla original ("se borran con su venta"), el movimiento de una anulación reciente de una venta
+  vieja quedaba huérfano para siempre. La anulación como documento propio, con sus movimientos y pagos
+  copiados del original, se discute en #99.
 - **Turnos de caja cerrados** con más de 7 días (no viajan desde v3: "sincronizado" no aplica), salvo el
   ancla.
 

@@ -44,6 +44,12 @@ export type CleanupPlan = {
  * Etapa 5, #100): el último turno cerrado, el abierto y sus ventas. Un evento
  * `sale` ausente del outbox cuenta como sincronizado: lo pendiente nunca se
  * borra, así que solo pudo irse por una limpieza anterior.
+ *
+ * Los movimientos de stock y de cuenta son registros **independientes** de su
+ * venta: el `saleId` es solo auditoría. Se borran por su propia edad, nunca
+ * "junto con" la venta — si no, el movimiento de una anulación reciente de una
+ * venta vieja quedaba huérfano para siempre (la venta ya no está para
+ * arrastrarlo). Solo se conservan mientras su venta sea parte del ancla.
  */
 export function planLocalCleanup(input: CleanupInput): CleanupPlan {
   const cutoff = new Date(input.now).getTime() - CLEANUP_RETENTION_MS;
@@ -71,21 +77,27 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
         !keptSaleIds.has(sale.id),
     )
     .map((sale) => sale.id);
-  const deletedSales = new Set(sales);
+  const inAnchor = (movement: SaleLinked): boolean =>
+    movement.saleId !== undefined && keptSaleIds.has(movement.saleId);
 
+  // Viajan como su propio evento `stock-movement`.
   const stockMovements = input.stockMovements
     .filter(
       (movement) =>
-        !pendingIds.has(movement.id) &&
-        (movement.saleId !== undefined
-          ? deletedSales.has(movement.saleId)
-          : isOld(movement.createdAt)),
+        isOld(movement.createdAt) && !pendingIds.has(movement.id) && !inAnchor(movement),
     )
     .map((movement) => movement.id);
 
-  // Sin evento propio: siguen a su venta; sin venta se conservan (la Etapa 6 define su regla).
+  // Sin evento propio: viajan dentro del evento `sale` de su venta, así que esperan a que ese no
+  // esté pendiente. Sin venta se conservan (la Etapa 6 define su regla cuando genere cobranzas).
   const accountMovements = input.accountMovements
-    .filter((movement) => movement.saleId !== undefined && deletedSales.has(movement.saleId))
+    .filter(
+      (movement) =>
+        movement.saleId !== undefined &&
+        isOld(movement.createdAt) &&
+        !pendingIds.has(movement.saleId) &&
+        !inAnchor(movement),
+    )
     .map((movement) => movement.id);
 
   const outbox = input.syncedEvents

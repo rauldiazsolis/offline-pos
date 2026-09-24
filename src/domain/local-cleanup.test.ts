@@ -133,4 +133,51 @@ describe('planLocalCleanup', () => {
     );
     expect(plan.stockMovements).toEqual([]);
   });
+
+  it('un movimiento es independiente de su venta: se borra por su edad aunque la venta ya no exista', () => {
+    // Anulación reciente de una venta vieja: la venta se borró en una limpieza anterior y el
+    // movimiento `sale-void` quedó con un `saleId` que ya no apunta a nada (solo auditoría).
+    const plan = planLocalCleanup(
+      input({
+        stockMovements: [{ id: 'm-void', saleId: 's-gone', createdAt: old }],
+        accountMovements: [{ id: 'a-void', saleId: 's-gone', createdAt: old }],
+      }),
+    );
+    expect(plan.stockMovements).toEqual(['m-void']);
+    expect(plan.accountMovements).toEqual(['a-void']);
+  });
+
+  it('un movimiento reciente se conserva aunque su venta vieja se borre', () => {
+    const plan = planLocalCleanup(
+      input({
+        sales: [{ id: 's-old', createdAt: old }],
+        stockMovements: [{ id: 'm-void', saleId: 's-old', createdAt: recent }],
+      }),
+    );
+    expect(plan.sales).toEqual(['s-old']);
+    expect(plan.stockMovements).toEqual([]);
+  });
+
+  it('los movimientos de las ventas del ancla se conservan con ellas', () => {
+    const plan = planLocalCleanup(
+      input({
+        sales: [{ id: 's-a', createdAt: old }],
+        stockMovements: [{ id: 'm-a', saleId: 's-a', createdAt: old }],
+        accountMovements: [{ id: 'a-a', saleId: 's-a', createdAt: old }],
+        cashSessions: [session('t1', ['s-a'], old)],
+      }),
+    );
+    expect(plan.stockMovements).toEqual([]);
+    expect(plan.accountMovements).toEqual([]);
+  });
+
+  it('un movimiento de cuenta viaja en el evento de su venta: se conserva mientras esté pendiente', () => {
+    const pendingEvents = [
+      { id: 's1', type: 'sale', status: 'pending', createdAt: old },
+    ] as OutboxEvent[];
+    const plan = planLocalCleanup(
+      input({ pendingEvents, accountMovements: [{ id: 'a1', saleId: 's1', createdAt: old }] }),
+    );
+    expect(plan.accountMovements).toEqual([]);
+  });
 });
