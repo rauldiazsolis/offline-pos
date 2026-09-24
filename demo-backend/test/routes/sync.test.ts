@@ -293,6 +293,51 @@ describe('POST /sync/pull', () => {
     expect(body.products.nextCursor).toBeUndefined();
   });
 
+  it('un fiado sin hold mueve el saldo y el cursor del cliente (el POS lo ve en el delta, #98)', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'cust-01',
+      JSON.stringify({
+        id: 'cust-01',
+        name: 'Ana',
+        createdAt: '2025-06-01T00:00:00.000Z',
+        creditLimit: 1000,
+        margin: 0,
+        balance: 50,
+      }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    const first = (await (await pull({ cursors: {}, pendingLotIds: [] })).json()) as {
+      customers: { items: { id: string; balance?: number }[]; nextCursor?: string };
+    };
+    expect(first.customers.items.find((item) => item.id === 'cust-01')?.balance).toBe(50);
+    const cursor = first.customers.nextCursor;
+    expect(cursor).toBeDefined();
+
+    await push('lot-balance', [
+      {
+        id: 'sale-balance',
+        type: 'sale',
+        createdAt: new Date().toISOString(),
+        origin: {},
+        sale: {
+          id: 'sale-balance',
+          customerId: 'cust-01',
+          payments: [{ method: 'account', amount: 10 }],
+          lines: [],
+          total: 10,
+          status: 'closed',
+          createdAt: new Date().toISOString(),
+        },
+      },
+    ]);
+
+    const delta = (await (
+      await pull({ cursors: { customers: cursor ?? '' }, pendingLotIds: [] })
+    ).json()) as { customers: { items: { id: string; balance?: number }[] } };
+    expect(delta.customers.items.find((item) => item.id === 'cust-01')?.balance).toBe(60);
+  });
+
   it('informa el estado de los lotes de push pedidos, y omite los que no reconoce', async () => {
     await push('lot-known', [{ type: 'sale', id: 'sale-1', sale: { id: 'sale-1', total: 1 } }]);
 

@@ -161,22 +161,58 @@ exponencial (mismo esquema que antes, ahora por lote en vez de por evento);
 `sync/push-lot.ts` lo persiste en `localStorage` (mismo criterio best-effort que
 `sync/cursor.ts`) junto con la lista de lotes ya enviados que todavía no confirmaron `ok`/`issues`.
 
-**Pull: un solo lote, gateado por el estado de los lotes de push (#87)**.
+**Pull: un solo lote, con eventos reaplicados (#87, regla de la Etapa 3 de #94 — #98)**.
 `sync/engine.ts::runPullCycle` pide productos/clientes (con cursor `since` opcional por recurso, o
 sin él para pedir la foto completa de ese recurso) y stock (siempre completo) en una sola llamada,
 más el estado de los lotes de push que el POS todavía espera confirmar — contrato v3 (#96):
 `queued` (recibido, sin empezar), `processing`, `ok` o `issues`, con los avisos como `LotIssue`
-(`{ message, eventId? }`, `sync/connector.ts`). **Si alguno de esos lotes sigue `queued` o
-`processing` (o el backend no lo informa, que cuenta como `processing`), el pull entero se
-descarta** — ni el delta ni la foto completa se aplican — porque aplicar sin saber si el último push
-ya se procesó podría reconciliar contra un estado que ese push todavía no reflejó. Esa es la regla
-de la Etapa 1 de #94 (igual que el `pending` de v2); la Etapa 3 (#98) la refina (datos maestros
-siempre, stock/saldo reaplicando eventos de lotes `queued`). El último estado en curso informado se
-guarda en el lote en espera (`AwaitingLot.lastStatus`, `sync/push-lot.ts::updateAwaitingLots`) y
-`/DIAGNOSTICO` lo muestra ("en cola"/"procesando"/"sin informar"). Un lote que se resuelve con
-`issues` no bloquea nada (el POS nunca se autobloquea) — solo se muestra al humano vía
-`pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`), formateado con el
-evento al que se refiere (`ui/format-lot.ts::formatLotIssue`).
+(`{ message, eventId? }`, `sync/connector.ts`). `pendingLotIds` lleva los lotes en espera **y el
+lote en curso** (congelado, mandado al menos una vez, sin ack). La clasificación es pura
+(`sync/pull-rule.ts::classifyLots`):
+- Lote en espera `ok`/`issues`: resuelto, sale de la lista. `queued`: sus eventos se **reaplican**
+  (`AwaitingLot.eventIds`, guardados al ack; un lote guardado antes de #98 sin ellos cuenta como
+  `processing`). `processing` o no informado: **retiene** stock y saldo.
+- Lote en curso informado: **ack recuperado** — sus eventos pasan a `synced`, sale del lote en curso y
+  entra a la lista de espera con el estado informado; nunca se reenvía. No informado: **no recibido**
+  (`PushLot.notReceivedAt`, solo para `/DIAGNOSTICO`), sus eventos se reaplican como pendientes y el
+  lote se sigue reintentando igual.
+
+Aplicación, en **una** transacción Dexie que lee el outbox adentro
+(`storage/apply-pull.ts::applyPull`, así una venta cerrada con el pull en vuelo entra en la
+reaplicación): **datos maestros y bloqueos siempre** (delta con `bulkPut`, foto completa con
+`storage/reconcile.ts::applySnapshotReconciled`). Stock y saldo (`sync/pull-adjust.ts::adjustPull`):
+sin retención, valor del backend **más** los efectos (`domain/reapply.ts::reapplyEffects`) de los
+eventos de lotes `queued` ∪ pendientes del outbox que nunca viajaron — esto también cierra un agujero
+previo: un pull pisaba el descuento local de ventas todavía sin enviar. Con retención quedan los
+locales, el cursor de clientes **no avanza** (el saldo viaja dentro del cliente: el próximo delta lo
+vuelve a traer) y una foto completa no cuenta como hecha (se vuelve a intentar). El stock se ajusta en
+todas las filas (un producto con efectos y sin fila parte de 0); el saldo, solo en los clientes que
+vinieron con saldo (nunca se inventa una cuenta). Un pull que retiene **no es un fallo**
+(`sync/pending-lot` se eliminó): devuelve `PullApplication` (`applied` / `reapplied` / `retained`,
+`lastPullApplicationSignal` en `ui/state/sync.ts`). El último estado en curso informado se guarda en
+el lote en espera (`AwaitingLot.lastStatus`, `sync/push-lot.ts::updateAwaitingLots`) y `/DIAGNOSTICO`
+lo muestra ("en cola · N eventos"/"procesando"/"sin informar"), junto con cómo se aplicó el último
+pull. Un lote que se resuelve con `issues` no bloquea nada (el POS nunca se autobloquea) — solo se
+muestra al humano vía `pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`),
+formateado con el evento al que se refiere (`ui/format-lot.ts::formatLotIssue`). Pendiente: #115
+(foto completa con stock vacío y movimientos pendientes) y, en backlog, #113 (cálculo por ítem con un
+lote `processing`).
+
+**Limpieza a 7 días (#98)**: la terminal borra lo sincronizado con más de 7 días
+(`domain/local-cleanup.ts::planLocalCleanup`, pura; `storage/local-cleanup.ts::runLocalCleanup`, una
+transacción): eventos `synced` del outbox salvo los de lotes en espera o en curso (hacen falta para
+reaplicar, `sync/cleanup-schedule.ts::protectedEventIds`); ventas cuyo evento y cuya anulación no están
+pendientes; movimientos de stock y de cuenta por **su propia edad** — son registros independientes de
+su venta, el `saleId` es solo auditoría (con "se borran con su venta" quedaba huérfano el movimiento
+de la anulación reciente de una venta vieja; la anulación como documento propio se discute en #99);
+un `accountMovement` sin venta se conserva (la Etapa 6 define su regla); turnos cerrados. Nunca se
+borra lo pendiente, el catálogo/stock/clientes/cuentas ni la venta en curso, ni **el ancla del
+arqueo** mientras existan turnos (hasta la Etapa 5, #100): el último turno cerrado, el abierto y sus
+ventas con sus movimientos. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
+exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, que guarda también los conteos y la
+fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
+`/CONFIG` abierto. Efecto aceptado: una venta borrada deja de aparecer en `/ANULAR` (#110 limita
+`/ANULAR` a los tickets del día).
 
 **Log de intentos y `/DIAGNOSTICO`**: un usuario probando el conector de Sheets contra un
 despliegue real se topó con un error de sync sin poder ver el detalle (la Console del navegador no
@@ -184,12 +220,14 @@ mostraba nada, solo la pestaña Network). `sync/engine.ts::logSyncAttempt` regis
 a `connector.pushBatch`/`pullBatch` — `request`/`result` son literalmente lo que el call site ya
 tiene en la mano, sin resumir, para poder correlacionar con Network — en `syncLogSignal`
 (`ui/state/sync.ts`, tope de 20, más nuevo primero, sin persistir). Un ciclo exitoso no toca la
-consola; un fallo real (`sync/request-failed`, `sync/remote-error`, etc.) hace `console.error`; el
-descarte por lote en curso (comportamiento esperado de la regla de arriba, no un problema) hace
-`console.info`; un lote resuelto con `issues` hace `console.warn`. `/DIAGNOSTICO` (comando core,
+consola; un fallo real (`sync/request-failed`, `sync/remote-error`, etc.) hace `console.error`; un
+pull que retiene stock y saldo (comportamiento esperado de la regla de arriba, no un problema) hace
+`console.info`; un lote resuelto con `issues` hace `console.warn`. La entrada de un pull exitoso
+guarda también cómo se aplicó (`SyncLogEntry.application`). `/DIAGNOSTICO` (comando core,
 `ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
-motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo y los lotes en espera con su último
-estado — de solo lectura, mismo patrón de
+motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo, los lotes en espera con su último
+estado y su cantidad de eventos, el lote en curso "no recibido por el backend", cómo se aplicó el
+último pull y la última limpieza de datos locales con su ancla — de solo lectura, mismo patrón de
 teclado que `/RESUMEN`. Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
 (ver "Barra de estado" más abajo).
 
@@ -207,8 +245,8 @@ cerrojo sin espera, el que se llama primero siempre gana la carrera — un bug r
 recién al escribir los tests de esta etapa.
 
 **Foto completa y bajas**: sin cambios de fondo respecto de antes de #87 — un pull sin cursor de un
-recurso es la fuente de verdad de ese recurso (`storage/reconcile.ts::reconcileSnapshot`, todo o
-nada, nunca toca ventas/turnos/movimientos/outbox/venta en curso), cada conector declara su
+recurso es la fuente de verdad de ese recurso (`storage/reconcile.ts::applySnapshotReconciled`
+dentro de la transacción de `storage/apply-pull.ts`, todo o nada, nunca toca ventas/turnos/movimientos/outbox/venta en curso), cada conector declara su
 `pullMode` (`connector-registry.ts`), la foto completa de un conector `delta` se repite cada 2 h
 (`sync/full-refresh.ts::FULL_REFRESH_INTERVAL_MS`, antes 1 h) además de al arrancar y a pedido.
 
@@ -376,8 +414,8 @@ primer paso incompleto en modo requerido, y en Terminal tras perder la identidad
   guarda sucursal/punto de venta/locale conservando `verifiedAt`, sin prueba ni cerrojo ni IndexedDB.
   De `incomplete` pasa a `active`. Los eventos ya encolados conservan su `origin`.
 - **Conexión cambiada, Mantener** (`applyConnection` con `local: 'keep'`): en la transacción de
-  siempre, la foto se reconcilia (`storage/reconcile.ts::applySnapshotReconciled`, la lógica de
-  `reconcileSnapshot` sin transacción propia) — ventas, turnos, movimientos, venta en curso y outbox
+  siempre, la foto se reconcilia (`storage/reconcile.ts::applySnapshotReconciled`, sin transacción
+  propia — la misma que usa el pull, `storage/apply-pull.ts`) — ventas, turnos, movimientos, venta en curso y outbox
   quedan intactos. Con **otro origen** se descarta el estado de lotes del backend viejo (los
   pendientes salen en un lote nuevo al nuevo) y una tabla que llega vacía sí borra lo local (un backend
   nuevo vacío es legítimo). Con el **mismo origen** el estado de lotes se **conserva** — un lote
@@ -669,7 +707,9 @@ de Tab ni sacarle el foco a la barra de comandos. 4 estados reales
 "sin configurar", con precedencia sobre todo salvo estar offline. En `sync-error` muestra el motivo
 traducido (`lastSyncFailureSignal` + `describeError`) y la hora de la última sync exitosa; en
 `online-idle`, lo que hay en la base local (`localCatalogCountsSignal`, contado — un pull por delta
-trae solo cambios). Un lote de push con `issues` (#87) no dispara `sync-error` — es informativo,
+trae solo cambios) y, si el último pull retuvo stock y saldos por un lote `processing` (#98), el
+sufijo "· stock y saldos en espera del backend" (`lastPullApplicationSignal`) — sin pasar a
+`sync-error`: no es un fallo. Un lote de push con `issues` (#87) no dispara `sync-error` — es informativo,
 `pushLotIssuesSignal` — pero sí actualiza el texto de la barra. `runPullCycle` devuelve un
 `Result<void>` y `lastSyncedAt` solo se actualiza en un ciclo completamente exitoso. Lee los signals
 de `ui/state/sync.ts`; no toca `navigator.onLine`
@@ -1301,6 +1341,20 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   `/RESUMEN` — ver "Ciclo de vida de la conexión", "Teclado y mouse" y "Menú de '/'". Los e2e siembran
   un id de dispositivo por pestaña (`e2e/fixtures.ts::seedDeviceIdentity`): sin él, cada spec con una
   config sembrada arrancaría como una terminal que perdió su identidad.
+
+- Pull con eventos reaplicados y limpieza a 7 días (Etapa 3 del epic #94, issue #98; spec
+  `docs/superpowers/specs/2026-09-24-pull-con-eventos-reaplicados-y-limpieza-design.md`, plan
+  `docs/superpowers/plans/2026-09-24-pull-con-eventos-reaplicados-y-limpieza.md`): datos maestros y
+  bloqueos siempre, stock y saldo del backend más los eventos que todavía no refleja (lotes `queued` y
+  pendientes nunca enviados) o retenidos con un lote `processing`, ack recuperado del lote en curso, y
+  limpieza de lo sincronizado con más de 7 días — ver "Patrón outbox". El contrato sigue en 3.0.0 (solo
+  se precisó la semántica de `/sync/pull`); el minibackend y el puente de Sheets ya cumplían sin
+  cambios. Desviaciones del plan: `withConnectorCycle` devuelve lo que devuelve el ciclo (para saber si
+  el pull salió bien sin mutar una variable desde el callback), y la limpieza trata los movimientos
+  como independientes de su venta (surgió al implementarla: un movimiento de anulación quedaba huérfano;
+  la anulación como documento propio pasó a #99, la ventana de anulación del día a #110). Quedaron
+  #115 (foto completa con stock vacío y movimientos pendientes) y la issue `backlog` #113 (cálculo por
+  ítem y marcas propias del POS con un lote `processing`).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
