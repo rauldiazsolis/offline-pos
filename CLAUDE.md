@@ -87,7 +87,7 @@ registro central (`ErrorMeta`) para mantener exhaustividad en los `switch` de la
 
 ```typescript
 type ErrorMeta = {
-  'sale/insufficient-stock': { productId: string; requested: number; available: number };
+  'sale/refund-amount-mismatch': { total: number; tendered: number };
   'sale/no-line-to-reduce': undefined;
   'account/hold-rejected': { reasonCode: string };
   'account/offline-limit-exceeded': { missing: number };
@@ -145,10 +145,12 @@ avise. Riesgo aceptado: lo pendiente sin enviar se pierde. `getDeviceId()` devue
 **nunca crea uno** (llamarlo antes de resolver es un bug): borrar la clave a mitad de sesión no cambia
 nada hasta recargar, así nunca se pushean datos viejos con un id nuevo. Sucursal y punto de venta son
 **obligatorios** desde #97 (estado `incomplete`, ver "Ciclo de vida de la conexión"): el POS los manda
-siempre; un evento encolado antes puede llegar sin ellos. Un evento `cash-session` que haya
-quedado pendiente en una terminal (tipo que v3 eliminó) nunca viaja:
-`storage/local-data.ts::listPendingOutbox` lo excluye y lo marca como enviado
-(`domain/outbox.ts::isLegacyOutboxType`).
+siempre; un evento encolado antes puede llegar sin ellos. Un evento `cash-session` (tipo que v3
+eliminó) o `sale-void` (tipo que 4.0.0 eliminó, #99: la anulación viaja como `sale`) que haya
+quedado pendiente en una terminal nunca viaja: `storage/local-data.ts::listPendingOutbox` lo excluye
+y lo marca como enviado (`domain/outbox.ts::LEGACY_OUTBOX_TYPES`). Un `sale-void` pendiente ya mandó
+su stock por sus propios `stock-movement`; se pierde solo el aviso de la anulación (riesgo aceptado,
+no hay terminales en producción).
 
 **Push: un solo lote, un solo ack (#87)**. `sync/engine.ts::pushPendingLot` manda **toda** la cola
 `pending` del outbox de una vez, con un `idempotency_id` (ULID) generado al armar el lote y
@@ -201,23 +203,24 @@ lote `processing`).
 **Limpieza a 7 días (#98)**: la terminal borra lo sincronizado con más de 7 días
 (`domain/local-cleanup.ts::planLocalCleanup`, pura; `storage/local-cleanup.ts::runLocalCleanup`, una
 transacción): eventos `synced` del outbox salvo los de lotes en espera o en curso (hacen falta para
-reaplicar, `sync/cleanup-schedule.ts::protectedEventIds`); ventas cuyo evento y cuya anulación no están
-pendientes; movimientos de stock y de cuenta por **su propia edad** — son registros independientes de
-su venta, el `saleId` es solo auditoría (con "se borran con su venta" quedaba huérfano el movimiento
-de la anulación reciente de una venta vieja; la anulación como documento propio se discute en #99);
+reaplicar, `sync/cleanup-schedule.ts::protectedEventIds`); cada venta por **su propia edad y su propio
+evento** (desde #99 una anulación es otra venta, no retiene a la que anula); movimientos de stock y de
+cuenta por **su propia edad** — son registros independientes de su venta, el `saleId` es solo
+auditoría (con "se borran con su venta" quedaba huérfano el movimiento de la anulación reciente de
+una venta vieja);
 un `accountMovement` sin venta se conserva (la Etapa 6 define su regla); turnos cerrados. Nunca se
 borra lo pendiente, el catálogo/stock/clientes/cuentas ni la venta en curso, ni **el ancla del
 arqueo** mientras existan turnos (hasta la Etapa 5, #100): el último turno cerrado, el abierto y sus
 ventas con sus movimientos. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
 exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, que guarda también los conteos y la
 fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
-`/CONFIG` abierto. Efecto aceptado: una venta borrada deja de aparecer en `/ANULAR` (#110 limita
-`/ANULAR` a los tickets del día).
+`/CONFIG` abierto. `/ANULAR` solo ofrece las últimas 24 h (#99), así que nunca se anula algo que la
+limpieza ya borró.
 
 **Log de intentos y `/DIAGNOSTICO`**: un usuario probando el conector de Sheets contra un
 despliegue real se topó con un error de sync sin poder ver el detalle (la Console del navegador no
-mostraba nada, solo la pestaña Network). `sync/engine.ts::logSyncAttempt` registra cada llamada real
-a `connector.pushBatch`/`pullBatch` — `request`/`result` son literalmente lo que el call site ya
+mostraba nada, solo la pestaña Network). `sync/sync-log.ts::logSyncAttempt` registra cada llamada real
+a `connector.pushBatch`/`pullBatch`/`getInfo` (`kind` `push`/`pull`/`info`) — `request`/`result` son literalmente lo que el call site ya
 tiene en la mano, sin resumir, para poder correlacionar con Network — en `syncLogSignal`
 (`ui/state/sync.ts`, tope de 20, más nuevo primero, sin persistir). Un ciclo exitoso no toca la
 consola; un fallo real (`sync/request-failed`, `sync/remote-error`, etc.) hace `console.error`; un
@@ -225,7 +228,8 @@ pull que retiene stock y saldo (comportamiento esperado de la regla de arriba, n
 `console.info`; un lote resuelto con `issues` hace `console.warn`. La entrada de un pull exitoso
 guarda también cómo se aplicó (`SyncLogEntry.application`). `/DIAGNOSTICO` (comando core,
 `ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
-motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo, los lotes en espera con su último
+motor (`sync/engine.ts::isSyncLockHeld`), el estado del backend (contrato y `ok`/mantenimiento/
+incompatible, #99), el id de dispositivo, los lotes en espera con su último
 estado y su cantidad de eventos, el lote en curso "no recibido por el backend", cómo se aplicó el
 último pull y la última limpieza de datos locales con su ancla — de solo lectura, mismo patrón de
 teclado que `/RESUMEN`. Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
@@ -272,14 +276,15 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 3.0.0** desde la Etapa 1 del epic #94 —
-#96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`). **Desde la Etapa 1 del rediseño de sync (#87,
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.0.0** desde la Etapa 4 del epic #94 —
+#99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
+la Etapa 1, #96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`). **Desde la Etapa 1 del rediseño de sync (#87,
 "el backend nunca rechaza") el contrato pasó de 10 endpoints por recurso/evento a dos operaciones
 batch** (`POST /sync/push`, `POST /sync/pull`) más dos excepciones síncronas: la reserva de crédito
 existente (`POST /account-holds`, sin cambios) y una futura consulta de saldo
 (`GET /account-balance/{customerId}`, documentada pero `x-pos-status: documented-not-implemented`
-— backlog #51/#59). `sync/connector.ts::Connector` tiene, en consecuencia, solo tres métodos:
-`pushBatch`, `pullBatch` y `requestAccountHold`. Principio central del contrato: **el backend nunca
+— backlog #51/#59), más `GET /info` desde 4.0.0. `sync/connector.ts::Connector` tiene, en
+consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. Principio central del contrato: **el backend nunca
 evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
 movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
 y audita, y cualquier inconsistencia se resuelve de su lado o a mano. Esto cierra el punto que
@@ -296,7 +301,24 @@ contrato nunca había definido ese endpoint) viajan hoy como eventos del lote de
 (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya no son endpoints HTTP
 propios.
 
-**Contrato v3 (#96)** — 8 tipos de evento: `sale`, `stock-movement`, `sale-void`, `customer`,
+**Contrato 4.0.0 (#99)** — la anulación es un **ticket propio**: viaja como un evento `sale` más, con
+líneas y pagos invertidos y `voidsSaleId` apuntando al original (sale `sale-void`: 7 tipos de evento;
+`Sale.status` solo `closed`, sin `voidedAt`). `GET /info` informa `contractVersion` y `status`
+(`ok`/`maintenance`, con `message?` y `backend?`); todo request lleva `X-POS-Contract-Version`
+(REST: header, `sync/connector.ts::CONTRACT_VERSION_HEADER`; Sheets: `contractVersion` en el cuerpo).
+Un backend que no habla ese major responde `409 { code: 'incompatible-contract', contractVersion }`
+**sin procesar nada y sin ack** — no contradice "el backend nunca rechaza" (es el idioma, no el
+contenido) y nada se pierde: el lote sigue congelado en el outbox. Compatible = mismo major y minor
+igual o mayor (`domain/contract-version.ts`). **Estado del backend en el POS**
+(`sync/backend-status.ts`, `backendStatusSignal`: `unknown`/`ok`/`incompatible`/`maintenance`): se
+pregunta `getInfo` al probar la conexión en el wizard (incompatible o mantenimiento hacen fallar la
+prueba con su motivo), al arrancar, en `/SINCRONIZAR`, después de un fallo que no sea de red
+(`backendCheckDueSignal`) y siempre que llega un 409. Con `incompatible` o `maintenance`
+`withConnectorCycle` no corre ningún push ni pull: cada ciclo hace solo un `getInfo` y se retoma solo
+al volver `ok`. Un error de red no cambia el estado; con `unknown` los ciclos corren como siempre.
+**La venta nunca se bloquea.**
+
+**Contrato v3 (#96)** — 8 tipos de evento: `sale`, `stock-movement`, `sale-void` (4.0.0 lo sacó), `customer`,
 `account-hold-confirm`, `account-hold-release`, y dos nuevos: `cash-movement`
 (`domain/cash-movement.ts`: ingreso/egreso de caja; el arqueo viaja solo como ajuste
 `count-adjustment` con lo esperado y lo contado, y solo si la diferencia no es 0) y
@@ -309,7 +331,8 @@ ser negativos (el POS los genera recién en la Etapa 4, los conectores ya los ac
 `account` sin `reference` es fiado offline (positivo) o acreditación (negativo). El pull trae
 `createdAt` **obligatorio** (fecha de alta real — `splitConnectorCustomer` la usa en vez de la hora
 del pull) y `blocked?: { reason }` (bloqueo informativo, nunca impide operar) en productos y clientes;
-`blocked` se guarda en IndexedDB pero no se muestra hasta la Etapa 4. El puerto: `pushBatch(batch:
+`blocked` se muestra desde la Etapa 4 como advertencia (ver "Advertencias en vez de bloqueos" en "UX
+keyboard-first"). El puerto: `pushBatch(batch:
 PushBatch, idempotencyId)` con `PushBatch = { deviceId, events }`, y `PullBatchParams.deviceId`. Los
 schemas Zod de red que comparten los dos conectores TS (`connectorProductSchema`,
 `batchLotStatusSchema`, `pullBatchResponseSchema`, `toPullBatchResult`, …) viven en
@@ -486,13 +509,88 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
 7. Cualquier otro texto → búsqueda difusa por nombre **o por una línea libre ya en este ticket**
    (ver detalle abajo).
 
-`Ctrl+Enter` = `/COBRAR` desde cualquier estado. Con la barra vacía, `↑/↓` navegan el carrito; con
+`Ctrl+Enter` = `/COBRAR` desde cualquier estado. **Enter con la barra vacía (#99)**: con líneas abre
+Cobro igual que Ctrl+Enter (aunque haya una línea seleccionada), sin líneas y con cliente avisa
+"Cobranza sin venta: llega en una próxima versión." (Etapa 6), sin nada no hace nada
+(`command-bar-controller.ts::submitEmptyCommandBar`). Con la barra vacía, `↑/↓` navegan el carrito; con
 texto, navegan resultados (producto, cliente o el menú de comandos filtrado). Errores de parseo van
 en un slot de altura fija reservado (nunca corren el layout) y seleccionan todo el input (`.select()`)
 para reemplazar sin retipear. El foco al montar y el `.select()` en error se resuelven con los hooks
 compartidos de `ui/hooks/` (ver "Patrones establecidos") — nunca con el atributo HTML `autoFocus`,
 que no dispara de forma confiable cuando Preact desmonta y vuelve a montar una pantalla (el caso
 real: volver de un popup con Esc).
+
+**Venta de la Etapa 4 (#99)** — el POS nunca se autobloquea:
+
+- **Cantidades con signo y hasta 3 decimales** (`,` o `.`), en el prefijo `<n>*` y en número + Enter
+  sobre la línea seleccionada (`parse-command-bar.ts::parseQuantityText`); más de 3 decimales es un
+  error en el slot ("Hasta 3 decimales en la cantidad"), nunca un redondeo silencioso. El carrito
+  suma neto por producto: puede crear o dejar una línea en negativo (`-2*coca` sin línea previa es una
+  devolución) y 0 exacto la borra; número + Enter con 0 también. Redondeo en un solo lugar
+  (`domain/rounding.ts`): cantidades a 3, importes a 2, y `calculateTotals` redondea cada campo (el
+  total sale de los otros ya redondeados). Un descuento de línea va sobre el valor absoluto con el
+  signo de la línea.
+- **Tickets en 0 o negativos**: `closeSale` exige que todos los pagos tengan el signo del total (en
+  negativo, suma exacta; en 0, sin pagos). Cobro (`domain/tender.ts::tenderMode`) en **modo
+  devolución** con total negativo: título "Devolver X", se tipea en positivo cuánto se devuelve por
+  medio, sin vuelto, suma exacta (`sale/refund-amount-mismatch`); cuenta corriente acredita sin pedir
+  hold (sigue exigiendo cliente). Un ticket negativo suma stock (`delta = -qty`).
+- **Cobro**: Efectivo arranca con |total| precargado y seleccionado (`checkout-controller.ts::
+  enterCheckout`, lo llama `triggerCheckout`); Enter y ↓ pasan al campo siguiente, ↑ al anterior, sin
+  ciclar y salteando Cuenta corriente deshabilitada (`moveCheckoutField`); Ctrl+Enter confirma, Esc
+  cancela. Cobrar limpia la línea seleccionada del carrito.
+- **Advertencias en vez de bloqueos** (`domain/sale-warnings.ts`, `ui/format-warning.ts`, cierra #12):
+  stock insuficiente (solo `tracksStock`, cantidad positiva) y productos/clientes bloqueados se
+  muestran en ámbar (`--color-warning`/`--color-chrome-warning`), siempre con texto: en la búsqueda
+  ("Bloqueado: …", "Stock: N"), en la lista de `@`, debajo de la línea del carrito ("⚠ Stock
+  disponible: N"), en la tarjeta de Cliente, en un bloque "Advertencias" de Cobro y en el slot de la
+  barra al agregar o ajustar (`commandBarWarningSignal`: no selecciona el texto, se borra con la
+  próxima tecla; un error tiene precedencia). El stock sale de `ui/state/stock.ts::
+  stockSnapshotSignal` (la tabla entera en memoria).
+- **La anulación es un ticket propio** (`domain/sale-lifecycle.ts::buildVoidSale`): líneas y pagos
+  invertidos, `voidsSaleId` al original (que no se toca), el pago `account` pierde su `reference`
+  (acreditación); `storage/sale-repository.ts::voidSaleAndPersist` la persiste como cualquier venta
+  (índice Dexie `voidsSaleId`, versión 6). Ventana de 24 h móviles (`isWithinVoidWindow`), no se
+  anula dos veces (`sale/already-voided`) ni una anulación (`sale/cannot-void-a-void`); una devolución
+  común sí. `/ANULAR` (`listVoidCandidates`) lista los últimos 20 tickets de 24 h, con la original
+  anulada ("Anulada") y la anulación ("Anulación de HH:MM · $X") atenuadas y sin acción; `/RESUMEN`
+  marca lo mismo (`isVoided`, que también reconoce el `status: 'voided'` legado).
+
+**Venta de la Etapa 4 (#99)** — el POS nunca se autobloquea:
+
+- **Cantidades con signo y hasta 3 decimales** (`,` o `.`), en el prefijo `<n>*` y en número + Enter
+  sobre la línea seleccionada (`parse-command-bar.ts::parseQuantityText`); más de 3 decimales es un
+  error en el slot ("Hasta 3 decimales en la cantidad"), nunca un redondeo silencioso. El carrito
+  suma neto por producto: puede crear o dejar una línea en negativo (`-2*coca` sin línea previa es una
+  devolución) y 0 exacto la borra; número + Enter con 0 también. Redondeo en un solo lugar
+  (`domain/rounding.ts`): cantidades a 3, importes a 2, y `calculateTotals` redondea cada campo (el
+  total sale de los otros ya redondeados). Un descuento de línea va sobre el valor absoluto con el
+  signo de la línea.
+- **Tickets en 0 o negativos**: `closeSale` exige que todos los pagos tengan el signo del total (en
+  negativo, suma exacta; en 0, sin pagos). Cobro (`domain/tender.ts::tenderMode`) en **modo
+  devolución** con total negativo: título "Devolver X", se tipea en positivo cuánto se devuelve por
+  medio, sin vuelto, suma exacta (`sale/refund-amount-mismatch`); cuenta corriente acredita sin pedir
+  hold (sigue exigiendo cliente). Un ticket negativo suma stock (`delta = -qty`).
+- **Cobro**: Efectivo arranca con |total| precargado y seleccionado (`checkout-controller.ts::
+  enterCheckout`, lo llama `triggerCheckout`); Enter y ↓ pasan al campo siguiente, ↑ al anterior, sin
+  ciclar y salteando Cuenta corriente deshabilitada (`moveCheckoutField`); Ctrl+Enter confirma, Esc
+  cancela. Cobrar limpia la línea seleccionada del carrito.
+- **Advertencias en vez de bloqueos** (`domain/sale-warnings.ts`, `ui/format-warning.ts`, cierra #12):
+  stock insuficiente (solo `tracksStock`, cantidad positiva) y productos/clientes bloqueados se
+  muestran en ámbar (`--color-warning`/`--color-chrome-warning`), siempre con texto: en la búsqueda
+  ("Bloqueado: …", "Stock: N"), en la lista de `@`, debajo de la línea del carrito ("⚠ Stock
+  disponible: N"), en la tarjeta de Cliente, en un bloque "Advertencias" de Cobro y en el slot de la
+  barra al agregar o ajustar (`commandBarWarningSignal`: no selecciona el texto, se borra con la
+  próxima tecla; un error tiene precedencia). El stock sale de `ui/state/stock.ts::
+  stockSnapshotSignal` (la tabla entera en memoria).
+- **La anulación es un ticket propio** (`domain/sale-lifecycle.ts::buildVoidSale`): líneas y pagos
+  invertidos, `voidsSaleId` al original (que no se toca), el pago `account` pierde su `reference`
+  (acreditación); `storage/sale-repository.ts::voidSaleAndPersist` la persiste como cualquier venta
+  (índice Dexie `voidsSaleId`, versión 6). Ventana de 24 h móviles (`isWithinVoidWindow`), no se
+  anula dos veces (`sale/already-voided`) ni una anulación (`sale/cannot-void-a-void`); una devolución
+  común sí. `/ANULAR` (`listVoidCandidates`) lista los últimos 20 tickets de 24 h, con la original
+  anulada ("Anulada") y la anulación ("Anulación de HH:MM · $X") atenuadas y sin acción; `/RESUMEN`
+  marca lo mismo (`isVoided`, que también reconoce el `status: 'voided'` legado).
 
 **Menú de "/" — filtra, navega, ejecuta sin ambigüedad**: escribir después de `/` filtra
 `availableCommands()` por prefijo (`commandResultsSignal`) en vez de mostrar siempre la lista
@@ -639,8 +737,10 @@ mismo chequeo de fondo (la verificación real; `triggerCheckout` es solo para fa
 hay un turno abierto, agrega el id de la venta a su `sales[]` en la misma transacción que la cierra.
 El arqueo al cerrar es **solo de efectivo** (apertura + ventas en efectivo del turno vs. lo
 contado) — tarjeta/cuenta corriente no tienen equivalente físico para "contar", aunque el reporte
-básico sí desglosa el total por cada medio de pago. Un turno **abierto** nunca se sincroniza (mismo
-criterio que una `Sale` con `status: 'open'`, Fase 1: nace ya cerrada). Hasta el contrato v2 se
+básico sí desglosa el total por cada medio de pago. Anular **no** exige un turno abierto; si hay uno,
+el ticket de anulación queda registrado en él (#99), así el arqueo descuenta el efectivo devuelto
+hasta que la Etapa 5 saque los turnos. Un turno **abierto** nunca se sincroniza (mismo
+criterio que una venta: nace ya cerrada). Hasta el contrato v2 se
 encolaba en el outbox al cerrarse; desde v3 (#96) **no viaja nunca** — el turno local sigue hasta la
 Etapa 5 de #94, que lo reemplaza por movimientos de caja (ver "Connector API" más abajo).
 
@@ -700,7 +800,10 @@ hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 Barra de estado (extremo opuesto, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
 propósito no interactiva; esa decisión se reabrió a propósito en la prueba manual de esa etapa: un
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
-de Tab ni sacarle el foco a la barra de comandos. 4 estados reales
+de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
+(`backendStatusSignal`), detrás de "sin configurar" y de offline y delante del resto: "Backend
+incompatible (contrato X, se necesita 4.x)" con estilo de error, y "Backend en mantenimiento:
+<mensaje>", informativo. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
 `isPushStruggling` en `domain/push-lot.ts`, **o cualquier pull que falle**, #53) — más un quinto,
@@ -752,10 +855,12 @@ patrón único (sacado de `/RESUMEN`, Ciclo 10):
 Dónde se aplica: **venta** — click en una fila de un overlay (comandos, clientes incluidos "Consumidor
 Final" y "+ Crear cliente", artículos incluidas las líneas libres) es lo mismo que Enter sobre ella
 (`command-bar-controller.ts::activateCommandBarRow`, mismo camino que `submitCommandBar`); click fuera
-del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`). El carrito todavía no
-es clickeable (Etapa 4). **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
+del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`); click en una fila del
+carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). **Cobro** (#99): click
+en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
-**`/DEMO_RESET`**, **`/RESUMEN`** y la **barra de estado** (click = `/DIAGNOSTICO`). Fuera por ahora: cobro (Etapa 4) y `/CAJA` (Etapa 5).
+**`/DEMO_RESET`**, **`/RESUMEN`** y la **barra de estado** (click = `/DIAGNOSTICO`). Fuera por ahora:
+`/CAJA` (Etapa 5).
 
 ## Diseño visual
 
@@ -1355,6 +1460,19 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   la anulación como documento propio pasó a #99, la ventana de anulación del día a #110). Quedaron
   #115 (foto completa con stock vacío y movimientos pendientes) y la issue `backlog` #113 (cálculo por
   ítem y marcas propias del POS con un lote `processing`).
+
+- Venta: Enter para cobrar, cantidades, advertencias, anulación como ticket y contrato 4.0.0 (Etapa 4
+  del epic #94, issue #99; cierra #12 y #61; spec
+  `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`, plan
+  `docs/superpowers/plans/2026-09-24-venta-enter-cantidades-advertencias.md`): ver "Venta de la Etapa
+  4" en "UX keyboard-first", "Contrato 4.0.0" en "Connector API" y "Patrón outbox". Desviaciones del
+  plan (anotadas en la spec): el stock en memoria es la tabla entera, no solo los productos del
+  carrito; en Sheets la anulación eran columnas de Ventas que dejan de escribirse (no una pestaña);
+  el redondeo es sobre la representación decimal; agregar un producto pasó a ser síncrono; el vacío
+  de `/ANULAR` espera a que termine la carga; aplicar una conexión resetea el estado del backend.
+  El e2e encontró dos bugs, corregidos: cobrar dejaba seleccionada una línea que ya no existía (el
+  siguiente código de barras se tomaba como su cantidad) y la hora de "Anulación de HH:MM" salía en
+  12 h con `es-AR`. #110 conserva la búsqueda en `/ANULAR` y el ticket completo en la confirmación.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

@@ -1,7 +1,8 @@
 # Venta: Enter para cobrar, cantidades decimales/negativas, advertencias, anulación como ticket y contrato 4.0.0
 
 Fecha: 2026-09-24
-Estado: diseño aprobado por el usuario en la sesión de brainstorming; pendiente de revisión escrita.
+Estado: implementado (plan `docs/superpowers/plans/2026-09-24-venta-enter-cantidades-advertencias.md`); ver
+"Desviaciones de la implementación" al final.
 Issue: #99 (Etapa 4 del epic #94). Cierra #12 y #61. Toma de #110 solo el criterio de qué se puede
 anular (ventana y marca). Toca #100 (marca de anulado en `/RESUMEN`, saldo de efectivo). Depende de
 las Etapas 1 a 3 (#96, #97, #98).
@@ -401,3 +402,30 @@ Click en una fila = seleccionarla (lo mismo que llegar con ↑/↓). El foco se 
 - Cobranza sin venta (Etapa 6, #101): Enter con cliente y sin líneas solo avisa.
 - Sacar los turnos de caja (Etapa 5, #100).
 - Modo mantenimiento en la planilla de Sheets (siempre `ok`).
+
+## Desviaciones de la implementación
+
+- **Stock en memoria (§3, "Datos para la UI")**: `stockSnapshotSignal` (`ui/state/stock.ts`) guarda la
+  tabla `stock` entera, no solo los productos del carrito — así la búsqueda puede mostrar "Stock: N"
+  sin una lectura async por fila (tabla chica, una fila por producto). Se recarga al arrancar, tras
+  cada pull, al aplicar una conexión o un `/DEMO_RESET`, y tras cobrar o anular. En la búsqueda,
+  "Stock: N" compara la cantidad pedida **más** la que ya hay en el carrito (lo que quedaría en la
+  línea).
+- **Sheets (§5)**: la anulación nunca tuvo una pestaña propia en la planilla — eran columnas de Ventas
+  ("Anulada el", "Sucursal de anulación", "Punto de venta de anulación"), que dejan de escribirse.
+  "Motivo de anulación" se sigue escribiendo, ahora en las filas del ticket de anulación.
+- **Redondeo (§1)**: `roundQuantity`/`roundAmount` redondean sobre la representación decimal
+  (`1.005e2`), no sobre el producto en coma flotante (`1.005 * 100` da `100.4999…`). Se consolidó
+  también la copia de `roundAmount` que tenía `domain/cash-movement.ts`.
+- **Agregar un producto es síncrono**: sin el chequeo de stock ya no hay lectura async, así que
+  `pendingBarOperation` queda solo para el alta de cliente.
+- **`/ANULAR`**: una lista sin filas anulables muestra el vacío ("No hay ventas de las últimas 24
+  horas para anular."), así que las marcas solo se ven cuando hay al menos una venta anulable. El
+  vacío se muestra recién cuando terminó la carga (`voidLoadedSignal`), sin parpadeo.
+- **Estado del backend**: aplicar una conexión nueva vuelve el estado a `unknown` y agenda un
+  `getInfo`, para no arrastrar el estado de la conexión anterior.
+- **Bugs encontrados por el e2e**: tras cobrar quedaba seleccionada una línea que ya no existía (el
+  próximo código de barras se tomaba como su cantidad) — cobrar ahora limpia la selección; y la hora
+  de "Anulación de HH:MM" salía en 12 h con `es-AR` — `formatTime` fuerza 24 h.
+- **OpenAPI**: validado con prettier (parsea YAML) y un chequeo de que cada `$ref` resuelve, en vez de
+  `@redocly/cli`.
