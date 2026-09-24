@@ -1,4 +1,5 @@
 import type { OutboxEvent } from './outbox.ts';
+import { roundAmount, roundQuantity } from './rounding.ts';
 
 /**
  * Efectos sobre stock y saldo de un conjunto de eventos del outbox, para
@@ -12,14 +13,6 @@ export type ReapplyEffects = {
   stock: ReadonlyMap<string, number>;
   balance: ReadonlyMap<string, number>;
 };
-
-export function roundQuantity(value: number): number {
-  return Math.round(value * 1000) / 1000;
-}
-
-export function roundAmount(value: number): number {
-  return Math.round(value * 100) / 100;
-}
 
 function add(map: Map<string, number>, key: string, delta: number): void {
   map.set(key, (map.get(key) ?? 0) + delta);

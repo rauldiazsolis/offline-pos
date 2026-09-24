@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { OutboxEvent } from './outbox.ts';
 import type { Sale } from './sale.ts';
-import { reapplyEffects, roundAmount, roundQuantity } from './reapply.ts';
+import { reapplyEffects } from './reapply.ts';
+import { roundAmount, roundQuantity } from './rounding.ts';
 
 const now = '2026-09-24T10:00:00.000Z';
 const envelope = { status: 'pending' as const, createdAt: now };

@@ -1,3 +1,5 @@
+import { roundAmount } from './rounding.ts';
+
 /**
  * Ingreso/egreso de caja (contrato v3, #96 — lo genera la Etapa 5). El arqueo
  * viaja solo como ajuste (`source: 'count-adjustment'`) cuando la diferencia
@@ -16,8 +18,6 @@ export type CashMovement = {
 };
 
 export const COUNT_ADJUSTMENT_CONCEPT = 'Ajuste por arqueo';
-
-const roundAmount = (value: number): number => Math.round(value * 100) / 100;
 
 /** `undefined` si lo contado coincide con lo esperado: un arqueo sin diferencia no viaja. */
 export function buildCountAdjustment(params: {

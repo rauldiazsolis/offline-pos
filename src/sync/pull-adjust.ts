@@ -1,4 +1,5 @@
-import { roundAmount, roundQuantity, type ReapplyEffects } from '../domain/reapply.ts';
+import type { ReapplyEffects } from '../domain/reapply.ts';
+import { roundAmount, roundQuantity } from '../domain/rounding.ts';
 import type { StockItem } from '../domain/stock.ts';
 import type { ConnectorCustomer } from './connector.ts';
 
