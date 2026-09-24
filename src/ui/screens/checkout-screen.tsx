@@ -1,13 +1,17 @@
 import { useSignalEffect } from '@preact/signals';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { PaymentMethod } from '../../domain/sale.ts';
+import { tenderMode } from '../../domain/tender.ts';
 import { calculateTotals } from '../../domain/totals.ts';
 import { formatMoney } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
   amountTendered,
   cancelCheckout,
   changePreview,
+  moveCheckoutField,
   submitCheckout,
 } from '../keyboard/checkout-controller.ts';
 import { remapDecimalKey } from '../keyboard/decimal-key.ts';
@@ -84,16 +88,34 @@ const sectionLabelStyle = {
 };
 
 /**
- * Pantalla de cobro (`/COBRAR` o `Ctrl+Enter`) — diálogo modal con un campo
- * de monto simultáneo por medio de pago (issue #55, sesión de brainstorming
- * 2026-09-16). A diferencia del resto de la app, acá Enter solo no confirma
- * nada (moverse entre campos con Tab es el flujo normal de un formulario
- * con varios campos) — Ctrl+Enter confirma el cobro completo, Esc cancela.
- * La validación (falta cubrir el total, un medio no-efectivo excedido) pasa
- * recién al confirmar, nunca mientras se tipea.
+ * Pantalla de cobro (`/COBRAR`, `Ctrl+Enter` o Enter con la barra vacía) —
+ * diálogo modal con un campo de monto simultáneo por medio de pago (issue
+ * #55, sesión de brainstorming 2026-09-16). Efectivo arranca con el total
+ * precargado y seleccionado (#99). Enter y ↓ pasan al campo siguiente, ↑ al
+ * anterior, sin ciclar y salteando un campo deshabilitado; Ctrl+Enter
+ * confirma el cobro completo, Esc cancela. La validación (falta cubrir el
+ * total, un medio no-efectivo excedido) pasa recién al confirmar, nunca
+ * mientras se tipea. Con total negativo trabaja en modo devolución: se tipea
+ * en positivo cuánto se devuelve por medio, sin vuelto.
  */
 export function CheckoutScreen() {
   const firstFieldRef = useFocusOnMount<HTMLInputElement>();
+  const fieldRefs = useRef(new Map<PaymentMethod, HTMLInputElement>());
+
+  // Efectivo viene con el total precargado (#99): seleccionado, así tipear
+  // lo reemplaza sin borrar a mano.
+  useLayoutEffect(() => {
+    firstFieldRef.current?.select();
+  }, [firstFieldRef]);
+
+  const focusField = (target: PaymentMethod | undefined) => {
+    if (target === undefined) {
+      return;
+    }
+    const input = fieldRefs.current.get(target);
+    input?.focus();
+    input?.select();
+  };
 
   // A diferencia del resto de la app (un único input, siempre el mismo),
   // acá hay 6 campos — un error tiene que seleccionar el que tenía el foco
@@ -106,19 +128,30 @@ export function CheckoutScreen() {
     }
   });
 
-  const handleKeyDown = (event: TargetedKeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelCheckout();
-      return;
-    }
-    if (event.key === 'Enter' && event.ctrlKey) {
-      event.preventDefault();
-      void submitCheckout();
-      return;
-    }
-    remapDecimalKey(event);
-  };
+  const handleKeyDown =
+    (method: PaymentMethod) => (event: TargetedKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelCheckout();
+        return;
+      }
+      if (event.key === 'Enter' && event.ctrlKey) {
+        event.preventDefault();
+        void submitCheckout();
+        return;
+      }
+      if (event.key === 'Enter' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        focusField(moveCheckoutField(method, 1));
+        return;
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        focusField(moveCheckoutField(method, -1));
+        return;
+      }
+      remapDecimalKey(event);
+    };
 
   const handleInput = (method: PaymentMethod) => (event: TargetedEvent<HTMLInputElement>) => {
     checkoutBuffersSignal.value = {
@@ -132,11 +165,14 @@ export function CheckoutScreen() {
   const paid = amountTendered();
   const change = changePreview();
   const hasCustomer = attachedCustomerSignal.value !== undefined;
+  const mode = tenderMode(totals.total);
 
   return (
-    <div style={overlayStyle}>
+    <div style={overlayStyle} onMouseDown={keepFocusOnMouseDown}>
       <div style={dialogStyle}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Cobrar venta</h1>
+        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
+          {mode === 'refund' ? `Devolver ${formatMoney(Math.abs(totals.total))}` : 'Cobrar venta'}
+        </h1>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 'var(--space-4)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -151,12 +187,21 @@ export function CheckoutScreen() {
                 <label key={method} style={fieldRowStyle}>
                   <span>{PAYMENT_METHOD_LABELS[method]}</span>
                   <input
-                    {...(index === 0 ? { ref: firstFieldRef } : {})}
+                    ref={(element) => {
+                      if (index === 0) {
+                        firstFieldRef.current = element;
+                      }
+                      if (element === null) {
+                        fieldRefs.current.delete(method);
+                      } else {
+                        fieldRefs.current.set(method, element);
+                      }
+                    }}
                     type="text"
                     inputMode="decimal"
                     value={raw}
                     onInput={handleInput(method)}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={handleKeyDown(method)}
                     disabled={disabled}
                     placeholder="0,00"
                     aria-label={PAYMENT_METHOD_LABELS[method]}
@@ -173,7 +218,9 @@ export function CheckoutScreen() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div style={cardStyle}>
-              <div style={sectionLabelStyle}>Total a pagar</div>
+              <div style={sectionLabelStyle}>
+                {mode === 'refund' ? 'Total a devolver' : 'Total a pagar'}
+              </div>
               <div
                 style={{
                   fontFamily: 'var(--font-mono)',
@@ -181,7 +228,7 @@ export function CheckoutScreen() {
                   fontWeight: 'bold',
                 }}
               >
-                {formatMoney(totals.total)}
+                {formatMoney(Math.abs(totals.total))}
               </div>
               <div style={rowStyle}>
                 <span>Cantidad de ítems</span>
@@ -190,22 +237,24 @@ export function CheckoutScreen() {
                 </span>
               </div>
               <div style={rowStyle}>
-                <span>Suma de pagos</span>
+                <span>{mode === 'refund' ? 'Suma devuelta' : 'Suma de pagos'}</span>
                 <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(paid)}</span>
               </div>
             </div>
-            <div style={cardStyle}>
-              <div style={sectionLabelStyle}>Vuelto</div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 'var(--font-size-xl)',
-                  color: 'var(--color-success)',
-                }}
-              >
-                {formatMoney(change)}
+            {mode === 'charge' && (
+              <div style={cardStyle}>
+                <div style={sectionLabelStyle}>Vuelto</div>
+                <div
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--font-size-xl)',
+                    color: 'var(--color-success)',
+                  }}
+                >
+                  {formatMoney(change)}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -226,31 +275,15 @@ export function CheckoutScreen() {
           }}
         >
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            Ctrl+Enter para confirmar, Esc para cancelar.
+            Enter o ↓ pasa al campo siguiente, ↑ al anterior. Ctrl+Enter confirma, Esc cancela.
             {!hasCustomer && ' Adjuntá un cliente con @ para habilitar cuenta corriente.'}
           </p>
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={cancelCheckout}
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Cancelar
+            <button type="button" class="btn" onClick={cancelCheckout}>
+              Cancelar (Esc)
             </button>
-            <button
-              type="button"
-              onClick={() => void submitCheckout()}
-              style={{
-                padding: 'var(--space-2) var(--space-3)',
-                borderRadius: 'var(--radius-md)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Confirmar Cobro
+            <button type="button" class="btn btn-primary" onClick={() => void submitCheckout()}>
+              Confirmar cobro (Ctrl+Enter)
             </button>
           </div>
         </div>

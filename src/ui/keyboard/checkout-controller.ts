@@ -1,14 +1,14 @@
 import { availableCredit, canChargeOffline } from '../../domain/customer.ts';
 import { err, ok, type Result } from '../../domain/result.ts';
-import type { Payment } from '../../domain/sale.ts';
-import { resolveTender, type TenderedAmounts } from '../../domain/tender.ts';
+import type { Payment, PaymentMethod } from '../../domain/sale.ts';
+import { resolveTender, tenderMode, type TenderedAmounts } from '../../domain/tender.ts';
 import { calculateTotals } from '../../domain/totals.ts';
 import { releaseAccountHold } from '../../storage/customer-repository.ts';
 import { newId } from '../../storage/ids.ts';
 import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
 import { requestAccountHoldNow } from '../../sync/account-hold.ts';
 import { describeError } from '../errors.ts';
-import { parseNonNegativeAmount } from '../parse-amount.ts';
+import { formatAmountInput, parseNonNegativeAmount } from '../parse-amount.ts';
 import { cartSignal } from '../state/cart.ts';
 import {
   checkoutBuffersSignal,
@@ -21,6 +21,38 @@ import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+
+/**
+ * Al abrir el cobro (#99): Efectivo arranca con |total| precargado (la
+ * pantalla lo deja seleccionado, así tipear lo reemplaza y Ctrl+Enter cobra
+ * justo). Con total 0 no se precarga nada. Lo llama `triggerCheckout` antes
+ * de cambiar de pantalla.
+ */
+export function enterCheckout(): void {
+  resetCheckout();
+  const { total } = calculateTotals(cartSignal.value);
+  if (total !== 0) {
+    checkoutBuffersSignal.value = {
+      ...checkoutBuffersSignal.value,
+      cash: formatAmountInput(Math.abs(total)),
+    };
+  }
+}
+
+/**
+ * Campo al que lleva Enter/↓ (`direction` 1) o ↑ (-1) desde `from`,
+ * salteando Cuenta corriente sin cliente adjunto (deshabilitada). Sin ciclar:
+ * `undefined` en los extremos.
+ */
+export function moveCheckoutField(
+  from: PaymentMethod,
+  direction: 1 | -1,
+): PaymentMethod | undefined {
+  const hasCustomer = attachedCustomerSignal.value !== undefined;
+  const enabled = TENDERABLE_METHODS.filter((method) => method !== 'account' || hasCustomer);
+  const index = enabled.indexOf(from);
+  return index === -1 ? undefined : enabled[index + direction];
+}
 
 function parsedTenderSafe(): TenderedAmounts {
   const buffers = checkoutBuffersSignal.value;
@@ -37,9 +69,12 @@ export function amountTendered(): number {
   return TENDERABLE_METHODS.reduce((sum, method) => sum + tender[method], 0);
 }
 
-/** Vista previa de vuelto para la pantalla — nunca negativo, no bloquea el tipeo. */
+/** Vista previa de vuelto para la pantalla — nunca negativo, no bloquea el tipeo. Sin vuelto al devolver (#99). */
 export function changePreview(): number {
   const { total } = calculateTotals(cartSignal.value);
+  if (tenderMode(total) !== 'charge') {
+    return 0;
+  }
   return Math.max(0, amountTendered() - total);
 }
 
@@ -132,6 +167,10 @@ function attachReference(payments: Payment[], reference: string | undefined): Pa
  * resuelve cuenta corriente si corresponde, y cierra la venta si con eso se
  * cubre el total — nunca antes (RNF-04, el menor número de pasos posible,
  * pero sin cerrar una venta a medio pagar).
+ *
+ * Al devolver (total negativo, #99) Cuenta corriente acredita sin pedir
+ * hold: un pago `account` negativo sin `reference` es una acreditación
+ * (contrato). Sigue exigiendo un cliente adjunto.
  */
 export async function submitCheckout(): Promise<void> {
   const tenderResult = parsedTenderOrError();
@@ -148,8 +187,17 @@ export async function submitCheckout(): Promise<void> {
   }
 
   const accountAmount = tenderResult.value.account;
+  const mode = tenderMode(total);
+  if (mode === 'refund' && accountAmount > 0 && attachedCustomerSignal.value === undefined) {
+    checkoutErrorSignal.value = describeError({
+      ok: false,
+      error: 'account/no-customer-attached',
+      meta: undefined,
+    });
+    return;
+  }
   let accountReference: string | undefined;
-  if (accountAmount > 0) {
+  if (mode === 'charge' && accountAmount > 0) {
     const accountResult = await resolveAccountReference(accountAmount);
     if (!accountResult.ok) {
       checkoutErrorSignal.value = describeError(accountResult);

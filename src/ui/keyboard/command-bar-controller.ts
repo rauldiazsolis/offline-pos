@@ -39,6 +39,7 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
+import { enterCheckout } from './checkout-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
@@ -280,6 +281,7 @@ export async function triggerCheckout(): Promise<void> {
     });
     return;
   }
+  enterCheckout();
   activeScreenSignal.value = 'checkout';
   clearBuffer();
 }

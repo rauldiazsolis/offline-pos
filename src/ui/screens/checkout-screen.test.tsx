@@ -72,7 +72,7 @@ describe('CheckoutScreen', () => {
     expect(activeScreenSignal.value).toBe('sale');
   });
 
-  it('Enter solo no confirma el cobro', () => {
+  it('Enter solo no confirma el cobro (navega al campo siguiente, #99)', () => {
     render(<CheckoutScreen />);
     const input = screen.getByLabelText('Efectivo');
 
@@ -147,5 +147,61 @@ describe('CheckoutScreen', () => {
     fireEvent.keyDown(input, { key: '.' });
 
     expect(input.value).toBe('1.5');
+  });
+});
+
+describe('CheckoutScreen — precarga, navegación y modo devolución (#99)', () => {
+  it('al montar, Efectivo tiene el foco y su texto precargado seleccionado', () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '100' };
+    render(<CheckoutScreen />);
+    const cash = getInput('Efectivo');
+
+    expect(document.activeElement).toBe(cash);
+    expect(cash.selectionStart).toBe(0);
+    expect(cash.selectionEnd).toBe(cash.value.length);
+  });
+
+  it('Enter y ↓ pasan al campo siguiente, ↑ al anterior', () => {
+    render(<CheckoutScreen />);
+    const cash = getInput('Efectivo');
+    const debit = getInput('Tarjeta de Débito');
+    const credit = getInput('Tarjeta de Crédito');
+
+    fireEvent.keyDown(cash, { key: 'Enter' });
+    expect(document.activeElement).toBe(debit);
+    fireEvent.keyDown(debit, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(credit);
+    fireEvent.keyDown(credit, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(debit);
+  });
+
+  it('Enter en el último campo habilitado no mueve el foco', () => {
+    render(<CheckoutScreen />);
+    const qr = getInput('Código QR');
+    qr.focus();
+
+    fireEvent.keyDown(qr, { key: 'Enter' });
+
+    expect(document.activeElement).toBe(qr);
+  });
+
+  it('con total negativo: título "Devolver", sin tarjeta de vuelto', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    render(<CheckoutScreen />);
+
+    expect(screen.getByRole('heading').textContent).toBe('Devolver 500,00');
+    expect(screen.queryByText('Vuelto')).toBeNull();
+    expect(screen.getByText('Total a devolver')).not.toBeNull();
+  });
+
+  it('botones con el atajo en la etiqueta y la acción principal destacada', () => {
+    render(<CheckoutScreen />);
+    const confirm = screen.getByRole('button', { name: 'Confirmar cobro (Ctrl+Enter)' });
+
+    expect(confirm.className).toContain('btn-primary');
+    expect(screen.getByRole('button', { name: 'Cancelar (Esc)' })).not.toBeNull();
   });
 });

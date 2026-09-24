@@ -58,3 +58,12 @@ export function parseNonNegativeAmount(raw: string): number | undefined {
   const value = parseNormalized(raw);
   return value !== undefined && value >= 0 ? value : undefined;
 }
+
+/**
+ * Monto para precargar un campo editable (el total en Efectivo al abrir el
+ * cobro, #99): con el separador decimal del locale y sin separador de miles,
+ * así `parseNonNegativeAmount` lo vuelve a leer tal cual si no se toca.
+ */
+export function formatAmountInput(value: number): string {
+  return String(value).replace('.', decimalSeparator(resolveLocale()));
+}
