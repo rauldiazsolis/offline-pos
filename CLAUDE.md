@@ -190,8 +190,8 @@ descarte por lote en curso (comportamiento esperado de la regla de arriba, no un
 `ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
 motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo y los lotes en espera con su último
 estado — de solo lectura, mismo patrón de
-teclado que `/RESUMEN`; la barra de estado sigue sin ser interactiva (decisión que se mantiene, ver
-"Barra de estado" más abajo).
+teclado que `/RESUMEN`. Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
+(ver "Barra de estado" más abajo).
 
 **Cadencias independientes (#87)**: push cada `PUSH_INTERVAL_MS` (10-15 min) + al arrancar + por
 cada evento nuevo del outbox (debounced 2 s) + al vencer el backoff del lote fallido; pull cada
@@ -334,7 +334,8 @@ acá; `hasTerminalIdentity`) o `active`. Si no es `active`, `ui/app.tsx` muestra
 sync corre (el wizard pausa el sync). El bloqueo depende únicamente de lo guardado, nunca de la
 conectividad: una terminal `active` abre y opera offline como siempre; solo el primer arranque y el
 cambio de conexión necesitan red, porque probar es hacer un pull. No hay valores por omisión: los
-campos arrancan vacíos y los ejemplos son `placeholder`s (`ConfigField.placeholder`).
+campos arrancan vacíos y los ejemplos son `placeholder`s (`ConfigField.placeholder`) con el formato
+"ej. …" y en gris claro (`--color-placeholder`), para que nunca pasen por un dato cargado.
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
 wizard secuencial que oculta lo ya cargado"): lo cargado nunca se oculta, queda resumido en una
@@ -658,7 +659,10 @@ carrito, así que con el input abajo la línea recién agregada aparece pegada a
 tipeando, en vez del salto largo de atención que había con el input arriba y el carrito creciendo
 hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 
-Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
+Barra de estado (extremo opuesto, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
+propósito no interactiva; esa decisión se reabrió a propósito en la prueba manual de esa etapa: un
+click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
+de Tab ni sacarle el foco a la barra de comandos. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
 `isPushStruggling` en `domain/push-lot.ts`, **o cualquier pull que falle**, #53) — más un quinto,
@@ -695,6 +699,13 @@ patrón único (sacado de `/RESUMEN`, Ciclo 10):
   controller** que su tecla. Todo atajo visible tiene su botón, con el atajo en la etiqueta ("Cerrar
   (Esc)", "Anular (Enter)"), y viceversa.
 - El hover es decorativo: nunca mueve la selección.
+- La acción principal de cada estado (la que dispara Enter) se ve destacada: clases `.btn` (secundario),
+  `.btn-primary` (acento) y `.btn-danger` (destructiva: "Borrar y cambiar", "Anular", "Reiniciar
+  demo") en `tokens.css`.
+- Cursor: la flecha por defecto en toda la app (`body { cursor: default }`), el de texto solo en los
+  campos editables, la mano en lo clickeable — nunca el cursor de texto sobre algo que no se edita.
+- Un grupo de opciones (Tipo de conexión, Datos locales del wizard) se comporta como un radio: el foco
+  está en la opción elegida y la sigue con ↑/↓, nunca en un contenedor invisible.
 - Un botón enfocado con Tab se activa con Enter de forma nativa: el `onKeyDown` del contenedor no
   vuelve a ejecutar su atajo de Enter (si no, "Volver" enfocado + Enter en `/ANULAR` anulaba igual).
 
@@ -704,7 +715,7 @@ Final" y "+ Crear cliente", artículos incluidas las líneas libres) es lo mismo
 del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`). El carrito todavía no
 es clickeable (Etapa 4). **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
-**`/DEMO_RESET`** y **`/RESUMEN`**. Fuera por ahora: cobro (Etapa 4) y `/CAJA` (Etapa 5).
+**`/DEMO_RESET`**, **`/RESUMEN`** y la **barra de estado** (click = `/DIAGNOSTICO`). Fuera por ahora: cobro (Etapa 4) y `/CAJA` (Etapa 5).
 
 ## Diseño visual
 
