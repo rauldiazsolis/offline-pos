@@ -329,3 +329,89 @@ describe('requestAccountHold', () => {
     );
   });
 });
+
+describe('contrato 4.0.0 (#99)', () => {
+  it('getInfo hace GET /info con Authorization y la versión del contrato', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ contractVersion: '4.0.0', status: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await createRestFetchConnector(config).getInfo();
+
+    expect(result).toEqual({ ok: true, value: { contractVersion: '4.0.0', status: 'ok' } });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/info');
+    expect(init.method).toBe('GET');
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer secret-key',
+      'X-POS-Contract-Version': '4.0.0',
+    });
+  });
+
+  it('getInfo valida la respuesta', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ status: 'raro' })));
+
+    const result = await createRestFetchConnector(config).getInfo();
+
+    expect(result).toMatchObject({ ok: false, error: 'sync/invalid-payload' });
+  });
+
+  it('push, pull y holds mandan la versión del contrato', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const connector = createRestFetchConnector(config);
+
+    await connector.pushBatch({ deviceId: 'd', events: [] }, 'lot-1');
+    await connector.pullBatch({ deviceId: 'd', cursors: {}, pendingLotIds: [] });
+    await connector.requestAccountHold({ customerId: 'c1', amount: 10 }, 'k');
+
+    for (const call of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(call[1].headers).toMatchObject({ 'X-POS-Contract-Version': '4.0.0' });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('un 409 incompatible-contract se traduce a sync/incompatible-contract', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(
+            { code: 'incompatible-contract', contractVersion: '3.0.0' },
+            { ok: false, status: 409 },
+          ),
+        ),
+    );
+
+    const result = await createRestFetchConnector(config).pushBatch(
+      { deviceId: 'd', events: [] },
+      'lot-1',
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'sync/incompatible-contract',
+      meta: { backend: '3.0.0', pos: '4.0.0' },
+    });
+  });
+
+  it('un 409 con otro cuerpo sigue siendo sync/request-failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ code: 'otra-cosa' }, { ok: false, status: 409 })),
+    );
+
+    const result = await createRestFetchConnector(config).pushBatch(
+      { deviceId: 'd', events: [] },
+      'lot-1',
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: 'sync/request-failed',
+      meta: { status: 409 },
+    });
+  });
+});

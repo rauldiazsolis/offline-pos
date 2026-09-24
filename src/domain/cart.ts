@@ -1,7 +1,7 @@
 import type { Product } from './product.ts';
 import { err, ok, type Result } from './result.ts';
 import type { Discount, SaleLine } from './sale.ts';
-import type { StockItem } from './stock.ts';
+import { hasAtMostThreeDecimals, roundQuantity } from './rounding.ts';
 
 /**
  * Carrito en curso. Vive solo en signals de UI mientras se arma — nunca se
@@ -12,44 +12,34 @@ import type { StockItem } from './stock.ts';
  */
 export type Cart = { lines: SaleLine[]; globalAdjustmentPercentage?: number };
 
+/** Cantidad tipeada válida (#99): con signo, hasta 3 decimales, distinta de 0. */
+function isValidQuantity(qty: number): boolean {
+  return hasAtMostThreeDecimals(qty) && qty !== 0;
+}
+
 function findProductLineIndex(cart: Cart, productId: string): number {
   return cart.lines.findIndex((line) => line.kind === 'product' && line.productId === productId);
 }
 
 /**
- * Agrega (o resta, con `qty` negativo — ver regla 4 de la barra de comandos)
- * una cantidad de un producto al carrito. Si el producto trackea stock,
- * valida que la cantidad final no supere el stock disponible.
+ * Suma neta de una cantidad de un producto al carrito (una sola línea por
+ * producto). Desde #99 puede crear o dejar la línea en negativo (`-2*coca`
+ * sin línea previa es una devolución); 0 exacto la borra. Nunca bloquea por
+ * stock: la advertencia se calcula aparte (`domain/sale-warnings.ts`).
  */
 export function addProductLine(
   cart: Cart,
-  params: { product: Product; stock: StockItem | undefined; qty: number },
+  params: { product: Product; qty: number },
 ): Result<Cart> {
-  const { product, stock, qty } = params;
+  const { product, qty } = params;
 
-  if (!Number.isInteger(qty) || qty === 0) {
+  if (!isValidQuantity(qty)) {
     return err('cart/invalid-quantity', { quantity: qty });
   }
 
   const existingIndex = findProductLineIndex(cart, product.id);
   const existingQty = existingIndex === -1 ? 0 : (cart.lines[existingIndex]?.qty ?? 0);
-  const nextQty = existingQty + qty;
-
-  if (qty < 0 && existingIndex === -1) {
-    return err('cart/nothing-to-subtract', { productId: product.id });
-  }
-  if (nextQty < 0) {
-    return err('cart/invalid-quantity', { quantity: nextQty });
-  }
-
-  const available = stock?.quantity ?? 0;
-  if (product.tracksStock && nextQty > available) {
-    return err('sale/insufficient-stock', {
-      productId: product.id,
-      requested: nextQty,
-      available,
-    });
-  }
+  const nextQty = roundQuantity(existingQty + qty);
 
   const lines = [...cart.lines];
   if (nextQty === 0 && existingIndex !== -1) {
@@ -71,9 +61,11 @@ export function addProductLine(
  * `qty` desde un prefijo de cantidad delante — `3*regalo$100` = 3 × $100).
  * Siempre una línea nueva, nunca fusiona con una línea libre existente que
  * tenga la misma descripción: no hay identidad de producto contra la que
- * fusionar dos líneas libres, a diferencia de un producto por su `id`. Por
- * eso `qty` tiene que ser positivo acá — ajustar la cantidad de una línea
- * libre ya existente es una operación distinta, ver `adjustFreeformLineQuantity`.
+ * fusionar dos líneas libres, a diferencia de un producto por su `id` —
+ * ajustar la cantidad de una línea libre ya existente es una operación
+ * distinta, ver `adjustFreeformLineQuantity`. Desde #99 `qty` puede ser
+ * negativa (`-1*regalo$100`, una devolución); el precio sigue siendo
+ * positivo: el signo lo lleva la cantidad.
  */
 export function addFreeformLine(
   cart: Cart,
@@ -87,7 +79,7 @@ export function addFreeformLine(
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     return err('cart/invalid-freeform-line', { field: 'unitPrice' });
   }
-  if (!Number.isInteger(qty) || qty <= 0) {
+  if (!isValidQuantity(qty)) {
     return err('cart/invalid-freeform-line', { field: 'qty' });
   }
 
@@ -113,6 +105,8 @@ function findFreeformLineIndex(cart: Cart, description: string): number {
  * barra de comandos cuando `<n>*descripción`/`-<n>*descripción` (sin `$`)
  * matchea una línea libre ya tipeada en este ticket, en vez de crear una
  * línea nueva (eso solo pasa con `descripción$monto`, ver `addFreeformLine`).
+ * Igual que `addProductLine`, puede dejar la línea en negativo (#99); 0
+ * exacto la borra.
  */
 export function adjustFreeformLineQuantity(
   cart: Cart,
@@ -120,7 +114,7 @@ export function adjustFreeformLineQuantity(
 ): Result<Cart> {
   const { description, qty } = params;
 
-  if (!Number.isInteger(qty) || qty === 0) {
+  if (!isValidQuantity(qty)) {
     return err('cart/invalid-quantity', { quantity: qty });
   }
 
@@ -130,10 +124,7 @@ export function adjustFreeformLineQuantity(
   }
 
   const existing = cart.lines[existingIndex];
-  const nextQty = (existing?.qty ?? 0) + qty;
-  if (nextQty < 0) {
-    return err('cart/invalid-quantity', { quantity: nextQty });
-  }
+  const nextQty = roundQuantity((existing?.qty ?? 0) + qty);
 
   const lines = [...cart.lines];
   if (nextQty === 0) {
@@ -156,33 +147,19 @@ export function removeLine(cart: Cart, lineIndex: number): Result<Cart> {
 
 /**
  * Reemplaza la cantidad de una línea ya existente (número + Enter sobre la
- * línea seleccionada). Si la línea es de producto y el producto trackea
- * stock, valida contra el stock disponible.
+ * línea seleccionada). Desde #99 acepta decimales y negativos, y 0 borra la
+ * línea (igual que Supr). Nunca bloquea por stock.
  */
-export function setLineQuantity(
-  cart: Cart,
-  lineIndex: number,
-  qty: number,
-  params?: { product?: Product; stock?: StockItem },
-): Result<Cart> {
+export function setLineQuantity(cart: Cart, lineIndex: number, qty: number): Result<Cart> {
   const line = cart.lines[lineIndex];
   if (line === undefined) {
     return err('cart/line-not-found', { lineIndex });
   }
-  if (!Number.isInteger(qty) || qty <= 0) {
+  if (!hasAtMostThreeDecimals(qty)) {
     return err('cart/invalid-quantity', { quantity: qty });
   }
-
-  const product = params?.product;
-  if (line.kind === 'product' && product?.tracksStock) {
-    const available = params?.stock?.quantity ?? 0;
-    if (qty > available) {
-      return err('sale/insufficient-stock', {
-        productId: line.productId,
-        requested: qty,
-        available,
-      });
-    }
+  if (qty === 0) {
+    return removeLine(cart, lineIndex);
   }
 
   const lines = [...cart.lines];
@@ -202,7 +179,7 @@ export function applyLineDiscount(cart: Cart, lineIndex: number, discount: Disco
   if (discount.type === 'percentage' && discount.value > 100) {
     return err('cart/invalid-discount', { discount });
   }
-  if (discount.type === 'amount' && discount.value > line.unitPrice * line.qty) {
+  if (discount.type === 'amount' && discount.value > Math.abs(line.unitPrice * line.qty)) {
     return err('cart/invalid-discount', { discount });
   }
 

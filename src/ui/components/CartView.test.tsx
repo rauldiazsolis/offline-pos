@@ -5,6 +5,7 @@ import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 
 beforeEach(() => {
   cartSignal.value = { lines: [] };
@@ -13,6 +14,7 @@ beforeEach(() => {
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: (id) =>
       id === 'p1'
         ? {
@@ -156,5 +158,51 @@ describe('CartView', () => {
     };
     render(<CartView />);
     expect(screen.getByText(/Descuento \(-10%\)/)).not.toBeNull();
+  });
+});
+
+describe('CartView — advertencias (#99)', () => {
+  it('una línea sobre el stock muestra "⚠ Stock disponible: N"', () => {
+    stockSnapshotSignal.value = new Map([['p1', 3]]);
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 5, unitPrice: 100 }] };
+    render(<CartView />);
+
+    expect(screen.getByText('⚠ Stock disponible: 3')).not.toBeNull();
+  });
+
+  it('una línea negativa nunca advierte por stock', () => {
+    stockSnapshotSignal.value = new Map();
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: -5, unitPrice: 100 }] };
+    render(<CartView />);
+
+    expect(screen.queryByText(/Stock disponible/)).toBeNull();
+  });
+
+  it('la tarjeta de cliente muestra el bloqueo', () => {
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      blocked: { reason: 'Deuda' },
+    };
+    render(<CartView />);
+
+    expect(screen.getByText('⚠ Bloqueado: Deuda')).not.toBeNull();
+  });
+});
+
+describe('CartView — devolución destacada (prueba manual de la Etapa 4)', () => {
+  it('una línea negativa se resalta y el total negativo va en rojo', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'regalo', qty: -1, unitPrice: 100 }],
+    };
+    const { container } = render(<CartView />);
+
+    expect(container.querySelector('.cart-view__refund-line')).not.toBeNull();
+    const totalsCard = container.querySelector<HTMLElement>('.cart-view__totals');
+    if (totalsCard === null) throw new Error('setup falló');
+    expect(within(totalsCard).getAllByText(formatMoney(-100)).at(-1)?.style.color).toBe(
+      'var(--color-danger)',
+    );
   });
 });

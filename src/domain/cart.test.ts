@@ -11,7 +11,6 @@ import {
 } from './cart.ts';
 import type { Product } from './product.ts';
 import type { Cart } from './cart.ts';
-import type { StockItem } from './stock.ts';
 
 const emptyCart: Cart = { lines: [] };
 
@@ -29,15 +28,10 @@ function makeProduct(overrides: Partial<Product> = {}): Product {
   };
 }
 
-function makeStock(overrides: Partial<StockItem> = {}): StockItem {
-  return { productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z', ...overrides };
-}
-
 describe('addProductLine', () => {
   it('agrega una línea nueva para un producto no presente en el carrito', () => {
     const result = addProductLine(emptyCart, {
       product: makeProduct(),
-      stock: makeStock(),
       qty: 2,
     });
 
@@ -51,7 +45,7 @@ describe('addProductLine', () => {
 
   it('suma a la línea existente si el producto ya está en el carrito', () => {
     const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
-    const result = addProductLine(cart, { product: makeProduct(), stock: makeStock(), qty: 2 });
+    const result = addProductLine(cart, { product: makeProduct(), qty: 2 });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -61,7 +55,7 @@ describe('addProductLine', () => {
 
   it('resta cantidad con qty negativo y elimina la línea si llega a 0', () => {
     const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] };
-    const result = addProductLine(cart, { product: makeProduct(), stock: makeStock(), qty: -2 });
+    const result = addProductLine(cart, { product: makeProduct(), qty: -2 });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -69,37 +63,9 @@ describe('addProductLine', () => {
     }
   });
 
-  it('rechaza restar de un producto que no está en el carrito', () => {
-    const result = addProductLine(emptyCart, {
-      product: makeProduct(),
-      stock: makeStock(),
-      qty: -1,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('cart/nothing-to-subtract');
-    }
-  });
-
-  it('rechaza superar el stock disponible cuando el producto trackea stock', () => {
-    const result = addProductLine(emptyCart, {
-      product: makeProduct(),
-      stock: makeStock({ quantity: 1 }),
-      qty: 2,
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/insufficient-stock');
-      expect(result.meta).toEqual({ productId: 'p1', requested: 2, available: 1 });
-    }
-  });
-
-  it('no valida stock para un producto que no lo trackea', () => {
+  it('nunca bloquea por stock, trackee o no (#99)', () => {
     const result = addProductLine(emptyCart, {
       product: makeProduct({ tracksStock: false }),
-      stock: undefined,
       qty: 1000,
     });
 
@@ -109,7 +75,6 @@ describe('addProductLine', () => {
   it('rechaza qty en 0', () => {
     const result = addProductLine(emptyCart, {
       product: makeProduct(),
-      stock: makeStock(),
       qty: 0,
     });
 
@@ -178,14 +143,19 @@ describe('addFreeformLine', () => {
     }
   });
 
-  it('rechaza qty no positivo — crear no fusiona, así que no hay nada previo de qué restar', () => {
-    const result = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 500, qty: -2 });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('cart/invalid-freeform-line');
-      expect(result.meta).toEqual({ field: 'qty' });
-    }
+  it('rechaza qty 0 o con más de 3 decimales', () => {
+    const zero = addFreeformLine(emptyCart, { description: 'Envío', unitPrice: 500, qty: 0 });
+    expect(zero).toMatchObject({
+      ok: false,
+      error: 'cart/invalid-freeform-line',
+      meta: { field: 'qty' },
+    });
+    const tooPrecise = addFreeformLine(emptyCart, {
+      description: 'Envío',
+      unitPrice: 500,
+      qty: 1.2345,
+    });
+    expect(tooPrecise.ok).toBe(false);
   });
 });
 
@@ -238,15 +208,6 @@ describe('adjustFreeformLineQuantity', () => {
     }
   });
 
-  it('rechaza si el resultado sería negativo', () => {
-    const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Regalo', qty: -5 });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('cart/invalid-quantity');
-    }
-  });
-
   it('un match parcial (no exacto) no cuenta como identidad', () => {
     const result = adjustFreeformLineQuantity(cartWithFreeform, { description: 'Rega', qty: 1 });
 
@@ -281,7 +242,7 @@ describe('removeLine', () => {
 describe('setLineQuantity', () => {
   it('reemplaza la cantidad de una línea existente', () => {
     const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
-    const result = setLineQuantity(cart, 0, 5, { product: makeProduct(), stock: makeStock() });
+    const result = setLineQuantity(cart, 0, 5);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -289,22 +250,9 @@ describe('setLineQuantity', () => {
     }
   });
 
-  it('rechaza superar el stock disponible', () => {
+  it('rechaza más de 3 decimales', () => {
     const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
-    const result = setLineQuantity(cart, 0, 10, {
-      product: makeProduct(),
-      stock: makeStock({ quantity: 3 }),
-    });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/insufficient-stock');
-    }
-  });
-
-  it('rechaza cantidades no positivas', () => {
-    const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
-    const result = setLineQuantity(cart, 0, 0);
+    const result = setLineQuantity(cart, 0, 1.2345);
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -410,7 +358,6 @@ describe('el ajuste global sobrevive a cualquier otra mutación del carrito', ()
   it('addProductLine lo preserva', () => {
     const result = addProductLine(cartWithAdjustment, {
       product: makeProduct({ id: 'p2' }),
-      stock: makeStock({ productId: 'p2' }),
       qty: 1,
     });
     expect(result.ok).toBe(true);
@@ -452,10 +399,7 @@ describe('el ajuste global sobrevive a cualquier otra mutación del carrito', ()
   });
 
   it('setLineQuantity lo preserva', () => {
-    const result = setLineQuantity(cartWithAdjustment, 0, 5, {
-      product: makeProduct(),
-      stock: makeStock({ quantity: 100 }),
-    });
+    const result = setLineQuantity(cartWithAdjustment, 0, 5);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.globalAdjustmentPercentage).toBe(10);
@@ -474,5 +418,68 @@ describe('el ajuste global sobrevive a cualquier otra mutación del carrito', ()
 describe('discardCart (/DESCARTAR, Ciclo 8)', () => {
   it('devuelve un carrito vacío, sin líneas ni ajuste global', () => {
     expect(discardCart()).toEqual({ lines: [] });
+  });
+});
+
+describe('cantidades decimales y negativas (#99)', () => {
+  const product = makeProduct({ name: 'Queso', price: 1000 });
+
+  it('suma neta con decimales', () => {
+    const r1 = addProductLine(emptyCart, { product, qty: 0.1 });
+    if (!r1.ok) throw new Error('esperaba ok');
+    const r2 = addProductLine(r1.value, { product, qty: 0.2 });
+    expect(r2.ok && r2.value.lines[0]?.qty).toBe(0.3);
+  });
+
+  it('crea la línea en negativo sin línea previa', () => {
+    const r = addProductLine(emptyCart, { product, qty: -2 });
+    expect(r.ok && r.value.lines[0]?.qty).toBe(-2);
+  });
+
+  it('puede dejar la línea en negativo y la borra en 0 exacto', () => {
+    const r1 = addProductLine(emptyCart, { product, qty: 1 });
+    if (!r1.ok) throw new Error('esperaba ok');
+    const r2 = addProductLine(r1.value, { product, qty: -3 });
+    expect(r2.ok && r2.value.lines[0]?.qty).toBe(-2);
+    const r3 = addProductLine(r1.value, { product, qty: -1 });
+    expect(r3.ok && r3.value.lines).toEqual([]);
+  });
+
+  it('nunca bloquea por stock', () => {
+    expect(addProductLine(emptyCart, { product, qty: 999 }).ok).toBe(true);
+  });
+
+  it('rechaza más de 3 decimales y 0', () => {
+    expect(addProductLine(emptyCart, { product, qty: 1.2345 }).ok).toBe(false);
+    expect(addProductLine(emptyCart, { product, qty: 0 }).ok).toBe(false);
+  });
+
+  it('línea libre con cantidad negativa', () => {
+    const r = addFreeformLine(emptyCart, { description: 'regalo', unitPrice: 100, qty: -1 });
+    expect(r.ok && r.value.lines[0]?.qty).toBe(-1);
+  });
+
+  it('ajuste de línea libre puede quedar negativo', () => {
+    const r1 = addFreeformLine(emptyCart, { description: 'regalo', unitPrice: 100, qty: 1 });
+    if (!r1.ok) throw new Error('esperaba ok');
+    const r2 = adjustFreeformLineQuantity(r1.value, { description: 'regalo', qty: -2 });
+    expect(r2.ok && r2.value.lines[0]?.qty).toBe(-1);
+  });
+
+  it('setLineQuantity acepta decimales y negativos, y 0 borra', () => {
+    const r1 = addProductLine(emptyCart, { product, qty: 1 });
+    if (!r1.ok) throw new Error('esperaba ok');
+    expect(setLineQuantity(r1.value, 0, -1.5)).toMatchObject({
+      ok: true,
+      value: { lines: [{ qty: -1.5 }] },
+    });
+    const r3 = setLineQuantity(r1.value, 0, 0);
+    expect(r3.ok && r3.value.lines).toEqual([]);
+  });
+
+  it('un descuento por monto se valida contra el valor absoluto de la línea', () => {
+    const cart: Cart = { lines: [{ kind: 'freeform', description: 'x', qty: -2, unitPrice: 100 }] };
+    expect(applyLineDiscount(cart, 0, { type: 'amount', value: 150 }).ok).toBe(true);
+    expect(applyLineDiscount(cart, 0, { type: 'amount', value: 250 }).ok).toBe(false);
   });
 });

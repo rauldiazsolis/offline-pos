@@ -15,11 +15,15 @@ import {
   createCustomerLocally,
   loadCustomerRepository,
 } from '../../storage/customer-repository.ts';
+import { lineWarnings } from '../../domain/sale-warnings.ts';
 import { describeError } from '../errors.ts';
+import { formatQuantity } from '../format.ts';
+import { formatWarning } from '../format-warning.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarWarningSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
   effectiveCommandIndexSignal,
@@ -36,15 +40,17 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
+import { enterCheckout } from './checkout-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, disabledCommandMessage } from './commands.ts';
-import { parseCommandBar } from './parse-command-bar.ts';
+import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { syncNow } from '../../sync/engine.ts';
 
@@ -55,8 +61,9 @@ import { syncNow } from '../../sync/engine.ts';
  */
 
 /**
- * Agregar un producto es async (lookup de stock vía Dexie), y crear un
- * cliente nuevo desde `@` también (persiste en Dexie + encola outbox). Sin
+ * Crear un cliente nuevo desde `@` es async (persiste en Dexie + encola
+ * outbox); agregar un producto también lo era (lookup de stock) hasta #99,
+ * que sacó el bloqueo por stock. Sin
  * este rastreo, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después
  * podría cambiar de pantalla antes de que la operación termine — una
  * carrera real, no solo teórica (la agarró el test e2e de cobro en Fase 1).
@@ -164,6 +171,7 @@ export function updateCommandBarBuffer(value: string): void {
 
   commandBarBufferSignal.value = value;
   commandBarErrorSignal.value = null;
+  commandBarWarningSignal.value = null;
   // Issue #28: cualquier tecla que cambie el buffer reabre el overlay que
   // corresponda al contenido nuevo, aunque se haya cerrado con Esc.
   overlayDismissedSignal.value = false;
@@ -205,27 +213,49 @@ async function createAndAttachCustomer(name: string): Promise<void> {
   clearBuffer();
 }
 
-async function addByProduct(product: Product, qty: number): Promise<void> {
+/**
+ * Advertencias (#99) de la línea de producto que quedó en el carrito tras
+ * agregarla o ajustarla, en el slot de la barra. Nunca bloquea nada.
+ */
+function warnAboutProductLine(cart: Cart, productId: string): void {
+  const line = cart.lines.find(
+    (candidate) => candidate.kind === 'product' && candidate.productId === productId,
+  );
+  if (line === undefined) {
+    return;
+  }
   const repo = getCatalogRepository();
-  const stock = await repo.getStock(product.id);
-  const result = addProductLine(cartSignal.value, { product, stock, qty });
+  const warnings = lineWarnings(line, {
+    product: repo.getProduct(productId),
+    stockQuantity: stockSnapshotSignal.value.get(productId),
+  });
+  if (warnings.length > 0) {
+    commandBarWarningSignal.value = warnings
+      .map((warning) => formatWarning(warning, (id) => repo.getProduct(id)?.name ?? id))
+      .join(' · ');
+  }
+}
+
+function addByProduct(product: Product, qty: number): void {
+  const result = addProductLine(cartSignal.value, { product, qty });
   if (applyCartResult(result)) {
     selectResultingLine(
       result.value,
       (line) => line.kind === 'product' && line.productId === product.id,
     );
     clearBuffer();
+    warnAboutProductLine(result.value, product.id);
   }
 }
 
-async function addByCode(code: string, qty: number): Promise<void> {
+function addByCode(code: string, qty: number): void {
   const repo = getCatalogRepository();
   const product = repo.findByBarcodeOrSku(code);
   if (product === undefined) {
     commandBarErrorSignal.value = `No se encontró ningún producto con "${code}".`;
     return;
   }
-  await addByProduct(product, qty);
+  addByProduct(product, qty);
 }
 
 /**
@@ -281,8 +311,33 @@ export async function triggerCheckout(): Promise<void> {
     });
     return;
   }
+  enterCheckout();
   activeScreenSignal.value = 'checkout';
   clearBuffer();
+}
+
+/**
+ * Enter con la barra vacía (#99): con líneas abre Cobro (aunque haya una
+ * línea seleccionada — cambiar su cantidad necesita un número en la barra).
+ * Sin líneas y con cliente, la cobranza sin venta llega en la Etapa 6
+ * (#101); sin nada, no hace nada: Enter sobre la barra vacía es un gesto
+ * reflejo y un error molestaría.
+ */
+export function submitEmptyCommandBar(): Promise<void> {
+  if (cartSignal.value.lines.length > 0) {
+    return triggerCheckout();
+  }
+  if (attachedCustomerSignal.value !== undefined) {
+    commandBarErrorSignal.value = 'Cobranza sin venta: llega en una próxima versión.';
+  }
+  return Promise.resolve();
+}
+
+/** Click en una fila del carrito (#99): lo mismo que llegar con ↑/↓. */
+export function selectCartLine(index: number): void {
+  if (index >= 0 && index < cartSignal.value.lines.length) {
+    cartSelectionIndexSignal.value = index;
+  }
 }
 
 function triggerVoid(): void {
@@ -354,6 +409,19 @@ function runCommand(name: string, _args: string[]): void {
 
 /** Se llama al presionar Enter con la barra de comandos activa (no en modo navegación del carrito). */
 export function submitCommandBar(): void {
+  // Más de 3 decimales en el prefijo se redondea (#99): se avisa si la acción salió bien.
+  const rounded = roundedQuantityPrefix(commandBarBufferSignal.value);
+  doSubmitCommandBar();
+  if (
+    rounded !== undefined &&
+    commandBarBufferSignal.value === '' &&
+    commandBarErrorSignal.value === null
+  ) {
+    prependCommandBarWarning(roundedQuantityWarning(rounded));
+  }
+}
+
+function doSubmitCommandBar(): void {
   const parsed = parseCommandBar(commandBarBufferSignal.value, { finalizing: true });
 
   switch (parsed.kind) {
@@ -437,9 +505,19 @@ export function submitCommandBar(): void {
       }
       return;
     }
-    case 'barcode':
-      trackPendingBarOperation(addByCode(parsed.code, parsed.qty));
+    case 'barcode': {
+      // Una fila de la lista de códigos elegida a mano (↓ o click) gana; si
+      // no, el código exacto — un lector que escanea un código inexistente
+      // nunca agrega una coincidencia parcial por accidente (#99).
+      const index = searchSelectionIndexSignal.value;
+      const selected = index !== null ? searchResultsSignal.value[index] : undefined;
+      if (selected?.kind === 'product') {
+        addByProduct(selected.result.product, parsed.qty);
+        return;
+      }
+      addByCode(parsed.code, parsed.qty);
       return;
+    }
     case 'search': {
       const results = searchResultsSignal.value;
       const index = searchSelectionIndexSignal.value ?? 0;
@@ -462,7 +540,7 @@ export function submitCommandBar(): void {
         }
         return;
       }
-      trackPendingBarOperation(addByProduct(selected.result.product, parsed.qty));
+      addByProduct(selected.result.product, parsed.qty);
     }
   }
 }
@@ -529,8 +607,9 @@ export function moveSelection(direction: 1 | -1): void {
 
   const isSearching = commandBarBufferSignal.value !== '';
   if (isSearching) {
+    // La lista de códigos (#99) no preselecciona la fila 0: Enter sin elegir es el código exacto.
     moveSelectionOver(searchResultsSignal.value.length, searchSelectionIndexSignal, direction, {
-      assumeFirstSelected: true,
+      assumeFirstSelected: parsed.kind !== 'code-search',
     });
     return;
   }
@@ -557,35 +636,41 @@ export function removeSelectedCartLine(): void {
   }
 }
 
-async function doSetSelectedCartLineQuantity(qty: number): Promise<void> {
+/** Suma una advertencia al slot de la barra (#99), delante de las que ya haya. */
+function prependCommandBarWarning(text: string): void {
+  const current = commandBarWarningSignal.value;
+  commandBarWarningSignal.value = current === null ? text : `${text} · ${current}`;
+}
+
+function roundedQuantityWarning(qty: number): string {
+  return `Cantidad redondeada a ${formatQuantity(qty)}`;
+}
+
+function doSetSelectedCartLineQuantity(qty: number): void {
   const index = cartSelectionIndexSignal.value;
   if (index === null) {
     return;
   }
   const line = cartSignal.value.lines[index];
-  if (line === undefined) {
-    return;
+  const result = setLineQuantity(cartSignal.value, index, qty);
+  if (applyCartResult(result)) {
+    if (line?.kind === 'product') {
+      warnAboutProductLine(result.value, line.productId);
+    }
+    // Con 0 la línea se borra (#99): misma selección resultante que Supr.
+    const newLength = result.value.lines.length;
+    cartSelectionIndexSignal.value = newLength === 0 ? null : Math.min(index, newLength - 1);
   }
-
-  if (line.kind === 'product') {
-    const repo = getCatalogRepository();
-    const product = repo.getProduct(line.productId);
-    const stock = await repo.getStock(line.productId);
-    applyCartResult(
-      setLineQuantity(cartSignal.value, index, qty, {
-        ...(product !== undefined ? { product } : {}),
-        ...(stock !== undefined ? { stock } : {}),
-      }),
-    );
-    return;
-  }
-
-  applyCartResult(setLineQuantity(cartSignal.value, index, qty));
 }
 
 /** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
-export function setSelectedCartLineQuantity(qty: number): Promise<void> {
-  const promise = doSetSelectedCartLineQuantity(qty);
-  trackPendingBarOperation(promise);
-  return promise;
+export function setSelectedCartLineQuantity(
+  qty: number,
+  options: { rounded?: boolean } = {},
+): Promise<void> {
+  doSetSelectedCartLineQuantity(qty);
+  if (options.rounded === true && commandBarErrorSignal.value === null) {
+    prependCommandBarWarning(roundedQuantityWarning(qty));
+  }
+  return Promise.resolve();
 }

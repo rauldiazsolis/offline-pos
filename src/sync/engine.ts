@@ -16,10 +16,12 @@ import { newId } from '../storage/ids.ts';
 import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
+import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import {
-  appendSyncLogEntry,
+  backendStatusSignal,
   lastSyncFailureSignal,
   pushLotIssuesSignal,
+  setBackendCheckDue,
   setLastPullApplication,
   setLastSyncFailure,
   setLastSyncedAt,
@@ -29,8 +31,13 @@ import {
   setSyncConfigured,
   setSyncStatus,
   syncPausedSignal,
-  type SyncLogEntry,
 } from '../ui/state/sync.ts';
+import {
+  backendCheckNeeded,
+  blocksSync,
+  noteSyncFailure,
+  refreshBackendStatus,
+} from './backend-status.ts';
 import { runCleanupIfDue } from './cleanup-schedule.ts';
 import type { Connector, LotIssue, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
@@ -55,6 +62,7 @@ import {
   setCurrentPushLot,
   updateAwaitingLots,
 } from './push-lot.ts';
+import { logSyncAttempt } from './sync-log.ts';
 import { getDeviceId } from './terminal-identity.ts';
 
 /** Convierte un evento del outbox a su forma de red (contrato v3): payload + sobre, sin `status`. */
@@ -66,14 +74,6 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
       return { type: 'sale', sale: event.sale, ...envelope };
     case 'stock-movement':
       return { type: 'stock-movement', movement: event.movement, ...envelope };
-    case 'sale-void':
-      return {
-        type: 'sale-void',
-        saleId: event.saleId,
-        voidedAt: event.voidedAt,
-        ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
-        ...envelope,
-      };
     case 'customer':
       return { type: 'customer', customer: event.customer, ...envelope };
     case 'account-hold-confirm':
@@ -93,37 +93,6 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
       const exhaustiveCheck: never = event;
       throw new Error(`Tipo de evento de outbox desconocido: ${JSON.stringify(exhaustiveCheck)}`);
     }
-  }
-}
-
-/**
- * Registra un intento real de push/pull para `/DIAGNOSTICO` — `request`/
- * `result` son literalmente lo que el call site ya tiene en la mano, sin
- * resumir, así se puede correlacionar con la pestaña Network. Un ciclo
- * exitoso no toca la consola, salvo un pull que retuvo stock y saldos: es el
- * comportamiento esperado mientras un lote se procesa (#98), va a `console.info`.
- */
-function logSyncAttempt(
-  kind: 'push' | 'pull',
-  now: string,
-  request: unknown,
-  result: Result<unknown>,
-  application?: PullApplication,
-): void {
-  const entry: SyncLogEntry = {
-    at: now,
-    kind,
-    request,
-    result: result.ok ? { ok: true } : { ok: false, error: result.error, meta: result.meta },
-    ...(application !== undefined ? { application } : {}),
-  };
-  appendSyncLogEntry(entry);
-  if (!result.ok) {
-    console.error(`[sync] ${kind} falló: ${result.error}`, entry);
-    return;
-  }
-  if (application?.kind === 'retained') {
-    console.info('[sync] pull aplicado sin stock ni saldos — lote(s) procesando', entry);
   }
 }
 
@@ -185,6 +154,9 @@ export async function pushPendingLot(
   const batch = { deviceId: getDeviceId(), events: events.map(toBatchItem) };
   const result = await connector.pushBatch(batch, lot.id);
   logSyncAttempt('push', now, { idempotencyId: lot.id, ...batch }, result);
+  if (!result.ok) {
+    noteSyncFailure(result);
+  }
   if (result.ok) {
     await db.outbox.bulkPut(events.map(markSynced));
     clearCurrentPushLot();
@@ -325,6 +297,7 @@ async function pullAndApply(
 async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Result<void>> {
   setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
   setLocalCatalogCounts(await countLocalCatalog());
+  await refreshStockSnapshot();
   setPushLotIssues(outcome.issues.length > 0 ? outcome.issues : null);
   if (outcome.issues.length > 0) {
     console.warn(
@@ -341,6 +314,7 @@ async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Resul
   );
 
   if (outcome.failure !== undefined) {
+    noteSyncFailure(outcome.failure);
     setLastSyncFailure(outcome.failure);
     setSyncStatus('sync-error');
     return outcome.failure;
@@ -412,7 +386,9 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
 /**
  * Preámbulo común a cualquier ciclo (push o pull, #87): toma el cerrojo
  * **solo mientras dura este request** (nunca durante todo el intervalo entre
- * ciclos), respeta `/CONFIG` abierto, chequea red y config activa. `run`
+ * ciclos), respeta `/CONFIG` abierto, chequea red y config activa, y que el
+ * backend no esté en mantenimiento ni sea incompatible (4.0.0, #99): en ese
+ * caso el ciclo hace solo un `getInfo` y, cuando vuelve `ok`, se retoma. `run`
  * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
  * ni `runPullCycle` necesitan saber de dónde salió. Devuelve lo que devuelve
  * `run`, o `undefined` si el ciclo no corrió (pausado, cerrojo, sin red o sin config).
@@ -439,7 +415,14 @@ async function withConnectorCycle<T>(
     }
     setSyncConfigured(true);
     const connector = createConnector(configResult.value);
-    return await run(connector, new Date().toISOString(), configResult.value);
+    const now = new Date().toISOString();
+    if (backendCheckNeeded()) {
+      await refreshBackendStatus(connector, now);
+    }
+    if (blocksSync(backendStatusSignal.value)) {
+      return undefined;
+    }
+    return await run(connector, now, configResult.value);
   } finally {
     release();
   }
@@ -502,6 +485,8 @@ export async function runPullCycleNow(options: { full?: boolean } = {}): Promise
 
 /** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
 export async function syncNow(): Promise<void> {
+  // 4.0.0 (#99): /SINCRONIZAR pregunta primero el estado del backend.
+  setBackendCheckDue(true);
   await runPushCycle({ ignoreBackoff: true });
   await runPullCycleNow({ full: true });
 }

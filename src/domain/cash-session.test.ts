@@ -171,7 +171,6 @@ describe('calculateCashSessionSummary', () => {
         id: 's2',
         payments: [{ method: 'cash', amount: 50 }],
         status: 'voided',
-        voidedAt: '2026-01-01T11:00:00.000Z',
       }),
     ];
 
@@ -290,7 +289,6 @@ describe('calculateProductQuantities', () => {
         id: 's1',
         lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }],
         status: 'voided',
-        voidedAt: '2026-01-01T11:00:00.000Z',
       }),
     ];
 

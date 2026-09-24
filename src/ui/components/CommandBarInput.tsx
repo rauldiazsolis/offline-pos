@@ -7,6 +7,7 @@ import {
   removeSelectedCartLine,
   setSelectedCartLineQuantity,
   submitCommandBar,
+  submitEmptyCommandBar,
   triggerCheckout,
   updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
@@ -15,12 +16,15 @@ import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
-import { formatDate, formatMoney } from '../format.ts';
-import { cartSelectionIndexSignal } from '../state/cart.ts';
+import { formatDate, formatMoney, formatQuantity } from '../format.ts';
+import { parseQuantityText } from '../keyboard/parse-command-bar.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarWarningSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
   customerResultsSignal,
@@ -31,8 +35,6 @@ import {
   searchResultsSignal,
   searchSelectionIndexSignal,
 } from '../state/command-bar.ts';
-
-const ONLY_DIGITS = /^\d+$/;
 
 /**
  * El único input siempre enfocado durante la operación normal (ver
@@ -66,7 +68,11 @@ export function CommandBarInput() {
   const overlayScrollThumb = useScrollIndicator(overlayScrollRef);
 
   const searchResults = searchResultsSignal.value;
-  const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
+  // La lista de códigos (#99) no preselecciona: sin elegir, Enter es el código exacto.
+  const selectedSearchIndex =
+    parsedSignal.value.kind === 'code-search'
+      ? searchSelectionIndexSignal.value
+      : (searchSelectionIndexSignal.value ?? 0);
   const customerResults = customerResultsSignal.value;
   const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
   const parsed = parsedSignal.value;
@@ -80,6 +86,8 @@ export function CommandBarInput() {
   const showCustomerResults = parsed.kind === 'customer';
 
   const hasError = commandBarErrorSignal.value !== null;
+  // #99: una advertencia usa el mismo slot; el error tiene precedencia.
+  const hasWarning = !hasError && commandBarWarningSignal.value !== null;
   const hasCommandResults = showCommandList && commandResults.length > 0;
   // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
   // con query vacía, solo si hay clientes recientes — si no, no hay nada que
@@ -95,7 +103,7 @@ export function CommandBarInput() {
   // que corresponda a lo nuevo.
   const showOverlay =
     !overlayDismissedSignal.value &&
-    (hasError || hasCommandResults || hasCustomerResults || hasSearchResults);
+    (hasError || hasWarning || hasCommandResults || hasCustomerResults || hasSearchResults);
 
   // updateCommandBarBuffer (no tocar los signals directo): además de
   // actualizar el buffer, resetea/reindexa la selección de las tres listas
@@ -145,12 +153,27 @@ export function CommandBarInput() {
       event.preventDefault();
       const buffer = commandBarBufferSignal.value;
 
-      // Con una línea del carrito seleccionada (↑/↓ previo), un número + Enter
-      // reemplaza su cantidad en vez de buscarse como código de barras.
-      if (cartSelectionIndexSignal.value !== null && ONLY_DIGITS.test(buffer)) {
-        void setSelectedCartLineQuantity(Number.parseInt(buffer, 10));
-        commandBarBufferSignal.value = '';
+      // Barra vacía (#99): Enter abre Cobro si hay algo que cobrar, igual
+      // que Ctrl+Enter — va antes que la línea seleccionada, que necesita un
+      // número para cambiar su cantidad.
+      if (buffer === '') {
+        void submitEmptyCommandBar();
         return;
+      }
+
+      // Con una línea del carrito seleccionada (↑/↓ previo), una cantidad +
+      // Enter reemplaza la de la línea en vez de buscarse como código de
+      // barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`).
+      // Una fila de la lista de códigos elegida a mano gana sobre "cantidad de la línea".
+      const pickingCode =
+        parsedSignal.value.kind === 'code-search' && searchSelectionIndexSignal.value !== null;
+      if (cartSelectionIndexSignal.value !== null && !pickingCode) {
+        const parsedQty = parseQuantityText(buffer);
+        if (parsedQty.ok) {
+          void setSelectedCartLineQuantity(parsedQty.qty, { rounded: parsedQty.rounded });
+          commandBarBufferSignal.value = '';
+          return;
+        }
       }
 
       submitCommandBar();
@@ -175,6 +198,11 @@ export function CommandBarInput() {
   // en el carrito, documento/teléfono de cliente) — mismo patrón que
   // `lineCode` en CartView, adaptado a legible sobre el fondo sólido cuando
   // la fila está seleccionada.
+  const warningTextStyle = {
+    fontSize: 'var(--font-size-sm)',
+    color: 'var(--color-chrome-warning)',
+  };
+
   const subtextStyle = (selected: boolean): { [key: string]: string } => ({
     fontSize: 'var(--font-size-sm)',
     color: selected ? 'rgba(255, 255, 255, 0.85)' : 'var(--color-chrome-text-muted)',
@@ -249,6 +277,17 @@ export function CommandBarInput() {
               <p role="alert" style={{ margin: 0, padding: 'var(--space-2)', color: '#f87171' }}>
                 {commandBarErrorSignal.value}
               </p>
+            ) : hasWarning ? (
+              <p
+                role="status"
+                style={{
+                  margin: 0,
+                  padding: 'var(--space-2)',
+                  color: 'var(--color-chrome-warning)',
+                }}
+              >
+                ⚠ {commandBarWarningSignal.value}
+              </p>
             ) : hasCommandResults ? (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {commandResults.map((command, index) => {
@@ -321,6 +360,9 @@ export function CommandBarInput() {
                     >
                       <div>{customer.name}</div>
                       <div style={subtextStyle(selected)}>{identifier}</div>
+                      {customer.blocked !== undefined && (
+                        <div style={warningTextStyle}>Bloqueado: {customer.blocked.reason}</div>
+                      )}
                     </li>
                   );
                 })}
@@ -359,7 +401,16 @@ export function CommandBarInput() {
                     );
                   }
                   const { product } = result.result;
-                  const qty = parsed.kind === 'search' ? parsed.qty : 1;
+                  const qty =
+                    parsed.kind === 'search' || parsed.kind === 'code-search' ? parsed.qty : 1;
+                  // #99: advertir en vez de bloquear — el stock que quedaría
+                  // corto con la cantidad pedida (sumada a la del carrito).
+                  const stock = stockSnapshotSignal.value.get(product.id) ?? 0;
+                  const inCart =
+                    cartSignal.value.lines.find(
+                      (line) => line.kind === 'product' && line.productId === product.id,
+                    )?.qty ?? 0;
+                  const shortOfStock = product.tracksStock && qty > 0 && inCart + qty > stock;
                   return (
                     <li
                       key={product.id}
@@ -381,11 +432,17 @@ export function CommandBarInput() {
                           <>
                             {formatMoney(product.price)}{' '}
                             <strong style={emphasisStyle(selected)}>
-                              x {String(qty)} = {formatMoney(product.price * qty)}
+                              x {formatQuantity(qty)} = {formatMoney(product.price * qty)}
                             </strong>
                           </>
                         )}
                       </div>
+                      {product.blocked !== undefined && (
+                        <div style={warningTextStyle}>Bloqueado: {product.blocked.reason}</div>
+                      )}
+                      {shortOfStock && (
+                        <div style={warningTextStyle}>Stock: {formatQuantity(stock)}</div>
+                      )}
                     </li>
                   );
                 })}

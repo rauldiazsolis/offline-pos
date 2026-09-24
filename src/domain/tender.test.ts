@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTender, type TenderedAmounts } from './tender.ts';
+import { resolveTender, tenderMode, type TenderedAmounts } from './tender.ts';
 
 function tender(overrides: Partial<TenderedAmounts> = {}): TenderedAmounts {
   return { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0, ...overrides };
@@ -76,5 +76,49 @@ describe('resolveTender', () => {
       ok: true,
       value: { payments: [{ method: 'account', amount: 1200 }], change: 0 },
     });
+  });
+});
+
+describe('modo devolución (#99)', () => {
+  const zero = { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 };
+
+  it('total negativo: montos positivos → pagos negativos, suma exacta, sin vuelto', () => {
+    const r = resolveTender({ ...zero, cash: 300, account: 200 }, -500);
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        payments: [
+          { method: 'account', amount: -200 },
+          { method: 'cash', amount: -300 },
+        ],
+        change: 0,
+      },
+    });
+  });
+
+  it('total negativo con suma distinta es error', () => {
+    const r = resolveTender({ ...zero, cash: 600 }, -500);
+    expect(r).toMatchObject({
+      ok: false,
+      error: 'sale/refund-amount-mismatch',
+      meta: { total: -500, tendered: 600 },
+    });
+  });
+
+  it('total 0 sin montos: sin pagos', () => {
+    expect(resolveTender(zero, 0)).toEqual({ ok: true, value: { payments: [], change: 0 } });
+  });
+
+  it('total 0 con algún monto es error', () => {
+    expect(resolveTender({ ...zero, cash: 10 }, 0)).toMatchObject({
+      ok: false,
+      error: 'sale/refund-amount-mismatch',
+    });
+  });
+
+  it('tenderMode según el signo del total', () => {
+    expect(tenderMode(10)).toBe('charge');
+    expect(tenderMode(-10)).toBe('refund');
+    expect(tenderMode(0)).toBe('zero');
   });
 });

@@ -105,6 +105,7 @@ describe('pullBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pullBatch',
+      contractVersion: '4.0.0',
       payload: {
         deviceId: 'dev-1',
         cursors: { products: 'cursor-p', customers: 'cursor-c' },
@@ -234,6 +235,7 @@ describe('pushBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pushBatch',
+      contractVersion: '4.0.0',
       payload: batch,
       idempotencyKey: 'lot-1',
     });
@@ -246,14 +248,6 @@ describe('pushBatch', () => {
     const envelope = { createdAt: now, origin: {} };
     const allEvents: OutboxBatchItem[] = [
       { type: 'sale', id: 'sale-1', ...envelope, sale },
-      {
-        type: 'sale-void',
-        id: 'void-1',
-        ...envelope,
-        saleId: 'sale-1',
-        voidedAt: '2026-01-02T00:00:00.000Z',
-        voidReason: 'error de precio',
-      },
       { type: 'customer', id: 'c1', ...envelope, customer },
       {
         type: 'account-hold-confirm',
@@ -301,6 +295,7 @@ describe('pushBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pushBatch',
+      contractVersion: '4.0.0',
       payload: { deviceId: 'dev-1', events: allEvents },
       idempotencyKey: 'lot-1',
     });
@@ -353,5 +348,30 @@ describe('requestAccountHold (sin red)', () => {
       }
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('getInfo (#99)', () => {
+  it('llama la acción info y devuelve la versión y el estado', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      bridgeOk({
+        contractVersion: '4.0.0',
+        status: 'ok',
+        backend: { name: 'pos-sheets-bridge', version: '4.0.0' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await createGoogleSheetsConnector(config).getInfo();
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        contractVersion: '4.0.0',
+        status: 'ok',
+        backend: { name: 'pos-sheets-bridge', version: '4.0.0' },
+      },
+    });
+    expect(sentEnvelope(fetchMock, 0)).toMatchObject({ action: 'info', contractVersion: '4.0.0' });
   });
 });

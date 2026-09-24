@@ -102,7 +102,6 @@ describe('POST /sync/push', () => {
         id: 'mov-1',
         movement: { id: 'mov-1', productId: 'p1', delta: -1 },
       },
-      { type: 'sale-void', id: 'void-1', saleId: 'sale-1', voidedAt: '2026-01-01T00:00:00.000Z' },
       { type: 'customer', id: 'cust-02', customer: { id: 'cust-02', name: 'Beto' } },
       { type: 'account-hold-confirm', id: 'confirm-1', holdId, saleId: 'sale-1' },
       {
@@ -127,7 +126,6 @@ describe('POST /sync/push', () => {
     expect(response.status).toBe(200);
     expect(db.prepare('SELECT COUNT(*) c FROM sales').get()).toEqual({ c: 1 });
     expect(db.prepare('SELECT COUNT(*) c FROM stock_movements').get()).toEqual({ c: 1 });
-    expect(db.prepare('SELECT COUNT(*) c FROM sale_voids').get()).toEqual({ c: 1 });
     expect(db.prepare('SELECT COUNT(*) c FROM customer_payments').get()).toEqual({ c: 1 });
     expect(db.prepare('SELECT device_id, branch, point_of_sale FROM cash_movements').get()).toEqual(
       { device_id: 'dev-1', branch: 'Centro', point_of_sale: 'Caja 1' },
@@ -346,5 +344,50 @@ describe('POST /sync/pull', () => {
 
     expect(body.lots).toEqual({ 'lot-known': { status: 'ok' } });
     expect(body.lots['lot-desconocido']).toBeUndefined();
+  });
+});
+
+describe('anulación como venta (4.0.0, #99)', () => {
+  it('una venta a cuenta sin hold y su anulación dejan el saldo como estaba', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'cust-01',
+      JSON.stringify({ id: 'cust-01', name: 'Ana', creditLimit: 1000, margin: 0, balance: 0 }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    await push('lot-void', [
+      {
+        type: 'sale',
+        id: 's1',
+        sale: {
+          id: 's1',
+          total: 150,
+          customerId: 'cust-01',
+          payments: [{ method: 'account', amount: 150 }],
+        },
+      },
+      {
+        type: 'sale',
+        id: 'v1',
+        sale: {
+          id: 'v1',
+          total: -150,
+          customerId: 'cust-01',
+          voidsSaleId: 's1',
+          payments: [{ method: 'account', amount: -150 }],
+        },
+      },
+    ]);
+
+    const customer = JSON.parse(
+      (
+        db.prepare('SELECT payload FROM customers WHERE id = ?').get('cust-01') as {
+          payload: string;
+        }
+      ).payload,
+    ) as { balance: number };
+    expect(customer.balance).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) c FROM sales').get()).toEqual({ c: 2 });
   });
 });

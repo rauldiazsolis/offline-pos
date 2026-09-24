@@ -3,6 +3,7 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import {
+  backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -133,5 +134,45 @@ describe('StatusBar — pull que retiene (#98)', () => {
     lastPullApplicationSignal.value = { kind: 'reapplied', events: 2 };
     render(<StatusBar />);
     expect(screen.queryByText(/en espera del backend/)).toBeNull();
+  });
+});
+
+describe('StatusBar — estado del backend (#99)', () => {
+  beforeEach(() => {
+    backendStatusSignal.value = { kind: 'unknown' };
+  });
+
+  it('backend incompatible, con estilo de error', () => {
+    syncStatusSignal.value = 'online-idle';
+    backendStatusSignal.value = { kind: 'incompatible', backendVersion: '3.0.0' };
+
+    const { container } = render(<StatusBar />);
+
+    expect(
+      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.x)'),
+    ).not.toBeNull();
+    const dot = container.querySelector<HTMLElement>('[aria-hidden="true"]');
+    expect(dot?.style.background).toBe('var(--color-danger)');
+  });
+
+  it('backend en mantenimiento con su mensaje', () => {
+    syncStatusSignal.value = 'online-idle';
+    backendStatusSignal.value = {
+      kind: 'maintenance',
+      info: { contractVersion: '4.0.0', status: 'maintenance', message: 'Cierre de mes' },
+    };
+
+    render(<StatusBar />);
+
+    expect(screen.getByText('Backend en mantenimiento: Cierre de mes')).not.toBeNull();
+  });
+
+  it('offline tiene precedencia', () => {
+    syncStatusSignal.value = 'offline';
+    backendStatusSignal.value = { kind: 'incompatible', backendVersion: '3.0.0' };
+
+    render(<StatusBar />);
+
+    expect(screen.getByText('Sin conexión (0)')).not.toBeNull();
   });
 });

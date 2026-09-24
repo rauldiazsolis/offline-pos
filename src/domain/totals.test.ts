@@ -139,4 +139,39 @@ describe('calculateLineTotal', () => {
       }),
     ).toBe(70);
   });
+
+  it('redondea cada campo a 2 decimales y el total suma lo que se ve (#99)', () => {
+    const cart: Cart = {
+      lines: [{ kind: 'freeform', description: 'x', qty: 0.333, unitPrice: 10 }],
+      globalAdjustmentPercentage: 10,
+    };
+    const totals = calculateTotals(cart);
+    expect(totals.subtotal).toBe(3.33);
+    expect(totals.globalAdjustmentAmount).toBe(0.33);
+    expect(totals.total).toBe(3.66);
+  });
+
+  it('una línea negativa con descuento porcentual devuelve menos (#99)', () => {
+    expect(
+      calculateLineTotal({
+        kind: 'freeform',
+        description: 'x',
+        qty: -2,
+        unitPrice: 100,
+        discount: { type: 'percentage', value: 10 },
+      }),
+    ).toBe(-180);
+  });
+
+  it('descuento por monto sobre una línea negativa conserva el signo (#99)', () => {
+    expect(
+      calculateLineTotal({
+        kind: 'freeform',
+        description: 'x',
+        qty: -1,
+        unitPrice: 100,
+        discount: { type: 'amount', value: 30 },
+      }),
+    ).toBe(-70);
+  });
 });

@@ -18,6 +18,7 @@ beforeEach(() => {
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => ({
       id: 'p1',
       sku: 'SKU-1',

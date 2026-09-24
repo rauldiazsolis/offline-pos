@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures.ts';
 import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
+import { getAllFromStore } from './indexed-db.ts';
 
 /**
  * Issue #17: la venta en curso vivía solo en memoria — un refresh la
@@ -21,6 +22,15 @@ test('recargar la página no borra el carrito en curso', async ({ page }) => {
   await commandBar.press('Enter');
   await expect(commandBar).toHaveValue('');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
+  // El borrador se guarda en IndexedDB en segundo plano: recargar antes de que termine de
+  // escribirse lo perdería (una carrera del test, no algo que un cajero pueda disparar).
+  await expect
+    .poll(
+      async () =>
+        (await getAllFromStore<{ cart: { lines: unknown[] } }>(page, 'draftCart'))[0]?.cart.lines
+          .length,
+    )
+    .toBe(1);
 
   await page.reload();
 

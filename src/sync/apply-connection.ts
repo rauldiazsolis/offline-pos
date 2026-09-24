@@ -7,11 +7,14 @@ import { clearAllTables, countLocalCatalog } from '../storage/local-data.ts';
 import { applySnapshotReconciled } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
+import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import {
   setActiveConnectorType,
   setConnectionState,
   setLastSyncFailure,
   setLastSyncedAt,
+  setBackendCheckDue,
+  setBackendStatus,
   setLocalCatalogCounts,
   setSyncConfigured,
   setSyncStatus,
@@ -148,6 +151,10 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);
     setLocalCatalogCounts(await countLocalCatalog());
+    await refreshStockSnapshot();
+    // Otra conexión (#99): su estado se pregunta antes del próximo ciclo.
+    setBackendStatus({ kind: 'unknown' });
+    setBackendCheckDue(true);
     setSyncStatus('online-idle');
     return ok(undefined);
   } finally {

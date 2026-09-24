@@ -12,16 +12,12 @@ describe('Result', () => {
   });
 
   it('err() produce un Result fallido con el código y la metadata dados', () => {
-    const result = err('sale/insufficient-stock', {
-      productId: 'p1',
-      requested: 5,
-      available: 2,
-    });
+    const result = err('sale/not-found', { saleId: 's1' });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toBe('sale/insufficient-stock');
-      expect(result.meta).toEqual({ productId: 'p1', requested: 5, available: 2 });
+      expect(result.error).toBe('sale/not-found');
+      expect(result.meta).toEqual({ saleId: 's1' });
     }
   });
 });

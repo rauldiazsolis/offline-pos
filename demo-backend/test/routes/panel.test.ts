@@ -210,7 +210,7 @@ describe('panel — contrato v3 (#96)', () => {
       method: 'PUT',
       body: JSON.stringify({ delayLots: true }),
     });
-    expect(await getJson('/_demo/api/settings')).toEqual({ delayLots: true });
+    expect(await getJson('/_demo/api/settings')).toMatchObject({ delayLots: true });
 
     await pushLot('l1', []);
     expect(await getJson('/_demo/api/lots')).toMatchObject([
@@ -344,5 +344,36 @@ describe('panel — contrato v3 (#96)', () => {
   it('ya no expone turnos de caja', async () => {
     const response = await fetch(`${baseUrl}/_demo/api/cash-sessions`);
     expect(response.status).toBe(404);
+  });
+});
+
+describe('panel — estado del backend (#99)', () => {
+  it('los ajustes de mantenimiento y contrato se guardan por separado, sin pisar la demora', async () => {
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ delayLots: true }),
+    });
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ maintenance: { enabled: true, message: 'Cierre de mes' } }),
+    });
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ simulateContract3: true }),
+    });
+
+    expect(await getJson('/_demo/api/settings')).toEqual({
+      delayLots: true,
+      maintenance: { enabled: true, message: 'Cierre de mes' },
+      simulateContract3: true,
+    });
+  });
+
+  it('la lista de ventas muestra a qué venta anula una anulación', async () => {
+    await pushLot('l1', [
+      { type: 'sale', id: 'v1', sale: { id: 'v1', total: -100, voidsSaleId: 's1' } },
+    ]);
+
+    expect(await getJson('/_demo/api/sales')).toMatchObject([{ id: 'v1', voidsSaleId: 's1' }]);
   });
 });

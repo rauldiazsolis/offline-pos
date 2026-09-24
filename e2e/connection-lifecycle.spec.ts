@@ -12,8 +12,8 @@ const CORS = {
 };
 
 /**
- * Backend REST simulado en http://backend.test: OPTIONS + /sync/push y
- * /sync/pull vacíos. Devuelve cuántos pulls recibió (la prueba de conexión es
+ * Backend REST simulado en http://backend.test: OPTIONS, /info (4.0.0, #99) y
+ * /sync/push y /sync/pull vacíos. Devuelve cuántos pulls recibió (la prueba de conexión es
  * un pull).
  */
 async function routeRestBackend(page: Page): Promise<{ pulls: () => number }> {
@@ -30,7 +30,9 @@ async function routeRestBackend(page: Page): Promise<{ pulls: () => number }> {
     const body =
       path === '/sync/pull'
         ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
-        : {};
+        : path === '/info'
+          ? { contractVersion: '4.0.0', status: 'ok' }
+          : {};
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -44,25 +46,30 @@ async function routeRestBackend(page: Page): Promise<{ pulls: () => number }> {
 /** Puente de Sheets simulado: un producto propio, sin clientes. */
 async function routeSheetsBridge(page: Page): Promise<void> {
   await page.route('https://script.google.com/**', async (route) => {
-    const data = {
-      products: {
-        items: [
-          {
-            id: 'sheet-p1',
-            sku: 'SHEET-1',
-            barcodes: [],
-            name: 'Producto de la planilla',
-            price: 500,
-            taxRate: 0.21,
-            category: 'x',
-            // Contrato v3 (#96): la fecha de alta es obligatoria en el pull.
-            createdAt: '2026-01-01T00:00:00.000Z',
-          },
-        ],
-      },
-      customers: { items: [] },
-      lots: {},
-    };
+    // 4.0.0 (#99): la prueba de conexión pregunta primero la acción `info`.
+    const { action } = JSON.parse(route.request().postData() ?? '{}') as { action?: string };
+    const data =
+      action === 'info'
+        ? { contractVersion: '4.0.0', status: 'ok' }
+        : {
+            products: {
+              items: [
+                {
+                  id: 'sheet-p1',
+                  sku: 'SHEET-1',
+                  barcodes: [],
+                  name: 'Producto de la planilla',
+                  price: 500,
+                  taxRate: 0.21,
+                  category: 'x',
+                  // Contrato v3 (#96): la fecha de alta es obligatoria en el pull.
+                  createdAt: '2026-01-01T00:00:00.000Z',
+                },
+              ],
+            },
+            customers: { items: [] },
+            lots: {},
+          };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',

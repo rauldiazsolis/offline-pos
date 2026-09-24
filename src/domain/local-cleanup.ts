@@ -43,7 +43,9 @@ export type CleanupPlan = {
  * sin resolver, ni el ancla del arqueo — mientras existan turnos (hasta la
  * Etapa 5, #100): el último turno cerrado, el abierto y sus ventas. Un evento
  * `sale` ausente del outbox cuenta como sincronizado: lo pendiente nunca se
- * borra, así que solo pudo irse por una limpieza anterior.
+ * borra, así que solo pudo irse por una limpieza anterior. Cada venta se mide
+ * por su propia edad y su propio evento: una anulación es otra venta (#99), no
+ * retiene a la que anula.
  *
  * Los movimientos de stock y de cuenta son registros **independientes** de su
  * venta: el `saleId` es solo auditoría. Se borran por su propia edad, nunca
@@ -56,9 +58,6 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
   const isOld = (iso: string): boolean => new Date(iso).getTime() < cutoff;
 
   const pendingIds = new Set(input.pendingEvents.map((event) => event.id));
-  const pendingVoidSaleIds = new Set(
-    input.pendingEvents.flatMap((event) => (event.type === 'sale-void' ? [event.saleId] : [])),
-  );
 
   const open = input.cashSessions.find((session) => session.closedAt === undefined);
   const anchor = input.cashSessions
@@ -70,11 +69,7 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
 
   const sales = input.sales
     .filter(
-      (sale) =>
-        isOld(sale.createdAt) &&
-        !pendingIds.has(sale.id) &&
-        !pendingVoidSaleIds.has(sale.id) &&
-        !keptSaleIds.has(sale.id),
+      (sale) => isOld(sale.createdAt) && !pendingIds.has(sale.id) && !keptSaleIds.has(sale.id),
     )
     .map((sale) => sale.id);
   const inAnchor = (movement: SaleLinked): boolean =>

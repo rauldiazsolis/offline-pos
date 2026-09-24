@@ -114,19 +114,18 @@ describe('probeConnection', () => {
     expect(result).toMatchObject({ ok: false, error: 'sync/timeout' });
   });
 
-  it('sin conector inyectado, arma el real desde la config (REST: POST a {baseUrl}/sync/pull)', async () => {
-    const fetchMock = vi.fn((_url: string) =>
+  it('sin conector inyectado, arma el real desde la config (REST: GET /info y POST /sync/pull)', async () => {
+    const fetchMock = vi.fn((url: string) =>
       Promise.resolve({
         ok: true,
         status: 200,
         statusText: 'OK',
         json: () =>
-          Promise.resolve({
-            products: { items: [] },
-            customers: { items: [] },
-            stock: [],
-            lots: {},
-          }),
+          Promise.resolve(
+            new URL(url).pathname === '/info'
+              ? { contractVersion: '4.0.0', status: 'ok' }
+              : { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} },
+          ),
       } as Response),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -135,7 +134,7 @@ describe('probeConnection', () => {
 
     expect(result.ok).toBe(true);
     const paths = fetchMock.mock.calls.map(([url]) => new URL(url).pathname);
-    expect(paths).toEqual(['/sync/pull']);
+    expect(paths).toEqual(['/info', '/sync/pull']);
   });
 });
 
@@ -272,5 +271,66 @@ describe('originKey', () => {
     expect(originKey({ type: 'rest', baseUrl: 'https://a.example.com' })).not.toBe(
       originKey({ type: 'rest', baseUrl: 'https://b.example.com' }),
     );
+  });
+});
+
+describe('probeConnection — estado del backend (#99)', () => {
+  it('pregunta getInfo antes del pull', async () => {
+    const calls: string[] = [];
+    const connector = fakeConnector({
+      getInfo: () => {
+        calls.push('info');
+        return Promise.resolve(ok({ contractVersion: '4.0.0', status: 'ok' as const }));
+      },
+      pullBatch: () => {
+        calls.push('pull');
+        return Promise.resolve(
+          ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
+        );
+      },
+    });
+
+    await probeConnection(config, { connector });
+
+    expect(calls[0]).toBe('info');
+    expect(calls).toContain('pull');
+  });
+
+  it('un backend 3.0.0 falla con sync/incompatible-contract sin llamar al pull', async () => {
+    const pullBatch = vi.fn();
+    const connector = fakeConnector({
+      getInfo: () => Promise.resolve(ok({ contractVersion: '3.0.0', status: 'ok' as const })),
+      pullBatch,
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'sync/incompatible-contract',
+      meta: { backend: '3.0.0', pos: '4.0.0' },
+    });
+    expect(pullBatch).not.toHaveBeenCalled();
+  });
+
+  it('un backend en mantenimiento falla con su mensaje', async () => {
+    const connector = fakeConnector({
+      getInfo: () =>
+        Promise.resolve(
+          ok({
+            contractVersion: '4.0.0',
+            status: 'maintenance' as const,
+            message: 'Cierre de mes',
+          }),
+        ),
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'sync/backend-maintenance',
+      meta: { message: 'Cierre de mes' },
+    });
   });
 });

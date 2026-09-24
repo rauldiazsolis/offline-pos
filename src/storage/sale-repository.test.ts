@@ -8,7 +8,8 @@ import {
 } from './cash-session-repository.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
-import { closeSaleAndPersist, voidSaleAndPersist } from './sale-repository.ts';
+import type { Sale } from '../domain/sale.ts';
+import { closeSaleAndPersist, listVoidCandidates, voidSaleAndPersist } from './sale-repository.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -199,88 +200,168 @@ describe('closeSaleAndPersist', () => {
   });
 });
 
-describe('voidSaleAndPersist', () => {
-  it('anula la venta y revierte el stock', async () => {
-    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
+describe('voidSaleAndPersist (anulación como ticket propio, #99)', () => {
+  async function closeOnAccount() {
+    await db.customers.add({ id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' });
+    await db.customerAccounts.add({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      balance: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const closed = await closeSaleAndPersist({
+      cart: { lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 125 }] },
+      payments: [
+        { method: 'account', amount: 150 },
+        { method: 'cash', amount: 100 },
+      ],
+      customerId: 'c1',
+    });
     if (!closed.ok) throw new Error('setup falló');
+    return closed.value;
+  }
 
-    const result = await voidSaleAndPersist(closed.value.id, { reason: 'error de cobro' });
+  it('persiste un ticket negativo aparte y deja el original intacto', async () => {
+    const original = await closeOnAccount();
 
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.status).toBe('voided');
-      expect(result.value.voidReason).toBe('error de cobro');
-    }
-    const stock = await db.stock.get('p1');
-    expect(stock?.quantity).toBe(10);
+    const result = await voidSaleAndPersist(original.id, { reason: 'error de cobro' });
+
+    if (!result.ok) throw new Error('esperaba ok');
+    const voidTicket = result.value;
+    expect(voidTicket.voidsSaleId).toBe(original.id);
+    expect(voidTicket.total).toBe(-original.total);
+    expect(voidTicket.voidReason).toBe('error de cobro');
+    expect(await db.sales.count()).toBe(2);
+    expect(await db.sales.get(original.id)).toEqual(original);
   });
 
-  it('no modifica lines/payments/total/createdAt de la venta original', async () => {
-    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-    if (!closed.ok) throw new Error('setup falló');
+  it('repone el stock con un movimiento sale-void del ticket de anulación', async () => {
+    const original = await closeOnAccount();
 
-    const result = await voidSaleAndPersist(closed.value.id);
+    const result = await voidSaleAndPersist(original.id);
 
-    if (result.ok) {
-      expect(result.value.lines).toEqual(closed.value.lines);
-      expect(result.value.payments).toEqual(closed.value.payments);
-      expect(result.value.total).toBe(closed.value.total);
-      expect(result.value.createdAt).toBe(closed.value.createdAt);
-    }
+    if (!result.ok) throw new Error('esperaba ok');
+    expect((await db.stock.get('p1'))?.quantity).toBe(10);
+    const movements = await db.stockMovements.where('saleId').equals(result.value.id).toArray();
+    expect(movements).toMatchObject([{ reason: 'sale-void', delta: 2 }]);
   });
 
-  it('registra un movimiento de stock nuevo con reason "sale-void", sin editar el original', async () => {
-    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-    if (!closed.ok) throw new Error('setup falló');
+  it('acredita el saldo de cuenta corriente', async () => {
+    const original = await closeOnAccount();
+    expect((await db.customerAccounts.get('c1'))?.balance).toBe(150);
 
-    await voidSaleAndPersist(closed.value.id);
+    const result = await voidSaleAndPersist(original.id);
 
-    const movements = await db.stockMovements.where('saleId').equals(closed.value.id).toArray();
-    expect(movements).toHaveLength(2);
-    expect(movements.find((m) => m.reason === 'sale')?.delta).toBe(-2);
-    expect(movements.find((m) => m.reason === 'sale-void')?.delta).toBe(2);
+    if (!result.ok) throw new Error('esperaba ok');
+    expect((await db.customerAccounts.get('c1'))?.balance).toBe(0);
+    const accountMovements = await db.accountMovements
+      .where('saleId')
+      .equals(result.value.id)
+      .toArray();
+    expect(accountMovements.map((movement) => movement.amount)).toEqual([-150]);
   });
 
-  it('escribe un evento sale-void con id propio, distinto del id de la venta, más un evento por movimiento', async () => {
-    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-    if (!closed.ok) throw new Error('setup falló');
+  it('encola un evento sale con voidsSaleId y sus stock-movement', async () => {
+    const original = await closeOnAccount();
 
-    await voidSaleAndPersist(closed.value.id, { reason: 'error de cobro' });
+    const result = await voidSaleAndPersist(original.id);
 
+    if (!result.ok) throw new Error('esperaba ok');
     const events = await db.outbox.toArray();
-    const voidEvent = events.find((event) => event.type === 'sale-void');
-    expect(voidEvent).toBeDefined();
-    expect(voidEvent?.id).not.toBe(closed.value.id);
-    if (voidEvent?.type === 'sale-void') {
-      expect(voidEvent.saleId).toBe(closed.value.id);
-      expect(voidEvent.voidReason).toBe('error de cobro');
-    }
-
+    const voidEvent = events.find((event) => event.id === result.value.id);
+    expect(voidEvent?.type === 'sale' && voidEvent.sale.voidsSaleId).toBe(original.id);
     const movementEvents = events.filter(
-      (event) => event.type === 'stock-movement' && event.movement.reason === 'sale-void',
+      (event) => event.type === 'stock-movement' && event.movement.saleId === result.value.id,
     );
     expect(movementEvents).toHaveLength(1);
+  });
+
+  it('con un turno abierto, lo registra en él', async () => {
+    const original = await closeOnAccount();
+
+    const result = await voidSaleAndPersist(original.id);
+
+    if (!result.ok) throw new Error('esperaba ok');
+    expect((await getCurrentOpenCashSession())?.sales).toContain(result.value.id);
+  });
+
+  it('sin turno abierto también anula', async () => {
+    const original = await closeOnAccount();
+    await closeCashSessionAndPersist({ closingAmount: 100 });
+
+    const result = await voidSaleAndPersist(original.id);
+
+    expect(result.ok).toBe(true);
   });
 
   it('rechaza anular una venta inexistente', async () => {
     const result = await voidSaleAndPersist('no-existe');
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/not-found');
-    }
+    expect(result).toMatchObject({ ok: false, error: 'sale/not-found' });
   });
 
-  it('rechaza anular una venta ya anulada', async () => {
-    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-    if (!closed.ok) throw new Error('setup falló');
-    await voidSaleAndPersist(closed.value.id);
+  it('rechaza anular dos veces, y anular una anulación', async () => {
+    const original = await closeOnAccount();
+    const first = await voidSaleAndPersist(original.id);
+    if (!first.ok) throw new Error('esperaba ok');
 
-    const result = await voidSaleAndPersist(closed.value.id);
+    expect(await voidSaleAndPersist(original.id)).toMatchObject({
+      ok: false,
+      error: 'sale/already-voided',
+    });
+    expect(await voidSaleAndPersist(first.value.id)).toMatchObject({
+      ok: false,
+      error: 'sale/cannot-void-a-void',
+    });
+  });
+});
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/already-voided');
-    }
+describe('listVoidCandidates (#99)', () => {
+  const now = '2026-09-24T12:00:00.000Z';
+  const sale = (id: string, createdAt: string, extra: Partial<Sale> = {}): Sale => ({
+    id,
+    lines: [],
+    payments: [],
+    total: 100,
+    status: 'closed',
+    createdAt,
+    ...extra,
+  });
+
+  it('solo las últimas 24 h, más nuevo primero, con el estado de cada una', async () => {
+    await db.sales.bulkAdd([
+      sale('old', '2026-09-23T11:00:00.000Z'),
+      sale('voided', '2026-09-24T09:00:00.000Z'),
+      sale('void-of', '2026-09-24T10:00:00.000Z', { voidsSaleId: 'voided', total: -100 }),
+      sale('common', '2026-09-24T11:00:00.000Z'),
+      sale('legacy', '2026-09-24T08:00:00.000Z', { status: 'voided' }),
+    ]);
+
+    const candidates = await listVoidCandidates(now);
+
+    expect(candidates.map((candidate) => [candidate.sale.id, candidate.state])).toEqual([
+      ['common', 'voidable'],
+      ['void-of', 'void-ticket'],
+      ['voided', 'voided'],
+      ['legacy', 'voided'],
+    ]);
+    expect(candidates[1]?.original?.id).toBe('voided');
+  });
+
+  it('tope de 20', async () => {
+    await db.sales.bulkAdd(
+      Array.from({ length: 25 }, (_, index) =>
+        sale(
+          `s${String(index).padStart(2, '0')}`,
+          `2026-09-24T11:${String(index).padStart(2, '0')}:00.000Z`,
+        ),
+      ),
+    );
+
+    const candidates = await listVoidCandidates(now);
+
+    expect(candidates).toHaveLength(20);
+    expect(candidates[0]?.sale.id).toBe('s24');
   });
 });

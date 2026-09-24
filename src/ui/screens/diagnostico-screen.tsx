@@ -13,7 +13,7 @@ import {
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
-import type { SyncLogEntry } from '../state/sync.ts';
+import type { BackendStatus, SyncLogEntry } from '../state/sync.ts';
 
 const cardStyle = {
   border: '1px solid var(--color-border)',
@@ -48,6 +48,38 @@ function describeLogResult(result: SyncLogEntry['result']): string {
  * `pos.status()` muestra en la consola — se actualiza sola mientras está
  * abierta, sin poll.
  */
+/** Estado del backend (4.0.0, #99) en una línea: "contrato 4.0.0 · ok". */
+function backendStatusText(status: BackendStatus): string {
+  switch (status.kind) {
+    case 'unknown':
+      return 'sin consultar';
+    case 'ok':
+      return `contrato ${status.info.contractVersion} · ok`;
+    case 'maintenance':
+      return `contrato ${status.info.contractVersion} · en mantenimiento${
+        status.info.message !== undefined ? ` (${status.info.message})` : ''
+      }`;
+    case 'incompatible':
+      return `contrato ${status.backendVersion} · incompatible`;
+  }
+}
+
+/** Mismo criterio de color que la barra de estado: incompatible en rojo, mantenimiento en ámbar. */
+function backendStatusStyle(status: BackendStatus): { color?: string; fontWeight?: string } {
+  if (status.kind === 'incompatible') {
+    return { color: 'var(--color-danger)', fontWeight: 'bold' };
+  }
+  if (status.kind === 'maintenance') {
+    return { color: 'var(--color-warning)', fontWeight: 'bold' };
+  }
+  return {};
+}
+
+function backendName(status: BackendStatus): string | undefined {
+  const info = status.kind === 'unknown' ? undefined : status.info;
+  return info?.backend !== undefined ? `${info.backend.name} ${info.backend.version}` : undefined;
+}
+
 export function DiagnosticoScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
 
@@ -121,6 +153,14 @@ export function DiagnosticoScreen() {
           </p>
           <p style={{ margin: 0 }}>Cerrojo: {diagnostics.lockHeld ? 'ocupado' : 'libre'}</p>
           <p style={{ margin: 0 }}>Red: {diagnostics.online ? 'online' : 'offline'}</p>
+          <p style={{ margin: 0, ...backendStatusStyle(diagnostics.backendStatus) }}>
+            Backend: {backendStatusText(diagnostics.backendStatus)}
+          </p>
+          {backendName(diagnostics.backendStatus) !== undefined && (
+            <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+              {backendName(diagnostics.backendStatus)}
+            </p>
+          )}
         </div>
 
         <div style={cardStyle}>

@@ -171,7 +171,50 @@ export function toPullBatchResult(data: z.infer<typeof pullBatchResponseSchema>)
  * #87) más `requestAccountHold`, la única que sigue siendo síncrona: decide
  * el flujo del cobro en el momento (§5), nunca pasa por el outbox.
  */
+/** Header con la versión del contrato que habla el POS, en todo request REST (4.0.0, #99). */
+export const CONTRACT_VERSION_HEADER = 'X-POS-Contract-Version';
+
+/** Respuesta de `GET /info` (contrato 4.0.0, #99): versión y estado del backend. */
+export const backendInfoSchema = z.object({
+  contractVersion: z.string(),
+  status: z.enum(['ok', 'maintenance']),
+  message: z.string().optional(),
+  backend: z.object({ name: z.string(), version: z.string() }).optional(),
+});
+
+export type BackendInfo = {
+  contractVersion: string;
+  status: 'ok' | 'maintenance';
+  message?: string;
+  backend?: { name: string; version: string };
+};
+
+/** Omite los opcionales ausentes (`exactOptionalPropertyTypes`). */
+export function toBackendInfo(data: z.infer<typeof backendInfoSchema>): BackendInfo {
+  return {
+    contractVersion: data.contractVersion,
+    status: data.status,
+    ...(data.message !== undefined ? { message: data.message } : {}),
+    ...(data.backend !== undefined ? { backend: data.backend } : {}),
+  };
+}
+
+/**
+ * Cuerpo de un `409` de un backend que no habla la versión del POS (4.0.0,
+ * #99): no procesó nada ni dio ack, así que el lote sigue en el outbox.
+ */
+export const incompatibleContractBodySchema = z.object({
+  code: z.literal('incompatible-contract'),
+  contractVersion: z.string(),
+});
+
 export type Connector = {
+  /**
+   * Versión del contrato y estado del backend (`GET /info`, 4.0.0 — #99).
+   * Liviano: el motor lo consulta antes de sincronizar y, con el backend en
+   * mantenimiento o incompatible, en vez de sincronizar.
+   */
+  getInfo(): Promise<Result<BackendInfo>>;
   /** Manda TODA la cola pendiente del outbox de una vez, con un solo idempotency_id para el lote entero. */
   pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>>;
   /** Pide productos/clientes/stock en una sola llamada, más el estado de los lotes de push que interesan. */

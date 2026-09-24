@@ -1,4 +1,6 @@
+import { contractMajor } from '../domain/contract-version.ts';
 import type { Failure } from '../domain/result.ts';
+import { formatMoney } from './format.ts';
 
 /**
  * Traductor central de errores de negocio a mensajes para el cajero. Switch
@@ -9,11 +11,9 @@ import type { Failure } from '../domain/result.ts';
 export function describeError(failure: Failure): string {
   switch (failure.error) {
     case 'cart/invalid-quantity':
-      return `Cantidad inválida (${String(failure.meta.quantity)}).`;
+      return `Cantidad inválida: ${String(failure.meta.quantity)}. Usá hasta 3 decimales, distinta de 0.`;
     case 'cart/line-not-found':
       return 'No hay una línea del carrito en esa posición.';
-    case 'cart/nothing-to-subtract':
-      return 'Ese producto no está en el carrito.';
     case 'cart/invalid-discount':
       return 'Descuento inválido.';
     case 'cart/invalid-freeform-line':
@@ -27,18 +27,22 @@ export function describeError(failure: Failure): string {
       return `No hay ninguna línea libre "${failure.meta.description}" en el carrito.`;
     case 'cart/invalid-global-adjustment':
       return `Recargo/descuento inválido (${String(failure.meta.percentage)}%). No se puede descontar más del 100%.`;
-    case 'sale/insufficient-stock':
-      return `Stock insuficiente (pedido ${String(failure.meta.requested)}, disponible ${String(failure.meta.available)}).`;
     case 'sale/empty-cart':
       return 'El carrito está vacío.';
     case 'sale/invalid-payment-amount':
       return 'Uno de los pagos tiene un monto inválido.';
     case 'sale/insufficient-payment':
       return `Falta pagar ${String(failure.meta.total - failure.meta.paid)}.`;
+    case 'sale/refund-amount-mismatch':
+      return failure.meta.total === 0
+        ? 'El ticket está en $0: no hay nada que cobrar ni devolver.'
+        : `Lo que se devuelve (${formatMoney(failure.meta.tendered)}) tiene que ser exactamente ${formatMoney(Math.abs(failure.meta.total))}.`;
     case 'sale/non-cash-exceeds-total':
       return `No se puede dar vuelto con un medio distinto a efectivo (excedente ${String(failure.meta.nonCashTotal - failure.meta.total)}).`;
-    case 'sale/not-closed':
-      return 'Esa venta no está cerrada.';
+    case 'sale/cannot-void-a-void':
+      return 'Esta venta ya es una anulación: no se puede anular.';
+    case 'sale/void-window-expired':
+      return 'Solo se pueden anular ventas de las últimas 24 horas.';
     case 'sale/already-voided':
       return 'Esa venta ya estaba anulada.';
     case 'catalog/duplicate-sku':
@@ -70,6 +74,12 @@ export function describeError(failure: Failure): string {
     }
     case 'sync/timeout':
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
+    case 'sync/incompatible-contract':
+      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractMajor(failure.meta.pos)}.x.`;
+    case 'sync/backend-maintenance':
+      return failure.meta.message !== undefined
+        ? `El backend está en mantenimiento: ${failure.meta.message}`
+        : 'El backend está en mantenimiento.';
     case 'sync/remote-error':
       return `El sistema externo respondió con un error: ${failure.meta.message}`;
     case 'sync/empty-snapshot': {

@@ -58,10 +58,13 @@ function okResponse(body: unknown): Response {
   return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
 }
 
-/** Backend REST de mentira: /sync/pull responde productos/clientes; cualquier otro POST da OK. */
+/** Backend REST de mentira: /info responde 4.0.0, /sync/pull productos/clientes; cualquier otro POST da OK. */
 function stubRestBackend(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn((url: string) => {
     const path = new URL(url).pathname;
+    if (path === '/info') {
+      return Promise.resolve(okResponse({ contractVersion: '4.0.0', status: 'ok' }));
+    }
     if (path === '/sync/pull') {
       return Promise.resolve(
         okResponse({

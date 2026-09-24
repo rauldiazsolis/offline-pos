@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Cart } from './cart.ts';
-import { buildStockMovementsForSale, closeSale, voidSale } from './sale-lifecycle.ts';
+import {
+  buildStockMovementsForSale,
+  buildVoidSale,
+  closeSale,
+  isVoided,
+  isWithinVoidWindow,
+} from './sale-lifecycle.ts';
 import type { Sale } from './sale.ts';
 
 const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] };
@@ -144,43 +150,113 @@ const closedSale: Sale = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-describe('voidSale', () => {
-  it('anula una venta cerrada sin tocar sus datos originales', () => {
-    const result = voidSale(closedSale, {
-      now: '2026-01-02T00:00:00.000Z',
-      reason: 'error de cobro',
+describe('buildVoidSale (#99)', () => {
+  const original: Sale = {
+    id: 'S1',
+    status: 'closed',
+    createdAt: '2026-09-24T10:00:00.000Z',
+    total: 250,
+    customerId: 'C1',
+    globalAdjustmentPercentage: -10,
+    lines: [
+      {
+        kind: 'product',
+        productId: 'p1',
+        qty: 2,
+        unitPrice: 100,
+        discount: { type: 'amount', value: 10 },
+      },
+    ],
+    payments: [
+      { method: 'account', amount: 150, reference: 'H1' },
+      { method: 'cash', amount: 100 },
+    ],
+  };
+
+  it('arma un ticket negativo con referencia al original', () => {
+    const r = buildVoidSale(original, {
+      id: 'V1',
+      now: '2026-09-24T12:00:00.000Z',
+      reason: 'error',
+      isAlreadyVoided: false,
     });
-
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.value.status).toBe('voided');
-      expect(result.value.voidedAt).toBe('2026-01-02T00:00:00.000Z');
-      expect(result.value.voidReason).toBe('error de cobro');
-      expect(result.value.lines).toBe(closedSale.lines);
-      expect(result.value.total).toBe(closedSale.total);
-      expect(result.value.createdAt).toBe(closedSale.createdAt);
-    }
+    expect(r).toEqual({
+      ok: true,
+      value: {
+        id: 'V1',
+        status: 'closed',
+        createdAt: '2026-09-24T12:00:00.000Z',
+        total: -250,
+        customerId: 'C1',
+        globalAdjustmentPercentage: -10,
+        voidsSaleId: 'S1',
+        voidReason: 'error',
+        lines: [
+          {
+            kind: 'product',
+            productId: 'p1',
+            qty: -2,
+            unitPrice: 100,
+            discount: { type: 'amount', value: 10 },
+          },
+        ],
+        payments: [
+          { method: 'account', amount: -150 },
+          { method: 'cash', amount: -100 },
+        ],
+      },
+    });
   });
 
-  it('rechaza anular una venta ya anulada', () => {
-    const voided: Sale = { ...closedSale, status: 'voided', voidedAt: '2026-01-02T00:00:00.000Z' };
-    const result = voidSale(voided, { now: '2026-01-03T00:00:00.000Z' });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/already-voided');
-    }
+  it('rechaza anular dos veces, una anulación, o fuera de las 24 h', () => {
+    const now = '2026-09-24T12:00:00.000Z';
+    expect(buildVoidSale(original, { id: 'V', now, isAlreadyVoided: true })).toMatchObject({
+      ok: false,
+      error: 'sale/already-voided',
+    });
+    expect(
+      buildVoidSale({ ...original, status: 'voided' }, { id: 'V', now, isAlreadyVoided: false }),
+    ).toMatchObject({ ok: false, error: 'sale/already-voided' });
+    expect(
+      buildVoidSale({ ...original, voidsSaleId: 'S0' }, { id: 'V', now, isAlreadyVoided: false }),
+    ).toMatchObject({ ok: false, error: 'sale/cannot-void-a-void' });
+    expect(
+      buildVoidSale(original, {
+        id: 'V',
+        now: '2026-09-25T10:00:00.000Z',
+        isAlreadyVoided: false,
+      }),
+    ).toMatchObject({ ok: false, error: 'sale/void-window-expired' });
   });
 
-  it('rechaza anular una venta que no está cerrada', () => {
-    const open: Sale = { ...closedSale, status: 'open' };
-    const result = voidSale(open, { now: '2026-01-03T00:00:00.000Z' });
+  it('una devolución común (negativa, sin voidsSaleId) se anula con un ticket positivo', () => {
+    const refund: Sale = {
+      ...original,
+      total: -100,
+      payments: [{ method: 'cash', amount: -100 }],
+      lines: [{ kind: 'freeform', description: 'dev', qty: -1, unitPrice: 100 }],
+    };
+    const r = buildVoidSale(refund, {
+      id: 'V',
+      now: '2026-09-24T12:00:00.000Z',
+      isAlreadyVoided: false,
+    });
+    expect(r.ok && r.value.total).toBe(100);
+  });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sale/not-closed');
-      expect(result.meta).toEqual({ status: 'open' });
-    }
+  it('ventana de 24 h móviles: 23:59 se anula a las 00:01', () => {
+    expect(
+      isWithinVoidWindow({ createdAt: '2026-09-24T23:59:00.000Z' }, '2026-09-25T00:01:00.000Z'),
+    ).toBe(true);
+    expect(
+      isWithinVoidWindow({ createdAt: '2026-09-24T10:00:00.000Z' }, '2026-09-25T10:00:00.000Z'),
+    ).toBe(false);
+  });
+
+  it('isVoided con el status legado o con una anulación', () => {
+    expect(isVoided({ id: 'S1', status: 'voided' }, new Set())).toBe(true);
+    expect(isVoided({ id: 'S1', status: 'closed' }, new Set(['S1']))).toBe(true);
+    expect(isVoided({ id: 'S1', status: 'closed' }, new Set())).toBe(false);
   });
 });
 
@@ -206,8 +282,12 @@ describe('buildStockMovementsForSale', () => {
     ]);
   });
 
-  it('genera un movimiento positivo al anular', () => {
-    const movements = buildStockMovementsForSale(closedSale, {
+  it('una línea negativa (el ticket de una anulación) genera un movimiento positivo', () => {
+    const voidTicket: Sale = {
+      ...closedSale,
+      lines: closedSale.lines.map((line) => ({ ...line, qty: -line.qty })),
+    };
+    const movements = buildStockMovementsForSale(voidTicket, {
       reason: 'sale-void',
       now: '2026-01-02T00:00:00.000Z',
       newMovementId: () => 'm1',
@@ -241,5 +321,59 @@ describe('buildStockMovementsForSale', () => {
     });
 
     expect(movements).toEqual([]);
+  });
+});
+
+describe('closeSale con total 0 o negativo (#99)', () => {
+  it('cierra un ticket negativo con pagos negativos que suman exacto', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: -500 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r.ok && r.value.total).toBe(-500);
+  });
+
+  it('rechaza un pago con signo distinto al total', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: 500 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r).toMatchObject({ ok: false, error: 'sale/invalid-payment-amount' });
+  });
+
+  it('rechaza pagos negativos que no suman exactamente el total', () => {
+    const cart = {
+      lines: [{ kind: 'freeform' as const, description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    const r = closeSale({
+      cart,
+      payments: [{ method: 'cash', amount: -400 }],
+      id: 's1',
+      createdAt: 'now',
+    });
+    expect(r).toMatchObject({ ok: false, error: 'sale/refund-amount-mismatch' });
+  });
+
+  it('cierra un ticket en 0 sin pagos y rechaza uno con pagos', () => {
+    const cart = {
+      lines: [
+        { kind: 'freeform' as const, description: 'a', qty: 1, unitPrice: 100 },
+        { kind: 'freeform' as const, description: 'b', qty: -1, unitPrice: 100 },
+      ],
+    };
+    expect(closeSale({ cart, payments: [], id: 's1', createdAt: 'now' }).ok).toBe(true);
+    expect(
+      closeSale({ cart, payments: [{ method: 'cash', amount: 10 }], id: 's1', createdAt: 'now' }),
+    ).toMatchObject({ ok: false, error: 'sale/invalid-payment-amount' });
   });
 });

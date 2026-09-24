@@ -7,17 +7,22 @@ const STORAGE_KEY = 'offline-pos:sync-config';
 test.beforeEach(async ({ page }) => {
   // El puente de Sheets simulado: aplicar una conexión nueva exige PROBARLA
   // (pull completo), así que toda acción responde OK con listas vacías (con CORS).
-  await page.route('https://script.google.com/**', (route) =>
-    route.fulfill({
+  // 4.0.0 (#99): la acción `info` responde la versión del contrato.
+  await page.route('https://script.google.com/**', (route) => {
+    const { action } = JSON.parse(route.request().postData() ?? '{}') as { action?: string };
+    return route.fulfill({
       status: 200,
       contentType: 'application/json',
       headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify({
         ok: true,
-        data: { products: { items: [] }, customers: { items: [] }, lots: {} },
+        data:
+          action === 'info'
+            ? { contractVersion: '4.0.0', status: 'ok' }
+            : { products: { items: [] }, customers: { items: [] }, lots: {} },
       }),
-    }),
-  );
+    });
+  });
 });
 
 /** Con la terminal activa, /CONFIG abre el wizard en Revisar. */

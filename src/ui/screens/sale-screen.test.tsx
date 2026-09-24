@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../storage/db.ts';
-import { cartSignal } from '../state/cart.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { commandBarBufferSignal, overlayDismissedSignal } from '../state/command-bar.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
@@ -18,6 +18,7 @@ beforeEach(async () => {
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => undefined,
     getStock: () => Promise.resolve(undefined),
   });
@@ -67,5 +68,29 @@ describe('SaleScreen — mouse (Etapa 2 de #94)', () => {
     screen.getByText('/CAJA').dispatchEvent(event);
 
     expect(overlayDismissedSignal.value).toBe(false);
+  });
+});
+
+describe('SaleScreen — click en el carrito (#99)', () => {
+  it('click en una fila la selecciona y el foco sigue en la barra', () => {
+    cartSignal.value = {
+      lines: [
+        { kind: 'freeform', description: 'Uno', qty: 1, unitPrice: 10 },
+        { kind: 'freeform', description: 'Dos', qty: 1, unitPrice: 20 },
+      ],
+    };
+    cartSelectionIndexSignal.value = null;
+    render(<SaleScreen />);
+    const bar = screen.getByLabelText('Barra de comandos');
+    bar.focus();
+
+    const row = screen.getByText('Dos');
+    const mouseDown = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+    row.dispatchEvent(mouseDown);
+    fireEvent.click(row);
+
+    expect(mouseDown.defaultPrevented).toBe(true);
+    expect(cartSelectionIndexSignal.value).toBe(1);
+    expect(document.activeElement).toBe(bar);
   });
 });

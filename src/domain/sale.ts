@@ -29,12 +29,12 @@ export type Payment = {
 };
 
 /**
- * Venta cerrada, persistida en IndexedDB. En Fase 1 nunca se persiste una
- * Sale con status 'open' — el carrito en curso vive solo en signals de UI;
- * una Sale nace ya 'closed' en el mismo momento en que se persiste.
+ * Venta cerrada, persistida en IndexedDB. Nunca se persiste una venta
+ * abierta — el carrito en curso vive solo en signals de UI; una Sale nace ya
+ * 'closed' en el mismo momento en que se persiste.
  *
- * `syncedAt`, `voidedAt` y `voidReason` son opcionales (nunca `undefined`
- * explícito, así lo pide `exactOptionalPropertyTypes`). `syncedAt` no lo usa
+ * `syncedAt` y `voidReason` son opcionales (nunca `undefined` explícito, así
+ * lo pide `exactOptionalPropertyTypes`). `syncedAt` no lo usa
  * todavía nadie en Fase 1 — lo agrega recién Fase 2 al confirmar el push,
  * pero se define ya para no tener que tocar el tipo (y todo lo que hace
  * switch/destructuring sobre él) más adelante.
@@ -43,21 +43,32 @@ export type Payment = {
  * adjuntar independientemente de cómo se pague; solo es obligatorio cuando
  * algún `Payment.method` es `'account'` (ver `closeSale`).
  *
- * Anular una venta (RF-06) es la transición de ciclo de vida
- * status: 'closed' -> 'voided', ya contemplada por el enum — nunca se
- * editan `lines`/`payments`/`total`/`createdAt` (RNF-07: nada se edita
- * retroactivamente, solo se anula con un registro nuevo).
+ * Anular una venta (RF-06) es, desde la Etapa 4 de #94 (#99), un ticket
+ * nuevo con las líneas y los pagos invertidos y `voidsSaleId` apuntando al
+ * original (`buildVoidSale`) — el original nunca se toca (RNF-07: nada se
+ * edita retroactivamente, solo se compensa con un registro nuevo).
  */
 export type Sale = {
   id: string; // ULID
   lines: SaleLine[];
   payments: Payment[];
   total: number;
-  status: 'open' | 'closed' | 'voided';
+  /**
+   * `voided` solo aparece en ventas guardadas antes de la Etapa 4 de #94;
+   * desde entonces una anulación es un ticket negativo aparte (`voidsSaleId`)
+   * y ningún código nuevo lo escribe.
+   */
+  status: 'closed' | 'voided';
   createdAt: string; // ISO 8601
   syncedAt?: string;
-  voidedAt?: string;
+  /** Solo en un ticket de anulación: el motivo que tipeó el cajero. */
   voidReason?: string;
+  /**
+   * Solo en un ticket de anulación (#99): la venta que anula. Es un
+   * documento independiente que mueve stock, saldo y efectivo por su cuenta;
+   * esto queda para auditoría y para marcar el original como anulado.
+   */
+  voidsSaleId?: string;
   customerId?: string;
   /** Recargo (positivo) o descuento (negativo) global aplicado, RF-03 — copiado del Cart al cerrar. */
   globalAdjustmentPercentage?: number;

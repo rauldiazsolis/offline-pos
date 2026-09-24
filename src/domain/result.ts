@@ -1,4 +1,4 @@
-import type { Discount, Sale } from './sale.ts';
+import type { Discount } from './sale.ts';
 
 /**
  * Result<T> casero — ver "Manejo de errores" en CLAUDE.md.
@@ -22,20 +22,20 @@ export type ErrorMeta = {
   // cart.ts
   'cart/invalid-quantity': { quantity: number };
   'cart/line-not-found': { lineIndex: number };
-  'cart/nothing-to-subtract': { productId: string };
   'cart/invalid-discount': { discount: Discount };
   'cart/invalid-freeform-line': { field: 'description' | 'unitPrice' | 'qty' };
   'cart/freeform-line-not-found': { description: string };
   'cart/invalid-global-adjustment': { percentage: number };
 
   // sale.ts
-  'sale/insufficient-stock': { productId: string; requested: number; available: number };
   'sale/empty-cart': undefined;
   'sale/invalid-payment-amount': { index: number };
   'sale/insufficient-payment': { total: number; paid: number };
+  'sale/refund-amount-mismatch': { total: number; tendered: number };
   'sale/non-cash-exceeds-total': { nonCashTotal: number; total: number };
-  'sale/not-closed': { status: Sale['status'] };
   'sale/already-voided': undefined;
+  'sale/cannot-void-a-void': undefined;
+  'sale/void-window-expired': { createdAt: string };
 
   // catalog.ts
   'catalog/duplicate-sku': { sku: string };
@@ -59,6 +59,8 @@ export type ErrorMeta = {
   // sync/connection.ts (prueba de conexión) y connectors/google-sheets/bridge-client.ts
   'sync/timeout': { seconds: number };
   'sync/remote-error': { message: string };
+  'sync/incompatible-contract': { backend: string; pos: string };
+  'sync/backend-maintenance': { message?: string };
   // sync/apply-connection.ts
   'connection/apply-failed': { message: string };
   // sync/connection.ts: un ciclo de sync en curso no terminó a tiempo para probar

@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
-import type { LotIssue } from '../../sync/connector.ts';
+import type { BackendInfo, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 import type { PullApplication } from '../../sync/pull-rule.ts';
 
@@ -31,6 +31,31 @@ export function setLastSyncedAt(isoDate: string): void {
 
 export function setSyncConfigured(configured: boolean): void {
   syncConfiguredSignal.value = configured;
+}
+
+/**
+ * Estado del backend según su `GET /info` (contrato 4.0.0, #99). `unknown`
+ * hasta la primera respuesta (sin red al arrancar, los ciclos corren como
+ * siempre). Con `incompatible` o `maintenance` no corre ningún push ni pull —
+ * la venta nunca se bloquea.
+ */
+export type BackendStatus =
+  | { kind: 'unknown' }
+  | { kind: 'ok'; info: BackendInfo }
+  | { kind: 'incompatible'; backendVersion: string; info?: BackendInfo }
+  | { kind: 'maintenance'; info: BackendInfo };
+
+export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
+
+/** `true` = preguntar `getInfo` antes del próximo ciclo: al arrancar y tras un fallo que no es de red. */
+export const backendCheckDueSignal = signal(true);
+
+export function setBackendStatus(status: BackendStatus): void {
+  backendStatusSignal.value = status;
+}
+
+export function setBackendCheckDue(due: boolean): void {
+  backendCheckDueSignal.value = due;
 }
 
 /** Estado de la conexión (Etapa 2b): `App` bloquea todo salvo `/CONFIG` mientras no sea `active`. */
@@ -117,7 +142,7 @@ export function setLastPullApplication(application: PullApplication | null): voi
  */
 export type SyncLogEntry = {
   at: string;
-  kind: 'push' | 'pull';
+  kind: 'push' | 'pull' | 'info';
   request: unknown;
   result: { ok: true } | { ok: false; error: ErrorCode; meta: unknown };
   /** Solo en un pull exitoso: cómo se aplicó (#98). */

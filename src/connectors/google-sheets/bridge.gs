@@ -9,13 +9,22 @@
  */
 
 /**
+ * Versión del Connector API que habla este puente (4.0.0, #99). Un request
+ * con otra versión mayor se responde `incompatible-contract` sin procesar
+ * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
+ * redespliegue el puente.
+ */
+var CONTRACT_VERSION = '4.0.0';
+
+/**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
  *
  * Un solo endpoint: doPost(e). Request (Content-Type text/plain, para evitar
  * el preflight CORS que Apps Script no maneja):
- *   { action, payload, idempotencyKey?, sharedSecret? }
+ *   { action, payload, idempotencyKey?, sharedSecret?, contractVersion? }
  * Response (siempre HTTP 200 — Apps Script no deja controlar el status):
- *   { ok: true, data } | { ok: false, error }
+ *   { ok: true, data } | { ok: false, error, code?, contractVersion? }
+ * `contractVersion` viaja en el cuerpo (4.0.0): el `doPost` no expone headers.
  *
  * Desplegar como Web App: "Execute as: Me", "Who has access: Anyone".
  * Secreto compartido opcional: propiedad de script SHARED_SECRET
@@ -79,13 +88,12 @@ var SCHEMA = {
     ['totalVenta', 'number'],
     ['ajusteGlobalPct', 'number'],
     ['estado', 'text'],
-    ['anuladaEn', 'datetime'],
     ['motivoAnulacion', 'text'],
     ['deviceId', 'text', true],
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
-    ['anulacionBranch', 'text', true],
-    ['anulacionPointOfSale', 'text', true],
+    // 4.0.0 (#99): una anulación es una venta más que apunta a la que anula.
+    ['anulaA', 'text', true],
   ]),
   Pagos: columns([
     ['saleId', 'text'],
@@ -243,6 +251,19 @@ var ACTIONS = {
   pullBatch: pullBatchAction,
 };
 
+/** Versión y estado (4.0.0, #99). La planilla nunca está en mantenimiento: siempre `ok`. */
+function infoAction() {
+  return {
+    contractVersion: CONTRACT_VERSION,
+    status: 'ok',
+    backend: { name: 'pos-sheets-bridge', version: CONTRACT_VERSION },
+  };
+}
+
+function contractMajor(version) {
+  return String(version).split('.')[0];
+}
+
 // ---------------------------------------------------------------- entrada
 
 function doGet() {
@@ -267,6 +288,23 @@ function doPost(e) {
   var expectedSecret = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
   if (expectedSecret && request.sharedSecret !== expectedSecret) {
     return respond({ ok: false, error: 'Secreto compartido inválido' });
+  }
+
+  if (
+    typeof request.contractVersion === 'string' &&
+    contractMajor(request.contractVersion) !== contractMajor(CONTRACT_VERSION)
+  ) {
+    return respond({
+      ok: false,
+      code: 'incompatible-contract',
+      contractVersion: CONTRACT_VERSION,
+      error: 'Contrato incompatible: el puente habla ' + CONTRACT_VERSION,
+    });
+  }
+
+  // `info` es liviano: sin lock ni auto-provisión de pestañas.
+  if (request.action === 'info') {
+    return respond({ ok: true, data: infoAction() });
   }
 
   var handler = ACTIONS[request.action];
@@ -670,9 +708,6 @@ function applyBatchEvent(event, stamp) {
     case 'sale':
       pushSale(event.sale, stamp);
       return;
-    case 'sale-void':
-      pushSaleVoid(event, stamp);
-      return;
     case 'customer':
       pushCustomer(event.customer, stamp);
       return;
@@ -690,7 +725,7 @@ function applyBatchEvent(event, stamp) {
       // No-ops de este conector: ver README ("Qué hace cada operación").
       return;
     default:
-      throw new Error('Tipo de evento desconocido para el contrato v3: ' + event.type);
+      throw new Error('Tipo de evento desconocido para el contrato 4.0.0: ' + event.type);
   }
 }
 
@@ -909,6 +944,8 @@ function pushSale(sale, stamp) {
         totalVenta: sale.total,
         ajusteGlobalPct: sale.globalAdjustmentPercentage,
         estado: 'cerrada',
+        motivoAnulacion: sale.voidReason,
+        anulaA: sale.voidsSaleId,
       },
       stamp,
     );
@@ -941,6 +978,12 @@ function pushSale(sale, stamp) {
   appendObjects('Ventas', lines);
   appendObjects('Pagos', payments);
   appendObjects('CuentaCorriente', ledger);
+  // 4.0.0 (#99): la anulación es un ticket propio; el original se marca (no se borra, RNF-07). Si la
+  // planilla todavía no lo tiene, no es un error: el ticket de anulación ya quedó registrado.
+  if (sale.voidsSaleId) {
+    markSaleRows('Ventas', sale.voidsSaleId, { estado: 'anulada' });
+    markSaleRows('Pagos', sale.voidsSaleId, { estado: 'anulada' });
+  }
 }
 
 /** Marca (no borra, RNF-07) las filas de una venta; devuelve cuántas encontró. */
@@ -953,21 +996,6 @@ function markSaleRows(sheetName, saleId, values) {
     }
   });
   return count;
-}
-
-function pushSaleVoid(payload, stamp) {
-  var found = markSaleRows('Ventas', payload.saleId, {
-    estado: 'anulada',
-    anuladaEn: payload.voidedAt,
-    motivoAnulacion: payload.voidReason,
-    anulacionBranch: stamp.branch,
-    anulacionPointOfSale: stamp.pointOfSale,
-  });
-  if (found === 0) {
-    // La venta todavía no llegó: el motor de sync reintenta con backoff.
-    throw new Error('Venta no encontrada: ' + payload.saleId);
-  }
-  markSaleRows('Pagos', payload.saleId, { estado: 'anulada' });
 }
 
 function pushCustomer(customer, stamp) {

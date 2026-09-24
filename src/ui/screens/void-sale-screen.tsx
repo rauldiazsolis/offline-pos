@@ -1,7 +1,8 @@
 import { useSignalEffect } from '@preact/signals';
 import { useLayoutEffect } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
-import { formatMoney } from '../format.ts';
+import type { VoidCandidate } from '../../storage/sale-repository.ts';
+import { formatMoney, formatTime } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
@@ -16,16 +17,34 @@ import {
 import {
   voidConfirmingSignal,
   voidErrorSignal,
+  voidLoadedSignal,
   voidSelectionIndexSignal,
   voidableSalesSignal,
 } from '../state/void-sale.ts';
 
+/** Texto de una fila sin acción (#99): la original ya anulada, o el ticket de una anulación. */
+function candidateLabel(candidate: VoidCandidate): string | undefined {
+  if (candidate.state === 'voided') {
+    return 'Anulada';
+  }
+  if (candidate.state === 'void-ticket') {
+    const { original } = candidate;
+    return original !== undefined
+      ? `Anulación de ${formatTime(original.createdAt)} · ${formatMoney(original.total)}`
+      : 'Anulación';
+  }
+  return undefined;
+}
+
 /**
  * `/ANULAR`: mismo patrón lista→↑↓→Enter que la búsqueda de productos, sobre
- * las últimas ventas cerradas. Confirmación explícita antes de anular
- * (Enter otra vez) — anular no se puede deshacer. Teclado + mouse (Etapa 2
- * de #94): click en una venta = seleccionarla + Enter; cada atajo tiene su
- * botón.
+ * los últimos 20 tickets de las últimas 24 h (#99: ventana móvil, cubre el
+ * turno noche). Una original ya anulada y el ticket de una anulación se ven
+ * atenuados y sin acción: ↑/↓ y el click los saltean. La búsqueda y el ticket
+ * completo en la confirmación quedan en #110. Confirmación explícita antes de
+ * anular (Enter otra vez) — anular genera un ticket negativo que no se puede
+ * deshacer. Teclado + mouse (Etapa 2 de #94): click en una venta =
+ * seleccionarla + Enter; cada atajo tiene su botón.
  */
 export function VoidSaleScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
@@ -82,9 +101,10 @@ export function VoidSaleScreen() {
     }
   };
 
-  const sales = voidableSalesSignal.value;
+  const candidates = voidableSalesSignal.value;
   const selectedIndex = voidSelectionIndexSignal.value;
-  const selectedSale = selectedIndex !== null ? sales[selectedIndex] : undefined;
+  const selectedSale = selectedIndex !== null ? candidates[selectedIndex]?.sale : undefined;
+  const hasVoidable = candidates.some((candidate) => candidate.state === 'voidable');
 
   return (
     <div
@@ -132,29 +152,47 @@ export function VoidSaleScreen() {
             </button>
           </div>
         </div>
-      ) : sales.length === 0 ? (
-        <p style={{ color: 'var(--color-text-muted)' }}>No hay ventas cerradas para anular.</p>
+      ) : !voidLoadedSignal.value ? null : !hasVoidable ? (
+        <p style={{ color: 'var(--color-text-muted)' }}>
+          No hay ventas de las últimas 24 horas para anular.
+        </p>
       ) : (
         <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-          {sales.map((sale, index) => (
-            <li
-              key={sale.id}
-              onClick={() => {
-                activateVoidRow(index);
-              }}
-              style={{
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'space-between',
-                padding: 'var(--space-2)',
-                borderRadius: 'var(--radius-md)',
-                background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
-              }}
-            >
-              <span>{new Date(sale.createdAt).toLocaleString()}</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(sale.total)}</span>
-            </li>
-          ))}
+          {candidates.map((candidate, index) => {
+            const { sale } = candidate;
+            const label = candidateLabel(candidate);
+            const actionable = candidate.state === 'voidable';
+            return (
+              <li
+                key={sale.id}
+                onClick={() => {
+                  activateVoidRow(index);
+                }}
+                style={{
+                  cursor: actionable ? 'pointer' : 'default',
+                  opacity: actionable ? 1 : 0.5,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-3)',
+                  padding: 'var(--space-2)',
+                  borderRadius: 'var(--radius-md)',
+                  background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+                }}
+              >
+                <span>
+                  {new Date(sale.createdAt).toLocaleString()}
+                  {label !== undefined && (
+                    <span
+                      style={{ marginLeft: 'var(--space-2)', color: 'var(--color-text-muted)' }}
+                    >
+                      {label}
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{formatMoney(sale.total)}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
 

@@ -7,7 +7,6 @@ import {
   buildOutboxEventForHoldConfirm,
   buildOutboxEventForHoldRelease,
   buildOutboxEventForSale,
-  buildOutboxEventForVoid,
   buildOutboxEventsForStockMovements,
   isLegacyOutboxType,
   markSynced,
@@ -61,40 +60,6 @@ describe('buildOutboxEventsForStockMovements', () => {
     const events = buildOutboxEventsForStockMovements(movements, { now, origin });
     expect(events.map((e) => e.id)).toEqual(['m1', 'm2']);
     expect(events[0]).toMatchObject({ type: 'stock-movement', status: 'pending' });
-  });
-});
-
-describe('buildOutboxEventForVoid', () => {
-  it('id propio, distinto del id de la venta anulada', () => {
-    const event = buildOutboxEventForVoid({
-      id: 'void-1',
-      saleId: 'sale-1',
-      voidedAt: now,
-      voidReason: 'error de cobro',
-      now,
-      origin,
-    });
-    expect(event).toEqual({
-      type: 'sale-void',
-      saleId: 'sale-1',
-      voidedAt: now,
-      voidReason: 'error de cobro',
-      id: 'void-1',
-      status: 'pending',
-      createdAt: now,
-      origin,
-    });
-  });
-
-  it('omite voidReason si no se pasa (nunca undefined explícito)', () => {
-    const event = buildOutboxEventForVoid({
-      id: 'void-1',
-      saleId: 'sale-1',
-      voidedAt: now,
-      now,
-      origin,
-    });
-    expect('voidReason' in event).toBe(false);
   });
 });
 
@@ -190,8 +155,9 @@ describe('origen y eventos nuevos (contrato v3)', () => {
     });
   });
 
-  it('cash-session es un tipo legado', () => {
+  it('cash-session y sale-void son tipos legados', () => {
     expect(isLegacyOutboxType('cash-session')).toBe(true);
+    expect(isLegacyOutboxType('sale-void')).toBe(true);
     expect(isLegacyOutboxType('sale')).toBe(false);
   });
 });

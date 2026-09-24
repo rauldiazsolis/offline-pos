@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../../sync/config.ts';
-import { parseCommandBar } from './parse-command-bar.ts';
+import { parseCommandBar, parseQuantityText, roundedQuantityPrefix } from './parse-command-bar.ts';
 
 const live = (buffer: string) => parseCommandBar(buffer, { finalizing: false });
 const enter = (buffer: string) => parseCommandBar(buffer, { finalizing: true });
@@ -149,21 +149,35 @@ describe('parseCommandBar', () => {
   });
 
   describe('regla 5: código de barras / SKU (todo dígitos)', () => {
-    it('mientras se tipea, no dispara búsqueda (ambiguo con cantidad)', () => {
-      expect(live('7798787667')).toEqual({ kind: 'pending-numeric' });
+    it('mientras se tipea, con menos de 4 dígitos no lista nada; desde 4, lista códigos (#99)', () => {
+      expect(live('779')).toEqual({ kind: 'pending-numeric' });
+      expect(live('7798787667')).toEqual({ kind: 'code-search', code: '7798787667', qty: 1 });
     });
 
     it('al confirmar (Enter), resuelve a código de barras', () => {
       expect(enter('7798787667')).toEqual({ kind: 'barcode', code: '7798787667', qty: 1 });
     });
 
-    it('la secuencia tecla por tecla de un código completo nunca dispara búsqueda hasta Enter', () => {
+    it('tecla por tecla, un código nunca busca por nombre: solo códigos desde 4 dígitos', () => {
       const digits = '7798787667';
       for (let i = 1; i <= digits.length; i++) {
         const buffer = digits.slice(0, i);
-        expect(live(buffer)).toEqual({ kind: 'pending-numeric' });
+        expect(live(buffer).kind).toBe(i < 4 ? 'pending-numeric' : 'code-search');
       }
       expect(enter(digits)).toEqual({ kind: 'barcode', code: digits, qty: 1 });
+    });
+
+    it('un número con decimales nunca busca, y al confirmar falta el artículo (#99)', () => {
+      expect(live('1,5')).toEqual({ kind: 'pending-numeric' });
+      expect(live('1.5')).toEqual({ kind: 'pending-numeric' });
+      expect(enter('1,5')).toEqual({
+        kind: 'parse-error',
+        message: 'Falta el artículo: usá 1,5*artículo',
+      });
+    });
+
+    it('después de la cantidad, las mismas reglas de código', () => {
+      expect(live('2*7791')).toEqual({ kind: 'code-search', code: '7791', qty: 2 });
     });
 
     it('en cuanto aparece un carácter no numérico, se resuelve a búsqueda de inmediato', () => {
@@ -194,5 +208,72 @@ describe('parseCommandBar', () => {
     it('sigue siendo búsqueda al confirmar', () => {
       expect(enter('coca')).toEqual({ kind: 'search', query: 'coca', qty: 1 });
     });
+  });
+});
+
+describe('cantidades (#99)', () => {
+  it('prefijo con decimales y coma o punto', () => {
+    expect(parseCommandBar('1,5*queso', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'queso',
+      qty: 1.5,
+    });
+    expect(parseCommandBar('0.250*queso', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'queso',
+      qty: 0.25,
+    });
+  });
+
+  it('prefijo negativo y línea libre negativa', () => {
+    expect(parseCommandBar('-2*coca', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'coca',
+      qty: -2,
+    });
+    expect(parseCommandBar('-1*regalo$100', { finalizing: true })).toEqual({
+      kind: 'freeform-line',
+      description: 'regalo',
+      amount: 100,
+      qty: -1,
+    });
+  });
+
+  it('más de 3 decimales en el prefijo se redondea a 3 (y busca igual mientras se tipea)', () => {
+    expect(parseCommandBar('0.2001*c', { finalizing: false })).toEqual({
+      kind: 'search',
+      query: 'c',
+      qty: 0.2,
+    });
+    expect(roundedQuantityPrefix('0.2001*c')).toBe(0.2);
+    expect(roundedQuantityPrefix('1,5*c')).toBeUndefined();
+    expect(roundedQuantityPrefix('coca')).toBeUndefined();
+  });
+
+  it('un "-" pegado a un texto vale -1 (prueba manual de la Etapa 4)', () => {
+    expect(parseCommandBar('-regalo$100', { finalizing: true })).toEqual({
+      kind: 'freeform-line',
+      description: 'regalo',
+      amount: 100,
+      qty: -1,
+    });
+    expect(parseCommandBar('-aceite de girasol', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'aceite de girasol',
+      qty: -1,
+    });
+    expect(parseCommandBar('-10%', { finalizing: true })).toEqual({
+      kind: 'global-adjustment',
+      percentage: -10,
+    });
+    expect(parseCommandBar('-5', { finalizing: false })).toEqual({ kind: 'typing' });
+  });
+
+  it('parseQuantityText', () => {
+    expect(parseQuantityText('-2')).toEqual({ ok: true, qty: -2, rounded: false });
+    expect(parseQuantityText('1,5')).toEqual({ ok: true, qty: 1.5, rounded: false });
+    expect(parseQuantityText('0')).toEqual({ ok: true, qty: 0, rounded: false });
+    expect(parseQuantityText('1,2345')).toEqual({ ok: true, qty: 1.235, rounded: true });
+    expect(parseQuantityText('abc')).toEqual({ ok: false, reason: 'not-a-quantity' });
   });
 });

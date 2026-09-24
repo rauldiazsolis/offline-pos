@@ -1,3 +1,4 @@
+import { roundQuantity } from '../../domain/rounding.ts';
 import { parseAmount } from '../parse-amount.ts';
 
 /**
@@ -13,10 +14,45 @@ export type ParsedCommand =
   | { kind: 'customer'; query: string } // '@', identificación de cliente (RF-16) — sin ambigüedad que resolver con finalizing
   | { kind: 'global-adjustment'; percentage: number } // '<signo><número>%', recargo/descuento sobre el total (RF-03)
   | { kind: 'freeform-line'; description: string; amount: number; qty: number }
-  | { kind: 'pending-numeric' } // solo dígitos, ambiguo cantidad-vs-código: no dispara búsqueda aún
+  | { kind: 'pending-numeric' } // número corto o con decimales: no dispara búsqueda (nunca busca por nombre)
+  | { kind: 'code-search'; code: string; qty: number } // 4+ dígitos: lista códigos que empiezan o terminan así
   | { kind: 'barcode'; code: string; qty: number }
   | { kind: 'search'; query: string; qty: number }
   | { kind: 'parse-error'; message: string };
+
+/** Desde cuántos dígitos se listan coincidencias de código (#99: con 3, "779" matchea todo). */
+export const CODE_SEARCH_MIN_DIGITS = 4;
+const QUANTITY_PATTERN = /^-?\d+(?:[.,]\d+)?$/;
+const QUANTITY_PREFIX = /^(-?\d+(?:[.,]\d+)?)\*(.*)$/;
+
+/**
+ * Cantidad tipeada (#99): con signo, separador `,` o `.`. Con más de 3
+ * decimales se redondea a 3 (`rounded: true`) — decisión de la prueba manual
+ * de la Etapa 4: el cajero ve el aviso "Cantidad redondeada a N" en vez de un
+ * error.
+ */
+export function parseQuantityText(
+  raw: string,
+): { ok: true; qty: number; rounded: boolean } | { ok: false; reason: 'not-a-quantity' } {
+  if (!QUANTITY_PATTERN.test(raw)) {
+    return { ok: false, reason: 'not-a-quantity' };
+  }
+  const decimals = raw.split(/[.,]/)[1] ?? '';
+  const qty = Number(raw.replace(',', '.'));
+  return decimals.length > 3
+    ? { ok: true, qty: roundQuantity(qty), rounded: true }
+    : { ok: true, qty, rounded: false };
+}
+
+/** La cantidad del prefijo `<n>*` si se redondeó (más de 3 decimales), para avisarlo al confirmar. */
+export function roundedQuantityPrefix(buffer: string): number | undefined {
+  const match = QUANTITY_PREFIX.exec(buffer);
+  if (match === null) {
+    return undefined;
+  }
+  const parsed = parseQuantityText(match[1] ?? '');
+  return parsed.ok && parsed.rounded ? parsed.qty : undefined;
+}
 
 export function parseCommandBar(buffer: string, options: { finalizing: boolean }): ParsedCommand {
   const { finalizing } = options;
@@ -67,10 +103,20 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
   // El prefijo de cantidad se resuelve antes que la línea libre y que
   // código/búsqueda — regla 4 aplica "antes de cualquier búsqueda", y una
   // línea libre también cuenta: "3*regalo$100" es 3 unidades a $100 c/u
-  // ($300), no la descripción literal "3*regalo".
-  const quantityMatch = /^(-?\d+)\*(.*)$/.exec(buffer);
-  const qty = quantityMatch ? Number.parseInt(quantityMatch[1] ?? '1', 10) : 1;
-  const rest = quantityMatch ? (quantityMatch[2] ?? '') : buffer;
+  // ($300), no la descripción literal "3*regalo". Desde #99 la cantidad
+  // lleva signo y hasta 3 decimales (`1,5*queso`, `-2*coca`; con más, se
+  // redondea). Un `-` pegado a un texto vale `-1*` (`-regalo$100`,
+  // `-aceite`); `-<dígitos>` sigue siendo un recargo/cantidad a medio tipear.
+  const quantityMatch = QUANTITY_PREFIX.exec(buffer);
+  const minusText = quantityMatch === null ? /^-(?![\d\s*])(.+)$/.exec(buffer) : null;
+  let qty = 1;
+  if (quantityMatch) {
+    const parsedQty = parseQuantityText(quantityMatch[1] ?? '1');
+    qty = parsedQty.ok ? parsedQty.qty : 1;
+  } else if (minusText) {
+    qty = -1;
+  }
+  const rest = quantityMatch ? (quantityMatch[2] ?? '') : minusText ? (minusText[1] ?? '') : buffer;
 
   if (rest === '') {
     if (finalizing) {
@@ -96,9 +142,21 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
     return { kind: 'typing' };
   }
 
+  // Un número es cantidad o código, nunca una búsqueda por nombre (prueba
+  // manual de la Etapa 4). Con decimales no puede ser código: sin línea
+  // seleccionada (que lo tomaría como cantidad, `CommandBarInput`) falta el
+  // artículo. Solo dígitos: desde 4 se listan los códigos que empiezan o
+  // terminan así; Enter busca el código exacto (o la fila elegida con ↓).
+  if (/^\d+[.,]\d+$/.test(rest)) {
+    return finalizing
+      ? { kind: 'parse-error', message: `Falta el artículo: usá ${rest}*artículo` }
+      : { kind: 'pending-numeric' };
+  }
   if (/^\d+$/.test(rest)) {
     if (!finalizing) {
-      return { kind: 'pending-numeric' };
+      return rest.length >= CODE_SEARCH_MIN_DIGITS
+        ? { kind: 'code-search', code: rest, qty }
+        : { kind: 'pending-numeric' };
     }
     return { kind: 'barcode', code: rest, qty };
   }

@@ -101,7 +101,8 @@ function applyEvent(
       if (sale.customerId !== undefined) {
         for (const payment of sale.payments ?? []) {
           if (payment.method === 'account' && payment.reference === undefined) {
-            // Fiado sin hold (vendido sin red), o acreditación si es negativo.
+            // Fiado sin hold (vendido sin red), o acreditación si es negativo — la anulación de
+            // una venta a cuenta (4.0.0, #99) es una venta más con el pago invertido.
             adjustBalance(db, sale.customerId, payment.amount, now);
           }
         }
@@ -116,20 +117,6 @@ function applyEvent(
       ).run(movement.delta, now, movement.productId);
       return undefined;
     }
-    case 'sale-void':
-      db.prepare(
-        'INSERT INTO sale_voids (id, sale_id, payload, device_id, branch, point_of_sale, created_at) ' +
-          'VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload',
-      ).run(
-        event.id,
-        String(event.saleId),
-        JSON.stringify(event),
-        stamp.deviceId,
-        stamp.branch,
-        stamp.pointOfSale,
-        now,
-      );
-      return undefined;
     case 'customer': {
       const customer = event.customer as { id: string };
       db.prepare(

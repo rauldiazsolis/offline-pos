@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import type { DatabaseSync } from 'node:sqlite';
 import { readJsonBody, sendJson } from '../http-helpers.ts';
 import { finishLot, isDelayEnabled, listLots, setDelayEnabled, startLot } from '../lots.ts';
+import { getDemoSettings, setDemoSettings, type DemoSettings } from '../settings.ts';
 import type { RouteDef } from '../router.ts';
 
 const panelHtmlPath = fileURLToPath(new URL('../panel.html', import.meta.url));
@@ -102,7 +103,7 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/settings$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
-      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db) });
+      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db), ...getDemoSettings(ctx.db) });
     },
   },
   {
@@ -110,9 +111,19 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/settings$/,
     requiresAuth: false,
     handler: async (req, res, ctx) => {
-      const body = (await readJsonBody(req)) as { delayLots?: boolean } | undefined;
-      setDelayEnabled(ctx.db, body?.delayLots === true);
-      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db) });
+      // Actualización parcial: cada control del panel manda solo lo suyo.
+      const body = (await readJsonBody(req)) as
+        ({ delayLots?: boolean } & Partial<DemoSettings>) | undefined;
+      if (body?.delayLots !== undefined) {
+        setDelayEnabled(ctx.db, body.delayLots);
+      }
+      setDemoSettings(ctx.db, {
+        ...(body?.maintenance !== undefined ? { maintenance: body.maintenance } : {}),
+        ...(body?.simulateContract3 !== undefined
+          ? { simulateContract3: body.simulateContract3 }
+          : {}),
+      });
+      sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db), ...getDemoSettings(ctx.db) });
     },
   },
   {

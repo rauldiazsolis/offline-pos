@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 import { sendJson } from './http-helpers.ts';
+import { backendContractVersion, contractMajor } from './settings.ts';
 
 export type RouteContext = {
   db: DatabaseSync;
@@ -18,6 +19,12 @@ export type RouteDef = {
   method: string;
   pattern: RegExp;
   requiresAuth: boolean;
+  /**
+   * Valida `X-POS-Contract-Version` (4.0.0, #99): con otro major responde
+   * `409 incompatible-contract` sin procesar nada ni dar ack. Sin el header
+   * (un POS anterior a 4.0.0) se procesa.
+   */
+  checksContract?: boolean;
   handler: RouteHandler;
 };
 
@@ -50,12 +57,14 @@ function hasValidBearerToken(req: IncomingMessage): boolean {
  * Un demo público sin cookies/credenciales no necesita restringir el
  * origen — `*` alcanza. `Idempotency-Key` se suma a los headers permitidos
  * porque todo `POST` de eventos de negocio lo manda (ver
- * `connectors/rest/rest-fetch-connector.ts::buildHeaders`).
+ * `connectors/rest/rest-fetch-connector.ts::buildHeaders`), y
+ * `X-POS-Contract-Version` porque el POS la manda en todo request (4.0.0).
  */
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, Idempotency-Key, X-POS-Contract-Version',
 };
 
 export async function handleRequest(
@@ -89,6 +98,17 @@ export async function handleRequest(
     if (route.requiresAuth && !hasValidBearerToken(req)) {
       sendJson(res, 401, { error: 'Falta el header Authorization: Bearer <token>' });
       return;
+    }
+    if (route.checksContract === true) {
+      const declared = req.headers['x-pos-contract-version'];
+      const backendVersion = backendContractVersion(db);
+      if (
+        typeof declared === 'string' &&
+        contractMajor(declared) !== contractMajor(backendVersion)
+      ) {
+        sendJson(res, 409, { code: 'incompatible-contract', contractVersion: backendVersion });
+        return;
+      }
     }
     try {
       await route.handler(req, res, { db, params: { ...(match.groups ?? {}) }, url });

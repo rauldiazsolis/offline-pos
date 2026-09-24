@@ -43,12 +43,21 @@ export function formatDate(isoDate: string): string {
   }).format(new Date(isoDate));
 }
 
+/** Hora local HH:MM de una fecha ISO (#99: "Anulación de HH:MM"). */
+export function formatTime(isoDate: string): string {
+  return new Intl.DateTimeFormat(resolveLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(isoDate));
+}
+
 /**
- * Cantidad vendida, redondeada a 3 decimales sin ceros de más a la derecha — necesario para
+ * Cantidad vendida, hasta 3 decimales sin ceros de más a la derecha — necesario para
  * productos vendidos por peso, donde puede haber arrastre de punto flotante (ej.
- * `5.9510000000000005`). `Number(...toFixed(3))` recorta y también saca los ceros de sobra al
- * volver a stringificar.
+ * `5.9510000000000005`). Con el separador decimal del locale de la terminal (#99: el cajero
+ * tipea `1,5` y ve `1,5`).
  */
 export function formatQuantity(qty: number): string {
-  return String(Number(qty.toFixed(3)));
+  return new Intl.NumberFormat(resolveLocale(), { maximumFractionDigits: 3 }).format(qty);
 }

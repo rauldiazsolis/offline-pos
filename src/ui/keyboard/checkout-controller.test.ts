@@ -4,7 +4,7 @@ import type { CustomerAccount } from '../../domain/customer.ts';
 import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
-import { cartSignal } from '../state/cart.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   checkoutBuffersSignal,
   checkoutErrorSignal,
@@ -14,7 +14,13 @@ import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { amountTendered, cancelCheckout, submitCheckout } from './checkout-controller.ts';
+import {
+  amountTendered,
+  cancelCheckout,
+  enterCheckout,
+  moveCheckoutField,
+  submitCheckout,
+} from './checkout-controller.ts';
 
 function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
@@ -84,6 +90,15 @@ describe('submitCheckout', () => {
     expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
     expect(cartSignal.value.lines).toEqual([]);
     expect(activeScreenSignal.value).toBe('receipt');
+  });
+
+  it('al cerrar la venta no queda ninguna línea seleccionada (#99)', async () => {
+    cartSelectionIndexSignal.value = 0;
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
+
+    await submitCheckout();
+
+    expect(cartSelectionIndexSignal.value).toBeNull();
   });
 
   it('con efectivo de más, guarda el neto en vez del monto tendido (resuelve el bug #48)', async () => {
@@ -245,5 +260,89 @@ describe('cancelCheckout', () => {
 
     const event = (await db.outbox.toArray())[0];
     expect(event).toMatchObject({ type: 'account-hold-release', holdId: 'hold-1' });
+  });
+});
+
+describe('enterCheckout (#99)', () => {
+  it('precarga Efectivo con el total, con el separador del locale', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'x', qty: 1, unitPrice: 1234.5 }],
+    };
+
+    enterCheckout();
+
+    expect(checkoutBuffersSignal.value.cash).toBe('1234,5');
+  });
+
+  it('con total negativo precarga el valor absoluto', () => {
+    cartSignal.value = { lines: [{ kind: 'freeform', description: 'x', qty: -1, unitPrice: 500 }] };
+
+    enterCheckout();
+
+    expect(checkoutBuffersSignal.value.cash).toBe('500');
+  });
+
+  it('con total 0 no precarga nada', () => {
+    cartSignal.value = {
+      lines: [
+        { kind: 'freeform', description: 'a', qty: 1, unitPrice: 100 },
+        { kind: 'freeform', description: 'b', qty: -1, unitPrice: 100 },
+      ],
+    };
+
+    enterCheckout();
+
+    expect(checkoutBuffersSignal.value.cash).toBe('');
+  });
+});
+
+describe('moveCheckoutField (#99)', () => {
+  it('avanza, retrocede y no cicla', () => {
+    expect(moveCheckoutField('cash', 1)).toBe('debit');
+    expect(moveCheckoutField('debit', -1)).toBe('cash');
+    expect(moveCheckoutField('cash', -1)).toBeUndefined();
+  });
+
+  it('saltea Cuenta corriente sin cliente adjunto', () => {
+    expect(moveCheckoutField('qr', 1)).toBeUndefined();
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+    expect(moveCheckoutField('qr', 1)).toBe('account');
+    expect(moveCheckoutField('account', 1)).toBeUndefined();
+  });
+});
+
+describe('modo devolución (#99)', () => {
+  it('con cuenta corriente acredita sin pedir hold y cierra con pagos negativos', async () => {
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+    setOnline(true);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '300', account: '200' };
+
+    await submitCheckout();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(receiptSaleSignal.value?.total).toBe(-500);
+    expect(receiptSaleSignal.value?.payments).toEqual([
+      { method: 'account', amount: -200 },
+      { method: 'cash', amount: -300 },
+    ]);
+  });
+
+  it('acreditar a cuenta corriente sin cliente adjunto es un error', async () => {
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '300', account: '200' };
+
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+    expect(receiptSaleSignal.value).toBeNull();
   });
 });

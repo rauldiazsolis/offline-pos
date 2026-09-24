@@ -32,6 +32,14 @@ const diagnostics: SyncDiagnostics = {
   lastPullApplication: { kind: 'retained', lotIds: ['LOT-A'] },
   lastCleanup: undefined,
   pushLotIssues: [{ message: 'Stock negativo', eventId: 'm1' }],
+  backendStatus: {
+    kind: 'ok',
+    info: {
+      contractVersion: '4.0.0',
+      status: 'ok',
+      backend: { name: 'offline-pos-demo-backend', version: '4.0.0' },
+    },
+  },
   deviceId: 'dev-1',
   log: [],
 };
@@ -86,5 +94,29 @@ describe('DiagnosticoScreen — mouse (Etapa 2 de #94)', () => {
     expect(leftMouseDown(screen.getByText('Diagnóstico de sincronización')).defaultPrevented).toBe(
       true,
     );
+  });
+});
+
+describe('DiagnosticoScreen — estado del backend (#99)', () => {
+  it('muestra el contrato, el estado y el nombre del backend', () => {
+    render(<DiagnosticoScreen />);
+
+    expect(screen.getByText('Backend: contrato 4.0.0 · ok')).not.toBeNull();
+    expect(screen.getByText('offline-pos-demo-backend 4.0.0')).not.toBeNull();
+  });
+});
+
+describe('DiagnosticoScreen — backend incompatible resaltado (prueba manual de la Etapa 4)', () => {
+  it('la línea del backend va en rojo', () => {
+    const original = diagnostics.backendStatus;
+    diagnostics.backendStatus = { kind: 'incompatible', backendVersion: '3.0.0' };
+    try {
+      render(<DiagnosticoScreen />);
+      expect(screen.getByText('Backend: contrato 3.0.0 · incompatible').style.color).toBe(
+        'var(--color-danger)',
+      );
+    } finally {
+      diagnostics.backendStatus = original;
+    }
   });
 });

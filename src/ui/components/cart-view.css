@@ -65,7 +65,8 @@
  */
 .cart-view__customer {
   grid-area: customer;
-  min-height: 6.5rem;
+  /* 5 líneas: la quinta es "⚠ Bloqueado" de un cliente con teléfono (#99). */
+  min-height: 8rem;
   display: flex;
   flex-direction: column;
   justify-content: center;

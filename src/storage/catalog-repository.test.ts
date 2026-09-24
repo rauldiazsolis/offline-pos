@@ -50,3 +50,39 @@ describe('loadCatalogRepository', () => {
     expect(repo.getProduct('p1')?.name).toBe('Arroz 1kg');
   });
 });
+
+describe('searchByCode (#99)', () => {
+  beforeEach(async () => {
+    await db.products.bulkAdd([
+      {
+        id: 'p2',
+        sku: '4455',
+        barcodes: ['7791234000011'],
+        name: 'Fideos',
+        price: 1,
+        taxRate: 0,
+        category: 'c',
+        tracksStock: false,
+      },
+      {
+        id: 'p3',
+        sku: 'X-3',
+        barcodes: ['7790000004455'],
+        name: 'Aceite',
+        price: 1,
+        taxRate: 0,
+        category: 'c',
+        tracksStock: false,
+      },
+    ]);
+  });
+
+  it('exactos primero, después por el comienzo, después por el final; nunca por nombre', async () => {
+    const repo = await loadCatalogRepository();
+
+    expect(repo.searchByCode('4455').map((r) => r.product.id)).toEqual(['p2', 'p3']);
+    expect(repo.searchByCode('7791').map((r) => r.product.id)).toEqual(['p2']);
+    expect(repo.searchByCode('0011').map((r) => r.product.id)).toEqual(['p2']);
+    expect(repo.searchByCode('Fide')).toEqual([]);
+  });
+});

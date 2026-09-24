@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../sync/config.ts';
-import { formatDate, formatMoney, formatQuantity } from './format.ts';
+import { formatDate, formatMoney, formatQuantity, formatTime } from './format.ts';
 
 afterEach(() => {
   localStorage.clear();
@@ -58,5 +58,21 @@ describe('formatQuantity', () => {
     // (`5.9500000000000005`) el linter lo rechaza (no se puede representar exacto en un
     // `double`), así que se construye en runtime, que es como aparece en la práctica.
     expect(formatQuantity(Number('5.9500000000000005'))).toBe('5.95');
+  });
+
+  it('con el separador decimal del locale y con signo (#99)', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+
+    expect(formatQuantity(1.5)).toBe('1,5');
+    expect(formatQuantity(-2)).toBe('-2');
+  });
+});
+
+describe('formatTime (#99)', () => {
+  it('HH:MM en 24 h, también con un locale que usa 12 h por defecto', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', locale: 'es-AR' });
+    const date = new Date(2026, 8, 24, 14, 5);
+
+    expect(formatTime(date.toISOString())).toBe('14:05');
   });
 });

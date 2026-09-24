@@ -10,6 +10,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarWarningSignal,
   commandSelectionIndexSignal,
   customerSelectionIndexSignal,
   searchSelectionIndexSignal,
@@ -18,6 +19,7 @@ import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { formatDate, formatMoney } from '../format.ts';
 
 const arrozResult: CatalogSearchResult = {
@@ -86,6 +88,7 @@ beforeEach(async () => {
       return query.toLowerCase().includes('arroz') ? [arrozResult] : [];
     },
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => undefined,
     getStock: () => Promise.resolve({ productId: 'p1', quantity: 10, updatedAt: '' }),
   });
@@ -593,6 +596,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -679,6 +683,37 @@ describe('CommandBarInput', () => {
           unitPrice: 100,
         });
       });
+    });
+
+    it('una cantidad con signo o decimales + Enter reemplaza la de la línea seleccionada (#99)', () => {
+      cartSignal.value = {
+        lines: [{ kind: 'freeform', description: 'Queso', qty: 1, unitPrice: 100 }],
+      };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '1,5' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(cartSignal.value.lines[0]?.qty).toBe(1.5);
+
+      fireEvent.input(input, { target: { value: '-2' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(cartSignal.value.lines[0]?.qty).toBe(-2);
+    });
+
+    it('más de 3 decimales sobre la línea seleccionada se redondea y avisa (#99)', () => {
+      cartSignal.value = {
+        lines: [{ kind: 'freeform', description: 'Queso', qty: 1, unitPrice: 100 }],
+      };
+      cartSelectionIndexSignal.value = 0;
+      render(<CommandBarInput />);
+      const input = screen.getByLabelText('Barra de comandos');
+
+      fireEvent.input(input, { target: { value: '1,2345' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(cartSignal.value.lines[0]?.qty).toBe(1.235);
+      expect(commandBarWarningSignal.value).toBe('Cantidad redondeada a 1.235');
     });
 
     it('Supr sobre una línea del medio selecciona la que se corrió a ese índice', () => {
@@ -826,6 +861,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -850,6 +886,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -1005,5 +1042,146 @@ describe('CommandBarInput — mouse (Etapa 2 de #94)', () => {
       expect(cartSignal.value.lines).toHaveLength(1);
     });
     expect(cartSignal.value.lines[0]).toMatchObject({ productId: 'p2' });
+  });
+});
+
+describe('advertencias (#99)', () => {
+  const blockedArroz = { ...arrozResult.product, blocked: { reason: 'Vencido' } };
+
+  beforeEach(() => {
+    commandBarWarningSignal.value = null;
+    stockSnapshotSignal.value = new Map([['p1', 3]]);
+  });
+
+  it('la búsqueda muestra el bloqueo y el stock corto con la cantidad pedida', () => {
+    setCatalogRepository({
+      search: () => [{ product: blockedArroz, score: 1 }],
+      findByBarcodeOrSku: () => undefined,
+      searchByCode: () => [],
+      getProduct: () => blockedArroz,
+      getStock: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '5*arroz' } });
+
+    expect(screen.getByText('Bloqueado: Vencido')).not.toBeNull();
+    expect(screen.getByText('Stock: 3')).not.toBeNull();
+  });
+
+  it('la lista de @ muestra un cliente bloqueado', () => {
+    setCustomerRepository({
+      search: () => [
+        { customer: { ...anaResult.customer, blocked: { reason: 'Deuda' } }, score: 1 },
+      ],
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+
+    fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '@ana' } });
+
+    expect(screen.getByText('Bloqueado: Deuda')).not.toBeNull();
+  });
+
+  it('agregar más que el stock deja la advertencia en el slot y la próxima tecla la borra', () => {
+    setCatalogRepository({
+      search: () => [],
+      findByBarcodeOrSku: () => arrozResult.product,
+      searchByCode: () => [],
+      getProduct: () => arrozResult.product,
+      getStock: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '5*111' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]?.qty).toBe(5);
+    expect(screen.getByRole('status').textContent).toBe('⚠ Arroz 1kg: stock disponible 3');
+
+    fireEvent.input(input, { target: { value: 'a' } });
+    expect(commandBarWarningSignal.value).toBeNull();
+  });
+});
+
+describe('prueba manual de la Etapa 4', () => {
+  beforeEach(() => {
+    commandBarWarningSignal.value = null;
+  });
+
+  it('un prefijo con más de 3 decimales agrega redondeado y lo avisa', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '0.2001*regalo$100' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]?.qty).toBe(0.2);
+    expect(commandBarWarningSignal.value).toBe('Cantidad redondeada a 0.2');
+  });
+
+  it('-regalo$100 crea una línea libre con cantidad -1', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '-regalo$100' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines).toEqual([
+      { kind: 'freeform', description: 'regalo', qty: -1, unitPrice: 100 },
+    ]);
+  });
+});
+
+describe('números en la barra: cantidad o código (prueba manual de la Etapa 4)', () => {
+  const fideos = { ...fideosResult.product, barcodes: ['7791234000028'] };
+
+  beforeEach(() => {
+    setCatalogRepository({
+      search: () => [arrozResult],
+      findByBarcodeOrSku: (code) => (code === '7791234000028' ? fideos : undefined),
+      searchByCode: (fragment) =>
+        '7791234000028'.startsWith(fragment) || '7791234000028'.endsWith(fragment)
+          ? [{ product: fideos, score: 1 }]
+          : [],
+      getProduct: () => fideos,
+      getStock: () => Promise.resolve(undefined),
+    });
+  });
+
+  it('un número con decimales no busca artículos', () => {
+    render(<CommandBarInput />);
+
+    fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '1,5' } });
+
+    expect(screen.queryByText('Arroz 1kg')).toBeNull();
+  });
+
+  it('desde 4 dígitos lista los códigos que terminan así, sin preseleccionar', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '0028' } });
+    expect(screen.getByText('Fideos 500g')).not.toBeNull();
+
+    // Enter sin elegir: código exacto, que no existe.
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(cartSignal.value.lines).toEqual([]);
+    expect(commandBarErrorSignal.value).toBe('No se encontró ningún producto con "0028".');
+  });
+
+  it('↓ + Enter agrega la coincidencia elegida', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '7791' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]).toMatchObject({ kind: 'product', productId: 'p2', qty: 1 });
   });
 });

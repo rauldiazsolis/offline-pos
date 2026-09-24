@@ -2,13 +2,16 @@ import { z } from 'zod';
 import { ok, type Result } from '../../domain/result.ts';
 import { newId } from '../../storage/ids.ts';
 import {
+  backendInfoSchema,
   batchLotStatusSchema,
   connectorCustomerSchema,
   connectorProductSchema,
   pullResultSchema,
+  toBackendInfo,
   toLots,
   withCursor,
   type AccountHoldResult,
+  type BackendInfo,
   type Connector,
   type PullBatchParams,
   type PullBatchResult,
@@ -46,6 +49,11 @@ const emptyDataSchema = z.object({});
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
   return {
+    async getInfo(): Promise<Result<BackendInfo>> {
+      const result = await callBridge(config, { action: 'info' }, backendInfoSchema);
+      return result.ok ? ok(toBackendInfo(result.value)) : result;
+    },
+
     async pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>> {
       const result = await callBridge(
         config,

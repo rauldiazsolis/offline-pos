@@ -5,10 +5,14 @@ import type { Customer } from '../../domain/customer.ts';
 import type { SaleLine } from '../../domain/sale.ts';
 import { calculateTotals, type Totals } from '../../domain/totals.ts';
 import type { Cart } from '../../domain/cart.ts';
-import { formatMoney } from '../format.ts';
+import { formatMoney, formatQuantity } from '../format.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
+import { selectCartLine } from '../keyboard/command-bar-controller.ts';
+import { lineWarnings } from '../../domain/sale-warnings.ts';
+import { formatWarningInContext } from '../format-warning.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
@@ -55,6 +59,27 @@ const sectionLabelStyle = {
   letterSpacing: '.04em',
 };
 
+const warningStyle = {
+  color: 'var(--color-warning)',
+  fontSize: 'var(--font-size-sm)',
+};
+
+/** Advertencias de una línea (#99): stock insuficiente, producto bloqueado. */
+function lineWarningTexts(line: SaleLine): string[] {
+  if (line.kind !== 'product') {
+    return [];
+  }
+  return lineWarnings(line, {
+    product: getCatalogRepository().getProduct(line.productId),
+    stockQuantity: stockSnapshotSignal.value.get(line.productId),
+  }).map(formatWarningInContext);
+}
+
+/** Una línea de devolución (cantidad negativa, #99) lleva cantidad y subtotal en rojo. */
+function refundStyle(line: SaleLine): { color?: string } {
+  return line.qty < 0 ? { color: 'var(--color-danger)' } : {};
+}
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -83,8 +108,14 @@ function lineCode(line: SaleLine): string | undefined {
  * alto reservado, nunca se ocultan) si no: la posición de cada dato no se
  * mueve según qué tenga el cliente adjunto. Tamaño fijo (`cart-view.css`)
  * además, por las mismas razón.
+ *
+ * Un cliente bloqueado (#99) suma "⚠ Bloqueado: <motivo>": ocupa la fila del
+ * teléfono si no hay teléfono; si hay, es una fila más (el alto mínimo de
+ * la tarjeta ya la contempla).
  */
 function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Element {
+  const blockedText =
+    customer?.blocked !== undefined ? `⚠ Bloqueado: ${customer.blocked.reason}` : undefined;
   return (
     <div class="cart-view__customer" style={cardStyle}>
       <div style={sectionLabelStyle}>Cliente</div>
@@ -100,9 +131,12 @@ function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Ele
       <div style={{ color: 'var(--color-text-muted)' }}>
         {customer?.document !== undefined ? `Doc: ${customer.document}` : ' '}
       </div>
-      <div style={{ color: 'var(--color-text-muted)' }}>
-        {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
-      </div>
+      {(customer?.phone !== undefined || blockedText === undefined) && (
+        <div style={{ color: 'var(--color-text-muted)' }}>
+          {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
+        </div>
+      )}
+      {blockedText !== undefined && <div style={warningStyle}>{blockedText}</div>}
     </div>
   );
 }
@@ -156,15 +190,28 @@ function CartTable({
       <tbody>
         {lines.map((line, index) => {
           const code = lineCode(line);
+          const warnings = lineWarningTexts(line);
           return (
             <tr
               key={index}
               ref={rowRef(index)}
+              // Click = seleccionar (#99), lo mismo que llegar con ↑/↓; el
+              // foco se queda en la barra (`keepFocusOnMouseDown` de la venta).
+              onClick={() => {
+                selectCartLine(index);
+              }}
+              class={line.qty < 0 ? 'cart-view__refund-line' : undefined}
               style={{
-                background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+                background:
+                  index === selectedIndex
+                    ? 'var(--color-surface)'
+                    : line.qty < 0
+                      ? 'var(--color-refund-bg)'
+                      : 'transparent',
+                cursor: 'pointer',
               }}
             >
-              <td style={bodyCellStyle}>{line.qty}</td>
+              <td style={{ ...bodyCellStyle, ...refundStyle(line) }}>{formatQuantity(line.qty)}</td>
               <td style={bodyCellStyle}>
                 <div>{lineLabel(line)}</div>
                 {code !== undefined && (
@@ -178,11 +225,23 @@ function CartTable({
                     {code}
                   </div>
                 )}
+                {warnings.map((text) => (
+                  <div key={text} class="cart-view__warning" style={warningStyle}>
+                    ⚠ {text}
+                  </div>
+                ))}
               </td>
               <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
                 {formatMoney(line.unitPrice)}
               </td>
-              <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
+              <td
+                style={{
+                  ...bodyCellStyle,
+                  ...amountCellStyle,
+                  ...moneyStyle,
+                  ...refundStyle(line),
+                }}
+              >
                 {formatMoney(calculateLineTotal(line))}
               </td>
             </tr>
@@ -246,7 +305,14 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
         }}
       >
         <span>Total</span>
-        <span style={moneyStyle}>{formatMoney(totals.total)}</span>
+        <span
+          style={{
+            ...moneyStyle,
+            ...(totals.total < 0 ? { color: 'var(--color-danger)' } : {}),
+          }}
+        >
+          {formatMoney(totals.total)}
+        </span>
       </div>
     </div>
   );

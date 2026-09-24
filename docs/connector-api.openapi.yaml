@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '3.0.0'
+  version: '4.0.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
@@ -9,9 +9,23 @@ info:
     `CLAUDE.md` y los specs de rediseño
     (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87;
     `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`,
-    issue #96).
+    issue #96; `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`,
+    issue #99).
 
-    **v3 reemplaza a la v2** (cambio incompatible, Etapa 1 del epic #94):
+    **4.0.0 reemplaza a la v3** (cambio incompatible, Etapa 4 del epic #94):
+      - La anulación es un **ticket propio**: viaja como un `SaleEvent` más,
+        con líneas y pagos invertidos y `voidsSaleId` apuntando a la venta
+        que anula. Se elimina `SaleVoidEvent` (7 tipos de evento). El backend
+        la trata como cualquier venta (stock por sus `stock-movement`, saldo
+        por su pago `account` negativo sin `reference` = acreditación) y
+        puede usar `voidsSaleId` para auditoría o para marcar el original.
+      - `Sale.status` queda solo con `closed`; salen `voidedAt` y `syncedAt`.
+      - `GET /info`: versión del contrato y estado (`ok`/`maintenance`).
+      - Header `X-POS-Contract-Version` en todo request. Un backend que no
+        habla esa versión mayor responde `409 IncompatibleContract` sin
+        procesar nada ni dar ack.
+
+    **v3 reemplazó a la v2** (cambio incompatible, Etapa 1 del epic #94):
       - Sobre por evento: cada `OutboxBatchItem` lleva `id`, `type`,
         `createdAt` y `origin` (`branch`/`pointOfSale`, estampados en el POS
         al encolar el evento, no al armar el lote). El `deviceId` de la
@@ -40,7 +54,20 @@ info:
     o se informa como `issues` en un pull posterior, nunca como un
     "rechazo" síncrono.
 
+    **Compatibilidad (4.0.0)**: el POS manda `X-POS-Contract-Version` en
+    todos los requests. Si el major no es uno que el backend soporta, el
+    backend responde `409` con `{ code: "incompatible-contract",
+    contractVersion: "<la del backend>" }` **sin procesar nada y sin ack**.
+    Sin el header (un POS anterior a 4.0.0) queda a criterio del backend; se
+    recomienda tratarlo igual. No es un rechazo de contenido — el backend no
+    juzga una venta, dice que no entiende el idioma — y nada se pierde: sin
+    ack, el lote sigue congelado en el outbox del POS con su mismo
+    `idempotency_id` y sale cuando el backend se actualice. El POS se
+    considera compatible con un backend del mismo major y un minor igual o
+    mayor.
+
     Cada operación está marcada con una extensión `x-pos-status`:
+      - `implemented-v4`: el POS ya la consume con la forma de 4.0.0 (#99).
       - `implemented-v3`: el POS ya la consume con la forma de v3 (#96).
       - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
@@ -54,11 +81,34 @@ security:
   - bearerAuth: []
 
 paths:
+  /info:
+    get:
+      operationId: getInfo
+      summary: Versión del contrato y estado del backend
+      x-pos-status: implemented-v4
+      description: |
+        Liviano. El POS lo consulta al probar la conexión (`/CONFIG`), al
+        arrancar, antes de `/SINCRONIZAR` y después de un fallo de sync que
+        no sea de red. Con `status: maintenance` o un contrato incompatible,
+        el POS no corre ningún push ni pull (la venta nunca se bloquea) y
+        vuelve a preguntar acá en cada ciclo hasta que el backend vuelva.
+        Autenticado como el resto. **Nunca responde 409**: es justamente cómo
+        el POS se entera de que no son compatibles.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+      responses:
+        '200':
+          description: Versión y estado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendInfo'
+
   /sync/push:
     post:
       operationId: pushBatch
       summary: Envía toda la cola pendiente del outbox en un solo lote
-      x-pos-status: implemented-v3
+      x-pos-status: implemented-v4
       description: |
         Un solo `idempotency_id` para el lote entero (no uno por evento) —
         reintentar el mismo lote (mismo id, mismo conjunto de eventos) nunca
@@ -77,8 +127,12 @@ paths:
         (por ejemplo un `cash-session` de una terminal vieja) se informa como
         `LotIssue` con su `eventId` — nunca como error del push, y nunca
         impide aplicar el resto del lote.
+
+        4.0.0: un `sale-void` (tipo que 4.0.0 ya no tiene) se trata igual:
+        `LotIssue` con su `eventId`.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ContractVersion'
       requestBody:
         required: true
         content:
@@ -88,12 +142,14 @@ paths:
       responses:
         '200':
           description: Lote recibido (o ya recibido antes, si el idempotency_id se repite).
+        '409':
+          $ref: '#/components/responses/IncompatibleContract'
 
   /sync/pull:
     post:
       operationId: pullBatch
       summary: Trae productos, stock y clientes en una sola llamada, más el estado de lotes de push
-      x-pos-status: implemented-v3
+      x-pos-status: implemented-v4
       description: |
         Un `POST` (no `GET`) porque los parámetros son estructurados
         (cursores por recurso, lista de ids de lotes) — no una query string
@@ -127,6 +183,8 @@ paths:
         productos y clientes por lo que surja al procesar un lote, aun
         mientras está `processing`. Un lote `issues` nunca bloquea: el POS
         solo le muestra los avisos al humano.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
       requestBody:
         required: true
         content:
@@ -140,16 +198,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PullBatchResponse'
+        '409':
+          $ref: '#/components/responses/IncompatibleContract'
 
   /account-holds:
     post:
       operationId: postAccountHold
       summary: Bloqueo síncrono de crédito antes de cerrar una venta a cuenta corriente
-      x-pos-status: implemented-v3
+      x-pos-status: implemented-v4
       description: |
         Única operación del contrato pensada para llamarse de forma síncrona
         durante el cobro (§5 del doc de diseño) — nunca pasa por el outbox ni
-        por `/sync/push`. Sin cambios respecto de la v1 del contrato.
+        por `/sync/push`. Sin cambios respecto de la v1 del contrato, salvo
+        el header de versión (4.0.0). Una devolución a cuenta corriente
+        (ticket negativo) nunca pide hold: acredita con un pago `account`
+        negativo sin `reference`.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
       requestBody:
         required: true
         content:
@@ -163,6 +228,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AccountHoldResponse'
+        '409':
+          $ref: '#/components/responses/IncompatibleContract'
 
   /account-balance/{customerId}:
     get:
@@ -208,8 +275,60 @@ components:
       schema:
         type: string
       description: ULID del lote (o de la operación síncrona) — repetir el mismo valor nunca debe duplicar el efecto.
+    ContractVersion:
+      name: X-POS-Contract-Version
+      in: header
+      required: false
+      schema:
+        type: string
+        example: '4.0.0'
+      description: |
+        Versión del contrato que habla el POS (4.0.0). El POS la manda en
+        todos los requests. Un backend que no soporta ese major responde 409
+        `IncompatibleContract` sin procesar nada (salvo `/info`, que nunca
+        responde 409). Sin el header (un POS anterior a 4.0.0) queda a
+        criterio del backend; se recomienda tratarlo igual.
+
+  responses:
+    IncompatibleContract:
+      description: |
+        El backend no habla la versión mayor del contrato que declaró el POS.
+        No procesó nada ni dio ack: no es un rechazo de contenido (el backend
+        nunca rechaza una venta), es un "no entiendo el idioma". Sin ack, el
+        lote queda congelado en el outbox del POS con su mismo
+        `idempotency_id` y se reenvía cuando el backend se actualice. Se
+        descartó aceptar y guardar en cuarentena con ack: el POS lo daría por
+        entregado y lo borraría a los 7 días.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, contractVersion]
+            properties:
+              code: { type: string, enum: [incompatible-contract] }
+              contractVersion:
+                type: string
+                description: La versión del contrato que habla el backend.
 
   schemas:
+    BackendInfo:
+      type: object
+      required: [contractVersion, status]
+      properties:
+        contractVersion: { type: string, example: '4.0.0' }
+        status: { type: string, enum: [ok, maintenance] }
+        message:
+          {
+            type: string,
+            description: 'Para mostrar en el POS (p. ej. el motivo del mantenimiento).',
+          }
+        backend:
+          type: object
+          required: [name, version]
+          properties:
+            name: { type: string }
+            version: { type: string }
+
     Blocked:
       type: object
       required: [reason]
@@ -326,11 +445,19 @@ components:
         lines: { type: array, items: { $ref: '#/components/schemas/SaleLine' } }
         payments: { type: array, items: { $ref: '#/components/schemas/Payment' } }
         total: { type: number, description: 'Puede ser 0 o negativo (devolución).' }
-        status: { type: string, enum: [open, closed, voided] }
+        status: { type: string, enum: [closed] }
         createdAt: { type: string, format: date-time }
-        syncedAt: { type: string, format: date-time }
-        voidedAt: { type: string, format: date-time }
-        voidReason: { type: string }
+        voidsSaleId:
+          type: string
+          description: |
+            Solo en el ticket de una anulación (4.0.0, #99): el id de la venta
+            que anula. La anulación es un documento propio — mismas líneas con
+            `qty` invertida (el descuento de cada línea se conserva), pagos
+            invertidos (un pago `account` pierde su `reference`: negativo y
+            sin hold es una acreditación), `total` invertido, mismo
+            `customerId` y ajuste global — que mueve stock y saldo por su
+            cuenta. El original nunca se modifica.
+        voidReason: { type: string, description: 'Solo en el ticket de una anulación.' }
         customerId: { type: string }
 
     StockMovement:
@@ -340,7 +467,10 @@ components:
         id: { type: string }
         productId: { type: string }
         delta: { type: number, description: 'Con signo, hasta 3 decimales.' }
-        reason: { type: string, enum: [sale, sale-void] }
+        reason:
+          type: string
+          enum: [sale, sale-void]
+          description: '`sale-void` marca los movimientos del ticket de una anulación (reponen stock).'
         saleId: { type: string }
         createdAt: { type: string, format: date-time }
 
@@ -403,7 +533,7 @@ components:
     EventEnvelope:
       type: object
       required: [id, type, createdAt, origin]
-      description: Sobre común de los 8 tipos de evento.
+      description: Sobre común de los 7 tipos de evento.
       properties:
         id:
           type: string
@@ -422,7 +552,6 @@ components:
       oneOf:
         - $ref: '#/components/schemas/SaleEvent'
         - $ref: '#/components/schemas/StockMovementEvent'
-        - $ref: '#/components/schemas/SaleVoidEvent'
         - $ref: '#/components/schemas/CustomerEvent'
         - $ref: '#/components/schemas/AccountHoldConfirmEvent'
         - $ref: '#/components/schemas/AccountHoldReleaseEvent'
@@ -446,18 +575,6 @@ components:
           properties:
             type: { type: string, enum: [stock-movement] }
             movement: { $ref: '#/components/schemas/StockMovement' }
-
-    SaleVoidEvent:
-      allOf:
-        - $ref: '#/components/schemas/EventEnvelope'
-        - type: object
-          required: [type, saleId, voidedAt]
-          description: Solo para ventas — cobranzas y movimientos de caja no se anulan.
-          properties:
-            type: { type: string, enum: [sale-void] }
-            saleId: { type: string }
-            voidedAt: { type: string, format: date-time }
-            voidReason: { type: string }
 
     CustomerEvent:
       allOf:

@@ -38,6 +38,7 @@ export const syncRoutes: RouteDef[] = [
   {
     method: 'POST',
     pattern: /^\/sync\/push$/,
+    checksContract: true,
     requiresAuth: true,
     handler: async (req, res, ctx) => {
       const idempotencyKey = req.headers['idempotency-key'];
@@ -67,6 +68,7 @@ export const syncRoutes: RouteDef[] = [
   {
     method: 'POST',
     pattern: /^\/sync\/pull$/,
+    checksContract: true,
     requiresAuth: true,
     handler: async (req, res, ctx) => {
       const body = (await readJsonBody(req)) as {
