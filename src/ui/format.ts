@@ -43,6 +43,13 @@ export function formatDate(isoDate: string): string {
   }).format(new Date(isoDate));
 }
 
+/** Hora local HH:MM de una fecha ISO (#99: "Anulación de HH:MM"). */
+export function formatTime(isoDate: string): string {
+  return new Intl.DateTimeFormat(resolveLocale(), { hour: '2-digit', minute: '2-digit' }).format(
+    new Date(isoDate),
+  );
+}
+
 /**
  * Cantidad vendida, hasta 3 decimales sin ceros de más a la derecha — necesario para
  * productos vendidos por peso, donde puede haber arrastre de punto flotante (ej.

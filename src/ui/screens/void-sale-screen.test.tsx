@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
-import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
+import { closeSaleAndPersist, voidSaleAndPersist } from '../../storage/sale-repository.ts';
+import { formatMoney, formatTime } from '../format.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
@@ -49,12 +50,14 @@ describe('VoidSaleScreen', () => {
   it('muestra "no hay ventas" cuando no hay nada para anular', async () => {
     render(<VoidSaleScreen />);
 
-    expect(await screen.findByText('No hay ventas cerradas para anular.')).not.toBeNull();
+    expect(
+      await screen.findByText('No hay ventas de las últimas 24 horas para anular.'),
+    ).not.toBeNull();
   });
 
   it('Escape en la lista vuelve a la pantalla de venta', async () => {
     render(<VoidSaleScreen />);
-    await screen.findByText('No hay ventas cerradas para anular.');
+    await screen.findByText('No hay ventas de las últimas 24 horas para anular.');
 
     fireEvent.keyDown(getContainer(), { key: 'Escape' });
 
@@ -128,13 +131,30 @@ describe('VoidSaleScreen — mouse (Etapa 2 de #94)', () => {
 
   it('"Volver a la venta (Esc)" sale', async () => {
     render(<VoidSaleScreen />);
-    await screen.findByText('No hay ventas cerradas para anular.');
+    await screen.findByText('No hay ventas de las últimas 24 horas para anular.');
     fireEvent.click(screen.getByRole('button', { name: 'Volver a la venta (Esc)' }));
     expect(activeScreenSignal.value).toBe('sale');
   });
 
-  it('un mousedown sobre el título no le saca el foco a la pantalla', () => {
+  it('un mousedown sobre el título no le saca el foco a la pantalla', async () => {
     render(<VoidSaleScreen />);
+    await screen.findByText('No hay ventas de las últimas 24 horas para anular.');
     expect(leftMouseDown(screen.getByText('Anular venta')).defaultPrevented).toBe(true);
+  });
+});
+
+describe('VoidSaleScreen — marcas de anulado (#99)', () => {
+  it('la original anulada dice "Anulada" y la anulación "Anulación de HH:MM · $X", atenuadas', async () => {
+    const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+    if (!closed.ok) throw new Error('setup falló');
+    await voidSaleAndPersist(closed.value.id);
+    await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
+
+    render(<VoidSaleScreen />);
+
+    const voided = await screen.findByText('Anulada');
+    expect(voided.closest('li')?.style.opacity).toBe('0.5');
+    const expected = `Anulación de ${formatTime(closed.value.createdAt)} · ${formatMoney(100)}`;
+    expect(screen.getByText(expected).closest('li')?.style.opacity).toBe('0.5');
   });
 });

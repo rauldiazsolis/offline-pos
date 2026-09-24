@@ -17,6 +17,7 @@ import {
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { CashSummaryScreen } from './cash-summary-screen.tsx';
+import { formatTime } from '../format.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -78,6 +79,8 @@ beforeEach(async () => {
       },
     ],
     isClosed: false,
+    voidedSaleIds: new Set(),
+    voidOriginals: new Map(),
   };
   cashSummaryTabSignal.value = 'tickets';
   selectedTicketIndexSignal.value = 0;
@@ -178,6 +181,35 @@ describe('pestaña Tickets', () => {
 
     expect(selectedTicketIndexSignal.value).toBe(1);
     expect(document.activeElement).toBe(input);
+  });
+});
+
+describe('pestaña Tickets — marcas de anulado (#99)', () => {
+  it('un ticket anulado dice "Anulada" y una anulación "Anulación de HH:MM"', () => {
+    const context = cashSummaryContextSignal.value;
+    if (context === undefined) throw new Error('setup falló');
+    const original = context.sales[0];
+    if (original === undefined) throw new Error('setup falló');
+    cashSummaryContextSignal.value = {
+      ...context,
+      sales: [
+        ...context.sales,
+        {
+          ...original,
+          id: 'v1',
+          total: -200,
+          createdAt: '2026-01-01T12:00:00.000Z',
+          voidsSaleId: 's1',
+        },
+      ],
+      voidedSaleIds: new Set(['s1']),
+      voidOriginals: new Map([['s1', original]]),
+    };
+
+    render(<CashSummaryScreen />);
+
+    expect(screen.getByText('Anulada')).not.toBeNull();
+    expect(screen.getByText(`Anulación de ${formatTime(original.createdAt)}`)).not.toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ type StoredSale = {
   lines: unknown[];
   payments: unknown[];
   createdAt: string;
+  voidsSaleId?: string;
 };
 type StoredStockMovement = { saleId?: string; reason: string; delta: number };
 type StoredOutboxEvent = { id: string; type: string; status: string; saleId?: string };
@@ -57,23 +58,32 @@ test('anular una venta cerrada revierte el stock sin tocar sus datos originales'
 
   await expect(page.getByLabel('Barra de comandos')).toBeVisible();
 
-  const [voided] = await getAllFromStore<StoredSale>(page, 'sales');
-  expect(voided?.status).toBe('voided');
-  expect(voided?.lines).toEqual(closed?.lines);
-  expect(voided?.payments).toEqual(closed?.payments);
-  expect(voided?.total).toBe(closed?.total);
-  expect(voided?.createdAt).toBe(closed?.createdAt);
+  // #99: la anulación es un ticket propio, negativo, que apunta al original; el original no se toca.
+  const sales = await getAllFromStore<StoredSale>(page, 'sales');
+  expect(sales).toHaveLength(2);
+  const original = sales.find((sale) => sale.id === closed?.id);
+  const voidTicket = sales.find((sale) => sale.voidsSaleId === closed?.id);
+  expect(original).toEqual(closed);
+  expect(voidTicket?.status).toBe('closed');
+  expect(voidTicket?.total).toBe(-(closed?.total ?? 0));
 
   const movements = await getAllFromStore<StoredStockMovement>(page, 'stockMovements');
-  const forThisSale = movements.filter((movement) => movement.saleId === closed?.id);
-  expect(forThisSale).toHaveLength(2);
-  expect(forThisSale.find((m) => m.reason === 'sale')?.delta).toBe(-1);
-  expect(forThisSale.find((m) => m.reason === 'sale-void')?.delta).toBe(1);
+  expect(movements.find((m) => m.saleId === closed?.id)?.delta).toBe(-1);
+  expect(movements.find((m) => m.saleId === voidTicket?.id)).toMatchObject({
+    reason: 'sale-void',
+    delta: 1,
+  });
 
-  // Regresión barata: la anulación deja su propio evento de outbox, con un
-  // id distinto al de la venta (no reutiliza esa Idempotency-Key).
+  // La anulación viaja como un evento `sale` más, con su propio id.
   const outboxEvents = await getAllFromStore<StoredOutboxEvent>(page, 'outbox');
-  const voidEvent = outboxEvents.find((event) => event.type === 'sale-void');
-  expect(voidEvent).toMatchObject({ saleId: closed?.id, status: 'pending' });
-  expect(voidEvent?.id).not.toBe(closed?.id);
+  expect(outboxEvents.find((event) => event.id === voidTicket?.id)).toMatchObject({
+    type: 'sale',
+    status: 'pending',
+  });
+  expect(outboxEvents.some((event) => event.type === 'sale-void')).toBe(false);
+
+  // Volver a /ANULAR: sin ninguna fila anulable (la original ya anulada y su anulación), el vacío.
+  await commandBar.fill('/anular');
+  await commandBar.press('Enter');
+  await expect(page.getByText('No hay ventas de las últimas 24 horas para anular.')).toBeVisible();
 });

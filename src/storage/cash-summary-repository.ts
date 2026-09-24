@@ -9,12 +9,17 @@ import {
   getMostRecentClosedCashSession,
 } from './cash-session-repository.ts';
 import { db } from './db.ts';
+import { loadVoidedSaleIds, loadVoidOriginals } from './sale-repository.ts';
 
 export type CashSummaryContext = {
   session: CashSession;
   summary: CashSessionSummary;
   sales: Sale[];
   isClosed: boolean;
+  /** Ventas del turno anuladas (#99): con un ticket que las anula, o con el status legado. */
+  voidedSaleIds: Set<string>;
+  /** Para cada ticket de anulación del turno, la venta que anula (si sigue en la base). */
+  voidOriginals: Map<string, Sale>;
 };
 
 /**
@@ -31,10 +36,18 @@ export async function getCashSummaryContext(): Promise<CashSummaryContext | unde
   const sales = (await db.sales.bulkGet(session.sales)).filter(
     (sale): sale is Sale => sale !== undefined,
   );
+  const voidedSaleIds = await loadVoidedSaleIds(session.sales);
+  for (const sale of sales) {
+    if (sale.status === 'voided') {
+      voidedSaleIds.add(sale.id);
+    }
+  }
   return {
     session,
     summary: calculateCashSessionSummary(session, sales),
     sales,
     isClosed: session.closedAt !== undefined,
+    voidedSaleIds,
+    voidOriginals: await loadVoidOriginals(sales),
   };
 }

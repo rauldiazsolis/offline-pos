@@ -4,7 +4,8 @@ import { useMemo } from 'preact/hooks';
 import { calculateProductQuantities, type ProductQuantity } from '../../domain/cash-session.ts';
 import type { Sale, SaleLine } from '../../domain/sale.ts';
 import type { PaymentMethod } from '../../domain/sale.ts';
-import { formatMoney, formatQuantity } from '../format.ts';
+import { isVoided } from '../../domain/sale-lifecycle.ts';
+import { formatMoney, formatQuantity, formatTime } from '../format.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useIndexListNavigation } from '../hooks/use-index-list-navigation.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
@@ -107,6 +108,16 @@ function filterSales(sales: Sale[], query: string): Sale[] {
  * como componente separado, esa lectura queda en el nivel superior de SU propio render, que es la
  * forma que el análisis estático de `react-hooks/refs` espera.
  */
+/** Marca de un ticket anulado o de una anulación (#99), con la misma regla que `/ANULAR`. */
+function voidMark(sale: Sale): string | undefined {
+  const context = cashSummaryContextSignal.value;
+  if (sale.voidsSaleId !== undefined) {
+    const original = context?.voidOriginals.get(sale.voidsSaleId);
+    return original !== undefined ? `Anulación de ${formatTime(original.createdAt)}` : 'Anulación';
+  }
+  return context !== undefined && isVoided(sale, context.voidedSaleIds) ? 'Anulada' : undefined;
+}
+
 function TicketRow({
   sale,
   index,
@@ -125,6 +136,7 @@ function TicketRow({
       ? getCustomerRepository().getCustomer(sale.customerId)
       : undefined;
   const isSelected = index === selectedTicketIndexSignal.value;
+  const mark = voidMark(sale);
   return (
     <div
       ref={nav.ticketRef(index)}
@@ -148,7 +160,20 @@ function TicketRow({
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 600 }}>Ticket #{sale.id}</span>
+          <span style={{ fontWeight: 600 }}>
+            Ticket #{sale.id}
+            {mark !== undefined && (
+              <span
+                style={{
+                  marginLeft: 'var(--space-2)',
+                  fontWeight: 'normal',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                {mark}
+              </span>
+            )}
+          </span>
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
             {new Date(sale.createdAt).toLocaleString()}
           </span>
