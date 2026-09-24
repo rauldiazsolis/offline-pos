@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorProduct } from './connector.ts';
 import { err, ok } from '../domain/result.ts';
-import type { LocalDataSummary } from '../storage/local-data.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import type { SyncConfig } from './config.ts';
-import { originKey, planConnectionChange, probeConnection, withTimeout } from './connection.ts';
+import { originKey, probeConnection, withTimeout } from './connection.ts';
 import { tryAcquireSyncLock } from './engine.ts';
 
 afterEach(() => {
@@ -209,6 +208,29 @@ describe('probeConnection — convivencia con el motor de sync', () => {
   });
 });
 
+describe('probeConnection — progreso', () => {
+  it('informa el progreso: pulling sin cerrojo tomado', async () => {
+    const stages: string[] = [];
+    await probeConnection(config, {
+      connector: fakeConnector(),
+      onProgress: (stage) => stages.push(stage),
+    });
+    expect(stages).toEqual(['pulling']);
+  });
+
+  it('informa waiting-lock si hay un ciclo en curso', async () => {
+    const release = tryAcquireSyncLock();
+    const stages: string[] = [];
+    const probe = probeConnection(config, {
+      connector: fakeConnector(),
+      onProgress: (stage) => stages.push(stage),
+    });
+    release?.();
+    await probe;
+    expect(stages).toEqual(['waiting-lock', 'pulling']);
+  });
+});
+
 describe('originKey', () => {
   it('normaliza: sin barra final y con el host en minúsculas', () => {
     expect(originKey({ type: 'rest', baseUrl: 'https://Api.Example.com/' })).toBe(
@@ -235,75 +257,20 @@ describe('originKey', () => {
   });
 
   it('la API key, el secreto y el locale no forman parte del origen', () => {
-    expect(
-      originKey({
-        type: 'rest',
-        baseUrl: 'https://api.example.com',
-        apiKey: 'a',
-        locale: 'es-AR',
-      }),
-    ).toBe(originKey({ type: 'rest', baseUrl: 'https://api.example.com', apiKey: 'b' }));
+    const withLocale: SyncConfig = {
+      type: 'rest',
+      baseUrl: 'https://api.example.com',
+      apiKey: 'a',
+      locale: 'es-AR',
+    };
+    expect(originKey(withLocale)).toBe(
+      originKey({ type: 'rest', baseUrl: 'https://api.example.com', apiKey: 'b' }),
+    );
   });
 
   it('dos backends distintos tienen orígenes distintos', () => {
     expect(originKey({ type: 'rest', baseUrl: 'https://a.example.com' })).not.toBe(
       originKey({ type: 'rest', baseUrl: 'https://b.example.com' }),
     );
-  });
-});
-
-describe('planConnectionChange', () => {
-  const empty: LocalDataSummary = {
-    products: 0,
-    customers: 0,
-    sales: 0,
-    cashSessions: 0,
-    pendingOutbox: 0,
-    pendingSales: 0,
-    draftCartLines: 0,
-  };
-  const withSales: LocalDataSummary = { ...empty, products: 10, sales: 3 };
-  const other: SyncConfig = { type: 'rest', baseUrl: 'https://otro.example.com' };
-
-  it('mismo origen (aunque cambie la API key): no borra ni pregunta, tenga o no datos', () => {
-    const plan = planConnectionChange({
-      current: config,
-      candidate: { ...config, apiKey: 'nueva' },
-      localData: withSales,
-    });
-
-    expect(plan).toEqual({ wipe: false, needsConfirmation: false });
-  });
-
-  it('origen distinto con datos del usuario: borra y pide confirmación', () => {
-    const plan = planConnectionChange({ current: config, candidate: other, localData: withSales });
-
-    expect(plan).toEqual({ wipe: true, needsConfirmation: true });
-  });
-
-  it('origen distinto con solo catálogo y clientes: borra sin preguntar', () => {
-    const plan = planConnectionChange({
-      current: config,
-      candidate: other,
-      localData: { ...empty, products: 50, customers: 20 },
-    });
-
-    expect(plan).toEqual({ wipe: true, needsConfirmation: false });
-  });
-
-  it('sin config actual pero con datos del usuario: origen desconocido, pide confirmación', () => {
-    const plan = planConnectionChange({
-      current: undefined,
-      candidate: config,
-      localData: withSales,
-    });
-
-    expect(plan).toEqual({ wipe: true, needsConfirmation: true });
-  });
-
-  it('primer arranque (sin config ni datos): borra (no-op) y no pregunta', () => {
-    const plan = planConnectionChange({ current: undefined, candidate: config, localData: empty });
-
-    expect(plan).toEqual({ wipe: true, needsConfirmation: false });
   });
 });

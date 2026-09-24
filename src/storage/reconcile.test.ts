@@ -6,7 +6,7 @@ import type { Sale } from '../domain/sale.ts';
 import type { StockItem } from '../domain/stock.ts';
 import type { ProbeSnapshot } from '../sync/pull-snapshot.ts';
 import { db } from './db.ts';
-import { reconcileSnapshot } from './reconcile.ts';
+import { applySnapshotReconciled, reconcileSnapshot } from './reconcile.ts';
 
 const now = '2026-01-01T00:00:00.000Z';
 
@@ -238,5 +238,15 @@ describe('reconcileSnapshot — salvaguardas', () => {
     }
     await db.open();
     expect(await ids('products')).toEqual(['p1']);
+  });
+});
+
+describe('applySnapshotReconciled', () => {
+  it('con allowEmptyTables, una tabla que llega vacía borra lo local', async () => {
+    await db.products.put(product('p1'));
+    await db.transaction('rw', db.tables, () =>
+      applySnapshotReconciled(snapshot({ products: [] }), { now, allowEmptyTables: true }),
+    );
+    expect(await db.products.count()).toBe(0);
   });
 });

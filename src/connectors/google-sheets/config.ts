@@ -24,7 +24,7 @@ export const googleSheetsConfigFields: ConfigField<Exclude<keyof GoogleSheetsCon
     key: 'webAppUrl',
     label: 'URL del Web App de Google Apps Script',
     optional: false,
-    placeholder: 'https://script.google.com/macros/s/…/exec',
+    placeholder: 'ej. https://script.google.com/macros/s/…/exec',
   },
   {
     key: 'sharedSecret',

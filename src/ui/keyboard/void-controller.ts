@@ -42,6 +42,15 @@ export function selectForVoid(): void {
   }
 }
 
+/** Click en una venta de la lista (Etapa 2 de #94): lo mismo que ↑/↓ hasta ella + Enter. */
+export function activateVoidRow(index: number): void {
+  if (index < 0 || index >= voidableSalesSignal.value.length) {
+    return;
+  }
+  voidSelectionIndexSignal.value = index;
+  selectForVoid();
+}
+
 /** Esc en el paso de confirmación: vuelve a la lista sin anular nada. */
 export function cancelVoidConfirmation(): void {
   voidConfirmingSignal.value = false;

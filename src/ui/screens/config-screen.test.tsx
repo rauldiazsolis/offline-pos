@@ -1,11 +1,24 @@
 import 'fake-indexeddb/auto';
-import { fireEvent, render, screen, waitFor } from '@testing-library/preact';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../storage/db.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
-import { enterConfigScreen } from '../keyboard/config-controller.ts';
+import {
+  enterConfigScreen,
+  goToStep,
+  jumpToStep,
+  openRequiredWizard,
+  setConfigField,
+  setConfigType,
+} from '../keyboard/config-controller.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { connectionStateSignal } from '../state/sync.ts';
+import {
+  configTerminalSignal,
+  identityResetSignal,
+  localChoiceSignal,
+  wizardStepSignal,
+} from '../state/sync-config.ts';
 import { ConfigScreen } from './config-screen.tsx';
 
 // El ciclo de sync en background que dispara la aplicación de la conexión
@@ -16,7 +29,6 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
 }));
 
 const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
-const CTRL_ENTER = { key: 'Enter', ctrlKey: true };
 
 function okResponse(body: unknown): Response {
   return { ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve(body) } as Response;
@@ -36,10 +48,27 @@ function stubRestBackend(): void {
   );
 }
 
+/** Fetch colgado hasta que el test lo suelta (para no dejar el cerrojo de sync tomado). */
+function stubHangingFetch(): () => void {
+  let fail: (reason: Error) => void = () => undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          fail = reject;
+        }),
+    ),
+  );
+  return () => {
+    fail(new Error('fin del test'));
+  };
+}
+
 beforeEach(async () => {
   await db.open();
-  connectionStateSignal.value = 'active';
-  enterConfigScreen();
+  activeScreenSignal.value = 'config';
+  identityResetSignal.value = false;
 });
 
 afterEach(async () => {
@@ -49,198 +78,284 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function typeSelect(): HTMLSelectElement {
-  return screen.getByLabelText<HTMLSelectElement>('Tipo de conexión');
-}
-
-function chooseRest(): void {
-  fireEvent.change(typeSelect(), { target: { value: 'rest' } });
-}
-
-describe('ConfigScreen — formulario', () => {
-  it('arranca sin tipo elegido y sin ningún campo, solo el selector', () => {
-    render(<ConfigScreen />);
-
-    expect(typeSelect().value).toBe('');
-    expect(screen.queryByLabelText(/URL del sistema externo/)).toBeNull();
-    expect(screen.queryByLabelText(/Locale/)).toBeNull();
+describe('ConfigScreen — wizard', () => {
+  beforeEach(async () => {
+    connectionStateSignal.value = 'unconfigured';
+    await openRequiredWizard();
   });
 
-  it('el foco arranca en el selector de tipo', () => {
+  it('muestra los seis pasos y arranca en Terminal con el foco en Sucursal', () => {
     render(<ConfigScreen />);
-
-    expect(document.activeElement).toBe(typeSelect());
+    for (const title of [
+      'Terminal',
+      'Tipo de conexión',
+      'Datos del conector',
+      'Probar',
+      'Datos locales',
+      'Revisar',
+    ]) {
+      expect(screen.getByRole('button', { name: new RegExp(`Paso \\d: ${title}`) })).not.toBeNull();
+    }
+    expect(
+      screen.getByRole('button', { name: 'Paso 1: Terminal' }).getAttribute('aria-current'),
+    ).toBe('step');
+    expect(document.activeElement).toBe(screen.getByLabelText('Sucursal'));
   });
 
-  it('elegir REST muestra sus campos más el locale, sin valores por omisión y con placeholders', () => {
+  it('Enter sin sucursal muestra el error y selecciona el campo', () => {
     render(<ConfigScreen />);
-
-    chooseRest();
-
-    const url = screen.getByLabelText<HTMLInputElement>(/URL del sistema externo/);
-    expect(url.value).toBe('');
-    expect(url.placeholder).toBe('https://api.miempresa.com');
-    expect(screen.getByLabelText(/API key/)).not.toBeNull();
-    expect(screen.getByLabelText(/Locale/)).not.toBeNull();
+    fireEvent.keyDown(screen.getByLabelText('Sucursal'), { key: 'Enter' });
+    expect(screen.getByRole('alert').textContent).toContain('Sucursal');
+    expect(document.activeElement).toBe(screen.getByLabelText('Sucursal'));
   });
 
-  it('muestra Sucursal y Punto de venta (opcionales) antes del locale, al final (contrato v3)', () => {
+  it('muestra el aviso de identidad perdida en Terminal', async () => {
+    identityResetSignal.value = true;
+    await openRequiredWizard();
     render(<ConfigScreen />);
-    chooseRest();
-
-    const labels = [...document.querySelectorAll('[data-config-field]')].map((input) =>
-      input.getAttribute('data-config-field'),
-    );
-    expect(labels.slice(-3)).toEqual(['branch', 'pointOfSale', 'locale']);
-    expect(screen.getByLabelText(/Sucursal \(opcional\)/)).not.toBeNull();
-    expect(screen.getByLabelText(/Punto de venta \(opcional\)/)).not.toBeNull();
+    expect(screen.getByText(/Esta terminal no tenía identidad/)).not.toBeNull();
   });
 
-  it('cambiar a Google Sheets intercambia los campos sin ocultar el selector', () => {
-    render(<ConfigScreen />);
-    chooseRest();
-
-    fireEvent.change(typeSelect(), { target: { value: 'google-sheets' } });
-
-    expect(screen.queryByLabelText(/URL del sistema externo/)).toBeNull();
-    expect(screen.getByLabelText(/URL del Web App/)).not.toBeNull();
-    expect(screen.getByLabelText(/Secreto compartido/)).not.toBeNull();
-    expect(typeSelect().value).toBe('google-sheets');
-  });
-
-  it('marca como opcionales los campos opcionales', () => {
-    render(<ConfigScreen />);
-    chooseRest();
-
-    expect(screen.getByLabelText(/API key.*opcional/)).not.toBeNull();
-    expect(screen.queryByLabelText(/URL del sistema externo.*opcional/)).toBeNull();
-  });
-
-  it('valida solo al confirmar: sin error mientras se tipea, alerta al Ctrl+Enter', () => {
-    render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText(/URL del sistema externo/);
-
-    fireEvent.input(url, { target: { value: 'no-es-una-url' } });
-    expect(screen.queryByRole('alert')).toBeNull();
-    fireEvent.keyDown(url, CTRL_ENTER);
-
-    expect(screen.getByRole('alert').textContent).toContain('URL del sistema externo');
-    expect(activeScreenSignal.value).toBe('config');
-  });
-
-  it('tras un error de validación, el campo queda enfocado y con todo su texto seleccionado', () => {
-    render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText<HTMLInputElement>(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'no-es-una-url' } });
-
-    fireEvent.keyDown(url, CTRL_ENTER);
-
-    expect(document.activeElement).toBe(url);
-    expect(url.selectionStart).toBe(0);
-    expect(url.selectionEnd).toBe('no-es-una-url'.length);
-  });
-
-  it('Enter solo no prueba ni guarda nada', () => {
+  it('con el mouse: completar terminal, elegir tipo con click, avanzar con el botón', async () => {
     stubRestBackend();
     render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
-
-    fireEvent.keyDown(url, { key: 'Enter' });
-
-    expect(loadSyncConfig().ok).toBe(false);
-    expect(screen.queryByText(/Probando conexión/)).toBeNull();
-  });
-
-  it('precarga la config guardada al abrirse', () => {
-    saveSyncConfig({ type: 'google-sheets', webAppUrl: WEB_APP_URL, locale: 'es-AR' });
-    enterConfigScreen();
-
-    render(<ConfigScreen />);
-
-    expect(typeSelect().value).toBe('google-sheets');
-    expect(screen.getByLabelText<HTMLInputElement>(/URL del Web App/).value).toBe(WEB_APP_URL);
-    expect(screen.getByLabelText<HTMLInputElement>(/Locale/).value).toBe('es-AR');
-  });
-});
-
-describe('ConfigScreen — probar y guardar', () => {
-  it('Ctrl+Enter prueba, guarda con verifiedAt y vuelve a la venta', async () => {
-    stubRestBackend();
-    render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
-
-    fireEvent.keyDown(url, CTRL_ENTER);
-
+    fireEvent.input(screen.getByLabelText('Sucursal'), { target: { value: 'Centro' } });
+    fireEvent.input(screen.getByLabelText('Punto de venta'), { target: { value: 'Caja 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente (Enter)' }));
+    fireEvent.click(screen.getByRole('button', { name: /^REST genérico/ }));
+    fireEvent.input(screen.getByLabelText('URL del sistema externo'), {
+      target: { value: 'http://a.test' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente (Enter)' }));
+    await waitFor(() => {
+      expect(screen.getByText(/Conexión OK/)).not.toBeNull();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente (Enter)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar (Enter)' }));
     await waitFor(() => {
       expect(activeScreenSignal.value).toBe('sale');
     });
     const saved = loadSyncConfig();
-    expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
+    expect(saved.ok && saved.value).toMatchObject({ branch: 'Centro', pointOfSale: 'Caja 1' });
   });
 
-  it('muestra "Probando conexión…" mientras espera', async () => {
-    // La prueba toma el cerrojo de sync mientras dura: se termina la espera al final del test
-    // para no dejarlo tomado para el siguiente.
-    let failPending: (reason: Error) => void = () => undefined;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(
-        () =>
-          new Promise<Response>((_resolve, reject) => {
-            failPending = reject;
-          }),
-      ),
-    );
+  it('↓ y Enter en Tipo de conexión eligen y avanzan, con las instrucciones del tipo', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
     render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
-
-    fireEvent.keyDown(url, CTRL_ENTER);
-
-    await waitFor(() => {
-      expect(screen.getByText('Probando conexión…')).not.toBeNull();
+    await act(() => {
+      jumpToStep('type');
     });
-
-    failPending(new Error('fin del test'));
-    await waitFor(() => {
-      expect(screen.queryByText('Probando conexión…')).toBeNull();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    expect(
+      screen.getByRole('button', { name: /^Google Sheets/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+    expect(wizardStepSignal.value).toBe('connector');
+    expect(screen.getByText(/termina en \/exec/)).not.toBeNull();
+    fireEvent.input(screen.getByLabelText('URL del Web App de Google Apps Script'), {
+      target: { value: 'no-es-url' },
     });
+    fireEvent.keyDown(dialog, { key: 'Enter' });
+    expect(screen.getByRole('alert').textContent).toContain('no es válido');
   });
 
-  it('si la prueba falla, muestra el motivo y el formulario queda editable', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
+  it('mientras prueba muestra spinner, qué espera y los segundos', async () => {
+    const releaseFetch = stubHangingFetch();
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    setConfigType('rest');
+    setConfigField('baseUrl', 'http://a.test');
     render(<ConfigScreen />);
-    chooseRest();
-    const url = screen.getByLabelText(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'https://api.example.com' } });
-
-    fireEvent.keyDown(url, CTRL_ENTER);
-
+    jumpToStep('probe');
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toContain(
-        'No se pudo conectar con el servidor',
+      expect(screen.getByRole('status').textContent).toMatch(
+        /Pidiendo productos, stock y clientes a a\.test/,
       );
     });
+    expect(document.querySelector('.spinner')).not.toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/máx\. 20 s/);
+    expect(screen.getByRole('button', { name: 'Cancelar prueba (Esc)' })).not.toBeNull();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.getByText('Prueba cancelada.')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Reintentar (Enter)' })).not.toBeNull();
+    releaseFetch();
+  });
+
+  it('una prueba fallida ofrece corregir los datos', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    );
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    setConfigType('google-sheets');
+    setConfigField('webAppUrl', WEB_APP_URL);
+    render(<ConfigScreen />);
+    jumpToStep('probe');
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).not.toBeNull();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Corregir datos (Alt+3)' }));
+    expect(wizardStepSignal.value).toBe('connector');
+  });
+
+  it('Alt+1 vuelve a Terminal desde otro paso', () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    render(<ConfigScreen />);
+    jumpToStep('type');
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: '1', altKey: true });
+    expect(wizardStepSignal.value).toBe('terminal');
+  });
+
+  it('Alt+← vuelve al paso anterior; un paso no alcanzable está deshabilitado', () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    render(<ConfigScreen />);
+    jumpToStep('type');
+    expect(screen.getByRole('button', { name: 'Paso 6: Revisar' }).hasAttribute('disabled')).toBe(
+      true,
+    );
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowLeft', altKey: true });
+    expect(wizardStepSignal.value).toBe('terminal');
+  });
+
+  it('en modo requerido no hay botón Cancelar y Esc no sale', () => {
+    render(<ConfigScreen />);
+    expect(screen.queryByRole('button', { name: 'Cancelar (Esc)' })).toBeNull();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(activeScreenSignal.value).toBe('config');
-    expect(loadSyncConfig().ok).toBe(false);
+  });
+
+  it('un mousedown fuera de los campos no le saca el foco al campo', () => {
+    render(<ConfigScreen />);
+    const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+    screen.getByRole('heading', { name: 'Configurar conexión' }).dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });
 
-describe('ConfigScreen — confirmación del borrado', () => {
-  async function openConfirmation(): Promise<void> {
-    stubRestBackend();
+describe('ConfigScreen — terminal activa', () => {
+  beforeEach(() => {
+    saveSyncConfig({
+      type: 'google-sheets',
+      webAppUrl: WEB_APP_URL,
+      sharedSecret: 'shh',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+      verifiedAt: '2026-09-23T14:02:00.000Z',
+    });
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+  });
+
+  it('abre en Revisar con el resumen, el secreto oculto y Cancelar', () => {
+    render(<ConfigScreen />);
+    expect(screen.getByRole('button', { name: 'Aplicar (Enter)' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Cancelar (Esc)' })).not.toBeNull();
+    expect(screen.getAllByText(/Centro · Caja 1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Secreto compartido: •••/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/shh/)).toBeNull();
+    expect(
+      screen.getByText('Se guarda la sucursal, el punto de venta y el locale.'),
+    ).not.toBeNull();
+  });
+
+  it('Esc sale', () => {
+    render(<ConfigScreen />);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('"Cancelar (Esc)" sale', () => {
+    render(<ConfigScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar (Esc)' }));
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+});
+
+describe('ConfigScreen — correcciones de la prueba manual', () => {
+  beforeEach(async () => {
+    connectionStateSignal.value = 'unconfigured';
+    await openRequiredWizard();
+  });
+
+  it('Tipo de conexión: el foco va a una opción y sigue a ↑/↓', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    render(<ConfigScreen />);
+    await act(() => {
+      jumpToStep('type');
+    });
+    // Sin tipo elegido, el foco está en la primera opción (nunca en un contenedor
+    // invisible), pero no está elegida: el foco no es la selección.
+    const rest = screen.getByRole('button', { name: /^REST genérico/ });
+    expect(document.activeElement).toBe(rest);
+    expect(rest.getAttribute('aria-pressed')).toBe('false');
+    // ↓ pasa a la siguiente y la elige (como un grupo de radio).
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    const demo = screen.getByRole('button', { name: /^REST \(minibackend de demo\)/ });
+    expect(demo.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(demo);
+  });
+
+  it('Ctrl+Enter con el foco en una opción también avanza', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    setConfigType('rest');
+    render(<ConfigScreen />);
+    await act(() => {
+      jumpToStep('type');
+    });
+    const rest = screen.getByRole('button', { name: /^REST genérico/ });
+    expect(document.activeElement).toBe(rest);
+    await act(() => {
+      fireEvent.keyDown(rest, { key: 'Enter', ctrlKey: true });
+    });
+    // Sin URL, Ctrl+Enter se frena en "Datos del conector" con el error.
+    expect(wizardStepSignal.value).toBe('connector');
+  });
+
+  it('los ejemplos de los campos dicen "ej. …"', () => {
+    render(<ConfigScreen />);
+    expect(screen.getByLabelText('Sucursal').getAttribute('placeholder')).toBe('ej. Casa central');
+    expect(screen.getByLabelText('Punto de venta').getAttribute('placeholder')).toBe('ej. Caja 1');
+  });
+
+  it('la acción principal se ve como tal', () => {
+    render(<ConfigScreen />);
+    expect(screen.getByRole('button', { name: 'Siguiente (Enter)' }).className).toContain(
+      'btn-primary',
+    );
+    expect(screen.getByRole('button', { name: 'Atrás (Alt+←)' }).className).not.toContain(
+      'btn-primary',
+    );
+  });
+});
+
+describe('ConfigScreen — pasos salteados y Datos locales', () => {
+  beforeEach(() => {
     saveSyncConfig({
       type: 'rest',
-      baseUrl: 'https://viejo.example.com',
-      verifiedAt: '2025-12-01T00:00:00.000Z',
+      baseUrl: 'http://a.test',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+      verifiedAt: '2026-09-23T14:02:00.000Z',
     });
+    connectionStateSignal.value = 'active';
+  });
+
+  it('un paso salteado explica por qué no hace falta', async () => {
+    enterConfigScreen();
+    render(<ConfigScreen />);
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/No hace falta: la conexión no cambió \(probada el/).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
+  it('Datos locales: el foco está en la opción elegida y Enter sobre ella avanza a Revisar', async () => {
+    stubRestBackend();
     await db.sales.put({
       id: 's1',
       lines: [],
@@ -251,64 +366,31 @@ describe('ConfigScreen — confirmación del borrado', () => {
     });
     enterConfigScreen();
     render(<ConfigScreen />);
-    const url = screen.getByLabelText(/URL del sistema externo/);
-    fireEvent.input(url, { target: { value: 'https://nuevo.example.com' } });
-    fireEvent.keyDown(url, CTRL_ENTER);
-    await waitFor(() => {
-      expect(screen.getByText(/Cambiar de conexión borra/)).not.toBeNull();
+    await act(() => {
+      goToStep('connector');
+      setConfigField('baseUrl', 'http://b.test');
+      goToStep('probe');
     });
-  }
-
-  it('muestra qué se pierde, con los conteos', async () => {
-    await openConfirmation();
-
-    expect(screen.getByText(/1 venta/)).not.toBeNull();
-    expect(screen.getByText(/Enter borra y cambia de conexión/)).not.toBeNull();
-  });
-
-  it('Enter confirma: aplica la conexión nueva y vuelve a la venta', async () => {
-    await openConfirmation();
-
-    fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Enter' });
-
     await waitFor(() => {
-      expect(activeScreenSignal.value).toBe('sale');
+      expect(screen.getByText(/Conexión OK/)).not.toBeNull();
     });
-    await expect(db.sales.count()).resolves.toBe(0);
-  });
-
-  it('Esc vuelve a editar sin borrar nada', async () => {
-    await openConfirmation();
-
-    fireEvent.keyDown(screen.getByText(/Cambiar de conexión borra/), { key: 'Escape' });
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Cambiar de conexión borra/)).toBeNull();
+    await act(() => {
+      goToStep('local-data');
     });
-    await expect(db.sales.count()).resolves.toBe(1);
-    expect(activeScreenSignal.value).toBe('config');
-  });
-});
-
-describe('ConfigScreen — modo normal vs. requerido', () => {
-  it('con la conexión activa: hay botón Cancelar y Esc sale', () => {
-    connectionStateSignal.value = 'active';
-    render(<ConfigScreen />);
-
-    expect(screen.getByRole('button', { name: 'Cancelar' })).not.toBeNull();
-    fireEvent.keyDown(typeSelect(), { key: 'Escape' });
-
-    expect(activeScreenSignal.value).toBe('sale');
-  });
-
-  it('modo requerido: sin Cancelar, con el texto de bienvenida, y Esc no sale', () => {
-    connectionStateSignal.value = 'unconfigured';
-    render(<ConfigScreen />);
-
-    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull();
-    expect(screen.getByText('Configurá y probá la conexión para empezar.')).not.toBeNull();
-    fireEvent.keyDown(typeSelect(), { key: 'Escape' });
-
-    expect(activeScreenSignal.value).toBe('config');
+    const keep = await screen.findByRole('button', { name: 'Mantener los datos locales' });
+    expect(document.activeElement).toBe(keep);
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    const wipe = screen.getByRole('button', { name: 'Borrar los datos locales' });
+    expect(localChoiceSignal.value).toBe('wipe');
+    expect(document.activeElement).toBe(wipe);
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowUp' });
+    });
+    await act(() => {
+      fireEvent.keyDown(keep, { key: 'Enter' });
+    });
+    expect(wizardStepSignal.value).toBe('review');
   });
 });

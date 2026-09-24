@@ -26,10 +26,10 @@ info:
       - El pull trae `createdAt` (obligatorio) y `blocked` (bloqueo
         informativo) en productos y clientes.
 
-    **Transición de identidad**: `deviceId`, `origin.branch` y
-    `origin.pointOfSale` son obligatorios en v3, pero **tolerados ausentes
-    hasta la Etapa 2 del epic #94 (#97)** — un backend tiene que aceptar un
-    request sin `deviceId` y un `origin` vacío, y guardarlos vacíos.
+    **Identidad**: `deviceId`, `origin.branch` y `origin.pointOfSale` son
+    obligatorios en v3. El POS los manda siempre desde la Etapa 2 del epic #94
+    (#97). Un evento encolado antes puede llegar sin ellos: el backend lo
+    guarda con el valor vacío.
 
     **v2 reemplazó por completo la v1** (10 endpoints por recurso/evento) por
     dos operaciones batch más dos excepciones síncronas. Principio central:
@@ -385,9 +385,10 @@ components:
       description: |
         Sucursal y punto de venta, texto libre, estampados al encolar el
         evento en el POS (no al armar el lote): cambiar la sucursal con
-        eventos pendientes no reescribe los ya encolados. **Transición**:
-        obligatorios en v3, pero tolerados ausentes hasta la Etapa 2 del
-        epic #94 (#97) — un backend tiene que aceptar un `origin` vacío.
+        eventos pendientes no reescribe los ya encolados. Obligatorios en
+        v3: el POS los manda siempre desde la Etapa 2 del epic #94 (#97). Un
+        evento encolado antes puede llegar sin ellos: el backend lo guarda
+        con el valor vacío.
       properties:
         branch: { type: string }
         pointOfSale: { type: string }
@@ -503,7 +504,7 @@ components:
       properties:
         deviceId:
           type: string
-          description: UUID de la terminal, una vez por request (tolerado ausente hasta #97).
+          description: UUID de la terminal, una vez por request. El POS lo manda siempre desde la Etapa 2 del epic #94 (#97).
         events:
           type: array
           items: { $ref: '#/components/schemas/OutboxBatchItem' }
@@ -515,7 +516,8 @@ components:
         deviceId:
           type: string
           description: |
-            UUID de la terminal (tolerado ausente hasta #97). En v3 todavía no
+            UUID de la terminal (el POS lo manda siempre desde la Etapa 2 del
+            epic #94, #97). En v3 todavía no
             se usa: habilita que el backend informe lotes que la terminal
             perdió de vista (#90).
         cursors:

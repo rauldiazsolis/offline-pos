@@ -1,12 +1,12 @@
 import { summarizeLocalData } from '../../storage/local-data.ts';
-import { applyConnection, flushPendingBeforeWipe } from '../../sync/apply-connection.ts';
-import { loadSyncConfig, syncConfigSchema, type SyncConfig } from '../../sync/config.ts';
 import {
-  planConnectionChange,
-  probeConnection,
-  type ProbeSnapshot,
-} from '../../sync/connection.ts';
-import { connectorFields, type ConnectorType } from '../../sync/connector-registry.ts';
+  applyConnection,
+  applyTerminalSettings,
+  flushPendingBeforeWipe,
+} from '../../sync/apply-connection.ts';
+import { loadSyncConfig } from '../../sync/config.ts';
+import { probeConnection, type ProbeSnapshot } from '../../sync/connection.ts';
+import { CONNECTOR_TYPES, type ConnectorType } from '../../sync/connector-registry.ts';
 import { runPushThenPull } from '../../sync/engine.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -14,89 +14,307 @@ import { resetAttachedCustomer } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { connectionStateSignal, setSyncPaused } from '../state/sync.ts';
 import {
-  configConfirmationSignal,
   configErrorFieldSignal,
   configErrorSignal,
   configFieldValuesSignal,
-  configPhaseSignal,
   configTerminalSignal,
   configTypeSignal,
+  currentWizardInput,
+  identityResetSignal,
+  localChoiceConfirmedSignal,
+  localChoiceSignal,
+  localDataSignal,
+  probeOutcomeSignal,
+  probeProgressSignal,
   resetConfigForm,
+  savedConfigSignal,
+  wipeSummarySignal,
+  wizardAsyncSignal,
+  wizardModelSignal,
+  wizardStepSignal,
   type TerminalFieldKey,
 } from '../state/sync-config.ts';
-
-type PendingApply = { candidate: SyncConfig; snapshot: ProbeSnapshot; wipe: boolean };
+import {
+  initialStep,
+  isReachable,
+  nextStep,
+  previousStep,
+  validateStep,
+  WIZARD_STEPS,
+  type LocalChoice,
+  type StepValidation,
+  type WizardModel,
+  type WizardStepId,
+} from './config-wizard-model.ts';
 
 /**
- * Token de la prueba en curso: `handleConfigEscape` lo incrementa para
- * cancelar, y la prueba, al volver, descarta su resultado si el token ya no
- * es el suyo (no se cancela el `fetch`, solo se ignora lo que traiga).
+ * `/CONFIG` como wizard (Etapa 2 de #94, #97). Las reglas (salteos, qué hace
+ * Aplicar) viven en el modelo puro (`config-wizard-model.ts`, vía
+ * `wizardModelSignal`); acá solo se orquesta lo async — probar, enviar lo
+ * pendiente antes de borrar, aplicar — y la navegación. Mientras el wizard
+ * está abierto no hay sync de fondo (`syncPausedSignal`).
  */
-let submitToken = 0;
-/** Lo que se aplica si el usuario confirma el borrado (fase `confirming`). */
-let pendingApply: PendingApply | undefined;
 
-/** `/CONFIG`: abre el formulario, precargado con la config guardada (o vacío si no hay). */
-export function enterConfigScreen(): void {
-  submitToken += 1;
-  pendingApply = undefined;
+/**
+ * Token de la prueba en curso: Esc lo incrementa y la prueba, al volver,
+ * descarta su resultado si el token ya no es el suyo (no se cancela el
+ * `fetch`, solo se ignora lo que traiga).
+ */
+let probeToken = 0;
+/** Foto de la última prueba exitosa, con la clave de conexión con que se hizo. */
+let lastSnapshot: { key: string; snapshot: ProbeSnapshot } | undefined;
+
+function model(): WizardModel {
+  return wizardModelSignal.value;
+}
+
+function clearError(): void {
+  configErrorSignal.value = null;
+  configErrorFieldSignal.value = null;
+}
+
+async function refreshLocalData(): Promise<void> {
+  localDataSignal.value = await summarizeLocalData();
+}
+
+function openWizard(): void {
+  probeToken += 1;
+  lastSnapshot = undefined;
   const saved = loadSyncConfig();
   resetConfigForm(saved.ok ? saved.value : undefined);
-  // Mientras se configura no hay ciclos de sync (ver `syncPausedSignal`); se reanuda
-  // al cancelar o al aplicar la conexión nueva.
+  // Mientras se configura no hay ciclos de sync (ver `syncPausedSignal`); se
+  // reanuda al cancelar o al aplicar.
   setSyncPaused(true);
+}
+
+/** `/CONFIG` con la terminal activa: abre en Revisar, con todo precargado. */
+export function enterConfigScreen(): void {
+  openWizard();
+  void refreshLocalData();
+  goToStep(initialStep(model(), { active: true, identityReset: identityResetSignal.value }));
   activeScreenSignal.value = 'config';
 }
 
-/** Sale de la pantalla sin guardar nada (solo con la conexión activa; ver `handleConfigEscape`). */
-export function cancelConfigScreen(): void {
-  submitToken += 1;
-  pendingApply = undefined;
+/**
+ * Arranque sin conexión activa (modo requerido: instalación, `unverified`,
+ * `incomplete` o identidad perdida): lo llama `bootstrap`. Abre en el primer
+ * paso no completo.
+ */
+export async function openRequiredWizard(): Promise<void> {
+  openWizard();
+  await refreshLocalData();
+  goToStep(initialStep(model(), { active: false, identityReset: identityResetSignal.value }));
+}
+
+function leaveWizard(): void {
+  probeToken += 1;
+  lastSnapshot = undefined;
   resetConfigForm();
   setSyncPaused(false);
   activeScreenSignal.value = 'sale';
 }
 
-/** Vuelve del paso de confirmación a editar el formulario, sin borrar nada. */
-export function backToEditing(): void {
-  pendingApply = undefined;
-  configConfirmationSignal.value = null;
-  configPhaseSignal.value = 'editing';
-}
-
 /**
- * Esc según la fase: probando → cancela la prueba; confirmando → vuelve a
- * editar; aplicando → se ignora (es corto y no se puede interrumpir); editando
- * → sale, salvo en modo requerido (conexión todavía no activa), donde no hay
- * a dónde salir.
+ * Navegación interna, sin chequear alcance. Entrar a Probar sin una prueba
+ * vigente la lanza sola. Irse de un paso mientras se prueba cancela la prueba.
  */
-export function handleConfigEscape(): void {
-  switch (configPhaseSignal.value) {
-    case 'probing':
-      submitToken += 1;
-      configPhaseSignal.value = 'editing';
+export function goToStep(step: WizardStepId): void {
+  const async = wizardAsyncSignal.value;
+  if (async !== 'idle' && async !== 'probing') {
+    return;
+  }
+  if (async === 'probing') {
+    if (step === 'probe') {
       return;
-    case 'confirming':
-      backToEditing();
-      return;
-    case 'applying':
-      return;
-    default:
-      if (connectionStateSignal.value === 'active') {
-        cancelConfigScreen();
-      }
+    }
+    cancelProbe();
+  }
+  clearError();
+  wizardStepSignal.value = step;
+  if (step === 'probe' && !model().probeValid) {
+    void runProbe();
   }
 }
 
-function clearConfigError(): void {
-  configErrorSignal.value = null;
-  configErrorFieldSignal.value = null;
+/** Salto desde la columna de pasos o Alt+N: solo a un paso alcanzable. */
+export function jumpToStep(step: WizardStepId): void {
+  if (isReachable(model(), step)) {
+    goToStep(step);
+  }
 }
 
-/** Cambia el conector elegido — los campos que se muestran cambian en el acto, sin perder lo tipeado en el otro. */
+/** Alt+← / "Atrás": paso anterior no salteado. */
+export function goBack(): void {
+  goToStep(previousStep(model(), wizardStepSignal.value));
+}
+
+function showValidation(result: StepValidation): boolean {
+  if (result.ok) {
+    return true;
+  }
+  configErrorSignal.value = result.message;
+  configErrorFieldSignal.value = result.field ?? null;
+  return false;
+}
+
+/** Enter: valida el paso actual y avanza al siguiente no salteado. */
+export function advance(): void {
+  if (wizardAsyncSignal.value === 'confirming-wipe') {
+    void confirmWipe();
+    return;
+  }
+  if (wizardAsyncSignal.value !== 'idle') {
+    return;
+  }
+  const step = wizardStepSignal.value;
+  switch (step) {
+    case 'terminal':
+    case 'type':
+    case 'connector':
+      if (showValidation(validateStep(currentWizardInput(), step))) {
+        goToStep(nextStep(model(), step));
+      }
+      return;
+    case 'probe':
+      if (model().probeValid) {
+        goToStep(nextStep(model(), step));
+      } else {
+        void runProbe();
+      }
+      return;
+    case 'local-data':
+      if (localChoiceSignal.value === 'keep') {
+        localChoiceConfirmedSignal.value = true;
+        goToStep(nextStep(model(), step));
+      } else {
+        void prepareWipe();
+      }
+      return;
+    case 'review':
+      void applyWizard();
+  }
+}
+
+/**
+ * Ctrl+Enter: recorre desde el paso 1 y se frena en el primer paso donde hace
+ * falta el usuario — un error de validación, Probar (lanzando la prueba si no
+ * está vigente), Datos locales si corresponde, o Revisar.
+ */
+export function fastForward(): void {
+  if (wizardAsyncSignal.value !== 'idle') {
+    return;
+  }
+  for (const step of WIZARD_STEPS) {
+    const current = model();
+    if (current.steps.find((candidate) => candidate.id === step)?.status === 'skipped') {
+      continue;
+    }
+    if (step === 'terminal' || step === 'type' || step === 'connector') {
+      const validation = validateStep(currentWizardInput(), step);
+      if (!validation.ok) {
+        goToStep(step);
+        showValidation(validation);
+        return;
+      }
+      continue;
+    }
+    if (step === 'probe' && current.probeValid) {
+      continue;
+    }
+    if (step === 'local-data' && localChoiceConfirmedSignal.value) {
+      continue;
+    }
+    goToStep(step);
+    return;
+  }
+}
+
+function cancelProbe(): void {
+  probeToken += 1;
+  const key = model().connectionKey;
+  probeOutcomeSignal.value = key === undefined ? null : { status: 'cancelled', key };
+  probeProgressSignal.value = null;
+  wizardAsyncSignal.value = 'idle';
+}
+
+async function runProbe(): Promise<void> {
+  const current = model();
+  const candidate = current.candidate;
+  const key = current.connectionKey;
+  if (candidate === undefined || key === undefined) {
+    // No debería pasar (Probar solo es alcanzable con los pasos anteriores completos),
+    // pero si pasa, se vuelve al paso que falta en vez de probar algo a medias.
+    if (current.firstIncomplete !== 'probe') {
+      goToStep(current.firstIncomplete);
+    }
+    return;
+  }
+  probeToken += 1;
+  const token = probeToken;
+  wizardAsyncSignal.value = 'probing';
+  probeOutcomeSignal.value = null;
+  probeProgressSignal.value = { stage: 'pulling', startedAt: Date.now() };
+  const result = await probeConnection(candidate, {
+    onProgress: (stage) => {
+      const progress = probeProgressSignal.value;
+      if (token === probeToken && progress !== null) {
+        probeProgressSignal.value = { ...progress, stage };
+      }
+    },
+  });
+  if (token !== probeToken) {
+    return;
+  }
+  probeProgressSignal.value = null;
+  wizardAsyncSignal.value = 'idle';
+  if (!result.ok) {
+    probeOutcomeSignal.value = { status: 'failed', key, message: describeError(result) };
+    return;
+  }
+  lastSnapshot = { key, snapshot: result.value };
+  probeOutcomeSignal.value = {
+    status: 'ok',
+    key,
+    products: result.value.products.length,
+    customers: result.value.customers.length,
+  };
+  await refreshLocalData();
+}
+
+/** "Reintentar (Enter)" en Probar. */
+export function retryProbe(): void {
+  if (wizardAsyncSignal.value === 'idle') {
+    void runProbe();
+  }
+}
+
+/** Cambia el conector elegido — sin perder lo tipeado en el otro. Invalida la elección de datos locales. */
 export function setConfigType(type: ConnectorType | null): void {
   configTypeSignal.value = type;
-  clearConfigError();
+  localChoiceConfirmedSignal.value = false;
+  clearError();
+}
+
+/** Click o Enter en una opción del paso "Tipo de conexión": elige y avanza. */
+export function chooseConnectorType(type: ConnectorType): void {
+  setConfigType(type);
+  goToStep(nextStep(model(), 'type'));
+}
+
+/**
+ * ↑/↓ en el paso "Tipo de conexión", como en un grupo de radio: se mueve desde
+ * la opción enfocada — la elegida, o la primera si todavía no hay ninguna — y
+ * elige la nueva. Sin elección, ↓ pasa a la segunda (no "elige" la que ya
+ * tenía el foco sin que se note el movimiento).
+ */
+export function moveTypeChoice(direction: 1 | -1): void {
+  const index = CONNECTOR_TYPES.findIndex((info) => info.type === configTypeSignal.value);
+  const from = index === -1 ? 0 : index;
+  const next = Math.min(Math.max(from + direction, 0), CONNECTOR_TYPES.length - 1);
+  const chosen = CONNECTOR_TYPES[next];
+  if (chosen !== undefined) {
+    setConfigType(chosen.type);
+  }
 }
 
 /** Edita un campo del conector activo. */
@@ -107,146 +325,140 @@ export function setConfigField(key: string, value: string): void {
   }
   const all = configFieldValuesSignal.value;
   configFieldValuesSignal.value = { ...all, [type]: { ...all[type], [key]: value } };
-  clearConfigError();
+  localChoiceConfirmedSignal.value = false;
+  clearError();
 }
 
-/** Edita un campo de terminal (locale, sucursal, punto de venta). */
+/** Edita un campo de terminal (sucursal, punto de venta, locale). */
 export function setConfigTerminalField(key: TerminalFieldKey, value: string): void {
   configTerminalSignal.value = { ...configTerminalSignal.value, [key]: value };
-  clearConfigError();
+  clearError();
+}
+
+export function setLocalChoice(choice: LocalChoice): void {
+  localChoiceSignal.value = choice;
+  localChoiceConfirmedSignal.value = false;
+}
+
+/** ↑/↓ en "Datos locales": alterna entre las dos opciones. */
+export function moveLocalChoice(): void {
+  setLocalChoice(localChoiceSignal.value === 'keep' ? 'wipe' : 'keep');
 }
 
 /**
- * Valida el formulario (solo al confirmar, nunca mientras se tipea) y arma la
- * config candidata. Un valor vacío se omite (un opcional en blanco no se
- * guarda). En caso de error deja el mensaje y el campo señalado en los signals.
+ * Borrar elegido: antes de mostrar qué se pierde, un último intento de enviar
+ * lo pendiente a la conexión **actual** — así el conteo de "sin enviar" es el
+ * que de verdad queda.
  */
-function validateForm(): SyncConfig | undefined {
-  const type = configTypeSignal.value;
-  if (type === null) {
-    configErrorSignal.value = 'Elegí un tipo de conexión.';
-    return undefined;
+async function prepareWipe(): Promise<void> {
+  wizardAsyncSignal.value = 'flushing';
+  const current = savedConfigSignal.value;
+  if (current !== undefined && navigator.onLine) {
+    await flushPendingBeforeWipe(current);
   }
-  const fields = connectorFields(type);
-  const raw = configFieldValuesSignal.value[type];
-
-  const candidate: Record<string, string> = { type };
-  for (const field of fields) {
-    const value = (raw[field.key] ?? '').trim();
-    if (value !== '') {
-      candidate[field.key] = value;
-    }
-  }
-  for (const [key, value] of Object.entries(configTerminalSignal.value)) {
-    const trimmed = value.trim();
-    if (trimmed !== '') {
-      candidate[key] = trimmed;
-    }
-  }
-
-  const parsed = syncConfigSchema.safeParse(candidate);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  const offendingKey = parsed.error.issues[0]?.path[0];
-  const field = fields.find((candidateField) => candidateField.key === offendingKey);
-  if (field === undefined) {
-    configErrorSignal.value = 'La configuración no es válida.';
-    return undefined;
-  }
-  const isEmpty = (raw[field.key] ?? '').trim() === '';
-  configErrorFieldSignal.value = field.key;
-  configErrorSignal.value = isEmpty
-    ? `Completá «${field.label}».`
-    : `«${field.label}» no es válido.`;
-  return undefined;
+  wipeSummarySignal.value = await summarizeLocalData();
+  wizardAsyncSignal.value = 'confirming-wipe';
 }
 
-async function applyAndFinish(pending: PendingApply): Promise<void> {
-  configPhaseSignal.value = 'applying';
-  const result = await applyConnection({ ...pending, now: new Date().toISOString() });
+/** Esc o "Volver" en la confirmación de borrado: vuelve a las opciones sin borrar. */
+export function backFromWipeConfirmation(): void {
+  if (wizardAsyncSignal.value !== 'confirming-wipe') {
+    return;
+  }
+  wipeSummarySignal.value = null;
+  wizardAsyncSignal.value = 'idle';
+}
+
+/** Enter en la confirmación de borrado: aplica directo (spec §3, camino 3). */
+export async function confirmWipe(): Promise<void> {
+  if (wizardAsyncSignal.value !== 'confirming-wipe') {
+    return;
+  }
+  localChoiceConfirmedSignal.value = true;
+  wizardAsyncSignal.value = 'idle';
+  await applyWizard();
+}
+
+/** Enter en Revisar / "Aplicar": lo que diga `applyAction` del modelo. */
+export async function applyWizard(): Promise<void> {
+  if (wizardAsyncSignal.value !== 'idle') {
+    return;
+  }
+  const current = model();
+  const action = current.applyAction;
+  if (action === null) {
+    goToStep(current.firstIncomplete);
+    return;
+  }
+  wizardAsyncSignal.value = 'applying';
+  if (action.kind === 'save-terminal') {
+    const result = applyTerminalSettings(configTerminalSignal.value);
+    wizardAsyncSignal.value = 'idle';
+    if (!result.ok) {
+      configErrorSignal.value = describeError(result);
+      return;
+    }
+    finishWizard({ wiped: false });
+    return;
+  }
+  const candidate = current.candidate;
+  if (
+    candidate === undefined ||
+    lastSnapshot === undefined ||
+    lastSnapshot.key !== current.connectionKey
+  ) {
+    wizardAsyncSignal.value = 'idle';
+    goToStep('probe');
+    return;
+  }
+  const result = await applyConnection({
+    candidate,
+    snapshot: lastSnapshot.snapshot,
+    local: action.local,
+    originChanged: action.originChanged,
+    now: new Date().toISOString(),
+  });
+  wizardAsyncSignal.value = 'idle';
   if (!result.ok) {
-    configPhaseSignal.value = 'editing';
+    wizardStepSignal.value = 'review';
     configErrorSignal.value = describeError(result);
     return;
   }
-  if (pending.wipe) {
+  finishWizard({ wiped: action.local === 'wipe' });
+  void runPushThenPull();
+}
+
+function finishWizard(params: { wiped: boolean }): void {
+  if (params.wiped) {
     // La venta en curso ya no existe en la base: se vacía también en memoria.
     cartSignal.value = { lines: [] };
     cartSelectionIndexSignal.value = null;
     resetAttachedCustomer();
   }
-  pendingApply = undefined;
-  resetConfigForm();
-  setSyncPaused(false);
-  activeScreenSignal.value = 'sale';
-  void runPushThenPull();
+  identityResetSignal.value = false;
+  leaveWizard();
 }
 
 /**
- * Ctrl+Enter: valida, **prueba** la conexión (pull completo en memoria,
- * todo o nada), **planea** (¿cambió el origen? ¿se perderían datos del
- * usuario?) y, según eso, aplica directo o pide confirmación. Nada local ni
- * guardado cambia hasta que la prueba salió bien y, si hace falta, el usuario
- * confirmó el borrado.
+ * Esc según el estado: probando → cancela la prueba (queda en Probar);
+ * confirmando el borrado → vuelve a las opciones; enviando o aplicando → se
+ * ignora; resto → sale sin guardar, salvo en modo requerido (conexión todavía
+ * no activa), donde no hay a dónde salir.
  */
-export async function submitConfig(): Promise<void> {
-  if (configPhaseSignal.value !== 'editing') {
-    return;
+export function handleWizardEscape(): void {
+  switch (wizardAsyncSignal.value) {
+    case 'probing':
+      cancelProbe();
+      return;
+    case 'confirming-wipe':
+      backFromWipeConfirmation();
+      return;
+    case 'flushing':
+    case 'applying':
+      return;
+    case 'idle':
+      if (connectionStateSignal.value === 'active') {
+        leaveWizard();
+      }
   }
-  const candidate = validateForm();
-  if (candidate === undefined) {
-    return;
-  }
-
-  clearConfigError();
-  submitToken += 1;
-  const token = submitToken;
-  configPhaseSignal.value = 'probing';
-
-  const probe = await probeConnection(candidate);
-  if (token !== submitToken) {
-    return;
-  }
-  if (!probe.ok) {
-    configPhaseSignal.value = 'editing';
-    configErrorSignal.value = describeError(probe);
-    return;
-  }
-
-  const currentResult = loadSyncConfig();
-  const current = currentResult.ok ? currentResult.value : undefined;
-  const plan = planConnectionChange({
-    current,
-    candidate,
-    localData: await summarizeLocalData(),
-  });
-  const pending: PendingApply = { candidate, snapshot: probe.value, wipe: plan.wipe };
-
-  if (!plan.needsConfirmation) {
-    await applyAndFinish(pending);
-    return;
-  }
-
-  // Antes de advertir qué se pierde: un último intento de enviar lo pendiente
-  // al backend ACTUAL, así el conteo de "sin enviar" es el que de verdad queda.
-  if (current !== undefined && navigator.onLine) {
-    await flushPendingBeforeWipe(current);
-  }
-  const summary = await summarizeLocalData();
-  if (token !== submitToken) {
-    return;
-  }
-  pendingApply = pending;
-  configConfirmationSignal.value = summary;
-  configPhaseSignal.value = 'confirming';
-}
-
-/** Enter en la confirmación: borra lo local y aplica la conexión nueva. */
-export async function confirmConfigChange(): Promise<void> {
-  const pending = pendingApply;
-  if (configPhaseSignal.value !== 'confirming' || pending === undefined) {
-    return;
-  }
-  await applyAndFinish(pending);
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { confirmCheckout, fillPayment, openCashSession } from './helpers.ts';
+import { completeWizardRest, confirmCheckout, fillPayment, openCashSession } from './helpers.ts';
 
 const BACKEND_URL = 'http://localhost:4000';
 
@@ -14,30 +14,24 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await page.request.post('http://localhost:4000/_demo/reset');
 
   await page.goto('/');
-  // Sin config guardada la app abre directo en /CONFIG (modo requerido, Etapa
-  // 2b): configurar y probar la conexión con el minibackend es requisito antes
-  // de poder vender (Fase 7: ya no hay seed local).
+  // Sin config guardada la app abre directo en el wizard de /CONFIG (modo
+  // requerido): configurar y probar la conexión con el minibackend es requisito
+  // antes de poder vender (Fase 7: ya no hay seed local).
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
-
-  // Sin valores por omisión (Etapa 2b): hay que elegir el tipo y tipear la URL.
-  await page.getByLabel('Tipo de conexión').selectOption('rest-demo');
-  await page.getByLabel(/URL del sistema externo/).fill(BACKEND_URL);
 
   // El minibackend de demo implementa el contrato al pie de la letra —
   // `security: bearerAuth` es global en `docs/connector-api.openapi.yaml`,
-  // así que a diferencia de un backend real que decida no exigirlo, acá el
-  // pull de catálogo/clientes devuelve 401 sin un Bearer token (cualquier
-  // valor no vacío alcanza, el minibackend no valida el contenido — ver
-  // `demo-backend/src/router.ts::hasValidBearerToken`). Dejarlo en blanco
-  // (como si de verdad fuera opcional para este backend) hace que la PRUEBA
-  // de conexión falle con "El servidor rechazó las credenciales (401)" — antes
-  // de la Etapa 2b el pull fallaba en silencio y la barra decía "Sincronizado".
-  const apiKeyInput = page.getByLabel(/API key/);
-  await apiKeyInput.fill('demo-api-key');
-
-  // Ctrl+Enter prueba la conexión (pull completo) y, si sale bien, la guarda:
-  // el catálogo llega en este mismo paso, no hace falta un sync aparte.
-  await apiKeyInput.press('Control+Enter');
+  // así que el pull devuelve 401 sin un Bearer token (cualquier valor no vacío
+  // alcanza, ver `demo-backend/src/router.ts::hasValidBearerToken`). Sin API
+  // key, la PRUEBA de conexión falla con "El servidor rechazó las credenciales
+  // (401)". El catálogo llega al aplicar, no hace falta un sync aparte.
+  await completeWizardRest(page, {
+    baseUrl: BACKEND_URL,
+    apiKey: 'demo-api-key',
+    type: 'rest-demo',
+    branch: 'Sucursal e2e',
+    pointOfSale: 'Caja e2e',
+  });
   const commandBar = page.getByLabel('Barra de comandos');
   await expect(commandBar).toBeVisible();
 

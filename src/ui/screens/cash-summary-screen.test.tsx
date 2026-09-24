@@ -259,10 +259,10 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
     expect(cashSummaryTabSignal.value).toBe('products');
   });
 
-  it('"[Esc] Cerrar" es un botón clickeable', () => {
+  it('"Cerrar (Esc)" es un botón clickeable', () => {
     render(<CashSummaryScreen />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Cerrar/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar (Esc)' }));
 
     expect(activeScreenSignal.value).toBe('sale');
   });
@@ -286,6 +286,14 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
     const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del turno'));
 
     expect(notCancelled).toBe(false);
+  });
+
+  it('el botón del medio no se cancela (autoscroll)', () => {
+    render(<CashSummaryScreen />);
+
+    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del turno'), { button: 1 });
+
+    expect(notCancelled).toBe(true);
   });
 
   it('mousedown sobre el propio buscador no se cancela (deja reubicar el cursor)', () => {

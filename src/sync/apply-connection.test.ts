@@ -11,11 +11,16 @@ import {
   connectionStateSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
-import { applyConnection, flushPendingBeforeWipe } from './apply-connection.ts';
+import {
+  applyConnection,
+  applyTerminalSettings,
+  flushPendingBeforeWipe,
+} from './apply-connection.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import type { ProbeSnapshot } from './connection.ts';
 import { getCustomersCursor, getProductsCursor, setProductsCursor } from './cursor.ts';
 import { tryAcquireSyncLock } from './engine.ts';
+import { getCurrentPushLot, setCurrentPushLot } from './push-lot.ts';
 
 const now = '2026-01-01T00:00:00.000Z';
 
@@ -80,7 +85,13 @@ afterEach(async () => {
 
 describe('applyConnection', () => {
   it('sobre una terminal vacía: carga el snapshot, guarda la config con verifiedAt y deja la conexión activa', async () => {
-    const result = await applyConnection({ candidate, snapshot, wipe: true, now });
+    const result = await applyConnection({
+      candidate,
+      snapshot,
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
 
     expect(result).toEqual({ ok: true, value: undefined });
     await expect(db.products.count()).resolves.toBe(1);
@@ -96,7 +107,8 @@ describe('applyConnection', () => {
     await applyConnection({
       candidate: { type: 'rest-demo', baseUrl: 'http://localhost:4000' },
       snapshot,
-      wipe: true,
+      local: 'wipe',
+      originChanged: true,
       now,
     });
 
@@ -106,7 +118,13 @@ describe('applyConnection', () => {
   it('con wipe: borra ventas, outbox, turnos y venta en curso, y deja solo lo del snapshot', async () => {
     await seedOldWorld();
 
-    const result = await applyConnection({ candidate, snapshot, wipe: true, now });
+    const result = await applyConnection({
+      candidate,
+      snapshot,
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
 
     expect(result.ok).toBe(true);
     await expect(db.products.toArray()).resolves.toEqual([product]);
@@ -116,21 +134,10 @@ describe('applyConnection', () => {
     await expect(db.draftCart.count()).resolves.toBe(0);
   });
 
-  it('sin wipe (mismo origen): conserva lo local y suma el snapshot', async () => {
-    await seedOldWorld();
-
-    const result = await applyConnection({ candidate, snapshot, wipe: false, now });
-
-    expect(result.ok).toBe(true);
-    await expect(db.sales.count()).resolves.toBe(1);
-    await expect(db.outbox.count()).resolves.toBe(1);
-    await expect(db.products.count()).resolves.toBe(2);
-  });
-
   it('reinicia los cursores y fija los del snapshot', async () => {
     await seedOldWorld();
 
-    await applyConnection({ candidate, snapshot, wipe: true, now });
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
 
     expect(getProductsCursor()).toBe('cur-p');
     expect(getCustomersCursor()).toBe('cur-c');
@@ -142,7 +149,8 @@ describe('applyConnection', () => {
     await applyConnection({
       candidate,
       snapshot: { ...snapshot, cursors: {} },
-      wipe: true,
+      local: 'wipe',
+      originChanged: true,
       now,
     });
 
@@ -158,7 +166,13 @@ describe('applyConnection', () => {
       products: [{ ...product, id: null as unknown as string }],
     };
 
-    const result = await applyConnection({ candidate, snapshot: broken, wipe: true, now });
+    const result = await applyConnection({
+      candidate,
+      snapshot: broken,
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
 
     expect(result).toMatchObject({ ok: false, error: 'connection/apply-failed' });
     await expect(db.sales.count()).resolves.toBe(1);
@@ -172,7 +186,14 @@ describe('applyConnection', () => {
     await seedOldWorld();
     const release = tryAcquireSyncLock();
 
-    const result = await applyConnection({ candidate, snapshot, wipe: true, now, lockWaitMs: 40 });
+    const result = await applyConnection({
+      candidate,
+      snapshot,
+      local: 'wipe',
+      originChanged: true,
+      now,
+      lockWaitMs: 40,
+    });
 
     expect(result).toMatchObject({ ok: false, error: 'connection/apply-failed' });
     await expect(db.sales.count()).resolves.toBe(1);
@@ -181,11 +202,110 @@ describe('applyConnection', () => {
   });
 
   it('libera el cerrojo al terminar', async () => {
-    await applyConnection({ candidate, snapshot, wipe: true, now });
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
 
     const release = tryAcquireSyncLock();
     expect(release).not.toBeUndefined();
     release?.();
+  });
+});
+
+const emptySnapshot: ProbeSnapshot = { products: [], stock: [], customers: [], cursors: {} };
+const newProduct: Product = { ...product, id: 'nuevo', name: 'Del backend nuevo' };
+const frozenLot = {
+  id: 'L1',
+  eventIds: ['e1'],
+  createdAt: now,
+  retries: 1,
+  nextAttemptAt: now,
+};
+
+describe('applyConnection — keep', () => {
+  it('reconcilia la foto y conserva ventas, turnos, outbox y venta en curso', async () => {
+    await seedOldWorld();
+
+    const result = await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, products: [newProduct] },
+      local: 'keep',
+      originChanged: true,
+      now,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await db.products.toCollection().primaryKeys()).toEqual(['nuevo']);
+    await expect(db.sales.count()).resolves.toBe(1);
+    await expect(db.outbox.count()).resolves.toBe(1);
+    await expect(db.cashSessions.count()).resolves.toBe(1);
+    await expect(db.draftCart.count()).resolves.toBe(1);
+  });
+
+  it('origen cambiado: descarta el estado de lotes y una tabla vacía borra lo local', async () => {
+    await seedOldWorld();
+    setCurrentPushLot(frozenLot);
+
+    await applyConnection({
+      candidate,
+      snapshot: emptySnapshot,
+      local: 'keep',
+      originChanged: true,
+      now,
+    });
+
+    expect(getCurrentPushLot()).toBeUndefined();
+    await expect(db.products.count()).resolves.toBe(0);
+  });
+
+  it('mismo origen: conserva el estado de lotes y la salvaguarda de tabla vacía', async () => {
+    await seedOldWorld();
+    setCurrentPushLot(frozenLot);
+
+    await applyConnection({
+      candidate,
+      snapshot: emptySnapshot,
+      local: 'keep',
+      originChanged: false,
+      now,
+    });
+
+    expect(getCurrentPushLot()?.id).toBe('L1');
+    await expect(db.products.count()).resolves.toBe(1);
+  });
+});
+
+describe('applyConnection — wipe', () => {
+  it('descarta el estado de lotes', async () => {
+    setCurrentPushLot(frozenLot);
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: false, now });
+
+    expect(getCurrentPushLot()).toBeUndefined();
+  });
+});
+
+describe('applyTerminalSettings', () => {
+  it('guarda sucursal y punto de venta conservando verifiedAt y activa la terminal', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://x', verifiedAt: 'v', locale: 'es-AR' });
+    connectionStateSignal.value = 'incomplete';
+
+    const result = applyTerminalSettings({ branch: ' Centro ', pointOfSale: 'Caja 2', locale: '' });
+
+    expect(result.ok).toBe(true);
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value).toEqual({
+      type: 'rest',
+      baseUrl: 'http://x',
+      verifiedAt: 'v',
+      branch: 'Centro',
+      pointOfSale: 'Caja 2',
+    });
+    expect(connectionStateSignal.value).toBe('active');
+    expect(activeConnectorTypeSignal.value).toBe('rest');
+  });
+
+  it('sin config guardada devuelve el error de lectura', () => {
+    const result = applyTerminalSettings({ branch: 'A', pointOfSale: 'B', locale: '' });
+    expect(result.ok).toBe(false);
   });
 });
 

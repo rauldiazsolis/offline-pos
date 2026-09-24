@@ -41,7 +41,7 @@ describe('restConfigFields', () => {
         key: 'baseUrl',
         label: 'URL del sistema externo',
         optional: false,
-        placeholder: 'https://api.miempresa.com',
+        placeholder: 'ej. https://api.miempresa.com',
       },
       {
         key: 'apiKey',

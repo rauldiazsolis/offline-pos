@@ -2,7 +2,11 @@ import { computed, signal } from '@preact/signals';
 import type { CatalogSearchResult } from '../../domain/catalog-search.ts';
 import type { CustomerSearchResult } from '../../domain/customer-search.ts';
 import type { SaleLine } from '../../domain/sale.ts';
-import { availableCommands, type CommandInfo } from '../keyboard/commands.ts';
+import {
+  availableCommands,
+  type CommandAvailability,
+  type CommandInfo,
+} from '../keyboard/commands.ts';
 import { parseCommandBar, type ParsedCommand } from '../keyboard/parse-command-bar.ts';
 import { getCatalogRepository } from './catalog.ts';
 import { cartSignal } from './cart.ts';
@@ -129,13 +133,23 @@ export const customerSelectionIndexSignal = signal<number | null>(null);
  * `parsed.name === ''` (buffer es solo `/`) matchea todo — mismo caso que
  * antes de filtrar.
  */
-export const commandResultsSignal = computed<CommandInfo[]>(() => {
+export const commandResultsSignal = computed<CommandResult[]>(() => {
   const parsed = parsedSignal.value;
   if (parsed.kind !== 'command') {
     return [];
   }
-  return availableCommands().filter((command) => command.name.startsWith(parsed.name));
+  return availableCommands()
+    .filter((command) => command.name.startsWith(parsed.name))
+    .map(({ availability, ...command }) => ({
+      ...command,
+      availability: availability?.() ?? { enabled: true },
+    }));
 });
+
+/** Una fila del menú de "/": el comando con su disponibilidad ya evaluada (Etapa 2 de #94). */
+export type CommandResult = Omit<CommandInfo, 'availability'> & {
+  availability: CommandAvailability;
+};
 
 /**
  * Selección visual (↑/↓) sobre `commandResultsSignal`. Hasta el Ciclo 7 esto
@@ -150,3 +164,17 @@ export const commandResultsSignal = computed<CommandInfo[]>(() => {
  * compraba nada — solo agregaba fricción al camino rápido.
  */
 export const commandSelectionIndexSignal = signal<number | null>(null);
+
+/**
+ * Preselección del menú de "/" (issue #40, refinada en la Etapa 2 de #94): la
+ * fila 0 solo si está habilitada — si no, nada, y Enter no ejecuta nada hasta
+ * que el usuario elija. Así "/" con el carrito vacío no deja /COBRAR a un Enter.
+ */
+export const defaultCommandIndexSignal = computed<number | null>(() =>
+  commandResultsSignal.value[0]?.availability.enabled === true ? 0 : null,
+);
+
+/** La fila que Enter ejecutaría: la elegida con ↑/↓ o click, o la preselección. */
+export const effectiveCommandIndexSignal = computed<number | null>(
+  () => commandSelectionIndexSignal.value ?? defaultCommandIndexSignal.value,
+);

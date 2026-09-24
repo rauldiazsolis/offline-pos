@@ -6,6 +6,7 @@ import { collectDiagnostics } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
 import { formatAwaitingLotStatus, formatLotIssue } from '../format-lot.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import type { SyncLogEntry } from '../state/sync.ts';
 
@@ -60,6 +61,8 @@ export function DiagnosticoScreen() {
       ref={containerRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      // Teclado + mouse (Etapa 2 de #94): ver ui/hooks/use-mouse-keeps-focus.ts.
+      onMouseDown={keepFocusOnMouseDown}
       style={{
         height: 'var(--app-height)',
         overflowY: 'auto',
@@ -76,7 +79,9 @@ export function DiagnosticoScreen() {
         <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
           Diagnóstico de sincronización
         </h1>
-        <span style={{ color: 'var(--color-text-muted)' }}>Esc para volver a la venta</span>
+        <button type="button" class="btn" onClick={exitDiagnosticoScreen}>
+          Cerrar (Esc)
+        </button>
       </div>
 
       <div

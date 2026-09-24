@@ -1,34 +1,42 @@
-import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import type { TargetedKeyboardEvent } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import type { ConfigField } from '../../connectors/config-field.ts';
-import type { LocalDataSummary } from '../../storage/local-data.ts';
-import { CONNECTOR_TYPES, connectorFields } from '../../sync/connector-registry.ts';
 import {
-  backToEditing,
-  cancelConfigScreen,
-  confirmConfigChange,
-  handleConfigEscape,
-  setConfigField,
-  setConfigTerminalField,
-  setConfigType,
-  submitConfig,
+  advance,
+  applyWizard,
+  backFromWipeConfirmation,
+  confirmWipe,
+  fastForward,
+  goBack,
+  handleWizardEscape,
+  jumpToStep,
+  moveLocalChoice,
+  moveTypeChoice,
+  retryProbe,
 } from '../keyboard/config-controller.ts';
 import {
-  configConfirmationSignal,
+  isReachable,
+  WIZARD_STEPS,
+  WIZARD_STEP_TITLES,
+  type WizardModel,
+  type WizardStepId,
+} from '../keyboard/config-wizard-model.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
+import { connectionStateSignal } from '../state/sync.ts';
+import {
   configErrorFieldSignal,
   configErrorSignal,
-  configFieldValuesSignal,
-  configTerminalSignal,
-  configPhaseSignal,
-  configTypeSignal,
-  type ConfigPhase,
-  type TerminalFieldKey,
+  probeOutcomeSignal,
+  wizardAsyncSignal,
+  wizardModelSignal,
+  wizardStepSignal,
+  type WizardAsync,
 } from '../state/sync-config.ts';
-import { connectionStateSignal } from '../state/sync.ts';
+import { StepContent } from './config-wizard/steps.tsx';
+import { stepSummary } from './config-wizard/summary.ts';
 
 const overlayStyle = {
   height: 'var(--app-height)',
-  overflowY: 'auto' as const,
+  overflow: 'hidden',
   display: 'flex',
   flexDirection: 'column' as const,
   alignItems: 'center',
@@ -37,9 +45,13 @@ const overlayStyle = {
   background: 'var(--color-surface)',
 };
 
+// Alto fijo (no el del contenido de cada paso): la columna de pasos y el pie
+// quedan siempre en el mismo lugar; solo el contenido del paso scrollea.
 const dialogStyle = {
   width: '100%',
-  maxWidth: '560px',
+  maxWidth: '860px',
+  height: 'min(640px, 100%)',
+  minHeight: 0,
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
   boxShadow: 'var(--shadow-card)',
@@ -52,141 +64,253 @@ const dialogStyle = {
   outline: 'none',
 };
 
-const fieldStyle = { display: 'flex', flexDirection: 'column' as const, gap: 'var(--space-2)' };
-
-const controlStyle = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: 'var(--font-size-base)',
-  padding: 'var(--space-2)',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-};
-
-const buttonStyle = {
-  padding: 'var(--space-2) var(--space-3)',
-  borderRadius: 'var(--radius-md)',
-  whiteSpace: 'nowrap' as const,
-};
-
-/**
- * Config de terminal, no de un conector: vive aparte y va siempre al final.
- * Sucursal y punto de venta se estampan en cada evento al encolarlo (contrato
- * v3, #96); opcionales hasta la Etapa 2 (#97).
- */
-const TERMINAL_FIELDS: ConfigField[] = [
-  { key: 'branch', label: 'Sucursal', optional: true, placeholder: 'Casa central' },
-  { key: 'pointOfSale', label: 'Punto de venta', optional: true, placeholder: 'Caja 1' },
-  {
-    key: 'locale',
-    label: 'Locale (ej. es-AR — en blanco usa el del navegador)',
-    optional: true,
-    placeholder: 'es-AR',
-  },
-];
-
-const isTerminalField = (key: string): key is TerminalFieldKey =>
-  key === 'locale' || key === 'branch' || key === 'pointOfSale';
-
-function fieldLabel(field: ConfigField): string {
-  return field.optional ? `${field.label} (opcional)` : field.label;
-}
-
-function plural(count: number, singular: string, pluralForm: string): string {
-  return `${String(count)} ${count === 1 ? singular : pluralForm}`;
-}
-
-/** Lo que se perdería, en una línea: solo lo que existe. */
-function describeLocalDataLoss(summary: LocalDataSummary): string {
-  const parts: string[] = [];
-  if (summary.sales > 0) parts.push(plural(summary.sales, 'venta', 'ventas'));
-  if (summary.cashSessions > 0) {
-    parts.push(plural(summary.cashSessions, 'turno de caja', 'turnos de caja'));
+function statusMark(status: WizardModel['steps'][number]['status']): string {
+  switch (status) {
+    case 'complete':
+      return '✓';
+    case 'error':
+      return '!';
+    case 'skipped':
+      return '—';
+    case 'pending':
+      return '';
   }
-  if (summary.draftCartLines > 0) parts.push('la venta en curso');
-  if (summary.products > 0) parts.push(plural(summary.products, 'producto', 'productos'));
-  if (summary.customers > 0) parts.push(plural(summary.customers, 'cliente', 'clientes'));
-  return parts.join(' · ');
 }
 
-function ConfirmationCard({ summary }: { summary: LocalDataSummary }) {
+/** Columna izquierda: todos los pasos con su estado y lo cargado — nada queda oculto. */
+function StepList({ model, current }: { model: WizardModel; current: WizardStepId }) {
+  return (
+    <nav aria-label="Pasos" style={{ overflowY: 'auto', minHeight: 0 }}>
+      <ol
+        style={{
+          listStyle: 'none',
+          margin: 0,
+          padding: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-1)',
+        }}
+      >
+        {model.steps.map((step) => {
+          const isCurrent = step.id === current;
+          const reachable = isReachable(model, step.id);
+          const summary = stepSummary(step.id, model);
+          const mark = statusMark(step.status);
+          return (
+            <li key={step.id}>
+              <button
+                type="button"
+                class="wizard-step-button"
+                aria-label={`Paso ${String(step.number)}: ${WIZARD_STEP_TITLES[step.id]}`}
+                aria-current={isCurrent ? 'step' : undefined}
+                disabled={!reachable && !isCurrent}
+                onClick={() => {
+                  jumpToStep(step.id);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: '1.75em 1fr auto',
+                  columnGap: 'var(--space-2)',
+                  alignItems: 'baseline',
+                  textAlign: 'left',
+                  padding: 'var(--space-2)',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  borderLeft: `3px solid ${isCurrent ? 'var(--color-accent)' : 'transparent'}`,
+                  background: isCurrent ? 'var(--color-surface)' : 'transparent',
+                  color:
+                    step.status === 'skipped' || (!reachable && !isCurrent)
+                      ? 'var(--color-text-muted)'
+                      : 'var(--color-text)',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 'var(--font-size-base)',
+                  cursor: reachable ? 'pointer' : 'default',
+                }}
+              >
+                <span style={{ fontWeight: 'bold' }}>{String(step.number)}.</span>
+                <span style={{ fontWeight: isCurrent ? 'bold' : 'normal' }}>
+                  {WIZARD_STEP_TITLES[step.id]}
+                </span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    color:
+                      step.status === 'error'
+                        ? 'var(--color-danger)'
+                        : step.status === 'skipped'
+                          ? 'var(--color-text-muted)'
+                          : 'var(--color-success)',
+                    fontWeight: 'bold',
+                  }}
+                >
+                  {mark}
+                </span>
+                {/* Siempre presente y de alto fijo (dos renglones): completar un paso no
+                    agranda su ítem ni corre la lista. El texto completo, en el title. */}
+                <span class="wizard-step-summary" title={summary === '' ? undefined : summary}>
+                  {summary}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function footerHint(async: WizardAsync, required: boolean): string {
+  switch (async) {
+    case 'probing':
+      return 'Esc cancela la prueba.';
+    case 'confirming-wipe':
+      return 'Enter borra y cambia · Esc vuelve a las opciones.';
+    case 'flushing':
+    case 'applying':
+      return '';
+    case 'idle':
+      return (
+        'Enter siguiente · Alt+1…6 ir a un paso · Alt+← atrás · Ctrl+Enter avanzar hasta donde falte' +
+        (required ? '' : ' · Esc cancelar')
+      );
+  }
+}
+
+function Footer(props: {
+  step: WizardStepId;
+  async: WizardAsync;
+  required: boolean;
+  model: WizardModel;
+}) {
+  const { step, async, required, model } = props;
+  const busy = async === 'flushing' || async === 'applying';
+  const outcome = probeOutcomeSignal.value;
+  const probeFailed =
+    step === 'probe' &&
+    async === 'idle' &&
+    outcome !== null &&
+    outcome.key === model.connectionKey &&
+    outcome.status !== 'ok';
+
+  let buttons;
+  if (async === 'confirming-wipe') {
+    buttons = (
+      <>
+        <button type="button" onClick={backFromWipeConfirmation} class="btn">
+          Volver (Esc)
+        </button>
+        <button type="button" class="btn btn-danger" onClick={() => void confirmWipe()}>
+          Borrar y cambiar (Enter)
+        </button>
+      </>
+    );
+  } else if (async === 'probing') {
+    buttons = (
+      <button type="button" onClick={handleWizardEscape} class="btn">
+        Cancelar prueba (Esc)
+      </button>
+    );
+  } else if (probeFailed) {
+    buttons = (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            jumpToStep('connector');
+          }}
+          class="btn"
+        >
+          Corregir datos (Alt+3)
+        </button>
+        <button type="button" class="btn btn-primary" onClick={retryProbe}>
+          Reintentar (Enter)
+        </button>
+      </>
+    );
+  } else {
+    buttons = (
+      <>
+        {!required && (
+          <button type="button" onClick={handleWizardEscape} disabled={busy} class="btn">
+            Cancelar (Esc)
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={busy || step === WIZARD_STEPS[0]}
+          class="btn"
+        >
+          Atrás (Alt+←)
+        </button>
+        {step === 'review' ? (
+          <button
+            type="button"
+            onClick={() => void applyWizard()}
+            disabled={busy}
+            class="btn btn-primary"
+          >
+            Aplicar (Enter)
+          </button>
+        ) : (
+          <button type="button" class="btn btn-primary" onClick={advance} disabled={busy}>
+            Siguiente (Enter)
+          </button>
+        )}
+      </>
+    );
+  }
+
   return (
     <div
       style={{
-        border: '1px solid var(--color-danger)',
-        borderRadius: 'var(--radius-md)',
-        padding: 'var(--space-3)',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-2)',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        borderTop: '1px solid var(--color-border)',
+        paddingTop: 'var(--space-3)',
       }}
     >
-      <p style={{ margin: 0, fontWeight: 'bold' }}>
-        Cambiar de conexión borra los datos de esta terminal
+      <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+        {footerHint(async, required)}
       </p>
-      <p style={{ margin: 0 }}>Se van a borrar: {describeLocalDataLoss(summary)}.</p>
-      {summary.pendingOutbox > 0 && (
-        <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>
-          {plural(summary.pendingOutbox, 'evento sin enviar', 'eventos sin enviar')} al backend
-          actual ({plural(summary.pendingSales, 'venta', 'ventas')}) se perderán.
-        </p>
-      )}
-      <p style={{ margin: 0 }}>La caja empieza limpia con la conexión nueva.</p>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>{buttons}</div>
     </div>
   );
 }
 
-function footerHint(phase: ConfigPhase, required: boolean): string {
-  switch (phase) {
-    case 'confirming':
-      return 'Enter borra y cambia de conexión · Esc vuelve a editar.';
-    case 'probing':
-      return 'Esc cancela la prueba.';
-    case 'applying':
-      return '';
-    default:
-      return required
-        ? 'Tab para moverte entre campos, Ctrl+Enter para probar y guardar.'
-        : 'Tab para moverte entre campos, Ctrl+Enter para probar y guardar, Esc para cancelar.';
-  }
-}
-
 /**
- * `/CONFIG` como diálogo modal con fases (Etapa 2b, #76): editar → probar la
- * conexión → (confirmar el borrado de lo local, si cambia el origen y hay
- * datos del usuario) → aplicar. Tab/Shift+Tab (nativo) navega, Ctrl+Enter
- * prueba y guarda todo junto, Esc según la fase (ver `handleConfigEscape`);
- * Enter solo confirma el borrado en la fase de confirmación. Los atajos se
- * atienden en el contenedor (los eventos suben desde los campos), así siguen
- * llegando aunque el foco pase al contenedor en las fases sin campos
- * editables. Con la conexión todavía no activa es el **modo requerido**: no
- * hay "Cancelar" ni salida hasta tener una conexión probada.
+ * `/CONFIG` como wizard de instalación (Etapa 2 de #94, #97): columna de pasos
+ * a la izquierda (resumen visible de todo lo cargado, click o Alt+N para
+ * volver), el paso actual a la derecha, pie con atajos y botones. Las reglas
+ * viven en `config-wizard-model.ts`; la orquestación en `config-controller.ts`.
+ * Reemplaza para esta pantalla el criterio de #49 ("no un wizard secuencial
+ * que oculta lo ya cargado"): lo cargado nunca se oculta, queda en la columna.
+ * Teclado y mouse equivalentes (`keepFocusOnMouseDown`): cada botón llama a la
+ * misma función que su atajo. Con la conexión todavía no activa es el **modo
+ * requerido**: no hay "Cancelar" ni salida.
  */
 export function ConfigScreen() {
-  const typeRef = useRef<HTMLSelectElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const phase = configPhaseSignal.value;
+  const step = wizardStepSignal.value;
+  const async = wizardAsyncSignal.value;
+  const model = wizardModelSignal.value;
   const required = connectionStateSignal.value !== 'active';
   const errorField = configErrorFieldSignal.value;
   const error = configErrorSignal.value;
-  const type = configTypeSignal.value;
-  const editing = phase === 'editing';
 
-  // Foco: editando va al selector; en las demás fases al contenedor, para que
-  // Esc/Enter sigan llegando aunque los campos queden de solo lectura.
-  // `useLayoutEffect` (no `useSignalEffect`, que corre diferido y dejó una
-  // ventana de carrera en la Etapa 2).
+  // Foco al cambiar de paso o de estado: el primer control del paso, o el
+  // diálogo si no tiene (así Enter/Esc siguen llegando). `useLayoutEffect`,
+  // nunca `autoFocus` (ver `ui/hooks/`).
   useLayoutEffect(() => {
-    if (phase === 'editing') {
-      typeRef.current?.focus();
-    } else {
-      dialogRef.current?.focus();
-    }
-  }, [phase]);
+    const first = dialogRef.current?.querySelector<HTMLElement>('[data-step-autofocus]');
+    (first ?? dialogRef.current)?.focus();
+  }, [step, async]);
 
   // Un error apunta a un campo concreto: enfocarlo y seleccionarlo permite
-  // retipear de una. Declarado después del efecto de fase: si cambian juntos, gana este.
+  // retipear de una. Declarado después del efecto de paso: si cambian juntos, gana este.
   useLayoutEffect(() => {
     if (errorField === null || error === null) {
       return;
@@ -201,164 +325,103 @@ export function ConfigScreen() {
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
-      handleConfigEscape();
+      handleWizardEscape();
       return;
     }
-    if (event.key === 'Enter' && event.ctrlKey && phase === 'editing') {
+    if (event.altKey && /^[1-6]$/.test(event.key)) {
       event.preventDefault();
-      void submitConfig();
+      const target = WIZARD_STEPS[Number(event.key) - 1];
+      if (target !== undefined) {
+        jumpToStep(target);
+      }
       return;
     }
-    if (event.key === 'Enter' && phase === 'confirming') {
+    if (event.altKey && event.key === 'ArrowLeft') {
       event.preventDefault();
-      void confirmConfigChange();
+      goBack();
+      return;
+    }
+    if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && async === 'idle') {
+      if (step === 'type') {
+        event.preventDefault();
+        moveTypeChoice(event.key === 'ArrowUp' ? -1 : 1);
+        return;
+      }
+      if (step === 'local-data') {
+        event.preventDefault();
+        moveLocalChoice();
+        return;
+      }
+    }
+    if (event.key === 'Enter' && event.ctrlKey) {
+      // Ctrl+Enter avanza desde cualquier lado, también con el foco en un botón.
+      event.preventDefault();
+      fastForward();
+      return;
+    }
+    if (event.key === 'Enter') {
+      // Un botón enfocado se activa solo con Enter (nativo): no duplicar. La
+      // excepción son las opciones de "Datos locales": ahí Enter confirma la
+      // opción enfocada y avanza, igual que con el foco en el diálogo.
+      if (
+        event.target instanceof HTMLButtonElement &&
+        !event.target.hasAttribute('data-enter-advances')
+      ) {
+        return;
+      }
+      event.preventDefault();
+      advance();
     }
   };
-
-  const handleTypeChange = (event: TargetedEvent<HTMLSelectElement>) => {
-    const chosen = CONNECTOR_TYPES.find((info) => info.type === event.currentTarget.value);
-    setConfigType(chosen?.type ?? null);
-  };
-
-  const values = type === null ? undefined : configFieldValuesSignal.value[type];
-  const visibleFields = type === null ? [] : [...connectorFields(type), ...TERMINAL_FIELDS];
-  const confirmation = configConfirmationSignal.value;
 
   return (
-    <div style={overlayStyle}>
-      <div ref={dialogRef} tabIndex={-1} onKeyDown={handleKeyDown} style={dialogStyle}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Configurar conexión</h1>
-        {required && (
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            Configurá y probá la conexión para empezar.
-          </p>
-        )}
-
-        {phase === 'confirming' && confirmation !== null ? (
-          <ConfirmationCard summary={confirmation} />
-        ) : (
-          <>
-            <label style={fieldStyle}>
-              <span>Tipo de conexión</span>
-              <select
-                ref={typeRef}
-                value={type ?? ''}
-                onChange={handleTypeChange}
-                disabled={!editing}
-                aria-label="Tipo de conexión"
-                style={controlStyle}
-              >
-                <option value="">Elegí un tipo de conexión…</option>
-                {CONNECTOR_TYPES.map((info) => (
-                  <option key={info.type} value={info.type}>
-                    {info.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {visibleFields.map((field) => {
-              const terminalKey = isTerminalField(field.key) ? field.key : undefined;
-              const value =
-                terminalKey !== undefined
-                  ? configTerminalSignal.value[terminalKey]
-                  : (values?.[field.key] ?? '');
-              return (
-                <label key={`${type ?? ''}:${field.key}`} style={fieldStyle}>
-                  <span>{fieldLabel(field)}</span>
-                  <input
-                    type="text"
-                    value={value}
-                    readOnly={!editing}
-                    placeholder={field.placeholder}
-                    onInput={(event) => {
-                      if (terminalKey !== undefined) {
-                        setConfigTerminalField(terminalKey, event.currentTarget.value);
-                      } else {
-                        setConfigField(field.key, event.currentTarget.value);
-                      }
-                    }}
-                    data-config-field={field.key}
-                    aria-label={fieldLabel(field)}
-                    style={{
-                      ...controlStyle,
-                      borderColor:
-                        errorField === field.key ? 'var(--color-danger)' : 'var(--color-border)',
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </>
-        )}
-
-        <div style={{ minHeight: 'var(--space-8)' }}>
-          {phase === 'probing' && (
-            <p role="status" style={{ margin: 0 }}>
-              Probando conexión…
-            </p>
-          )}
-          {phase === 'applying' && (
-            <p role="status" style={{ margin: 0 }}>
-              Aplicando conexión…
-            </p>
-          )}
-          {editing && error !== null && (
-            <p role="alert" style={{ margin: 0, color: 'var(--color-danger)' }}>
-              {error}
+    <div style={overlayStyle} onMouseDown={keepFocusOnMouseDown}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-label="Configurar conexión"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        style={dialogStyle}
+      >
+        <div>
+          <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Configurar conexión</h1>
+          {required && (
+            <p style={{ margin: 'var(--space-1) 0 0', color: 'var(--color-text-muted)' }}>
+              Configurá y probá la conexión para empezar.
             </p>
           )}
         </div>
-
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 'var(--space-3)',
+            display: 'grid',
+            gridTemplateColumns: '240px 1fr',
+            gap: 'var(--space-4)',
+            minHeight: 0,
+            flex: 1,
           }}
         >
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            {footerHint(phase, required)}
-          </p>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
-            {phase === 'confirming' ? (
-              <>
-                <button type="button" onClick={backToEditing} style={buttonStyle}>
-                  Volver
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void confirmConfigChange()}
-                  style={buttonStyle}
-                >
-                  Borrar y cambiar
-                </button>
-              </>
-            ) : (
-              <>
-                {!required && (
-                  <button
-                    type="button"
-                    onClick={cancelConfigScreen}
-                    disabled={!editing}
-                    style={buttonStyle}
-                  >
-                    Cancelar
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void submitConfig()}
-                  disabled={!editing}
-                  style={buttonStyle}
-                >
-                  Probar y guardar
-                </button>
-              </>
-            )}
-          </div>
+          <StepList model={model} current={step} />
+          <section
+            aria-label={WIZARD_STEP_TITLES[step]}
+            style={{
+              overflowY: 'auto',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-3)',
+              // Margen para el anillo de foco: un contenedor con scroll recorta lo
+              // que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
+              padding: 'var(--space-1) var(--space-2) var(--space-1) var(--space-1)',
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>
+              {WIZARD_STEP_TITLES[step]}
+            </h2>
+            <StepContent step={step} model={model} />
+          </section>
         </div>
+        <Footer step={step} async={async} required={required} model={model} />
       </div>
     </div>
   );

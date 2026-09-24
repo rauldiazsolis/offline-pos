@@ -4,6 +4,7 @@ import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
 import { clearAllTables, countLocalCatalog } from '../storage/local-data.ts';
+import { applySnapshotReconciled } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
@@ -15,7 +16,8 @@ import {
   setSyncConfigured,
   setSyncStatus,
 } from '../ui/state/sync.ts';
-import { saveSyncConfig, type SyncConfig } from './config.ts';
+import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
+import { connectionState } from './connection-state.ts';
 import { withTimeout, type ProbeSnapshot } from './connection.ts';
 import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
@@ -60,7 +62,10 @@ export async function flushPendingBeforeWipe(
 export type ApplyConnectionParams = {
   candidate: SyncConfig;
   snapshot: ProbeSnapshot;
-  wipe: boolean;
+  /** Etapa 2 (#97): el usuario elige; nunca se borra solo por cambiar de origen. */
+  local: 'keep' | 'wipe';
+  /** El endpoint cambió: los lotes del backend viejo no le sirven al nuevo. */
+  originChanged: boolean;
   now: string;
   lockWaitMs?: number;
 };
@@ -68,8 +73,10 @@ export type ApplyConnectionParams = {
 /**
  * Aplica una conexión ya probada (Etapa 2b, #76):
  * 1. toma el cerrojo de sync (ningún ciclo se intercala);
- * 2. **una sola transacción Dexie** sobre todas las tablas: limpia si `wipe`
- *    y carga el snapshot — si algo falla acá, no cambió nada;
+ * 2. **una sola transacción Dexie** sobre todas las tablas — si algo falla
+ *    acá, no cambió nada. Con `wipe` limpia todo y carga el snapshot; con
+ *    `keep` (Etapa 2 de #94) lo reconcilia como una foto completa y deja
+ *    intactos ventas, turnos, movimientos, outbox y venta en curso;
  * 3. reinicia los cursores, fija los del snapshot y reconstruye los
  *    repositorios en memoria;
  * 4. **al final** guarda la config con `verifiedAt`, así nunca queda una
@@ -87,19 +94,26 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
   }
 
   try {
-    const { customers, accounts } = splitConnectorCustomers(params.snapshot.customers, {
-      now: params.now,
-    });
-
     try {
       await db.transaction('rw', db.tables, async () => {
-        if (params.wipe) {
+        if (params.local === 'wipe') {
+          const { customers, accounts } = splitConnectorCustomers(params.snapshot.customers, {
+            now: params.now,
+          });
           await clearAllTables();
+          await db.products.bulkPut(params.snapshot.products);
+          await db.stock.bulkPut(params.snapshot.stock);
+          await db.customers.bulkPut(customers);
+          await db.customerAccounts.bulkPut(accounts);
+          return;
         }
-        await db.products.bulkPut(params.snapshot.products);
-        await db.stock.bulkPut(params.snapshot.stock);
-        await db.customers.bulkPut(customers);
-        await db.customerAccounts.bulkPut(accounts);
+        // Mantener: la foto es la fuente de verdad del catálogo y los clientes
+        // (desaparece lo del backend anterior); lo demás queda intacto. Con
+        // otro origen, un backend nuevo vacío es legítimo y sí vacía la tabla.
+        await applySnapshotReconciled(params.snapshot, {
+          now: params.now,
+          allowEmptyTables: params.originChanged,
+        });
       });
     } catch (error) {
       return err('connection/apply-failed', {
@@ -108,7 +122,12 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     }
 
     clearSyncCursors();
-    clearPushLotState();
+    // Mismo origen: un lote congelado cuyo ack se perdió tiene que reenviarse con SU
+    // idempotency_id, o el backend lo recibiría duplicado. Otro origen: el backend nuevo no
+    // conoce esos lotes y los pendientes salen en uno nuevo.
+    if (params.local === 'wipe' || params.originChanged) {
+      clearPushLotState();
+    }
     if (params.snapshot.cursors.products !== undefined) {
       setProductsCursor(params.snapshot.cursors.products);
     }
@@ -134,4 +153,41 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
   } finally {
     release();
   }
+}
+
+/**
+ * Camino "solo terminal" del wizard (Etapa 2, #97): la conexión no cambió, así
+ * que no hay prueba ni cerrojo ni IndexedDB — solo se guarda sucursal, punto de
+ * venta y locale sobre la config actual, conservando `verifiedAt`. Los eventos
+ * ya encolados conservan su `origin`.
+ */
+export function applyTerminalSettings(terminal: {
+  branch: string;
+  pointOfSale: string;
+  locale: string;
+}): Result<void> {
+  const current = loadSyncConfig();
+  if (!current.ok) {
+    return current;
+  }
+  const next: SyncConfig = {
+    ...current.value,
+    branch: terminal.branch.trim(),
+    pointOfSale: terminal.pointOfSale.trim(),
+  };
+  const locale = terminal.locale.trim();
+  if (locale !== '') {
+    next.locale = locale;
+  } else {
+    delete next.locale;
+  }
+  const saved = saveSyncConfig(next);
+  if (!saved.ok) {
+    return saved;
+  }
+  const state = connectionState(ok(next));
+  setConnectionState(state);
+  // De `incomplete` a `active`: ahora sí hay comandos del conector (ver `bootstrap`).
+  setActiveConnectorType(state === 'active' ? next.type : null);
+  return ok(undefined);
 }

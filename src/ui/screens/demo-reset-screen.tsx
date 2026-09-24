@@ -1,5 +1,6 @@
 import type { TargetedKeyboardEvent } from 'preact';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { confirmDemoReset, exitDemoResetScreen } from '../keyboard/demo-reset-controller.ts';
 import { demoResetErrorSignal, demoResetInProgressSignal } from '../state/demo-reset.ts';
 
@@ -7,12 +8,19 @@ import { demoResetErrorSignal, demoResetInProgressSignal } from '../state/demo-r
  * `/DEMO_RESET` (Ciclo 8, retoma el issue #36): pantalla de confirmación
  * dedicada, mismo patrón que `/ANULAR` — a diferencia de esa, es un solo
  * paso: no hay nada que elegir (o se reinicia todo, o no se hace nada), así
- * que no hace falta la lista previa.
+ * que no hace falta la lista previa. Teclado + mouse (Etapa 2 de #94): cada
+ * atajo tiene su botón.
  */
 export function DemoResetScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
+  const inProgress = demoResetInProgressSignal.value;
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    // Un botón enfocado con Tab se activa solo con Enter (nativo): no duplicar
+    // la acción con el atajo del contenedor.
+    if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) {
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       if (!demoResetInProgressSignal.value) {
@@ -31,6 +39,7 @@ export function DemoResetScreen() {
       ref={containerRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      onMouseDown={keepFocusOnMouseDown}
       style={{
         height: 'var(--app-height)',
         overflowY: 'auto',
@@ -71,7 +80,19 @@ export function DemoResetScreen() {
           </p>
         )}
       </div>
-      <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Esc para volver a la venta.</p>
+      <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+        <button type="button" class="btn" onClick={exitDemoResetScreen} disabled={inProgress}>
+          Cancelar (Esc)
+        </button>
+        <button
+          type="button"
+          class="btn btn-danger"
+          onClick={() => void confirmDemoReset()}
+          disabled={inProgress}
+        >
+          Reiniciar demo (Enter)
+        </button>
+      </div>
     </div>
   );
 }

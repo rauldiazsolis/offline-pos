@@ -134,11 +134,18 @@ ya está cerrada y operativa localmente sin importar el resultado del sync.
 que los repositorios de `storage/` leen junto al `now`) y lo guarda en el `OutboxEvent`: al armar un
 lote nunca se relee la config, así que cambiar la sucursal con eventos pendientes no reescribe los ya
 encolados (auditoría). `sync/engine.ts::toBatchItem` arma el sobre de red (`id`, `createdAt`,
-`origin` — vacío para un evento encolado antes de v3). El id de dispositivo
-(`sync/terminal-identity.ts::getDeviceId`, UUID en `localStorage` bajo `offline-pos:device-id`,
-generado la primera vez) viaja **una vez por request**, en push y en pull, no por evento. Sucursal,
-punto de venta y `deviceId` son obligatorios en el contrato pero tolerados ausentes hasta la Etapa 2
-de #94 (#97, que además implementa el ciclo de vida del id). Un evento `cash-session` que haya
+`origin` — vacío para un evento encolado antes de v3). El id de dispositivo (UUID en `localStorage`
+bajo `offline-pos:device-id`) viaja **una vez por request**, en push y en pull, no por evento.
+**Ciclo de vida del id (Etapa 2 de #94, #97)**: `sync/terminal-identity.ts::resolveDeviceIdentity`
+corre una sola vez, al principio de `bootstrap()`. Con id guardado lo cachea; **sin id**, la terminal
+perdió su identidad: borra todas las tablas (`clearAllTables`), los cursores y el estado de lotes,
+conserva la config de `/CONFIG` como precarga pero **sin `verifiedAt`** (obliga a volver a probar sin
+retipear), genera un id nuevo y, si borró algo, prende `identityResetSignal` para que el wizard lo
+avise. Riesgo aceptado: lo pendiente sin enviar se pierde. `getDeviceId()` devuelve el id cacheado y
+**nunca crea uno** (llamarlo antes de resolver es un bug): borrar la clave a mitad de sesión no cambia
+nada hasta recargar, así nunca se pushean datos viejos con un id nuevo. Sucursal y punto de venta son
+**obligatorios** desde #97 (estado `incomplete`, ver "Ciclo de vida de la conexión"): el POS los manda
+siempre; un evento encolado antes puede llegar sin ellos. Un evento `cash-session` que haya
 quedado pendiente en una terminal (tipo que v3 eliminó) nunca viaja:
 `storage/local-data.ts::listPendingOutbox` lo excluye y lo marca como enviado
 (`domain/outbox.ts::isLegacyOutboxType`).
@@ -183,8 +190,8 @@ descarte por lote en curso (comportamiento esperado de la regla de arriba, no un
 `ui/screens/diagnostico-screen.tsx`) muestra ese log completo más la conexión actual, el cerrojo del
 motor (`sync/engine.ts::isSyncLockHeld`), el id de dispositivo y los lotes en espera con su último
 estado — de solo lectura, mismo patrón de
-teclado que `/RESUMEN`; la barra de estado sigue sin ser interactiva (decisión que se mantiene, ver
-"Barra de estado" más abajo).
+teclado que `/RESUMEN`. Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
+(ver "Barra de estado" más abajo).
 
 **Cadencias independientes (#87)**: push cada `PUSH_INTERVAL_MS` (10-15 min) + al arrancar + por
 cada evento nuevo del outbox (debounced 2 s) + al vencer el backoff del lote fallido; pull cada
@@ -308,47 +315,82 @@ maneja ventas y pagos) — un conector nuevo es un PR al repo. Todo `POST` de ev
 idempotente vía `Idempotency-Key`. La conexión se configura por terminal vía `/CONFIG` (runtime,
 `localStorage` — `sync/config.ts`), desacoplada del contrato: lo guardado es `{ type, …campos del
 conector, locale?, branch?, pointOfSale? }` (los tres últimos son config de terminal, fuera de la
-unión por `type`; sucursal y punto de venta se estampan en cada evento, opcionales hasta la Etapa 2
-de #94, que los vuelve obligatorios), y una config guardada sin `type` (anterior al registro) se lee como
+unión por `type`; sucursal y punto de venta se estampan en cada evento — el schema los tolera
+ausentes al leer, para precargar una config de la Etapa 1, pero sin ellos la terminal queda
+`incomplete`), y una config guardada sin `type` (anterior al registro) se lee como
 `type: 'rest'` (`z.preprocess` en `syncConfigSchema`), así ninguna terminal ya configurada pierde su
 conexión al actualizar. Un integrador nuevo implementa el contrato — un backend que ya habla el
 contrato REST no requiere tocar código del POS (RNF-06); un backend con otro formato (como la planilla
 de Sheets) entra como un conector nuevo del registro.
 
-## Ciclo de vida de la conexión (Etapa 2b, #76)
+## Ciclo de vida de la conexión (Etapa 2b, #76; wizard desde la Etapa 2 de #94, #97)
 
 Una conexión (conector + config) solo se activa después de **probarla**. `SyncConfig` guarda
 `verifiedAt` (fecha de la última prueba exitosa); `sync/connection-state.ts::connectionState` deriva
 `unconfigured` (sin config), `unverified` (config sin `verifiedAt`, incluidas las guardadas antes de
-2b) o `active`. Si no es `active`, `ui/app.tsx` muestra **solo** `/CONFIG` en **modo requerido** — ni
-venta ni barra de comandos, sin "Cancelar", Esc no sale — y ningún ciclo de sync corre. El bloqueo
-depende únicamente de lo guardado, nunca de la conectividad: una terminal `active` abre y opera
-offline como siempre; solo el primer arranque y el cambio de conector necesitan red, porque probar es
-hacer un pull. Las terminales configuradas antes de 2b pasan **una vez** por `/CONFIG` (precargada,
-sin perder datos: el origen no cambia). No hay valores por omisión: los campos arrancan vacíos y los
-ejemplos son `placeholder`s (`ConfigField.placeholder`); el selector de tipo arranca sin elegir.
+2b), `incomplete` (probada pero sin sucursal o punto de venta — una config de la Etapa 1 de #94 cae
+acá; `hasTerminalIdentity`) o `active`. Si no es `active`, `ui/app.tsx` muestra **solo** `/CONFIG` en
+**modo requerido** — ni venta ni barra de comandos, sin "Cancelar", Esc no sale — y ningún ciclo de
+sync corre (el wizard pausa el sync). El bloqueo depende únicamente de lo guardado, nunca de la
+conectividad: una terminal `active` abre y opera offline como siempre; solo el primer arranque y el
+cambio de conexión necesitan red, porque probar es hacer un pull. No hay valores por omisión: los
+campos arrancan vacíos y los ejemplos son `placeholder`s (`ConfigField.placeholder`) con el formato
+"ej. …" y en gris claro (`--color-placeholder`), para que nunca pasen por un dato cargado.
 
-Ctrl+Enter en `/CONFIG` recorre cuatro fases (`configPhaseSignal`):
-1. **Probar** (`sync/connection.ts::probeConnection`): pull completo de productos, stock y clientes
-   **en memoria**, todo o nada, con tiempo máximo (`withTimeout`, sin cambiar el puerto `Connector`).
-   No toca IndexedDB, ni los cursores, ni la config guardada. Si falla, el modal queda abierto con lo
-   tipeado y un mensaje legible; Esc cancela la prueba en vuelo (un token descarta su resultado).
-2. **Planear** (`planConnectionChange`, pura): el *origen* es el endpoint normalizado (`baseUrl` o
-   `webAppUrl`) — el `type` no cuenta; cambiar solo la API key, el secreto o el locale es el mismo
-   origen. `wipe` si cambió el origen (o no hay config actual: origen desconocido, se trata como
-   ajeno); `needsConfirmation` si además hay **datos del usuario** (ventas, turnos, pendientes del
-   outbox o venta en curso — `storage/local-data.ts::hasUserData`). Un catálogo o clientes solos se
-   reemplazan sin preguntar; nunca se descartan ventas locales en silencio.
-3. **Confirmar**, solo si hace falta: antes, un último intento de enviar el outbox al conector
-   **actual** (`flushPendingBeforeWipe`: ignora el backoff, toma el cerrojo, con tope de tiempo); la
-   pantalla muestra los conteos con lo no enviado destacado. Enter borra y cambia, Esc vuelve a editar.
-4. **Aplicar** (`sync/apply-connection.ts::applyConnection`): toma el cerrojo de `sync/engine.ts`
-   (`tryAcquireSyncLock`/`acquireSyncLockWaiting`, ningún ciclo se intercala), una sola transacción
-   Dexie sobre `db.tables` (limpia si `wipe` con `clearAllTables`, carga el snapshot), reinicia los
-   cursores y **al final** guarda la config con `verifiedAt`. Riesgo residual aceptado: el guardado
-   vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después del
-   commit (un `setItem` de un string chico), el próximo arranque encontraría la config anterior con
-   datos nuevos.
+**`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
+wizard secuencial que oculta lo ya cargado"): lo cargado nunca se oculta, queda resumido en una
+columna lateral con los 6 pasos (credenciales como `•••`), y se vuelve a cualquier paso ya alcanzado.
+1. **Terminal**: Sucursal y Punto de venta (obligatorios) y Locale (opcional); muestra el aviso de
+   identidad perdida (`identityResetSignal`).
+2. **Tipo de conexión**: las opciones de `CONNECTOR_TYPES` con su `description`; ↑/↓ + Enter o click.
+3. **Datos del conector**: los `configFields` del tipo más sus instrucciones (`setupHelp`).
+4. **Probar** (`sync/connection.ts::probeConnection`): arranca solo al entrar; pull completo **en
+   memoria**, todo o nada, con tope de tiempo — no toca IndexedDB, cursores ni config. Mientras
+   espera: spinner (quieto con `prefers-reduced-motion`), qué espera (`onProgress`: `waiting-lock` o
+   `pulling` a `<host>`), segundos y el tope, y con Google Sheets un aviso de que suele tardar. Esc la
+   cancela (un token descarta el resultado); una falla ofrece "Reintentar" y "Corregir datos".
+5. **Datos locales**: **Mantener** (preseleccionada) o **Borrar** lo local. Cambiar la conexión
+   **nunca borra datos automáticamente**. Borrar hace antes un último envío del outbox a la conexión
+   **actual** (`flushPendingBeforeWipe`: ignora el backoff, toma el cerrojo, con tope de tiempo) y pide
+   una segunda confirmación con los conteos (lo no enviado destacado).
+6. **Revisar**: todo lo cargado y qué va a pasar al aplicar; Enter aplica.
+
+Las reglas viven en un **modelo puro** (`ui/keyboard/config-wizard-model.ts`, sin DOM ni async):
+estado de cada paso (`pending`/`complete`/`error`/`skipped`), `connectionChanged` (el tipo o algún
+campo del conector difiere de la config guardada **y verificada**), `originChanged` (el *origen* es el
+endpoint normalizado, `originKey` — el `type` no cuenta; cambiar solo la API key, el secreto o el
+locale es el mismo origen), `probeValid` (hay una prueba exitosa hecha con **exactamente** la conexión
+cargada), pasos alcanzables (hasta el primero incompleto) y `applyAction`. Probar se saltea si la
+conexión no cambió; Datos locales, si no cambió o si no hay **datos del usuario** (ventas, turnos,
+pendientes del outbox o venta en curso — `storage/local-data.ts::hasUserData`; catálogo/clientes solos
+no cuentan). `ui/keyboard/config-controller.ts` solo orquesta lo async; `ui/state/sync-config.ts`
+tiene el paso actual (`wizardStepSignal`), el estado async (`wizardAsyncSignal`: `idle`/`probing`/
+`flushing`/`confirming-wipe`/`applying`) y `wizardModelSignal`. Navegación: Enter valida y avanza,
+Alt+1…6 o click en la columna saltan a un paso alcanzable, Alt+← vuelve, Ctrl+Enter avanza hasta
+donde haga falta el usuario, Esc según el estado (cancela la prueba, vuelve de la confirmación de
+borrado, o sale si la terminal está `active`). Arranca en Revisar con la terminal `active`, en el
+primer paso incompleto en modo requerido, y en Terminal tras perder la identidad.
+
+**Aplicar** — tres caminos según `applyAction`:
+- **Solo terminal** (`sync/apply-connection.ts::applyTerminalSettings`, la conexión no cambió):
+  guarda sucursal/punto de venta/locale conservando `verifiedAt`, sin prueba ni cerrojo ni IndexedDB.
+  De `incomplete` pasa a `active`. Los eventos ya encolados conservan su `origin`.
+- **Conexión cambiada, Mantener** (`applyConnection` con `local: 'keep'`): en la transacción de
+  siempre, la foto se reconcilia (`storage/reconcile.ts::applySnapshotReconciled`, la lógica de
+  `reconcileSnapshot` sin transacción propia) — ventas, turnos, movimientos, venta en curso y outbox
+  quedan intactos. Con **otro origen** se descarta el estado de lotes del backend viejo (los
+  pendientes salen en un lote nuevo al nuevo) y una tabla que llega vacía sí borra lo local (un backend
+  nuevo vacío es legítimo). Con el **mismo origen** el estado de lotes se **conserva** — un lote
+  congelado cuyo ack se perdió se reenvía con su mismo `idempotency_id`, en vez de duplicarse con otro
+  — y la salvaguarda de tabla vacía sigue activa.
+- **Conexión cambiada, Borrar** (`local: 'wipe'`): `clearAllTables` + carga de la foto; en memoria se
+  vacían la venta en curso y el cliente adjunto.
+Con Datos locales salteado: otro origen → `wipe` (lo que queda es catálogo ajeno), mismo origen →
+`keep`. Los caminos 2 y 3 toman el cerrojo de `sync/engine.ts`, reinician los cursores, reconstruyen
+los repositorios y guardan la config con `verifiedAt` **al final** — riesgo residual aceptado: el
+guardado vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después
+del commit, el próximo arranque encontraría la config anterior con datos nuevos. Al terminar: vuelve a
+la venta, reanuda el sync y dispara `runPushThenPull()`.
 
 Un solo lugar borra lo local: `clearAllTables` (`db.tables`, así una tabla futura queda incluida sola),
 compartido con `/DEMO_RESET`.
@@ -383,8 +425,9 @@ conector marca las suyas con `ConfigField.secret`. `reset()` borra **también la
 `/CONFIG`** (a diferencia de `/DEMO_RESET`): equivale a perder el id de dispositivo, y sin él la
 terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync y recarga.
 `pos.deviceId()` (Etapa 1 de #94, #96) devuelve el id de dispositivo de la terminal
-(`sync/terminal-identity.ts::getDeviceId`), el mismo que muestra `/DIAGNOSTICO` y que viaja en cada
-push/pull. Como vive bajo `offline-pos:*`, `reset()` también lo borra.
+(`sync/terminal-identity.ts::peekDeviceId`), el mismo que muestra `/DIAGNOSTICO` y que viaja en cada
+push/pull — `null` antes de que `bootstrap()` lo resuelva (la consola se instala antes del arranque).
+Como vive bajo `offline-pos:*`, `reset()` también lo borra.
 
 ## UX keyboard-first
 
@@ -423,7 +466,15 @@ preselecciona igual que en las otras dos listas, Enter sin tocar flechas ejecuta
 match del filtro. El riesgo que motivaba la excepción ya no aplica igual: `/DEMO_RESET` tiene su
 propia pantalla de confirmación, `/DESCARTAR` descarta algo que ni se había guardado, y el resto de
 los comandos no es destructivo — frenar en el menú no compraba nada, solo agregaba fricción al camino
-rápido. Este menú (y las listas de resultados de producto/cliente) se renderiza como un **overlay que
+rápido. **Comandos habilitados (Etapa 2 de #94)**: `CommandInfo.availability` (opcional, derivada de
+signals) puede deshabilitar un comando según el estado de la venta — hoy solo `/COBRAR`, sin artículos
+ni cliente adjunto ("sin artículos ni cliente"). `commandResultsSignal` evalúa la disponibilidad de
+cada fila (`CommandResult`); una fila deshabilitada se ve atenuada con su motivo, ↑/↓ la saltean y el
+click no hace nada. La fila 0 se preselecciona **solo si está habilitada**
+(`defaultCommandIndexSignal`; `effectiveCommandIndexSignal` es la que ejecutaría Enter): "/" con el
+carrito vacío no deja `/COBRAR` a un Enter. Enter sin selección sobre el nombre exacto de un comando
+deshabilitado, y Ctrl+Enter con `/COBRAR` deshabilitado (`triggerCheckout`), muestran el motivo en el
+slot de error. Este menú (y las listas de resultados de producto/cliente) se renderiza como un **overlay que
 se abre hacia arriba** desde el input (`position: absolute`, `bottom: 100%`, con `maxHeight` +
 `overflow-y: auto`, y solo se monta cuando hay algo que mostrar) — no participa del flujo normal del
 documento, así que nunca empuja el carrito ni cambia el scroll de la página al aparecer o crecer.
@@ -529,16 +580,9 @@ middle-click-drag, diseñar el fade).
 
 Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (Fase 6 — abre o cierra el
 turno de caja, ver más abajo), `/ANULAR`, `/DESCARTAR` (Ciclo 8 — vacía la venta en curso, ver más
-abajo), `/CONFIG` (configura la conexión con el sistema externo, runtime vía `localStorage` — no hay
-variables de entorno ni pantalla de config de terminal más amplia todavía; diálogo modal con el mismo
-chrome que Cobro: primer campo el selector de tipo de conector, todos los campos del tipo elegido
-visibles a la vez más `locale` al final, Tab/Shift+Tab navega, Ctrl+Enter valida y guarda todo junto,
-Esc cancela y Enter solo no hace nada; la validación es solo al confirmar y un error deja el campo
-afectado enfocado y seleccionado; abre precargado con la config guardada, o vacío y sin tipo elegido
-si no hay ninguna — no hay valores por omisión; Ctrl+Enter no solo valida sino que **prueba la
-conexión** (pull completo en memoria) y, si cambia el origen y hay datos del usuario, pide confirmar
-el borrado de lo local antes de aplicar, ver "Ciclo de vida de la conexión" — Etapas 2 y 2b del epic
-#66, cierra #56), `/SINCRONIZAR` (fuerza push y pull ya, RF-12 "bajo demanda" — ver "Patrón outbox"
+abajo), `/CONFIG` (la terminal y su conexión con el sistema externo, runtime vía `localStorage` — no
+hay variables de entorno; desde la Etapa 2 de #94 es un **wizard de 6 pasos** con resumen visible,
+ver "Ciclo de vida de la conexión"), `/SINCRONIZAR` (fuerza push y pull ya, RF-12 "bajo demanda" — ver "Patrón outbox"
 más arriba; no cambia de pantalla, el feedback es la barra de
 estado), `/DEMO_RESET` (Ciclo 8 — borra los datos locales de la terminal y reinicia la demo, ver más
 abajo) y `/DIAGNOSTICO` (pantalla de solo lectura sobre el estado de sincronización — conexión
@@ -615,7 +659,10 @@ carrito, así que con el input abajo la línea recién agregada aparece pegada a
 tipeando, en vez del salto largo de atención que había con el input arriba y el carrito creciendo
 hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
 
-Barra de estado (extremo opuesto, nunca interactiva, `ui/components/StatusBar.tsx`): 4 estados reales
+Barra de estado (extremo opuesto, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
+propósito no interactiva; esa decisión se reabrió a propósito en la prueba manual de esa etapa: un
+click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
+de Tab ni sacarle el foco a la barra de comandos. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
 `isPushStruggling` en `domain/push-lot.ts`, **o cualquier pull que falle**, #53) — más un quinto,
@@ -637,6 +684,38 @@ visible (nunca depender de `:hover`), locale configurable por terminal para `Int
 diseño que **todavía no está implementado ni asignado a ninguna fase** — no hay modelo de
 usuario/terminal en el dominio (§4). Se decidió dejarlo fuera del alcance de Fase 4 a propósito
 (ver Fase 4 en "Estado del proyecto"); no asumir que existe ningún tipo de autenticación.
+
+## Teclado y mouse (Etapa 2 de #94)
+
+La app sigue siendo 100% operable con teclado, y desde la Etapa 2 de #94 también con mouse, con un
+patrón único (sacado de `/RESUMEN`, Ciclo 10):
+
+- `ui/hooks/use-mouse-keeps-focus.ts::keepFocusOnMouseDown` va en el `onMouseDown` del contenedor de
+  cada pantalla: con el **botón izquierdo**, cancela el `mousedown` salvo sobre controles de texto
+  (`input`, `textarea`, `select`) — el foco se queda en el "hogar" de la pantalla (la barra, el
+  contenedor), incluso al clickear un botón, y el `click` se dispara igual. Con cualquier otro botón
+  no hace nada: la rueda y el autoscroll con el botón del medio siguen andando.
+- Todo lo clickeable es un `<button>` o una fila con `onClick` que llama a **la misma función del
+  controller** que su tecla. Todo atajo visible tiene su botón, con el atajo en la etiqueta ("Cerrar
+  (Esc)", "Anular (Enter)"), y viceversa.
+- El hover es decorativo: nunca mueve la selección.
+- La acción principal de cada estado (la que dispara Enter) se ve destacada: clases `.btn` (secundario),
+  `.btn-primary` (acento) y `.btn-danger` (destructiva: "Borrar y cambiar", "Anular", "Reiniciar
+  demo") en `tokens.css`.
+- Cursor: la flecha por defecto en toda la app (`body { cursor: default }`), el de texto solo en los
+  campos editables, la mano en lo clickeable — nunca el cursor de texto sobre algo que no se edita.
+- Un grupo de opciones (Tipo de conexión, Datos locales del wizard) se comporta como un radio: el foco
+  está en la opción elegida y la sigue con ↑/↓, nunca en un contenedor invisible.
+- Un botón enfocado con Tab se activa con Enter de forma nativa: el `onKeyDown` del contenedor no
+  vuelve a ejecutar su atajo de Enter (si no, "Volver" enfocado + Enter en `/ANULAR` anulaba igual).
+
+Dónde se aplica: **venta** — click en una fila de un overlay (comandos, clientes incluidos "Consumidor
+Final" y "+ Crear cliente", artículos incluidas las líneas libres) es lo mismo que Enter sobre ella
+(`command-bar-controller.ts::activateCommandBarRow`, mismo camino que `submitCommandBar`); click fuera
+del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`). El carrito todavía no
+es clickeable (Etapa 4). **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
+seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
+**`/DEMO_RESET`**, **`/RESUMEN`** y la **barra de estado** (click = `/DIAGNOSTICO`). Fuera por ahora: cobro (Etapa 4) y `/CAJA` (Etapa 5).
 
 ## Diseño visual
 
@@ -863,7 +942,8 @@ lectura/escritura cruda para datos que en producción vendrían de un pull (`Cus
 no tiene sentido ejercitar por UI en cada test.
 
 `e2e/fixtures.ts` (Etapa 2b) exporta un `test` de Playwright que siembra una conexión `active`
-(`ACTIVE_CONFIG`, con `verifiedAt`, apuntando a un backend inalcanzable) antes de cargar la app: sin
+(`ACTIVE_CONFIG`, con `verifiedAt`, sucursal y punto de venta, apuntando a un backend inalcanzable)
+y un id de dispositivo (`seedDeviceIdentity`, una vez por pestaña) antes de cargar la app: sin
 conexión activa la app solo muestra `/CONFIG`, así que todo spec que ejercite la app ya conectada
 (y offline) importa `test`/`expect` de ahí en vez de `@playwright/test`. Los que prueban el
 arranque y la configuración (`connection-lifecycle`, `minibackend-sync`) usan el de Playwright a
@@ -1131,8 +1211,8 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   tecla imprimible con el foco en un botón vuelve al buscador y continúa el texto. Esta pantalla es
   la primera que acepta mouse (filas y botones clickeables) — cada click devuelve el foco al
   buscador, y el `mousedown` sobre cualquier cosa no enfocable se cancela (si no, el foco cae a
-  `<body>` y los `keydown` dejan de llegar al contenedor). Las demás pantallas siguen sin mouse a
-  propósito.
+  `<body>` y los `keydown` dejan de llegar al contenedor). "Las demás pantallas siguen sin mouse" quedó
+  reemplazado por el patrón de la Etapa 2 de #94 (ver "Teclado y mouse").
 
 - Conectores plugin (epic #66, sesión de brainstorming 2026-09-17): Etapa 1 (#67) — conector de
   Google Sheets aislado (`connectors/google-sheets/`) con un puente Apps Script; Etapa 2 (#68) —
@@ -1200,7 +1280,7 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   estampado al encolar, `deviceId` por request, estados de lote `queued`/`processing`/`ok`/`issues`
   con avisos `{ message, eventId? }`, eventos `cash-movement` y `customer-payment` (sin UI todavía),
   `cash-session` eliminado, bloqueos y `createdAt` en el pull — implementado en el dominio, el motor,
-  `/CONFIG` (Sucursal y Punto de venta opcionales), `/DIAGNOSTICO`, `pos.deviceId()`, el conector
+  `/CONFIG` (Sucursal y Punto de venta opcionales hasta la Etapa 2), `/DIAGNOSTICO`, `pos.deviceId()`, el conector
   REST, el de Google Sheets (lado TS y puente) y el minibackend. El minibackend separa la
   **recepción** de un lote (`queued`) de su **procesamiento** (`demo-backend/src/lots.ts`: los efectos
   — stock, saldos, filas — recién al terminar); el panel `/_demo` puede demorar los lotes nuevos y
@@ -1209,6 +1289,18 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   (`PRAGMA user_version`): una base de otra versión se recrea vacía y el arranque resiembra. Una
   desviación del plan: `ensureColumns` del puente solo agrega columnas opcionales (ver "Connector
   API").
+
+- Identidad de terminal, `/CONFIG` como wizard y teclado + mouse (Etapa 2 del epic #94, issue #97;
+  spec `docs/superpowers/specs/2026-09-23-identidad-terminal-y-wizard-config-design.md`, plan
+  `docs/superpowers/plans/2026-09-23-identidad-terminal-y-wizard-config.md`): ciclo de vida del id de
+  dispositivo (sin id, la terminal arranca de cero con la config precargada sin probar), sucursal y
+  punto de venta obligatorios (estado `incomplete`), `/CONFIG` como wizard de 6 pasos con modelo puro,
+  mantener o borrar lo local a elección al cambiar de conexión (nunca se borra solo), lotes
+  conservados con el mismo origen, `/COBRAR` deshabilitado sin artículos ni cliente, y el patrón
+  teclado + mouse en venta, `/CONFIG`, `/ANULAR`, comprobante, `/DIAGNOSTICO`, `/DEMO_RESET` y
+  `/RESUMEN` — ver "Ciclo de vida de la conexión", "Teclado y mouse" y "Menú de '/'". Los e2e siembran
+  un id de dispositivo por pestaña (`e2e/fixtures.ts::seedDeviceIdentity`): sin él, cada spec con una
+  config sembrada arrancaría como una terminal que perdió su identidad.
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

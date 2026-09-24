@@ -47,6 +47,7 @@ import {
 } from './push-lot.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
+import { setDeviceIdForTests } from './terminal-identity.ts';
 import type { StockItem } from '../domain/stock.ts';
 
 function setOnline(online: boolean): void {
@@ -56,7 +57,7 @@ function setOnline(online: boolean): void {
 const now = '2026-01-01T00:00:00.000Z';
 
 beforeEach(async () => {
-  localStorage.setItem('offline-pos:device-id', 'dev-1');
+  setDeviceIdForTests('dev-1');
   await db.open();
   setCatalogRepository({
     search: () => [],

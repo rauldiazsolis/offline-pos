@@ -1,6 +1,7 @@
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useRef } from 'preact/hooks';
 import {
+  activateCommandBarRow,
   dismissCommandBarOverlay,
   moveSelection,
   removeSelectedCartLine,
@@ -10,6 +11,7 @@ import {
   updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
@@ -23,6 +25,7 @@ import {
   commandSelectionIndexSignal,
   customerResultsSignal,
   customerSelectionIndexSignal,
+  effectiveCommandIndexSignal,
   overlayDismissedSignal,
   parsedSignal,
   searchResultsSignal,
@@ -68,8 +71,9 @@ export function CommandBarInput() {
   const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
   const parsed = parsedSignal.value;
   const commandResults = commandResultsSignal.value;
-  // issue #40 (Ciclo 8): la fila 0 se preselecciona por default, igual que producto/cliente.
-  const selectedCommandIndex = commandSelectionIndexSignal.value ?? 0;
+  // issue #40 (Ciclo 8): la fila 0 se preselecciona por default, igual que
+  // producto/cliente — desde la Etapa 2 de #94, solo si está habilitada.
+  const selectedCommandIndex = effectiveCommandIndexSignal.value;
   const showCommandList = parsed.kind === 'command';
   // Issue #21: la lista se muestra apenas se abre "@", sin esperar texto —
   // con query vacía son los clientes más recientes (customerResultsSignal).
@@ -216,7 +220,11 @@ export function CommandBarInput() {
         // contenido en vez de quedar fijo en el borde. display: flex +
         // flex: 1 en el que scrollea, para que "maxHeight" siga
         // clampeando el conjunto igual que antes.
+        // Teclado + mouse (Etapa 2 de #94): click en una fila = Enter sobre
+        // ella; el `mousedown` se cancela para que la barra no pierda el foco.
         <div
+          data-command-bar-overlay=""
+          onMouseDown={keepFocusOnMouseDown}
           style={{
             position: 'absolute',
             bottom: '100%',
@@ -243,17 +251,34 @@ export function CommandBarInput() {
               </p>
             ) : hasCommandResults ? (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                {commandResults.map((command, index) => (
-                  <li
-                    key={command.name}
-                    ref={commandRowRef(index)}
-                    style={rowStyle(index === selectedCommandIndex)}
-                  >
-                    <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
-                    {' — '}
-                    {command.description}
-                  </li>
-                ))}
+                {commandResults.map((command, index) => {
+                  const enabled = command.availability.enabled;
+                  return (
+                    <li
+                      key={command.name}
+                      ref={commandRowRef(index)}
+                      class="command-bar-row"
+                      aria-disabled={enabled ? undefined : 'true'}
+                      onClick={() => {
+                        activateCommandBarRow('command', index);
+                      }}
+                      style={{
+                        ...rowStyle(enabled && index === selectedCommandIndex),
+                        ...(enabled ? {} : { opacity: 0.5 }),
+                      }}
+                    >
+                      <strong style={{ fontFamily: 'var(--font-mono)' }}>/{command.name}</strong>
+                      {' — '}
+                      {command.description}
+                      {!command.availability.enabled && (
+                        <span style={subtextStyle(false)}>
+                          {' — '}
+                          {command.availability.reason}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : showCustomerResults ? (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
@@ -264,6 +289,10 @@ export function CommandBarInput() {
                       <li
                         key="clear"
                         ref={customerRowRef(index)}
+                        class="command-bar-row"
+                        onClick={() => {
+                          activateCommandBarRow('customer', index);
+                        }}
                         style={{ ...rowStyle(selected), fontStyle: 'italic' }}
                       >
                         Consumidor Final
@@ -281,14 +310,28 @@ export function CommandBarInput() {
                       .filter((value): value is string => value !== undefined)
                       .join(' · ') || `Alta: ${formatDate(customer.createdAt)}`;
                   return (
-                    <li key={customer.id} ref={customerRowRef(index)} style={rowStyle(selected)}>
+                    <li
+                      key={customer.id}
+                      ref={customerRowRef(index)}
+                      class="command-bar-row"
+                      onClick={() => {
+                        activateCommandBarRow('customer', index);
+                      }}
+                      style={rowStyle(selected)}
+                    >
                       <div>{customer.name}</div>
                       <div style={subtextStyle(selected)}>{identifier}</div>
                     </li>
                   );
                 })}
                 {parsed.query !== '' && customerResults.length === 0 && (
-                  <li style={{ ...rowStyle(false), fontStyle: 'italic' }}>
+                  <li
+                    class="command-bar-row"
+                    onClick={() => {
+                      activateCommandBarRow('customer', customerResults.length);
+                    }}
+                    style={{ ...rowStyle(false), fontStyle: 'italic' }}
+                  >
                     + Crear cliente "{parsed.query}"
                   </li>
                 )}
@@ -302,6 +345,10 @@ export function CommandBarInput() {
                       <li
                         key={`freeform:${result.description}`}
                         ref={searchRowRef(index)}
+                        class="command-bar-row"
+                        onClick={() => {
+                          activateCommandBarRow('search', index);
+                        }}
                         style={rowStyle(selected)}
                       >
                         <div>{result.description}</div>
@@ -314,7 +361,15 @@ export function CommandBarInput() {
                   const { product } = result.result;
                   const qty = parsed.kind === 'search' ? parsed.qty : 1;
                   return (
-                    <li key={product.id} ref={searchRowRef(index)} style={rowStyle(selected)}>
+                    <li
+                      key={product.id}
+                      ref={searchRowRef(index)}
+                      class="command-bar-row"
+                      onClick={() => {
+                        activateCommandBarRow('search', index);
+                      }}
+                      style={rowStyle(selected)}
+                    >
                       <div>{product.name}</div>
                       <div style={subtextStyle(selected)}>
                         {product.sku} ·{' '}

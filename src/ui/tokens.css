@@ -17,6 +17,8 @@
   --color-danger: #dc2626;
   --color-success: #16a34a;
   --color-focus-ring: #2563eb;
+  /* texto de ejemplo de un campo vacío: bien distinto de un dato cargado */
+  --color-placeholder: #a1a1aa;
 
   /* "chrome" oscuro — barra de comandos y barra de estado (pase de diseño,
      ver CLAUDE.md). El resto de la app (carrito, pantallas de tarea) sigue
@@ -56,6 +58,77 @@
 *:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+/*
+ * Cursor (Etapa 2 de #94): la flecha por defecto en toda la app — sin esto el
+ * navegador muestra el cursor de texto sobre cualquier texto, aunque no se
+ * pueda editar ni seleccionar nada útil (barra de estado, tarjetas). El de
+ * texto solo en los campos editables; la mano en lo clickeable.
+ */
+body {
+  cursor: default;
+}
+
+input,
+textarea {
+  cursor: text;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/*
+ * Botones (Etapa 2 de #94): la acción principal de cada estado se destaca
+ * (fondo de acento) — la que dispara Enter; la destructiva, en rojo. El
+ * resto, secundarios. Una sola convención en todas las pantallas.
+ */
+.btn {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.btn:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.6;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-primary:disabled,
+.btn-danger:disabled {
+  color: #ffffff;
 }
 
 /*
@@ -149,4 +222,138 @@
 
 .command-bar-overlay-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * Spinner (Etapa 2 de #94): actividad mientras se espera a un servicio
+ * (prueba de conexión, envío previo al borrado, aplicar). Con
+ * `prefers-reduced-motion` queda quieto: un cuarto del borde marcado.
+ */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spinner-turn 0.8s linear infinite;
+  vertical-align: -0.15em;
+}
+
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/*
+ * Wizard de /CONFIG (Etapa 2 de #94). El hover es decorativo: nunca mueve la
+ * selección (Enter sigue actuando sobre lo elegido con el teclado).
+ */
+.wizard-step-button:hover:not(:disabled) {
+  background: var(--color-surface);
+}
+
+.wizard-option:hover {
+  border-color: var(--color-accent);
+}
+
+/*
+ * Opción de un grupo tipo radio: la selección y el foco se ven distinto. La
+ * elegida lleva el círculo lleno y el borde de acento; la enfocada, un halo
+ * suave alrededor (sin la separación del outline general, que se veía como un
+ * doble foco). Así una opción enfocada pero no elegida no parece elegida.
+ */
+.wizard-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+.wizard-radio {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.wizard-option[aria-pressed='true'] .wizard-radio {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: inset 0 0 0 3px var(--color-bg);
+}
+
+/*
+ * Paso de la columna enfocado con Tab: anillo por dentro, así no lo recorta el
+ * borde de la columna (que tiene scroll propio).
+ */
+.wizard-step-button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
+}
+
+/* Resumen de un paso en la columna: siempre dos renglones de alto, recortado con "…". */
+.wizard-step-summary {
+  grid-column: 2 / 4;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.3;
+  min-height: 2.6em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/*
+ * Campo de texto enfocado: siempre visible, con `:focus` y no solo
+ * `:focus-visible` — Chromium no marca `:focus-visible` cuando el foco se
+ * pone por código antes de cualquier interacción (el primer campo de un
+ * paso al cargar la página), y el campo quedaba enfocado sin que se note.
+ */
+.wizard-input:focus {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: 0;
+  border-color: var(--color-focus-ring);
+}
+
+/* Texto de ejemplo de los campos del wizard: gris claro y en cursiva, que no pase por un dato. */
+.wizard-input::placeholder {
+  color: var(--color-placeholder);
+  font-style: italic;
+}
+
+/*
+ * Filas de los overlays de la barra de comandos (Etapa 2 de #94): clickeables.
+ * El hover es decorativo — nunca mueve la selección; Enter sigue ejecutando la
+ * fila resaltada.
+ */
+.command-bar-row {
+  cursor: pointer;
+}
+
+.command-bar-row:hover:not([aria-disabled='true']) {
+  box-shadow: inset 0 0 0 1px var(--color-chrome-border);
+}
+
+.command-bar-row[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* Barra de estado: un click abre /DIAGNOSTICO (Etapa 2 de #94). */
+.status-bar {
+  cursor: pointer;
+}
+
+.status-bar:hover {
+  color: var(--color-chrome-text);
 }

@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/preact';
+import { fireEvent, render, screen } from '@testing-library/preact';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '../../domain/result.ts';
 import type { SyncDiagnostics } from '../../sync/diagnostics.ts';
+import { activeScreenSignal } from '../state/screen.ts';
 import { DiagnosticoScreen } from './diagnostico-screen.tsx';
 
 const diagnostics: SyncDiagnostics = {
@@ -36,5 +37,27 @@ describe('DiagnosticoScreen (contrato v3)', () => {
     expect(screen.getByText(/LOT-B .*en cola/)).not.toBeNull();
     expect(screen.getByText(/LOT-C .*sin informar/)).not.toBeNull();
     expect(screen.getByText(/Stock negativo \(evento m1\)/)).not.toBeNull();
+  });
+});
+
+function leftMouseDown(target: Element): MouseEvent {
+  const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
+describe('DiagnosticoScreen — mouse (Etapa 2 de #94)', () => {
+  it('"Cerrar (Esc)" vuelve a la venta', () => {
+    activeScreenSignal.value = 'diagnostico';
+    render(<DiagnosticoScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar (Esc)' }));
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
+  it('un mousedown sobre el título no le saca el foco a la pantalla', () => {
+    render(<DiagnosticoScreen />);
+    expect(leftMouseDown(screen.getByText('Diagnóstico de sincronización')).defaultPrevented).toBe(
+      true,
+    );
   });
 });

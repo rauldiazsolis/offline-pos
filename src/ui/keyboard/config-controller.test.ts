@@ -4,31 +4,35 @@ import { buildOutboxEventForSale } from '../../domain/outbox.ts';
 import type { Sale } from '../../domain/sale.ts';
 import { db } from '../../storage/db.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
-import { cartSignal } from '../state/cart.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { connectionStateSignal, syncPausedSignal } from '../state/sync.ts';
 import {
-  configConfirmationSignal,
   configErrorFieldSignal,
-  configErrorSignal,
-  configFieldValuesSignal,
-  configPhaseSignal,
-  configTerminalSignal,
-  configTypeSignal,
+  identityResetSignal,
+  localChoiceSignal,
+  probeOutcomeSignal,
+  wizardAsyncSignal,
+  wizardStepSignal,
 } from '../state/sync-config.ts';
 import {
-  backToEditing,
-  cancelConfigScreen,
-  confirmConfigChange,
+  advance,
+  applyWizard,
+  backFromWipeConfirmation,
+  chooseConnectorType,
+  confirmWipe,
   enterConfigScreen,
-  handleConfigEscape,
+  fastForward,
+  goToStep,
+  handleWizardEscape,
+  jumpToStep,
+  openRequiredWizard,
   setConfigField,
   setConfigTerminalField,
   setConfigType,
-  submitConfig,
+  setLocalChoice,
 } from './config-controller.ts';
 
-// `applyAndFinish` dispara un ciclo de sync en background: seguiría corriendo
+// `applyWizard` dispara un ciclo de sync en background: seguiría corriendo
 // después de que el test cierra la base. Se neutraliza solo el ciclo; el
 // cerrojo y el resto del motor (que usa `applyConnection`) siguen siendo reales.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
@@ -37,7 +41,6 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
 }));
 
 const now = '2026-01-01T00:00:00.000Z';
-const WEB_APP_URL = 'https://script.google.com/macros/s/abc/exec';
 
 const product = {
   id: 'p1',
@@ -79,17 +82,10 @@ function makeSale(id: string): Sale {
   return { id, lines: [], payments: [], total: 0, status: 'closed', createdAt: now };
 }
 
-async function seedUserDataFor(config: Parameters<typeof saveSyncConfig>[0]): Promise<void> {
-  saveSyncConfig(config);
-  await db.sales.put(makeSale('s1'));
-  await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
-}
-
 beforeEach(async () => {
   await db.open();
   activeScreenSignal.value = 'sale';
-  connectionStateSignal.value = 'unconfigured';
-  enterConfigScreen();
+  identityResetSignal.value = false;
 });
 
 afterEach(async () => {
@@ -99,382 +95,235 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-describe('enterConfigScreen', () => {
-  it('cambia a la pantalla config, sin tipo elegido, con los campos vacíos y sin error', () => {
-    expect(activeScreenSignal.value).toBe('config');
-    expect(configTypeSignal.value).toBeNull();
-    expect(configFieldValuesSignal.value.rest).toEqual({ baseUrl: '', apiKey: '' });
-    expect(configFieldValuesSignal.value['google-sheets']).toEqual({
-      webAppUrl: '',
-      sharedSecret: '',
-    });
-    expect(configTerminalSignal.value).toEqual({ locale: '', branch: '', pointOfSale: '' });
-    expect(configErrorSignal.value).toBeNull();
-    expect(configPhaseSignal.value).toBe('editing');
+/** Fetch que no responde hasta que el test lo suelta (para no dejar el cerrojo de sync tomado). */
+function stubHangingFetch(): () => void {
+  let fail: (reason: Error) => void = () => undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          fail = reject;
+        }),
+    ),
+  );
+  return () => {
+    fail(new Error('fin del test'));
+  };
+}
+
+function fillTerminal(): void {
+  setConfigTerminalField('branch', 'Centro');
+  setConfigTerminalField('pointOfSale', 'Caja 1');
+}
+
+describe('wizard — instalación', () => {
+  beforeEach(async () => {
+    connectionStateSignal.value = 'unconfigured';
+    await openRequiredWizard();
   });
 
-  it('con una config REST guardada, precarga esos valores', () => {
-    saveSyncConfig({
-      type: 'rest',
-      baseUrl: 'https://api.example.com',
-      locale: 'es-AR',
-      branch: 'Centro',
-    });
-
-    enterConfigScreen();
-
-    expect(configTypeSignal.value).toBe('rest');
-    expect(configFieldValuesSignal.value.rest).toEqual({
-      baseUrl: 'https://api.example.com',
-      apiKey: '',
-    });
-    expect(configTerminalSignal.value).toEqual({
-      locale: 'es-AR',
-      branch: 'Centro',
-      pointOfSale: '',
-    });
-  });
-
-  it('con una config de Google Sheets guardada, abre en ese tipo con sus valores', () => {
-    saveSyncConfig({ type: 'google-sheets', webAppUrl: WEB_APP_URL, sharedSecret: 's3cr3t' });
-
-    enterConfigScreen();
-
-    expect(configTypeSignal.value).toBe('google-sheets');
-    expect(configFieldValuesSignal.value['google-sheets']).toEqual({
-      webAppUrl: WEB_APP_URL,
-      sharedSecret: 's3cr3t',
-    });
-  });
-
-  it('con una config guardada sin type (formato anterior a la Etapa 2), la precarga como REST', () => {
-    localStorage.setItem(
-      'offline-pos:sync-config',
-      JSON.stringify({ baseUrl: 'https://api.example.com', apiKey: 'vieja' }),
-    );
-
-    enterConfigScreen();
-
-    expect(configTypeSignal.value).toBe('rest');
-    expect(configFieldValuesSignal.value.rest.apiKey).toBe('vieja');
-  });
-});
-
-describe('sincronización mientras /CONFIG está abierto', () => {
-  it('se pausa al abrir /CONFIG y se reanuda al cancelar', () => {
-    enterConfigScreen();
+  it('arranca en Terminal y pausa el sync; Enter sin sucursal marca el campo', () => {
+    expect(wizardStepSignal.value).toBe('terminal');
     expect(syncPausedSignal.value).toBe(true);
-
-    connectionStateSignal.value = 'active';
-    cancelConfigScreen();
-
-    expect(syncPausedSignal.value).toBe(false);
+    advance();
+    expect(configErrorFieldSignal.value).toBe('branch');
+    expect(wizardStepSignal.value).toBe('terminal');
   });
 
-  it('se reanuda al aplicar una conexión nueva', async () => {
+  it('recorrido completo: terminal → tipo → datos → probar (arranca solo) → revisar → aplicar', async () => {
     stubRestBackend();
-    enterConfigScreen();
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-
-    await submitConfig();
-
+    fillTerminal();
+    advance();
+    expect(wizardStepSignal.value).toBe('type');
+    chooseConnectorType('rest');
+    expect(wizardStepSignal.value).toBe('connector');
+    setConfigField('baseUrl', 'http://a.test');
+    advance();
+    expect(wizardStepSignal.value).toBe('probe');
+    await vi.waitFor(() => {
+      expect(probeOutcomeSignal.value?.status).toBe('ok');
+    });
+    advance();
+    expect(wizardStepSignal.value).toBe('review');
+    await applyWizard();
     expect(activeScreenSignal.value).toBe('sale');
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value.branch).toBe('Centro');
+    expect(saved.ok && saved.value.verifiedAt).toBeDefined();
+    expect(connectionStateSignal.value).toBe('active');
     expect(syncPausedSignal.value).toBe(false);
   });
 
-  it('sigue pausada si la prueba falla (el formulario sigue abierto)', async () => {
+  it('una prueba fallida queda en Probar con el error y no guarda nada', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
     );
-    enterConfigScreen();
+    fillTerminal();
     setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
+    setConfigField('baseUrl', 'http://a.test');
+    fastForward();
+    expect(wizardStepSignal.value).toBe('probe');
+    await vi.waitFor(() => {
+      expect(probeOutcomeSignal.value?.status).toBe('failed');
+    });
+    expect(wizardAsyncSignal.value).toBe('idle');
+    expect(loadSyncConfig().ok).toBe(false);
+  });
 
-    await submitConfig();
+  it('Esc probando cancela y queda en Probar con la prueba cancelada; el resultado tardío se descarta', async () => {
+    const releaseFetch = stubHangingFetch();
+    fillTerminal();
+    setConfigType('rest');
+    setConfigField('baseUrl', 'http://a.test');
+    goToStep('probe');
+    expect(wizardAsyncSignal.value).toBe('probing');
+    handleWizardEscape();
+    expect(wizardAsyncSignal.value).toBe('idle');
+    expect(wizardStepSignal.value).toBe('probe');
+    expect(probeOutcomeSignal.value?.status).toBe('cancelled');
+    await vi.waitFor(() => {
+      expect(vi.mocked(fetch)).toHaveBeenCalled();
+    });
+    releaseFetch();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(probeOutcomeSignal.value?.status).toBe('cancelled');
+  });
 
+  it('Esc en modo requerido fuera de una prueba no sale', () => {
+    activeScreenSignal.value = 'config';
+    handleWizardEscape();
     expect(activeScreenSignal.value).toBe('config');
+  });
+
+  it('no se puede saltar más allá del primer paso incompleto', () => {
+    jumpToStep('review');
+    expect(wizardStepSignal.value).toBe('terminal');
+  });
+
+  it('Ctrl+Enter se frena en el primer paso con error', () => {
+    setConfigTerminalField('branch', 'Centro');
+    fastForward();
+    expect(wizardStepSignal.value).toBe('terminal');
+    expect(configErrorFieldSignal.value).toBe('pointOfSale');
+  });
+});
+
+describe('wizard — identidad perdida', () => {
+  it('con la config precargada, abre en Terminal para mostrar el aviso', async () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'http://a.test',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+    });
+    identityResetSignal.value = true;
+    connectionStateSignal.value = 'unverified';
+    await openRequiredWizard();
+    expect(wizardStepSignal.value).toBe('terminal');
+  });
+});
+
+describe('wizard — terminal activa', () => {
+  beforeEach(() => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'http://a.test',
+      branch: 'Centro',
+      pointOfSale: 'Caja 1',
+      verifiedAt: now,
+    });
+    connectionStateSignal.value = 'active';
+    enterConfigScreen();
+  });
+
+  async function changeOriginAndProbe(): Promise<void> {
+    goToStep('connector');
+    setConfigField('baseUrl', 'http://b.test');
+    advance(); // → probe (arranca solo)
+    await vi.waitFor(() => {
+      expect(probeOutcomeSignal.value?.status).toBe('ok');
+    });
+    advance(); // → local-data
+  }
+
+  it('abre en Revisar y pausa el sync', () => {
+    expect(activeScreenSignal.value).toBe('config');
+    expect(wizardStepSignal.value).toBe('review');
     expect(syncPausedSignal.value).toBe(true);
   });
-});
 
-describe('edición del formulario', () => {
-  it('cambiar el tipo no pierde lo tipeado en el otro', () => {
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-    setConfigType('google-sheets');
-    setConfigField('webAppUrl', WEB_APP_URL);
-    setConfigType('rest');
-
-    expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
-    expect(configFieldValuesSignal.value['google-sheets'].webAppUrl).toBe(WEB_APP_URL);
-  });
-
-  it('volver a "sin tipo" también es válido', () => {
-    setConfigType('rest');
-    setConfigType(null);
-
-    expect(configTypeSignal.value).toBeNull();
-  });
-
-  it('editar limpia el error visible', async () => {
-    setConfigType('rest');
-    await submitConfig();
-    expect(configErrorSignal.value).not.toBeNull();
-
-    setConfigField('baseUrl', 'x');
-
-    expect(configErrorSignal.value).toBeNull();
-    expect(configErrorFieldSignal.value).toBeNull();
-  });
-});
-
-describe('submitConfig — validación (antes de probar)', () => {
-  it('sin tipo elegido pide elegir uno y no prueba nada', async () => {
+  it('cambiar solo la sucursal guarda sin probar', async () => {
     const fetchMock = stubRestBackend();
-
-    await submitConfig();
-
-    expect(configErrorSignal.value).toBe('Elegí un tipo de conexión.');
+    goToStep('terminal');
+    setConfigTerminalField('branch', 'Norte');
+    fastForward();
+    expect(wizardStepSignal.value).toBe('review');
+    await applyWizard();
     expect(fetchMock).not.toHaveBeenCalled();
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value).toMatchObject({ branch: 'Norte', verifiedAt: now });
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(syncPausedSignal.value).toBe(false);
   });
 
-  it('una URL vacía señala ese campo', async () => {
-    setConfigType('rest');
-
-    await submitConfig();
-
-    expect(configErrorSignal.value).toBe('Completá «URL del sistema externo».');
-    expect(configErrorFieldSignal.value).toBe('baseUrl');
-    expect(configPhaseSignal.value).toBe('editing');
+  it('Esc sale sin guardar', () => {
+    goToStep('terminal');
+    setConfigTerminalField('branch', 'Norte');
+    handleWizardEscape();
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(syncPausedSignal.value).toBe(false);
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value.branch).toBe('Centro');
   });
 
-  it('una URL inválida señala ese campo y no prueba nada', async () => {
+  it('cambiar de origen con ventas: pasa por Datos locales; Mantener conserva las ventas', async () => {
+    stubRestBackend();
+    await db.sales.put(makeSale('s1'));
+    await changeOriginAndProbe();
+    expect(wizardStepSignal.value).toBe('local-data');
+    expect(localChoiceSignal.value).toBe('keep');
+    advance(); // confirma Mantener → review
+    expect(wizardStepSignal.value).toBe('review');
+    await applyWizard();
+    expect(await db.sales.count()).toBe(1);
+    const saved = loadSyncConfig();
+    expect(saved.ok && saved.value).toMatchObject({ baseUrl: 'http://b.test' });
+  });
+
+  it('Borrar: envía lo pendiente al backend actual, pide confirmar y borra', async () => {
     const fetchMock = stubRestBackend();
-    setConfigType('rest');
-    setConfigField('baseUrl', 'no-es-una-url');
-
-    await submitConfig();
-
-    expect(configErrorSignal.value).toBe('«URL del sistema externo» no es válido.');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('submitConfig — primer arranque (sin datos locales)', () => {
-  it('prueba, aplica y deja la conexión activa con la config guardada con verifiedAt', async () => {
-    stubRestBackend();
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-    setConfigField('apiKey', 'secreto');
-    setConfigTerminalField('locale', 'es-AR');
-
-    await submitConfig();
-
-    expect(activeScreenSignal.value).toBe('sale');
-    expect(connectionStateSignal.value).toBe('active');
-    expect(configPhaseSignal.value).toBe('editing');
-    const saved = loadSyncConfig();
-    expect(saved.ok && saved.value).toMatchObject({
-      type: 'rest',
-      baseUrl: 'https://api.example.com',
-      apiKey: 'secreto',
-      locale: 'es-AR',
-    });
-    expect(saved.ok && saved.value.verifiedAt).toBeTruthy();
-    await expect(db.products.count()).resolves.toBe(1);
-    await expect(db.customers.count()).resolves.toBe(1);
-  });
-
-  it('guarda sucursal y punto de venta recortados; en blanco no se guardan (contrato v3)', async () => {
-    stubRestBackend();
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-    setConfigTerminalField('branch', '  Centro ');
-    setConfigTerminalField('pointOfSale', '   ');
-
-    await submitConfig();
-
-    const saved = loadSyncConfig();
-    expect(saved).toMatchObject({ ok: true, value: { branch: 'Centro' } });
-    expect(saved.ok && 'pointOfSale' in saved.value).toBe(false);
-  });
-
-  it('si la prueba falla: mensaje legible, el formulario queda como estaba y no cambia nada', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')));
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-
-    await submitConfig();
-
-    expect(configErrorSignal.value).toBe(
-      'No se pudo conectar con el servidor (Failed to fetch). ¿Está en línea y corriendo?',
-    );
-    expect(configPhaseSignal.value).toBe('editing');
-    expect(activeScreenSignal.value).toBe('config');
-    expect(configFieldValuesSignal.value.rest.baseUrl).toBe('https://api.example.com');
-    expect(loadSyncConfig().ok).toBe(false);
-    expect(connectionStateSignal.value).toBe('unconfigured');
-    await expect(db.products.count()).resolves.toBe(0);
-  });
-});
-
-describe('submitConfig — cambio de conexión con datos locales', () => {
-  const oldConfig = {
-    type: 'rest' as const,
-    baseUrl: 'https://viejo.example.com',
-    verifiedAt: '2025-12-01T00:00:00.000Z',
-  };
-
-  it('mismo origen (cambia solo la API key): no pide confirmación y conserva los datos', async () => {
-    stubRestBackend();
-    await seedUserDataFor(oldConfig);
-    connectionStateSignal.value = 'active';
-    enterConfigScreen();
-    setConfigField('apiKey', 'nueva');
-
-    await submitConfig();
-
-    expect(configPhaseSignal.value).toBe('editing');
-    expect(activeScreenSignal.value).toBe('sale');
-    await expect(db.sales.count()).resolves.toBe(1);
-  });
-
-  it('origen distinto: envía lo pendiente al conector actual y pide confirmación con los conteos', async () => {
-    const fetchMock = stubRestBackend();
-    await seedUserDataFor(oldConfig);
-    connectionStateSignal.value = 'active';
-    enterConfigScreen();
-    setConfigField('baseUrl', 'https://nuevo.example.com');
-
-    await submitConfig();
-
-    expect(configPhaseSignal.value).toBe('confirming');
-    expect(activeScreenSignal.value).toBe('config');
-    expect(configConfirmationSignal.value).toMatchObject({ sales: 1 });
-    // El último intento de envío fue contra el backend VIEJO.
-    const urls = fetchMock.mock.calls.map(([url]) => String(url));
-    expect(urls).toContain('https://viejo.example.com/sync/push');
-    // Nada cambió todavía.
-    await expect(db.sales.count()).resolves.toBe(1);
-    const saved = loadSyncConfig();
-    expect(saved.ok && saved.value.type === 'rest' && saved.value.baseUrl).toBe(
-      'https://viejo.example.com',
-    );
-  });
-
-  it('confirmar borra lo local, carga lo del backend nuevo y vacía la venta en curso', async () => {
-    stubRestBackend();
-    await seedUserDataFor(oldConfig);
-    connectionStateSignal.value = 'active';
-    cartSignal.value = { lines: [{ kind: 'freeform', description: 'x', qty: 1, unitPrice: 1 }] };
-    enterConfigScreen();
-    setConfigField('baseUrl', 'https://nuevo.example.com');
-    await submitConfig();
-
-    await confirmConfigChange();
-
-    expect(activeScreenSignal.value).toBe('sale');
-    await expect(db.sales.count()).resolves.toBe(0);
-    await expect(db.outbox.count()).resolves.toBe(0);
-    await expect(db.products.count()).resolves.toBe(1);
-    expect(cartSignal.value).toEqual({ lines: [] });
-    const saved = loadSyncConfig();
-    expect(saved.ok && saved.value.type === 'rest' && saved.value.baseUrl).toBe(
-      'https://nuevo.example.com',
-    );
-  });
-
-  it('Esc en la confirmación vuelve a editar sin borrar nada', async () => {
-    stubRestBackend();
-    await seedUserDataFor(oldConfig);
-    connectionStateSignal.value = 'active';
-    enterConfigScreen();
-    setConfigField('baseUrl', 'https://nuevo.example.com');
-    await submitConfig();
-
-    handleConfigEscape();
-
-    expect(configPhaseSignal.value).toBe('editing');
-    expect(configConfirmationSignal.value).toBeNull();
-    await expect(db.sales.count()).resolves.toBe(1);
-  });
-
-  it('backToEditing hace lo mismo que Esc en la confirmación', async () => {
-    stubRestBackend();
-    await seedUserDataFor(oldConfig);
-    connectionStateSignal.value = 'active';
-    enterConfigScreen();
-    setConfigField('baseUrl', 'https://nuevo.example.com');
-    await submitConfig();
-
-    backToEditing();
-
-    expect(configPhaseSignal.value).toBe('editing');
-  });
-});
-
-describe('Esc', () => {
-  it('con la conexión activa y editando, cancela y vuelve a la venta sin guardar', () => {
-    connectionStateSignal.value = 'active';
-
-    handleConfigEscape();
-
-    expect(activeScreenSignal.value).toBe('sale');
-  });
-
-  it('modo requerido (conexión sin activar): Esc no sale de la pantalla', () => {
-    connectionStateSignal.value = 'unconfigured';
-
-    handleConfigEscape();
-
-    expect(activeScreenSignal.value).toBe('config');
-  });
-
-  it('durante la prueba cancela la prueba: el resultado tardío se descarta', async () => {
-    let resolveFirst: (response: Response) => void = () => undefined;
-    let calls = 0;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string) => {
-        calls += 1;
-        if (calls === 1) {
-          return new Promise<Response>((resolve) => {
-            resolveFirst = resolve;
-          });
-        }
-        return Promise.resolve(okResponse(new URL(url).pathname === '/stock' ? [] : { items: [] }));
-      }),
-    );
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-    const pending = submitConfig();
-    expect(configPhaseSignal.value).toBe('probing');
-
-    handleConfigEscape();
-    expect(configPhaseSignal.value).toBe('editing');
-    // La prueba toma el cerrojo de sync antes de tocar la red: el primer fetch sale un instante después.
+    await db.sales.put(makeSale('s1'));
+    await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
+    await changeOriginAndProbe();
+    setLocalChoice('wipe');
+    advance();
     await vi.waitFor(() => {
-      expect(calls).toBe(1);
+      expect(wizardAsyncSignal.value).toBe('confirming-wipe');
     });
-    resolveFirst(okResponse({ items: [] }));
-    await pending;
-
-    expect(configPhaseSignal.value).toBe('editing');
-    expect(activeScreenSignal.value).toBe('config');
-    expect(loadSyncConfig().ok).toBe(false);
-  });
-});
-
-describe('cancelConfigScreen', () => {
-  it('vuelve a la venta sin guardar nada', () => {
-    setConfigType('rest');
-    setConfigField('baseUrl', 'https://api.example.com');
-
-    cancelConfigScreen();
-
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).startsWith('http://a.test/sync/push')),
+    ).toBe(true);
+    await confirmWipe();
+    expect(await db.sales.count()).toBe(0);
     expect(activeScreenSignal.value).toBe('sale');
-    expect(loadSyncConfig().ok).toBe(false);
+  });
+
+  it('Esc en la confirmación de borrado vuelve a las opciones sin borrar', async () => {
+    stubRestBackend();
+    await db.sales.put(makeSale('s1'));
+    await changeOriginAndProbe();
+    setLocalChoice('wipe');
+    advance();
+    await vi.waitFor(() => {
+      expect(wizardAsyncSignal.value).toBe('confirming-wipe');
+    });
+    handleWizardEscape();
+    expect(wizardAsyncSignal.value).toBe('idle');
+    expect(wizardStepSignal.value).toBe('local-data');
+    expect(await db.sales.count()).toBe(1);
+    backFromWipeConfirmation(); // sin confirmación en curso: no hace nada
+    expect(activeScreenSignal.value).toBe('config');
   });
 });
