@@ -360,6 +360,12 @@ export function ConfigScreen() {
         return;
       }
     }
+    if (event.key === 'Enter' && event.ctrlKey) {
+      // Ctrl+Enter avanza desde cualquier lado, también con el foco en un botón.
+      event.preventDefault();
+      fastForward();
+      return;
+    }
     if (event.key === 'Enter') {
       // Un botón enfocado se activa solo con Enter (nativo): no duplicar. La
       // excepción son las opciones de "Datos locales": ahí Enter confirma la
@@ -371,11 +377,7 @@ export function ConfigScreen() {
         return;
       }
       event.preventDefault();
-      if (event.ctrlKey) {
-        fastForward();
-      } else {
-        advance();
-      }
+      advance();
     }
   };
 

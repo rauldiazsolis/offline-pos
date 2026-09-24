@@ -298,6 +298,22 @@ describe('ConfigScreen — correcciones de la prueba manual', () => {
     expect(document.activeElement).toBe(demo);
   });
 
+  it('Ctrl+Enter con el foco en una opción también avanza', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    setConfigType('rest');
+    render(<ConfigScreen />);
+    await act(() => {
+      jumpToStep('type');
+    });
+    const rest = screen.getByRole('button', { name: /^REST genérico/ });
+    expect(document.activeElement).toBe(rest);
+    await act(() => {
+      fireEvent.keyDown(rest, { key: 'Enter', ctrlKey: true });
+    });
+    // Sin URL, Ctrl+Enter se frena en "Datos del conector" con el error.
+    expect(wizardStepSignal.value).toBe('connector');
+  });
+
   it('los ejemplos de los campos dicen "ej. …"', () => {
     render(<ConfigScreen />);
     expect(screen.getByLabelText('Sucursal').getAttribute('placeholder')).toBe('ej. Casa central');
