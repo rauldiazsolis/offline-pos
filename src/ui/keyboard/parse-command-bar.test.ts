@@ -149,21 +149,35 @@ describe('parseCommandBar', () => {
   });
 
   describe('regla 5: código de barras / SKU (todo dígitos)', () => {
-    it('mientras se tipea, no dispara búsqueda (ambiguo con cantidad)', () => {
-      expect(live('7798787667')).toEqual({ kind: 'pending-numeric' });
+    it('mientras se tipea, con menos de 4 dígitos no lista nada; desde 4, lista códigos (#99)', () => {
+      expect(live('779')).toEqual({ kind: 'pending-numeric' });
+      expect(live('7798787667')).toEqual({ kind: 'code-search', code: '7798787667', qty: 1 });
     });
 
     it('al confirmar (Enter), resuelve a código de barras', () => {
       expect(enter('7798787667')).toEqual({ kind: 'barcode', code: '7798787667', qty: 1 });
     });
 
-    it('la secuencia tecla por tecla de un código completo nunca dispara búsqueda hasta Enter', () => {
+    it('tecla por tecla, un código nunca busca por nombre: solo códigos desde 4 dígitos', () => {
       const digits = '7798787667';
       for (let i = 1; i <= digits.length; i++) {
         const buffer = digits.slice(0, i);
-        expect(live(buffer)).toEqual({ kind: 'pending-numeric' });
+        expect(live(buffer).kind).toBe(i < 4 ? 'pending-numeric' : 'code-search');
       }
       expect(enter(digits)).toEqual({ kind: 'barcode', code: digits, qty: 1 });
+    });
+
+    it('un número con decimales nunca busca, y al confirmar falta el artículo (#99)', () => {
+      expect(live('1,5')).toEqual({ kind: 'pending-numeric' });
+      expect(live('1.5')).toEqual({ kind: 'pending-numeric' });
+      expect(enter('1,5')).toEqual({
+        kind: 'parse-error',
+        message: 'Falta el artículo: usá 1,5*artículo',
+      });
+    });
+
+    it('después de la cantidad, las mismas reglas de código', () => {
+      expect(live('2*7791')).toEqual({ kind: 'code-search', code: '7791', qty: 2 });
     });
 
     it('en cuanto aparece un carácter no numérico, se resuelve a búsqueda de inmediato', () => {

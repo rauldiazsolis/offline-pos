@@ -68,7 +68,11 @@ export function CommandBarInput() {
   const overlayScrollThumb = useScrollIndicator(overlayScrollRef);
 
   const searchResults = searchResultsSignal.value;
-  const selectedSearchIndex = searchSelectionIndexSignal.value ?? 0;
+  // La lista de códigos (#99) no preselecciona: sin elegir, Enter es el código exacto.
+  const selectedSearchIndex =
+    parsedSignal.value.kind === 'code-search'
+      ? searchSelectionIndexSignal.value
+      : (searchSelectionIndexSignal.value ?? 0);
   const customerResults = customerResultsSignal.value;
   const selectedCustomerIndex = customerSelectionIndexSignal.value ?? 0;
   const parsed = parsedSignal.value;
@@ -160,7 +164,10 @@ export function CommandBarInput() {
       // Con una línea del carrito seleccionada (↑/↓ previo), una cantidad +
       // Enter reemplaza la de la línea en vez de buscarse como código de
       // barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`).
-      if (cartSelectionIndexSignal.value !== null) {
+      // Una fila de la lista de códigos elegida a mano gana sobre "cantidad de la línea".
+      const pickingCode =
+        parsedSignal.value.kind === 'code-search' && searchSelectionIndexSignal.value !== null;
+      if (cartSelectionIndexSignal.value !== null && !pickingCode) {
         const parsedQty = parseQuantityText(buffer);
         if (parsedQty.ok) {
           void setSelectedCartLineQuantity(parsedQty.qty, { rounded: parsedQty.rounded });
@@ -394,7 +401,8 @@ export function CommandBarInput() {
                     );
                   }
                   const { product } = result.result;
-                  const qty = parsed.kind === 'search' ? parsed.qty : 1;
+                  const qty =
+                    parsed.kind === 'search' || parsed.kind === 'code-search' ? parsed.qty : 1;
                   // #99: advertir en vez de bloquear — el stock que quedaría
                   // corto con la cantidad pedida (sumada a la del carrito).
                   const stock = stockSnapshotSignal.value.get(product.id) ?? 0;

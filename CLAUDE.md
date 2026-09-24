@@ -505,7 +505,12 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
 4. `cualquier cosa$monto` → línea libre de venta (con `<n>*` de prefijo, `n` es el precio unitario
    — ver detalle abajo).
 5. `<n>*` o `-<n>*` de prefijo → cantidad antes de cualquier búsqueda.
-6. Todo dígitos → código de barras o SKU.
+6. Un número → cantidad o código, **nunca** búsqueda por nombre (prueba manual de la Etapa 4, #99).
+   Con decimales no es código: con una línea seleccionada es su cantidad; si no, "Falta el
+   artículo". Solo dígitos: desde 4 (`CODE_SEARCH_MIN_DIGITS`) lista los productos cuyo SKU o
+   código de barras **empieza o termina** así (`CatalogRepository.searchByCode`), sin preseleccionar
+   — Enter sin elegir busca el código exacto (un lector con un código inexistente nunca agrega una
+   coincidencia parcial); ↓ o click eligen una fila. Mismas reglas después de `<n>*`.
 7. Cualquier otro texto → búsqueda difusa por nombre **o por una línea libre ya en este ticket**
    (ver detalle abajo).
 

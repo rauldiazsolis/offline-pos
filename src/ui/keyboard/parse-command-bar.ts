@@ -14,11 +14,14 @@ export type ParsedCommand =
   | { kind: 'customer'; query: string } // '@', identificación de cliente (RF-16) — sin ambigüedad que resolver con finalizing
   | { kind: 'global-adjustment'; percentage: number } // '<signo><número>%', recargo/descuento sobre el total (RF-03)
   | { kind: 'freeform-line'; description: string; amount: number; qty: number }
-  | { kind: 'pending-numeric' } // solo dígitos, ambiguo cantidad-vs-código: no dispara búsqueda aún
+  | { kind: 'pending-numeric' } // número corto o con decimales: no dispara búsqueda (nunca busca por nombre)
+  | { kind: 'code-search'; code: string; qty: number } // 4+ dígitos: lista códigos que empiezan o terminan así
   | { kind: 'barcode'; code: string; qty: number }
   | { kind: 'search'; query: string; qty: number }
   | { kind: 'parse-error'; message: string };
 
+/** Desde cuántos dígitos se listan coincidencias de código (#99: con 3, "779" matchea todo). */
+export const CODE_SEARCH_MIN_DIGITS = 4;
 const QUANTITY_PATTERN = /^-?\d+(?:[.,]\d+)?$/;
 const QUANTITY_PREFIX = /^(-?\d+(?:[.,]\d+)?)\*(.*)$/;
 
@@ -139,9 +142,21 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
     return { kind: 'typing' };
   }
 
+  // Un número es cantidad o código, nunca una búsqueda por nombre (prueba
+  // manual de la Etapa 4). Con decimales no puede ser código: sin línea
+  // seleccionada (que lo tomaría como cantidad, `CommandBarInput`) falta el
+  // artículo. Solo dígitos: desde 4 se listan los códigos que empiezan o
+  // terminan así; Enter busca el código exacto (o la fila elegida con ↓).
+  if (/^\d+[.,]\d+$/.test(rest)) {
+    return finalizing
+      ? { kind: 'parse-error', message: `Falta el artículo: usá ${rest}*artículo` }
+      : { kind: 'pending-numeric' };
+  }
   if (/^\d+$/.test(rest)) {
     if (!finalizing) {
-      return { kind: 'pending-numeric' };
+      return rest.length >= CODE_SEARCH_MIN_DIGITS
+        ? { kind: 'code-search', code: rest, qty }
+        : { kind: 'pending-numeric' };
     }
     return { kind: 'barcode', code: rest, qty };
   }

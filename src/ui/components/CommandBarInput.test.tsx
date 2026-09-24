@@ -88,6 +88,7 @@ beforeEach(async () => {
       return query.toLowerCase().includes('arroz') ? [arrozResult] : [];
     },
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => undefined,
     getStock: () => Promise.resolve({ productId: 'p1', quantity: 10, updatedAt: '' }),
   });
@@ -595,6 +596,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -859,6 +861,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -883,6 +886,7 @@ describe('CommandBarInput', () => {
           return [];
         },
         findByBarcodeOrSku: () => undefined,
+        searchByCode: () => [],
         getProduct: () => undefined,
         getStock: () => Promise.resolve({ productId: 'p2', quantity: 10, updatedAt: '' }),
       });
@@ -1053,6 +1057,7 @@ describe('advertencias (#99)', () => {
     setCatalogRepository({
       search: () => [{ product: blockedArroz, score: 1 }],
       findByBarcodeOrSku: () => undefined,
+      searchByCode: () => [],
       getProduct: () => blockedArroz,
       getStock: () => Promise.resolve(undefined),
     });
@@ -1085,6 +1090,7 @@ describe('advertencias (#99)', () => {
     setCatalogRepository({
       search: () => [],
       findByBarcodeOrSku: () => arrozResult.product,
+      searchByCode: () => [],
       getProduct: () => arrozResult.product,
       getStock: () => Promise.resolve(undefined),
     });
@@ -1128,5 +1134,54 @@ describe('prueba manual de la Etapa 4', () => {
     expect(cartSignal.value.lines).toEqual([
       { kind: 'freeform', description: 'regalo', qty: -1, unitPrice: 100 },
     ]);
+  });
+});
+
+describe('números en la barra: cantidad o código (prueba manual de la Etapa 4)', () => {
+  const fideos = { ...fideosResult.product, barcodes: ['7791234000028'] };
+
+  beforeEach(() => {
+    setCatalogRepository({
+      search: () => [arrozResult],
+      findByBarcodeOrSku: (code) => (code === '7791234000028' ? fideos : undefined),
+      searchByCode: (fragment) =>
+        '7791234000028'.startsWith(fragment) || '7791234000028'.endsWith(fragment)
+          ? [{ product: fideos, score: 1 }]
+          : [],
+      getProduct: () => fideos,
+      getStock: () => Promise.resolve(undefined),
+    });
+  });
+
+  it('un número con decimales no busca artículos', () => {
+    render(<CommandBarInput />);
+
+    fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '1,5' } });
+
+    expect(screen.queryByText('Arroz 1kg')).toBeNull();
+  });
+
+  it('desde 4 dígitos lista los códigos que terminan así, sin preseleccionar', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '0028' } });
+    expect(screen.getByText('Fideos 500g')).not.toBeNull();
+
+    // Enter sin elegir: código exacto, que no existe.
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(cartSignal.value.lines).toEqual([]);
+    expect(commandBarErrorSignal.value).toBe('No se encontró ningún producto con "0028".');
+  });
+
+  it('↓ + Enter agrega la coincidencia elegida', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '7791' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]).toMatchObject({ kind: 'product', productId: 'p2', qty: 1 });
   });
 });

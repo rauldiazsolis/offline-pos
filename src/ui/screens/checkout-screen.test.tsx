@@ -36,6 +36,7 @@ beforeEach(() => {
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => undefined,
     getStock: () => Promise.resolve(undefined),
   });
@@ -229,6 +230,7 @@ describe('CheckoutScreen — advertencias (#99)', () => {
     setCatalogRepository({
       search: () => [],
       findByBarcodeOrSku: () => undefined,
+      searchByCode: () => [],
       getProduct: () => ({ ...blockedProduct, blocked: { reason: 'Vencido' } }),
       getStock: () => Promise.resolve(undefined),
     });

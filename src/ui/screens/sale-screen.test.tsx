@@ -18,6 +18,7 @@ beforeEach(async () => {
   setCatalogRepository({
     search: () => [],
     findByBarcodeOrSku: () => undefined,
+    searchByCode: () => [],
     getProduct: () => undefined,
     getStock: () => Promise.resolve(undefined),
   });

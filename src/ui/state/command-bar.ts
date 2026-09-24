@@ -82,6 +82,12 @@ function matchingFreeformLines(query: string): UnifiedSearchResult[] {
  */
 export const searchResultsSignal = computed<UnifiedSearchResult[]>(() => {
   const parsed = parsedSignal.value;
+  if (parsed.kind === 'code-search') {
+    // Solo códigos, sin líneas libres ni nombres (#99).
+    return getCatalogRepository()
+      .searchByCode(parsed.code)
+      .map((result) => ({ kind: 'product', result }));
+  }
   if (parsed.kind !== 'search') {
     return [];
   }

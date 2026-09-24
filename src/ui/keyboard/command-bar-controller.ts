@@ -505,9 +505,19 @@ function doSubmitCommandBar(): void {
       }
       return;
     }
-    case 'barcode':
+    case 'barcode': {
+      // Una fila de la lista de códigos elegida a mano (↓ o click) gana; si
+      // no, el código exacto — un lector que escanea un código inexistente
+      // nunca agrega una coincidencia parcial por accidente (#99).
+      const index = searchSelectionIndexSignal.value;
+      const selected = index !== null ? searchResultsSignal.value[index] : undefined;
+      if (selected?.kind === 'product') {
+        addByProduct(selected.result.product, parsed.qty);
+        return;
+      }
       addByCode(parsed.code, parsed.qty);
       return;
+    }
     case 'search': {
       const results = searchResultsSignal.value;
       const index = searchSelectionIndexSignal.value ?? 0;
@@ -597,8 +607,9 @@ export function moveSelection(direction: 1 | -1): void {
 
   const isSearching = commandBarBufferSignal.value !== '';
   if (isSearching) {
+    // La lista de códigos (#99) no preselecciona la fila 0: Enter sin elegir es el código exacto.
     moveSelectionOver(searchResultsSignal.value.length, searchSelectionIndexSignal, direction, {
-      assumeFirstSelected: true,
+      assumeFirstSelected: parsed.kind !== 'code-search',
     });
     return;
   }

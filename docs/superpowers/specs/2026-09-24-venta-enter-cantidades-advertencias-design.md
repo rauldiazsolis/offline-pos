@@ -435,3 +435,10 @@ Click en una fila = seleccionarla (lo mismo que llegar con ↑/↓). El foco se 
   "Confirmar devolución" `.btn-danger` en Cobro; líneas negativas y total negativo en el carrito); y
   `/DIAGNOSTICO` resalta el backend incompatible (rojo) o en mantenimiento (ámbar). La revisión general
   de cantidades, precios y búsquedas en la barra quedó en #119.
+- **Números en la barra (acordado en la prueba manual)**: un número es cantidad o código, nunca una
+  búsqueda por nombre. Con decimales (`1,5`) no busca; sin línea seleccionada, Enter da "Falta el
+  artículo: usá 1,5*artículo". Solo dígitos: desde 4 lista los productos cuyo SKU o código de barras
+  empieza o termina así, sin preseleccionar; Enter sin elegir es el código exacto, ↓ o click eligen
+  una fila.
+- **Numeración de tickets**: se acordó una numeración propia por dispositivo y día; va en la Etapa 5
+  (#100), ver #120.
