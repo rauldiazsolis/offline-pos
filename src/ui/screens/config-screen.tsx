@@ -146,18 +146,11 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                 >
                   {mark}
                 </span>
-                {summary !== '' && (
-                  <span
-                    style={{
-                      gridColumn: '2 / 4',
-                      color: 'var(--color-text-muted)',
-                      fontSize: 'var(--font-size-sm)',
-                      overflowWrap: 'anywhere',
-                    }}
-                  >
-                    {summary}
-                  </span>
-                )}
+                {/* Siempre presente y de alto fijo (dos renglones): completar un paso no
+                    agranda su ítem ni corre la lista. El texto completo, en el title. */}
+                <span class="wizard-step-summary" title={summary === '' ? undefined : summary}>
+                  {summary}
+                </span>
               </button>
             </li>
           );
@@ -417,7 +410,9 @@ export function ConfigScreen() {
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
-              paddingRight: 'var(--space-2)',
+              // Margen para el anillo de foco: un contenedor con scroll recorta lo
+              // que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
+              padding: 'var(--space-1) var(--space-2) var(--space-1) var(--space-1)',
             }}
           >
             <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>

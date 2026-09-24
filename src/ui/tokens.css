@@ -265,6 +265,30 @@ button:not(:disabled) {
 }
 
 /*
+ * Opción enfocada: un solo anillo, dibujado por dentro del borde (la opción
+ * elegida ya tiene el borde de acento). El outline general, por fuera y con
+ * separación, se veía como un doble foco que se salía de la caja.
+ */
+.wizard-option:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
+}
+
+/* Resumen de un paso en la columna: siempre dos renglones de alto, recortado con "…". */
+.wizard-step-summary {
+  grid-column: 2 / 4;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.3;
+  min-height: 2.6em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/*
  * Campo de texto enfocado: siempre visible, con `:focus` y no solo
  * `:focus-visible` — Chromium no marca `:focus-visible` cuando el foco se
  * pone por código antes de cualquier interacción (el primer campo de un
