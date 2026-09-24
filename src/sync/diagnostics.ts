@@ -1,6 +1,7 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
 import {
+  lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   pushLotIssuesSignal,
@@ -10,6 +11,7 @@ import {
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import type { LotIssue } from './connector.ts';
 import { isSyncLockHeld } from './engine.ts';
+import type { PullApplication } from './pull-rule.ts';
 import { getAwaitingLots, getCurrentPushLot, type AwaitingLot } from './push-lot.ts';
 import { getDeviceId } from './terminal-identity.ts';
 
@@ -27,6 +29,8 @@ export type SyncDiagnostics = {
   awaitingLots: AwaitingLot[];
   lastSyncedAt: string | null;
   lastSyncFailure: Failure | null;
+  /** Cómo se aplicó el último pull exitoso (#98). */
+  lastPullApplication: PullApplication | null;
   pushLotIssues: LotIssue[] | null;
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
   deviceId: string;
@@ -42,6 +46,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     awaitingLots: getAwaitingLots(),
     lastSyncedAt: lastSyncedAtSignal.value,
     lastSyncFailure: lastSyncFailureSignal.value,
+    lastPullApplication: lastPullApplicationSignal.value,
     pushLotIssues: pushLotIssuesSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,

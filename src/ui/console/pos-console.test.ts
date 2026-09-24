@@ -21,6 +21,7 @@ const diagnostics: SyncDiagnostics = {
   ],
   lastSyncedAt: '2026-09-23T11:05:00.000Z',
   lastSyncFailure: null,
+  lastPullApplication: null,
   pushLotIssues: null,
   deviceId: 'dev-1',
   log: [
@@ -135,6 +136,31 @@ describe('contrato v3 (#96)', () => {
     );
 
     expect(pos.status().issuesDelBackend).toEqual(['x (evento e1)', 'y']);
+  });
+});
+
+describe('pull con eventos reaplicados (#98)', () => {
+  it('status() incluye cómo se aplicó el último pull y si el lote en curso no llegó', () => {
+    const pos = createPosConsole(
+      fakeDeps({
+        collectDiagnostics: () => ({
+          ...diagnostics,
+          lastPullApplication: { kind: 'applied' },
+          currentLot: {
+            id: 'LOT-CUR',
+            eventIds: ['e1'],
+            createdAt: '2026-09-23T10:00:00.000Z',
+            retries: 0,
+            nextAttemptAt: '2026-09-23T10:00:00.000Z',
+            notReceivedAt: '2026-09-23T10:00:30.000Z',
+          },
+        }),
+      }),
+    );
+
+    const status = pos.status();
+    expect(status.ultimoPullAplicado).toBe('Aplicado completo');
+    expect(status.ultimoPush?.noRecibido).toBe('2026-09-23T10:00:30.000Z');
   });
 });
 
