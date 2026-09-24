@@ -11,6 +11,7 @@ import { setCatalogRepository } from './state/catalog.ts';
 import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
+import { refreshStockSnapshot } from './state/stock.ts';
 import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
 import { identityResetSignal } from './state/sync-config.ts';
 
@@ -40,6 +41,7 @@ export async function bootstrap(): Promise<void> {
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
   setCustomerRepository(await loadCustomerRepository());
+  await refreshStockSnapshot();
 
   // Restaurar antes de empezar a persistir (issue #17): así el primer
   // disparo del effect no reescribe innecesariamente el mismo valor que se

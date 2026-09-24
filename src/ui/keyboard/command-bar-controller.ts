@@ -15,11 +15,14 @@ import {
   createCustomerLocally,
   loadCustomerRepository,
 } from '../../storage/customer-repository.ts';
+import { lineWarnings } from '../../domain/sale-warnings.ts';
 import { describeError } from '../errors.ts';
+import { formatWarning } from '../format-warning.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarWarningSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
   effectiveCommandIndexSignal,
@@ -36,6 +39,7 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
 import { enterCashScreen } from './cash-session-controller.ts';
@@ -166,6 +170,7 @@ export function updateCommandBarBuffer(value: string): void {
 
   commandBarBufferSignal.value = value;
   commandBarErrorSignal.value = null;
+  commandBarWarningSignal.value = null;
   // Issue #28: cualquier tecla que cambie el buffer reabre el overlay que
   // corresponda al contenido nuevo, aunque se haya cerrado con Esc.
   overlayDismissedSignal.value = false;
@@ -207,6 +212,29 @@ async function createAndAttachCustomer(name: string): Promise<void> {
   clearBuffer();
 }
 
+/**
+ * Advertencias (#99) de la línea de producto que quedó en el carrito tras
+ * agregarla o ajustarla, en el slot de la barra. Nunca bloquea nada.
+ */
+function warnAboutProductLine(cart: Cart, productId: string): void {
+  const line = cart.lines.find(
+    (candidate) => candidate.kind === 'product' && candidate.productId === productId,
+  );
+  if (line === undefined) {
+    return;
+  }
+  const repo = getCatalogRepository();
+  const warnings = lineWarnings(line, {
+    product: repo.getProduct(productId),
+    stockQuantity: stockSnapshotSignal.value.get(productId),
+  });
+  if (warnings.length > 0) {
+    commandBarWarningSignal.value = warnings
+      .map((warning) => formatWarning(warning, (id) => repo.getProduct(id)?.name ?? id))
+      .join(' · ');
+  }
+}
+
 function addByProduct(product: Product, qty: number): void {
   const result = addProductLine(cartSignal.value, { product, qty });
   if (applyCartResult(result)) {
@@ -215,6 +243,7 @@ function addByProduct(product: Product, qty: number): void {
       (line) => line.kind === 'product' && line.productId === product.id,
     );
     clearBuffer();
+    warnAboutProductLine(result.value, product.id);
   }
 }
 
@@ -587,8 +616,12 @@ function doSetSelectedCartLineQuantity(qty: number): void {
   if (index === null) {
     return;
   }
+  const line = cartSignal.value.lines[index];
   const result = setLineQuantity(cartSignal.value, index, qty);
   if (applyCartResult(result)) {
+    if (line?.kind === 'product') {
+      warnAboutProductLine(result.value, line.productId);
+    }
     // Con 0 la línea se borra (#99): misma selección resultante que Supr.
     const newLength = result.value.lines.length;
     cartSelectionIndexSignal.value = newLength === 0 ? null : Math.min(index, newLength - 1);

@@ -16,6 +16,8 @@
   --color-accent: #2563eb;
   --color-danger: #dc2626;
   --color-success: #16a34a;
+  /* advertencia (#99): stock insuficiente, bloqueos — siempre con texto, nunca solo color */
+  --color-warning: #b45309;
   --color-focus-ring: #2563eb;
   /* texto de ejemplo de un campo vacío: bien distinto de un dato cargado */
   --color-placeholder: #a1a1aa;
@@ -30,6 +32,7 @@
   --color-chrome-text: #e4e4e7;
   --color-chrome-text-muted: #8b8fa3;
   --color-chrome-border: #2563eb;
+  --color-chrome-warning: #fbbf24;
 
   /* radio y sombra — tarjetas (resumen de venta, cliente adjunto, recibo) */
   --radius-md: 8px;

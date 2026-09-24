@@ -5,6 +5,7 @@ import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 
 beforeEach(() => {
   cartSignal.value = { lines: [] };
@@ -156,5 +157,35 @@ describe('CartView', () => {
     };
     render(<CartView />);
     expect(screen.getByText(/Descuento \(-10%\)/)).not.toBeNull();
+  });
+});
+
+describe('CartView — advertencias (#99)', () => {
+  it('una línea sobre el stock muestra "⚠ Stock disponible: N"', () => {
+    stockSnapshotSignal.value = new Map([['p1', 3]]);
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 5, unitPrice: 100 }] };
+    render(<CartView />);
+
+    expect(screen.getByText('⚠ Stock disponible: 3')).not.toBeNull();
+  });
+
+  it('una línea negativa nunca advierte por stock', () => {
+    stockSnapshotSignal.value = new Map();
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: -5, unitPrice: 100 }] };
+    render(<CartView />);
+
+    expect(screen.queryByText(/Stock disponible/)).toBeNull();
+  });
+
+  it('la tarjeta de cliente muestra el bloqueo', () => {
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      blocked: { reason: 'Deuda' },
+    };
+    render(<CartView />);
+
+    expect(screen.getByText('⚠ Bloqueado: Deuda')).not.toBeNull();
   });
 });

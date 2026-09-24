@@ -22,6 +22,14 @@ export const commandBarBufferSignal = signal('');
  */
 export const commandBarErrorSignal = signal<string | null>(null);
 
+/**
+ * Advertencia en el mismo slot que el error (#99): al agregar o ajustar una
+ * línea que queda con stock insuficiente o bloqueada. No selecciona el texto
+ * (no hay nada que corregir) y se borra con la próxima tecla, igual que un
+ * error; un error tiene precedencia en el slot.
+ */
+export const commandBarWarningSignal = signal<string | null>(null);
+
 /** Preview en vivo del buffer actual (`finalizing: false`) — se recalcula solo. */
 export const parsedSignal = computed<ParsedCommand>(() =>
   parseCommandBar(commandBarBufferSignal.value, { finalizing: false }),

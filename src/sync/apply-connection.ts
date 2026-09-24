@@ -7,6 +7,7 @@ import { clearAllTables, countLocalCatalog } from '../storage/local-data.ts';
 import { applySnapshotReconciled } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
+import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import {
   setActiveConnectorType,
   setConnectionState,
@@ -148,6 +149,7 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);
     setLocalCatalogCounts(await countLocalCatalog());
+    await refreshStockSnapshot();
     setSyncStatus('online-idle');
     return ok(undefined);
   } finally {

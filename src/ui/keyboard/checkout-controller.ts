@@ -21,6 +21,7 @@ import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { refreshStockSnapshot } from '../state/stock.ts';
 
 /**
  * Al abrir el cobro (#99): Efectivo arranca con |total| precargado (la
@@ -220,6 +221,7 @@ export async function submitCheckout(): Promise<void> {
     return;
   }
 
+  await refreshStockSnapshot();
   receiptSaleSignal.value = result.value;
   cartSignal.value = { lines: [] };
   resetAttachedCustomer();

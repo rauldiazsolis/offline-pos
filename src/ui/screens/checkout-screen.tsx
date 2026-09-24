@@ -2,9 +2,11 @@ import { useSignalEffect } from '@preact/signals';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { PaymentMethod } from '../../domain/sale.ts';
+import { cartWarnings } from '../../domain/sale-warnings.ts';
 import { tenderMode } from '../../domain/tender.ts';
 import { calculateTotals } from '../../domain/totals.ts';
 import { formatMoney } from '../format.ts';
+import { formatWarning } from '../format-warning.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
@@ -18,6 +20,8 @@ import { remapDecimalKey } from '../keyboard/decimal-key.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
+import { getCatalogRepository } from '../state/catalog.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import {
   checkoutBuffersSignal,
   checkoutErrorSignal,
@@ -166,6 +170,13 @@ export function CheckoutScreen() {
   const change = changePreview();
   const hasCustomer = attachedCustomerSignal.value !== undefined;
   const mode = tenderMode(totals.total);
+  const catalog = getCatalogRepository();
+  // #99: advertir en vez de bloquear — la lista completa, sin pedir confirmación.
+  const warnings = cartWarnings(cartSignal.value, {
+    productById: (id) => catalog.getProduct(id),
+    stockOf: (id) => stockSnapshotSignal.value.get(id),
+    customer: attachedCustomerSignal.value,
+  });
 
   return (
     <div style={overlayStyle} onMouseDown={keepFocusOnMouseDown}>
@@ -173,6 +184,26 @@ export function CheckoutScreen() {
         <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
           {mode === 'refund' ? `Devolver ${formatMoney(Math.abs(totals.total))}` : 'Cobrar venta'}
         </h1>
+
+        {warnings.length > 0 && (
+          <div
+            role="status"
+            style={{
+              ...cardStyle,
+              borderColor: 'var(--color-warning)',
+              color: 'var(--color-warning)',
+            }}
+          >
+            <div style={{ ...sectionLabelStyle, color: 'var(--color-warning)' }}>Advertencias</div>
+            <ul style={{ margin: 0, paddingLeft: 'var(--space-4)' }}>
+              {warnings.map((warning, index) => (
+                <li key={index}>
+                  {formatWarning(warning, (id) => catalog.getProduct(id)?.name ?? id)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 'var(--space-4)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>

@@ -16,6 +16,7 @@ import { newId } from '../storage/ids.ts';
 import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
+import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import {
   appendSyncLogEntry,
   lastSyncFailureSignal,
@@ -325,6 +326,7 @@ async function pullAndApply(
 async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Result<void>> {
   setPendingOutboxCount(await db.outbox.where('status').equals('pending').count());
   setLocalCatalogCounts(await countLocalCatalog());
+  await refreshStockSnapshot();
   setPushLotIssues(outcome.issues.length > 0 ? outcome.issues : null);
   if (outcome.issues.length > 0) {
     console.warn(

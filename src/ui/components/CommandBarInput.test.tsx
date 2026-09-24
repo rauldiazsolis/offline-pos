@@ -10,6 +10,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarWarningSignal,
   commandSelectionIndexSignal,
   customerSelectionIndexSignal,
   searchSelectionIndexSignal,
@@ -18,6 +19,7 @@ import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { formatDate, formatMoney } from '../format.ts';
 
 const arrozResult: CatalogSearchResult = {
@@ -1036,5 +1038,66 @@ describe('CommandBarInput — mouse (Etapa 2 de #94)', () => {
       expect(cartSignal.value.lines).toHaveLength(1);
     });
     expect(cartSignal.value.lines[0]).toMatchObject({ productId: 'p2' });
+  });
+});
+
+describe('advertencias (#99)', () => {
+  const blockedArroz = { ...arrozResult.product, blocked: { reason: 'Vencido' } };
+
+  beforeEach(() => {
+    commandBarWarningSignal.value = null;
+    stockSnapshotSignal.value = new Map([['p1', 3]]);
+  });
+
+  it('la búsqueda muestra el bloqueo y el stock corto con la cantidad pedida', () => {
+    setCatalogRepository({
+      search: () => [{ product: blockedArroz, score: 1 }],
+      findByBarcodeOrSku: () => undefined,
+      getProduct: () => blockedArroz,
+      getStock: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '5*arroz' } });
+
+    expect(screen.getByText('Bloqueado: Vencido')).not.toBeNull();
+    expect(screen.getByText('Stock: 3')).not.toBeNull();
+  });
+
+  it('la lista de @ muestra un cliente bloqueado', () => {
+    setCustomerRepository({
+      search: () => [
+        { customer: { ...anaResult.customer, blocked: { reason: 'Deuda' } }, score: 1 },
+      ],
+      listRecent: () => [],
+      getCustomer: () => undefined,
+      getCustomerAccount: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+
+    fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '@ana' } });
+
+    expect(screen.getByText('Bloqueado: Deuda')).not.toBeNull();
+  });
+
+  it('agregar más que el stock deja la advertencia en el slot y la próxima tecla la borra', () => {
+    setCatalogRepository({
+      search: () => [],
+      findByBarcodeOrSku: () => arrozResult.product,
+      getProduct: () => arrozResult.product,
+      getStock: () => Promise.resolve(undefined),
+    });
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '5*111' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]?.qty).toBe(5);
+    expect(screen.getByRole('status').textContent).toBe('⚠ Arroz 1kg: stock disponible 3');
+
+    fireEvent.input(input, { target: { value: 'a' } });
+    expect(commandBarWarningSignal.value).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { CheckoutScreen } from './checkout-screen.tsx';
 import { cartSignal } from '../state/cart.ts';
+import { setCatalogRepository } from '../state/catalog.ts';
 import { checkoutBuffersSignal, checkoutErrorSignal } from '../state/checkout.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
@@ -20,7 +21,24 @@ function getInput(label: string): HTMLInputElement {
   return screen.getByLabelText(label) as HTMLInputElement;
 }
 
+const blockedProduct = {
+  id: 'p1',
+  sku: 'SKU-1',
+  barcodes: [],
+  name: 'Coca',
+  price: 100,
+  taxRate: 0,
+  category: 'c',
+  tracksStock: false,
+};
+
 beforeEach(() => {
+  setCatalogRepository({
+    search: () => [],
+    findByBarcodeOrSku: () => undefined,
+    getProduct: () => undefined,
+    getStock: () => Promise.resolve(undefined),
+  });
   cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
   checkoutBuffersSignal.value = emptyBuffers();
   checkoutErrorSignal.value = null;
@@ -203,5 +221,33 @@ describe('CheckoutScreen — precarga, navegación y modo devolución (#99)', ()
 
     expect(confirm.className).toContain('btn-primary');
     expect(screen.getByRole('button', { name: 'Cancelar (Esc)' })).not.toBeNull();
+  });
+});
+
+describe('CheckoutScreen — advertencias (#99)', () => {
+  it('muestra el bloque de advertencias y no bloquea nada', () => {
+    setCatalogRepository({
+      search: () => [],
+      findByBarcodeOrSku: () => undefined,
+      getProduct: () => ({ ...blockedProduct, blocked: { reason: 'Vencido' } }),
+      getStock: () => Promise.resolve(undefined),
+    });
+    attachedCustomerSignal.value = {
+      id: 'c1',
+      name: 'Ana',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      blocked: { reason: 'Deuda' },
+    };
+    render(<CheckoutScreen />);
+
+    const block = screen.getByRole('status');
+    expect(block.textContent).toContain('Advertencias');
+    expect(block.textContent).toContain('Coca: bloqueado — Vencido');
+    expect(block.textContent).toContain('Cliente bloqueado — Deuda');
+  });
+
+  it('sin advertencias no hay bloque', () => {
+    render(<CheckoutScreen />);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

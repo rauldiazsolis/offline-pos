@@ -9,7 +9,10 @@ import { formatMoney, formatQuantity } from '../format.ts';
 import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { selectCartLine } from '../keyboard/command-bar-controller.ts';
+import { lineWarnings } from '../../domain/sale-warnings.ts';
+import { formatWarningInContext } from '../format-warning.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
+import { stockSnapshotSignal } from '../state/stock.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
@@ -56,6 +59,22 @@ const sectionLabelStyle = {
   letterSpacing: '.04em',
 };
 
+const warningStyle = {
+  color: 'var(--color-warning)',
+  fontSize: 'var(--font-size-sm)',
+};
+
+/** Advertencias de una línea (#99): stock insuficiente, producto bloqueado. */
+function lineWarningTexts(line: SaleLine): string[] {
+  if (line.kind !== 'product') {
+    return [];
+  }
+  return lineWarnings(line, {
+    product: getCatalogRepository().getProduct(line.productId),
+    stockQuantity: stockSnapshotSignal.value.get(line.productId),
+  }).map(formatWarningInContext);
+}
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -84,8 +103,14 @@ function lineCode(line: SaleLine): string | undefined {
  * alto reservado, nunca se ocultan) si no: la posición de cada dato no se
  * mueve según qué tenga el cliente adjunto. Tamaño fijo (`cart-view.css`)
  * además, por las mismas razón.
+ *
+ * Un cliente bloqueado (#99) suma "⚠ Bloqueado: <motivo>": ocupa la fila del
+ * teléfono si no hay teléfono; si hay, es una fila más (el alto mínimo de
+ * la tarjeta ya la contempla).
  */
 function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Element {
+  const blockedText =
+    customer?.blocked !== undefined ? `⚠ Bloqueado: ${customer.blocked.reason}` : undefined;
   return (
     <div class="cart-view__customer" style={cardStyle}>
       <div style={sectionLabelStyle}>Cliente</div>
@@ -101,9 +126,12 @@ function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Ele
       <div style={{ color: 'var(--color-text-muted)' }}>
         {customer?.document !== undefined ? `Doc: ${customer.document}` : ' '}
       </div>
-      <div style={{ color: 'var(--color-text-muted)' }}>
-        {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
-      </div>
+      {(customer?.phone !== undefined || blockedText === undefined) && (
+        <div style={{ color: 'var(--color-text-muted)' }}>
+          {customer?.phone !== undefined ? `Tel: ${customer.phone}` : ' '}
+        </div>
+      )}
+      {blockedText !== undefined && <div style={warningStyle}>{blockedText}</div>}
     </div>
   );
 }
@@ -157,6 +185,7 @@ function CartTable({
       <tbody>
         {lines.map((line, index) => {
           const code = lineCode(line);
+          const warnings = lineWarningTexts(line);
           return (
             <tr
               key={index}
@@ -185,6 +214,11 @@ function CartTable({
                     {code}
                   </div>
                 )}
+                {warnings.map((text) => (
+                  <div key={text} class="cart-view__warning" style={warningStyle}>
+                    ⚠ {text}
+                  </div>
+                ))}
               </td>
               <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
                 {formatMoney(line.unitPrice)}

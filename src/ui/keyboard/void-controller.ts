@@ -2,6 +2,7 @@ import { db } from '../../storage/db.ts';
 import { voidSaleAndPersist } from '../../storage/sale-repository.ts';
 import { describeError } from '../errors.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { refreshStockSnapshot } from '../state/stock.ts';
 import {
   voidConfirmingSignal,
   voidErrorSignal,
@@ -81,5 +82,6 @@ export async function confirmVoid(): Promise<void> {
     voidErrorSignal.value = describeError(result);
     return;
   }
+  await refreshStockSnapshot();
   exitVoidScreen();
 }
