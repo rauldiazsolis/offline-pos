@@ -1,25 +1,26 @@
-import { splitConnectorCustomers } from '../domain/customer.ts';
 import { markSynced, type OutboxEvent } from '../domain/outbox.ts';
 import {
   buildPushLot,
   isLotDue,
   isPushStruggling,
   markLotFailed,
+  markLotNotReceived,
   type PushLot,
 } from '../domain/push-lot.ts';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
+import { applyPull } from '../storage/apply-pull.ts';
 import { newId } from '../storage/ids.ts';
 import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
-import { reconcileSnapshot } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import {
   appendSyncLogEntry,
   lastSyncFailureSignal,
   pushLotIssuesSignal,
+  setLastPullApplication,
   setLastSyncFailure,
   setLastSyncedAt,
   setLocalCatalogCounts,
@@ -42,9 +43,11 @@ import {
   setProductsCursor,
 } from './cursor.ts';
 import { isFullRefreshDue } from './full-refresh.ts';
-import { toProbeSnapshot, withTimeout } from './pull-snapshot.ts';
+import { withTimeout } from './pull-snapshot.ts';
+import { classifyLots, type PullApplication } from './pull-rule.ts';
 import {
   addAwaitingLot,
+  type AwaitingLot,
   clearCurrentPushLot,
   getAwaitingLots,
   getCurrentPushLot,
@@ -94,34 +97,33 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
 
 /**
  * Registra un intento real de push/pull para `/DIAGNOSTICO` — `request`/
- * `result` son literalmente lo que el call site ya tiene en la mano (los
- * argumentos que le pasó al `Connector` y lo que devolvió), sin resumir
- * nada, así se puede correlacionar con la pestaña Network del navegador.
- * Un ciclo exitoso normal no imprime nada en consola — solo queda en el
- * log; `sync/pending-lot` es el descarte esperado del diseño (ver spec de
- * #87), no un problema, así que va a `console.info` en vez de `console.error`.
+ * `result` son literalmente lo que el call site ya tiene en la mano, sin
+ * resumir, así se puede correlacionar con la pestaña Network. Un ciclo
+ * exitoso no toca la consola, salvo un pull que retuvo stock y saldos: es el
+ * comportamiento esperado mientras un lote se procesa (#98), va a `console.info`.
  */
 function logSyncAttempt(
   kind: 'push' | 'pull',
   now: string,
   request: unknown,
   result: Result<unknown>,
+  application?: PullApplication,
 ): void {
   const entry: SyncLogEntry = {
     at: now,
     kind,
     request,
     result: result.ok ? { ok: true } : { ok: false, error: result.error, meta: result.meta },
+    ...(application !== undefined ? { application } : {}),
   };
   appendSyncLogEntry(entry);
-  if (result.ok) {
+  if (!result.ok) {
+    console.error(`[sync] ${kind} falló: ${result.error}`, entry);
     return;
   }
-  if (result.error === 'sync/pending-lot') {
-    console.info(`[sync] ${kind} descartado — lote de push todavía pendiente`, entry);
-    return;
+  if (application?.kind === 'retained') {
+    console.info('[sync] pull aplicado sin stock ni saldos — lote(s) procesando', entry);
   }
-  console.error(`[sync] ${kind} falló: ${result.error}`, entry);
 }
 
 /**
@@ -204,15 +206,33 @@ export function resetFullRefreshSession(): void {
 /** Tope de una foto completa: un backend colgado no puede dejar tomado el cerrojo de sync. */
 export const FULL_REFRESH_TIMEOUT_MS = 60_000;
 
-type PullOutcome = { applied: boolean; failure?: Failure; issues: LotIssue[]; request: unknown };
+type PullOutcome = {
+  application?: PullApplication;
+  failure?: Failure;
+  issues: LotIssue[];
+  request: unknown;
+};
 
 /**
- * Un ciclo de **pull**: un solo `pullBatch` (delta si `full` no está, foto
- * completa si sí), gateado por el estado de los lotes de push que el POS
- * todavía espera confirmar (#87) — si alguno sigue `queued`/`processing`
- * (contrato v3, #96; o el backend no lo informa), no se aplica
- * nada de este pull (ver spec, "Regla de aplicación"). Reemplaza
- * `pullCatalog`/`pullCustomers`/`syncOnce`/`syncFull` de antes de #87.
+ * Ack recuperado (#98): el backend informó el lote en curso, así que lo
+ * recibió aunque la respuesta del push se perdió. Mismo efecto que el ack:
+ * eventos `synced`, lote a la lista de espera, nunca se reenvía.
+ */
+async function recoverLostAck(lot: AwaitingLot): Promise<void> {
+  const events = (await db.outbox.bulkGet(lot.eventIds ?? [])).filter(
+    (event): event is OutboxEvent => event !== undefined && event.status === 'pending',
+  );
+  await db.outbox.bulkPut(events.map(markSynced));
+  clearCurrentPushLot();
+  addAwaitingLot(lot);
+}
+
+/**
+ * Un ciclo de **pull** (spec de #98): un solo `pullBatch` que pregunta por
+ * los lotes en espera y por el lote en curso. Datos maestros y bloqueos se
+ * aplican siempre; stock y saldo, con el valor del backend más los eventos
+ * que todavía no refleja, o los locales si algún lote sigue `processing`
+ * (en ese caso el cursor de clientes no avanza: el saldo viaja en el cliente).
  */
 async function pullAndApply(
   connector: Connector,
@@ -220,6 +240,7 @@ async function pullAndApply(
   options: { full: boolean },
 ): Promise<PullOutcome> {
   const awaiting = getAwaitingLots();
+  const currentLot = getCurrentPushLot();
   const productsCursor = getProductsCursor();
   const customersCursor = getCustomersCursor();
   const cursors = options.full
@@ -232,102 +253,71 @@ async function pullAndApply(
   const request = {
     deviceId: getDeviceId(),
     cursors,
-    pendingLotIds: awaiting.map((lot) => lot.id),
+    pendingLotIds: [
+      ...awaiting.map((lot) => lot.id),
+      ...(currentLot !== undefined ? [currentLot.id] : []),
+    ],
   };
   const pullPromise = connector.pullBatch(request);
-  // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87): un backend
-  // colgado en un delta normal no justificaba la complejidad extra, la foto completa sí porque
-  // puede tardar mucho más y correr menos seguido.
+  // Solo la foto completa lleva tope de tiempo (mismo criterio que antes de #87).
   const pullResult = options.full
     ? await withTimeout(pullPromise, FULL_REFRESH_TIMEOUT_MS)
     : await pullPromise;
   if (!pullResult.ok) {
-    return { applied: false, failure: pullResult, issues: [], request };
+    return { failure: pullResult, issues: [], request };
   }
 
-  const resolved = new Set<string>();
-  const inProgress: Record<string, 'queued' | 'processing'> = {};
-  const issues: LotIssue[] = [];
-  let stillInProgress = false;
-  for (const lot of awaiting) {
-    const status = pullResult.value.lots[lot.id];
-    // Contrato v3: un lote pedido que el backend no informa cuenta como `processing`.
-    if (status === undefined || status.status === 'queued' || status.status === 'processing') {
-      stillInProgress = true;
-      if (status !== undefined) {
-        inProgress[lot.id] = status.status;
-      }
-      continue;
-    }
-    resolved.add(lot.id);
-    if (status.status === 'issues') {
-      issues.push(...status.issues);
-    }
+  const lots = classifyLots({ awaiting, currentLot, reported: pullResult.value.lots });
+  if (lots.recoveredLot !== undefined) {
+    await recoverLostAck(lots.recoveredLot);
+  } else if (currentLot !== undefined && lots.currentLotNotReceived) {
+    setCurrentPushLot(markLotNotReceived(currentLot, now));
   }
-  updateAwaitingLots(resolved, inProgress);
+  updateAwaitingLots(lots.resolvedIds, lots.inProgress);
 
-  // Etapa 1: `queued` y `processing` descartan el pull entero, igual que el `pending` de antes.
-  // La Etapa 3 (#98) aplica datos maestros siempre y reaplica eventos de los lotes `queued`.
-  if (stillInProgress) {
+  const retain = lots.retainingLotIds.length > 0;
+  const applied = await applyPull({
+    full: options.full,
+    result: pullResult.value,
+    retain,
+    queuedEventIds: lots.queuedEventIds,
+    now,
+  });
+  if (!applied.ok) {
+    return { failure: applied, issues: lots.issues, request };
+  }
+  if (applied.value.skipped.length > 0) {
     return {
-      applied: false,
-      failure: err('sync/pending-lot', undefined) as Failure,
-      issues,
+      failure: err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure,
+      issues: lots.issues,
       request,
     };
   }
 
-  if (options.full) {
-    const snapshot = toProbeSnapshot(pullResult.value);
-    const applied = await reconcileSnapshot(snapshot, { now });
-    if (!applied.ok) {
-      return { applied: false, failure: applied, issues, request };
-    }
-    if (applied.value.skipped.length > 0) {
-      return {
-        applied: false,
-        failure: err('sync/empty-snapshot', { tables: applied.value.skipped }) as Failure,
-        issues,
-        request,
-      };
-    }
-    if (snapshot.cursors.products !== undefined) {
-      setProductsCursor(snapshot.cursors.products);
-    }
-    if (snapshot.cursors.customers !== undefined) {
-      setCustomersCursor(snapshot.cursors.customers);
-    }
+  const { products, customers } = pullResult.value;
+  if (products.nextCursor !== undefined) {
+    setProductsCursor(products.nextCursor);
+  }
+  if (!retain && customers.nextCursor !== undefined) {
+    setCustomersCursor(customers.nextCursor);
+  }
+  if (options.full || products.items.length > 0) {
     setCatalogRepository(await loadCatalogRepository());
+  }
+  if (options.full || customers.items.length > 0) {
     setCustomerRepository(await loadCustomerRepository());
+  }
+  if (options.full && !retain) {
     setLastFullSyncAt(now);
     fullRefreshDoneThisSession = true;
-    return { applied: true, issues, request };
   }
 
-  if (pullResult.value.products.items.length > 0) {
-    await db.products.bulkPut(pullResult.value.products.items);
-    setCatalogRepository(await loadCatalogRepository());
-  }
-  if (pullResult.value.products.nextCursor !== undefined) {
-    setProductsCursor(pullResult.value.products.nextCursor);
-  }
-  if (pullResult.value.stock.length > 0) {
-    await db.stock.bulkPut(pullResult.value.stock);
-  }
-  if (pullResult.value.customers.items.length > 0) {
-    const { customers, accounts } = splitConnectorCustomers(pullResult.value.customers.items, {
-      now,
-    });
-    await db.customers.bulkPut(customers);
-    if (accounts.length > 0) {
-      await db.customerAccounts.bulkPut(accounts);
-    }
-    setCustomerRepository(await loadCustomerRepository());
-  }
-  if (pullResult.value.customers.nextCursor !== undefined) {
-    setCustomersCursor(pullResult.value.customers.nextCursor);
-  }
-  return { applied: true, issues, request };
+  const application: PullApplication = retain
+    ? { kind: 'retained', lotIds: lots.retainingLotIds }
+    : applied.value.reappliedEvents > 0
+      ? { kind: 'reapplied', events: applied.value.reappliedEvents }
+      : { kind: 'applied' };
+  return { application, issues: lots.issues, request };
 }
 
 /** Cola común de un ciclo de pull: conteos, aviso de issues y estado honesto (#53, adaptado a #87). */
@@ -341,7 +331,13 @@ async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Resul
       outcome.issues,
     );
   }
-  logSyncAttempt('pull', now, outcome.request, outcome.failure ?? ok(undefined));
+  logSyncAttempt(
+    'pull',
+    now,
+    outcome.request,
+    outcome.failure ?? ok(undefined),
+    outcome.application,
+  );
 
   if (outcome.failure !== undefined) {
     setLastSyncFailure(outcome.failure);
@@ -349,6 +345,7 @@ async function finishPullCycle(now: string, outcome: PullOutcome): Promise<Resul
     return outcome.failure;
   }
   setLastSyncFailure(null);
+  setLastPullApplication(outcome.application ?? null);
 
   if (isPushStruggling(getCurrentPushLot())) {
     setSyncStatus('sync-error');

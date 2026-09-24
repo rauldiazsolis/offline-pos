@@ -1,5 +1,4 @@
 import { splitConnectorCustomers } from '../domain/customer.ts';
-import { err, ok, type Result } from '../domain/result.ts';
 import type { ProbeSnapshot } from '../sync/pull-snapshot.ts';
 import { db } from './db.ts';
 
@@ -20,30 +19,11 @@ export type SnapshotTable = 'products' | 'stock' | 'customers';
  *   devuelve en `skipped` (un error del backend no debe vaciar el catálogo); el resto se reconcilia.
  *
  * Nunca toca ventas, turnos, movimientos de stock o de cuenta, el outbox ni la venta en curso.
- */
-export async function reconcileSnapshot(
-  snapshot: ProbeSnapshot,
-  params: { now: string },
-): Promise<Result<{ skipped: SnapshotTable[] }>> {
-  try {
-    return ok(
-      await db.transaction(
-        'rw',
-        [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
-        () => applySnapshotReconciled(snapshot, params),
-      ),
-    );
-  } catch (error) {
-    return err('sync/reconcile-failed', {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-/**
- * La reconciliación de una foto completa, **sin transacción propia**: para
- * correr dentro de una ya abierta (la de `applyConnection`, Etapa 2 de #94).
- * Lanza si Dexie falla — quien la llama convierte a `Result`.
+ *
+ * **Sin transacción propia**: corre dentro de la que ya abrió quien la llama —
+ * `storage/apply-pull.ts` (el pull del motor, #98) o `sync/apply-connection.ts`
+ * (aplicar una conexión, Etapa 2 de #94). Lanza si Dexie falla — quien la llama
+ * convierte a `Result`.
  * `allowEmptyTables`: un backend **nuevo** vacío es legítimo (una planilla
  * recién creada), así que la salvaguarda de tabla vacía no aplica.
  */

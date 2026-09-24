@@ -118,11 +118,6 @@ describe('describeError', () => {
     ).toBe('No se pudo reiniciar el minibackend de demo (Failed to fetch). ¿Está corriendo?');
   });
 
-  it('sync/pending-lot: explica que se esperó a que un envío anterior se confirme (#87)', () => {
-    const message = describeError({ ok: false, error: 'sync/pending-lot', meta: undefined });
-    expect(message).toMatch(/envío anterior/i);
-  });
-
   it('sync/push-issues: incluye el primer issue reportado por el backend (#87)', () => {
     const message = describeError({
       ok: false,
