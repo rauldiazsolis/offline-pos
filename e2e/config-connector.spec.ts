@@ -46,12 +46,12 @@ test('pasar a Google Sheets solo con teclado: instrucciones, validación, prueba
     'aria-pressed',
     'true',
   );
-  // El foco está en la opción elegida (grupo tipo radio) y se ve: un solo anillo
-  // por dentro del borde (box-shadow inset), sin el outline general por fuera.
+  // El foco está en la opción elegida (grupo tipo radio) y se ve: un halo
+  // alrededor (box-shadow), sin el outline general separado de la caja.
   const sheets = page.getByRole('button', { name: /^Google Sheets/ });
   await expect(sheets).toBeFocused();
   await expect(sheets).toHaveCSS('outline-style', 'none');
-  await expect(sheets).toHaveCSS('box-shadow', /inset/);
+  await expect(sheets).toHaveCSS('box-shadow', /rgba\(37, 99, 235/);
   await page.keyboard.press('Enter');
 
   // Datos del conector: el primer campo enfocado y las instrucciones del tipo a la vista.

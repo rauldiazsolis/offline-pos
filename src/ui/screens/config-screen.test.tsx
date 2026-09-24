@@ -285,11 +285,12 @@ describe('ConfigScreen — correcciones de la prueba manual', () => {
     await act(() => {
       jumpToStep('type');
     });
-    // Sin tipo elegido, el foco está en la primera opción (nunca en un contenedor invisible).
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^REST genérico/ }));
-    await act(() => {
-      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
-    });
+    // Sin tipo elegido, el foco está en la primera opción (nunca en un contenedor
+    // invisible), pero no está elegida: el foco no es la selección.
+    const rest = screen.getByRole('button', { name: /^REST genérico/ });
+    expect(document.activeElement).toBe(rest);
+    expect(rest.getAttribute('aria-pressed')).toBe('false');
+    // ↓ pasa a la siguiente y la elige (como un grupo de radio).
     await act(() => {
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
     });

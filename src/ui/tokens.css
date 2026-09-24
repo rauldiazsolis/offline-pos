@@ -265,11 +265,37 @@ button:not(:disabled) {
 }
 
 /*
- * Opción enfocada: un solo anillo, dibujado por dentro del borde (la opción
- * elegida ya tiene el borde de acento). El outline general, por fuera y con
- * separación, se veía como un doble foco que se salía de la caja.
+ * Opción de un grupo tipo radio: la selección y el foco se ven distinto. La
+ * elegida lleva el círculo lleno y el borde de acento; la enfocada, un halo
+ * suave alrededor (sin la separación del outline general, que se veía como un
+ * doble foco). Así una opción enfocada pero no elegida no parece elegida.
  */
 .wizard-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+.wizard-radio {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.wizard-option[aria-pressed='true'] .wizard-radio {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: inset 0 0 0 3px var(--color-bg);
+}
+
+/*
+ * Paso de la columna enfocado con Tab: anillo por dentro, así no lo recorta el
+ * borde de la columna (que tiene scroll propio).
+ */
+.wizard-step-button:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--color-focus-ring);
 }

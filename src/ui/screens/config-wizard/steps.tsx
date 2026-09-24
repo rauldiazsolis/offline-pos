@@ -180,6 +180,16 @@ function useFocusFollowsChoice(chosenIndex: number) {
 
 const groupStyle = { display: 'flex', flexDirection: 'column' as const, gap: 'var(--space-2)' };
 
+/** Título de una opción con su círculo de radio (lleno si está elegida, vía CSS). */
+function OptionTitle({ children }: { children: string }) {
+  return (
+    <strong style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <span class="wizard-radio" aria-hidden="true" />
+      {children}
+    </strong>
+  );
+}
+
 function TypeStep() {
   const selected = configTypeSignal.value;
   const chosenIndex = CONNECTOR_TYPES.findIndex((info) => info.type === selected);
@@ -200,7 +210,7 @@ function TypeStep() {
           }}
           style={optionStyle(selected === info.type)}
         >
-          <strong>{info.label}</strong>
+          <OptionTitle>{info.label}</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>{info.description}</span>
         </button>
       ))}
@@ -368,7 +378,7 @@ function LocalDataOptions(props: { choice: 'keep' | 'wipe'; model: WizardModel; 
           }}
           style={optionStyle(choice === 'keep')}
         >
-          <strong>Mantener</strong>
+          <OptionTitle>Mantener</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>
             Las ventas, turnos y lo pendiente se conservan; el catálogo y los clientes se reemplazan
             por los de la conexión nueva.
@@ -387,7 +397,7 @@ function LocalDataOptions(props: { choice: 'keep' | 'wipe'; model: WizardModel; 
           }}
           style={optionStyle(choice === 'wipe')}
         >
-          <strong>Borrar</strong>
+          <OptionTitle>Borrar</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>
             La terminal empieza de cero con la conexión nueva. Antes se intenta enviar lo pendiente
             a la conexión actual.
