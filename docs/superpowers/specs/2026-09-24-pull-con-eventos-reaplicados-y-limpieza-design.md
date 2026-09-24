@@ -1,7 +1,7 @@
 # Motor de sync: pull con eventos reaplicados y limpieza de datos locales a 7 días
 
 Fecha: 2026-09-24
-Estado: diseño aprobado por el usuario en la sesión de brainstorming, pendiente de plan.
+Estado: diseño aprobado por el usuario; plan en `docs/superpowers/plans/2026-09-24-pull-con-eventos-reaplicados-y-limpieza.md`.
 Issue: #98 (Etapa 3 del epic #94). Depende de las Etapas 1 (#96, contrato v3) y 2 (#97).
 
 ## Contexto
@@ -59,7 +59,7 @@ reenvía. Corre dentro del cerrojo de sync del pull, así que no se cruza con un
 ### Aplicación
 
 - **Datos maestros y bloqueos** de productos y clientes: **siempre**, con cualquier estado de lotes
-  (delta con `bulkPut`, foto completa con `reconcileSnapshot`).
+  (delta con `bulkPut`, foto completa con `applySnapshotReconciled`).
 - **Stock y saldo**:
   - **Algún lote retiene** (`processing` o equivalente): se descarta el stock y el saldo del pull y
     quedan los locales, que ya incluyen todo lo que hizo esta terminal. Sin cálculo por ítem: el
