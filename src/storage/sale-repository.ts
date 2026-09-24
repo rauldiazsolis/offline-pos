@@ -8,7 +8,7 @@ import {
   buildOutboxEventsForStockMovements,
 } from '../domain/outbox.ts';
 import { err, ok, type Result } from '../domain/result.ts';
-import { buildStockMovementsForSale, closeSale, voidSale } from '../domain/sale-lifecycle.ts';
+import { buildStockMovementsForSale, buildVoidSale, closeSale } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
 import type { StockMovement } from '../domain/stock.ts';
 import { currentEventOrigin } from '../sync/terminal-identity.ts';
@@ -195,8 +195,11 @@ export async function voidSaleAndPersist(
     return err('sale/not-found', { saleId });
   }
 
-  const voidResult = voidSale(existing, {
+  // Puente hasta la Tarea 9 del plan de #99: persiste el ticket de anulación.
+  const voidResult = buildVoidSale(existing, {
+    id: newId(),
     now,
+    isAlreadyVoided: false,
     ...(params?.reason !== undefined ? { reason: params.reason } : {}),
   });
   if (!voidResult.ok) {
@@ -205,7 +208,7 @@ export async function voidSaleAndPersist(
   const voided = voidResult.value;
 
   const trackedProductIds = await trackedProductIdsFor(existing.lines);
-  const movements = buildStockMovementsForSale(existing, {
+  const movements = buildStockMovementsForSale(voided, {
     reason: 'sale-void',
     now,
     newMovementId: newId,
@@ -214,7 +217,7 @@ export async function voidSaleAndPersist(
   const outboxEvents = [
     buildOutboxEventForVoid({
       id: newId(),
-      saleId: voided.id,
+      saleId: existing.id,
       voidedAt: now,
       ...(voided.voidReason !== undefined ? { voidReason: voided.voidReason } : {}),
       now,
@@ -225,7 +228,7 @@ export async function voidSaleAndPersist(
 
   try {
     await db.transaction('rw', db.sales, db.stock, db.stockMovements, db.outbox, async () => {
-      await db.sales.put(voided);
+      await db.sales.add(voided);
       await applyStockMovements(movements, now);
       await db.outbox.bulkAdd(outboxEvents);
     });

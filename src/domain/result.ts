@@ -1,4 +1,4 @@
-import type { Discount, Sale } from './sale.ts';
+import type { Discount } from './sale.ts';
 
 /**
  * Result<T> casero — ver "Manejo de errores" en CLAUDE.md.
@@ -33,8 +33,9 @@ export type ErrorMeta = {
   'sale/insufficient-payment': { total: number; paid: number };
   'sale/refund-amount-mismatch': { total: number; tendered: number };
   'sale/non-cash-exceeds-total': { nonCashTotal: number; total: number };
-  'sale/not-closed': { status: Sale['status'] };
   'sale/already-voided': undefined;
+  'sale/cannot-void-a-void': undefined;
+  'sale/void-window-expired': { createdAt: string };
 
   // catalog.ts
   'catalog/duplicate-sku': { sku: string };

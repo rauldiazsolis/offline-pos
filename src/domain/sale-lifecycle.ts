@@ -68,33 +68,74 @@ export function closeSale(params: {
   });
 }
 
+/** Ventana de anulación (#99): 24 h móviles, no día calendario — cubre el turno noche. */
+export const VOID_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export function isWithinVoidWindow(sale: Pick<Sale, 'createdAt'>, now: string): boolean {
+  return new Date(now).getTime() - new Date(sale.createdAt).getTime() < VOID_WINDOW_MS;
+}
+
+/** Anulada: con el status legado (antes de #99) o porque hay un ticket que la anula. */
+export function isVoided(
+  sale: Pick<Sale, 'id' | 'status'>,
+  voidedSaleIds: ReadonlySet<string>,
+): boolean {
+  return sale.status === 'voided' || voidedSaleIds.has(sale.id);
+}
+
+function negateLine(line: SaleLine): SaleLine {
+  return { ...line, qty: -line.qty };
+}
+
+function negatePayment(payment: Payment): Payment {
+  // Sin `reference`: un pago `account` negativo sin hold es una acreditación (contrato).
+  return { method: payment.method, amount: -payment.amount };
+}
+
 /**
- * Anula una venta cerrada (RF-06). No edita lines/payments/total/createdAt
- * (RNF-07) — solo transiciona el status y agrega el rastro de auditoría
- * (voidedAt/voidReason). El stock revertido se registra aparte, ver
- * `buildStockMovementsForSale`.
+ * La anulación como documento propio (RF-06, #99): un ticket nuevo con las
+ * líneas y los pagos del original invertidos (el descuento de cada línea se
+ * conserva), que mueve stock, saldo y efectivo por su cuenta. `voidsSaleId`
+ * queda solo para auditoría; el original no se toca (RNF-07). Una devolución
+ * común (negativa, sin `voidsSaleId`) también se anula: su anulación es un
+ * ticket positivo.
  */
-export function voidSale(sale: Sale, params: { now: string; reason?: string }): Result<Sale> {
-  if (sale.status === 'voided') {
+export function buildVoidSale(
+  original: Sale,
+  params: { id: string; now: string; reason?: string; isAlreadyVoided: boolean },
+): Result<Sale> {
+  if (original.voidsSaleId !== undefined) {
+    return err('sale/cannot-void-a-void', undefined);
+  }
+  if (params.isAlreadyVoided || original.status === 'voided') {
     return err('sale/already-voided', undefined);
   }
-  if (sale.status !== 'closed') {
-    return err('sale/not-closed', { status: sale.status });
+  if (!isWithinVoidWindow(original, params.now)) {
+    return err('sale/void-window-expired', { createdAt: original.createdAt });
   }
-
   return ok({
-    ...sale,
-    status: 'voided',
-    voidedAt: params.now,
+    id: params.id,
+    status: 'closed',
+    createdAt: params.now,
+    lines: original.lines.map(negateLine),
+    payments: original.payments.map(negatePayment),
+    total: -original.total,
+    voidsSaleId: original.id,
     ...(params.reason !== undefined ? { voidReason: params.reason } : {}),
+    ...(original.customerId !== undefined ? { customerId: original.customerId } : {}),
+    ...(original.globalAdjustmentPercentage !== undefined
+      ? { globalAdjustmentPercentage: original.globalAdjustmentPercentage }
+      : {}),
   });
 }
 
 /**
- * Genera los movimientos de stock correspondientes a cerrar (`reason:
- * 'sale'`, resta) o anular (`reason: 'sale-void'`, repone) una venta. Solo
- * para líneas de producto cuyo producto trackea stock — `trackedProductIds`
- * lo resuelve el caller (storage), el dominio no consulta el catálogo.
+ * Genera los movimientos de stock de una venta: `delta = -qty` por línea,
+ * así una línea negativa (devolución, o el ticket de una anulación, #99)
+ * repone sola. `reason` es solo la etiqueta de auditoría (`sale-void` para
+ * una anulación). Solo para líneas de producto cuyo producto trackea stock —
+ * `trackedProductIds` lo resuelve el caller (storage), el dominio no
+ * consulta el catálogo.
  */
 export function buildStockMovementsForSale(
   sale: Sale,
@@ -106,7 +147,6 @@ export function buildStockMovementsForSale(
   },
 ): StockMovement[] {
   const { reason, now, newMovementId, trackedProductIds } = params;
-  const sign = reason === 'sale' ? -1 : 1;
 
   const isTrackedProductLine = (line: SaleLine): line is Extract<SaleLine, { kind: 'product' }> =>
     line.kind === 'product' && trackedProductIds.has(line.productId);
@@ -114,7 +154,7 @@ export function buildStockMovementsForSale(
   return sale.lines.filter(isTrackedProductLine).map((line) => ({
     id: newMovementId(),
     productId: line.productId,
-    delta: sign * line.qty,
+    delta: -line.qty,
     reason,
     saleId: sale.id,
     createdAt: now,

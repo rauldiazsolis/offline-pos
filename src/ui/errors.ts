@@ -38,8 +38,10 @@ export function describeError(failure: Failure): string {
         : `Lo que se devuelve (${formatMoney(failure.meta.tendered)}) tiene que ser exactamente ${formatMoney(Math.abs(failure.meta.total))}.`;
     case 'sale/non-cash-exceeds-total':
       return `No se puede dar vuelto con un medio distinto a efectivo (excedente ${String(failure.meta.nonCashTotal - failure.meta.total)}).`;
-    case 'sale/not-closed':
-      return 'Esa venta no está cerrada.';
+    case 'sale/cannot-void-a-void':
+      return 'Esta venta ya es una anulación: no se puede anular.';
+    case 'sale/void-window-expired':
+      return 'Solo se pueden anular ventas de las últimas 24 horas.';
     case 'sale/already-voided':
       return 'Esa venta ya estaba anulada.';
     case 'catalog/duplicate-sku':
