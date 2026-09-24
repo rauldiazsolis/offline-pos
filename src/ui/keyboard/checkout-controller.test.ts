@@ -4,7 +4,7 @@ import type { CustomerAccount } from '../../domain/customer.ts';
 import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
-import { cartSignal } from '../state/cart.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   checkoutBuffersSignal,
   checkoutErrorSignal,
@@ -90,6 +90,15 @@ describe('submitCheckout', () => {
     expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
     expect(cartSignal.value.lines).toEqual([]);
     expect(activeScreenSignal.value).toBe('receipt');
+  });
+
+  it('al cerrar la venta no queda ninguna línea seleccionada (#99)', async () => {
+    cartSelectionIndexSignal.value = 0;
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
+
+    await submitCheckout();
+
+    expect(cartSelectionIndexSignal.value).toBeNull();
   });
 
   it('con efectivo de más, guarda el neto en vez del monto tendido (resuelve el bug #48)', async () => {

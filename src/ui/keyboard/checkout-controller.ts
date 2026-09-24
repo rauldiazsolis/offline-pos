@@ -9,7 +9,7 @@ import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
 import { requestAccountHoldNow } from '../../sync/account-hold.ts';
 import { describeError } from '../errors.ts';
 import { formatAmountInput, parseNonNegativeAmount } from '../parse-amount.ts';
-import { cartSignal } from '../state/cart.ts';
+import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   checkoutBuffersSignal,
   checkoutErrorSignal,
@@ -224,6 +224,9 @@ export async function submitCheckout(): Promise<void> {
   await refreshStockSnapshot();
   receiptSaleSignal.value = result.value;
   cartSignal.value = { lines: [] };
+  // Sin esto la selección seguía apuntando a una línea que ya no existe, y el
+  // próximo código de barras (todo dígitos) se tomaba como su cantidad.
+  cartSelectionIndexSignal.value = null;
   resetAttachedCustomer();
   resetCheckout();
   activeScreenSignal.value = 'receipt';

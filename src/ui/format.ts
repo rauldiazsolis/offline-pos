@@ -45,9 +45,11 @@ export function formatDate(isoDate: string): string {
 
 /** Hora local HH:MM de una fecha ISO (#99: "Anulación de HH:MM"). */
 export function formatTime(isoDate: string): string {
-  return new Intl.DateTimeFormat(resolveLocale(), { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(isoDate),
-  );
+  return new Intl.DateTimeFormat(resolveLocale(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(isoDate));
 }
 
 /**
