@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../../sync/config.ts';
-import { parseCommandBar, parseQuantityText } from './parse-command-bar.ts';
+import { parseCommandBar, parseQuantityText, roundedQuantityPrefix } from './parse-command-bar.ts';
 
 const live = (buffer: string) => parseCommandBar(buffer, { finalizing: false });
 const enter = (buffer: string) => parseCommandBar(buffer, { finalizing: true });
@@ -225,19 +225,41 @@ describe('cantidades (#99)', () => {
     });
   });
 
-  it('más de 3 decimales en el prefijo es error al confirmar, y sigue tipeando mientras tanto', () => {
-    expect(parseCommandBar('1,2345*queso', { finalizing: true })).toEqual({
-      kind: 'parse-error',
-      message: 'Hasta 3 decimales en la cantidad',
+  it('más de 3 decimales en el prefijo se redondea a 3 (y busca igual mientras se tipea)', () => {
+    expect(parseCommandBar('0.2001*c', { finalizing: false })).toEqual({
+      kind: 'search',
+      query: 'c',
+      qty: 0.2,
     });
-    expect(parseCommandBar('1,2345*queso', { finalizing: false })).toEqual({ kind: 'typing' });
+    expect(roundedQuantityPrefix('0.2001*c')).toBe(0.2);
+    expect(roundedQuantityPrefix('1,5*c')).toBeUndefined();
+    expect(roundedQuantityPrefix('coca')).toBeUndefined();
+  });
+
+  it('un "-" pegado a un texto vale -1 (prueba manual de la Etapa 4)', () => {
+    expect(parseCommandBar('-regalo$100', { finalizing: true })).toEqual({
+      kind: 'freeform-line',
+      description: 'regalo',
+      amount: 100,
+      qty: -1,
+    });
+    expect(parseCommandBar('-aceite de girasol', { finalizing: true })).toEqual({
+      kind: 'search',
+      query: 'aceite de girasol',
+      qty: -1,
+    });
+    expect(parseCommandBar('-10%', { finalizing: true })).toEqual({
+      kind: 'global-adjustment',
+      percentage: -10,
+    });
+    expect(parseCommandBar('-5', { finalizing: false })).toEqual({ kind: 'typing' });
   });
 
   it('parseQuantityText', () => {
-    expect(parseQuantityText('-2')).toEqual({ ok: true, qty: -2 });
-    expect(parseQuantityText('1,5')).toEqual({ ok: true, qty: 1.5 });
-    expect(parseQuantityText('0')).toEqual({ ok: true, qty: 0 });
-    expect(parseQuantityText('1,2345')).toEqual({ ok: false, reason: 'too-many-decimals' });
+    expect(parseQuantityText('-2')).toEqual({ ok: true, qty: -2, rounded: false });
+    expect(parseQuantityText('1,5')).toEqual({ ok: true, qty: 1.5, rounded: false });
+    expect(parseQuantityText('0')).toEqual({ ok: true, qty: 0, rounded: false });
+    expect(parseQuantityText('1,2345')).toEqual({ ok: true, qty: 1.235, rounded: true });
     expect(parseQuantityText('abc')).toEqual({ ok: false, reason: 'not-a-quantity' });
   });
 });

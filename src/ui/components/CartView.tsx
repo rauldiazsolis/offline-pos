@@ -75,6 +75,11 @@ function lineWarningTexts(line: SaleLine): string[] {
   }).map(formatWarningInContext);
 }
 
+/** Una línea de devolución (cantidad negativa, #99) lleva cantidad y subtotal en rojo. */
+function refundStyle(line: SaleLine): { color?: string } {
+  return line.qty < 0 ? { color: 'var(--color-danger)' } : {};
+}
+
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
     return line.description;
@@ -195,12 +200,18 @@ function CartTable({
               onClick={() => {
                 selectCartLine(index);
               }}
+              class={line.qty < 0 ? 'cart-view__refund-line' : undefined}
               style={{
-                background: index === selectedIndex ? 'var(--color-surface)' : 'transparent',
+                background:
+                  index === selectedIndex
+                    ? 'var(--color-surface)'
+                    : line.qty < 0
+                      ? 'var(--color-refund-bg)'
+                      : 'transparent',
                 cursor: 'pointer',
               }}
             >
-              <td style={bodyCellStyle}>{formatQuantity(line.qty)}</td>
+              <td style={{ ...bodyCellStyle, ...refundStyle(line) }}>{formatQuantity(line.qty)}</td>
               <td style={bodyCellStyle}>
                 <div>{lineLabel(line)}</div>
                 {code !== undefined && (
@@ -223,7 +234,14 @@ function CartTable({
               <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
                 {formatMoney(line.unitPrice)}
               </td>
-              <td style={{ ...bodyCellStyle, ...amountCellStyle, ...moneyStyle }}>
+              <td
+                style={{
+                  ...bodyCellStyle,
+                  ...amountCellStyle,
+                  ...moneyStyle,
+                  ...refundStyle(line),
+                }}
+              >
                 {formatMoney(calculateLineTotal(line))}
               </td>
             </tr>
@@ -287,7 +305,14 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
         }}
       >
         <span>Total</span>
-        <span style={moneyStyle}>{formatMoney(totals.total)}</span>
+        <span
+          style={{
+            ...moneyStyle,
+            ...(totals.total < 0 ? { color: 'var(--color-danger)' } : {}),
+          }}
+        >
+          {formatMoney(totals.total)}
+        </span>
       </div>
     </div>
   );

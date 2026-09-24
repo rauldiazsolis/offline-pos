@@ -251,3 +251,16 @@ describe('CheckoutScreen — advertencias (#99)', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 });
+
+describe('CheckoutScreen — devolución destacada (prueba manual de la Etapa 4)', () => {
+  it('título en rojo y confirmación destructiva', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'dev', qty: -1, unitPrice: 500 }],
+    };
+    render(<CheckoutScreen />);
+
+    expect(screen.getByRole('heading').style.color).toBe('var(--color-danger)');
+    const confirm = screen.getByRole('button', { name: 'Confirmar devolución (Ctrl+Enter)' });
+    expect(confirm.className).toContain('btn-danger');
+  });
+});

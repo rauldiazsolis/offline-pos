@@ -64,6 +64,17 @@ function backendStatusText(status: BackendStatus): string {
   }
 }
 
+/** Mismo criterio de color que la barra de estado: incompatible en rojo, mantenimiento en ámbar. */
+function backendStatusStyle(status: BackendStatus): { color?: string; fontWeight?: string } {
+  if (status.kind === 'incompatible') {
+    return { color: 'var(--color-danger)', fontWeight: 'bold' };
+  }
+  if (status.kind === 'maintenance') {
+    return { color: 'var(--color-warning)', fontWeight: 'bold' };
+  }
+  return {};
+}
+
 function backendName(status: BackendStatus): string | undefined {
   const info = status.kind === 'unknown' ? undefined : status.info;
   return info?.backend !== undefined ? `${info.backend.name} ${info.backend.version}` : undefined;
@@ -142,7 +153,9 @@ export function DiagnosticoScreen() {
           </p>
           <p style={{ margin: 0 }}>Cerrojo: {diagnostics.lockHeld ? 'ocupado' : 'libre'}</p>
           <p style={{ margin: 0 }}>Red: {diagnostics.online ? 'online' : 'offline'}</p>
-          <p style={{ margin: 0 }}>Backend: {backendStatusText(diagnostics.backendStatus)}</p>
+          <p style={{ margin: 0, ...backendStatusStyle(diagnostics.backendStatus) }}>
+            Backend: {backendStatusText(diagnostics.backendStatus)}
+          </p>
           {backendName(diagnostics.backendStatus) !== undefined && (
             <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
               {backendName(diagnostics.backendStatus)}

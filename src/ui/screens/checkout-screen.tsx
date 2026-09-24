@@ -181,7 +181,14 @@ export function CheckoutScreen() {
   return (
     <div style={overlayStyle} onMouseDown={keepFocusOnMouseDown}>
       <div style={dialogStyle}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
+        {/* Devolución (#99): título, importe y confirmación en rojo, para que no se confunda con un cobro. */}
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 'var(--font-size-xl)',
+            ...(mode === 'refund' ? { color: 'var(--color-danger)' } : {}),
+          }}
+        >
           {mode === 'refund' ? `Devolver ${formatMoney(Math.abs(totals.total))}` : 'Cobrar venta'}
         </h1>
 
@@ -257,6 +264,7 @@ export function CheckoutScreen() {
                   fontFamily: 'var(--font-mono)',
                   fontSize: 'var(--font-size-xl)',
                   fontWeight: 'bold',
+                  ...(mode === 'refund' ? { color: 'var(--color-danger)' } : {}),
                 }}
               >
                 {formatMoney(Math.abs(totals.total))}
@@ -313,8 +321,14 @@ export function CheckoutScreen() {
             <button type="button" class="btn" onClick={cancelCheckout}>
               Cancelar (Esc)
             </button>
-            <button type="button" class="btn btn-primary" onClick={() => void submitCheckout()}>
-              Confirmar cobro (Ctrl+Enter)
+            <button
+              type="button"
+              class={mode === 'refund' ? 'btn btn-danger' : 'btn btn-primary'}
+              onClick={() => void submitCheckout()}
+            >
+              {mode === 'refund'
+                ? 'Confirmar devolución (Ctrl+Enter)'
+                : 'Confirmar cobro (Ctrl+Enter)'}
             </button>
           </div>
         </div>

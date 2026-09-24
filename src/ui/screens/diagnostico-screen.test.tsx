@@ -105,3 +105,18 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
     expect(screen.getByText('offline-pos-demo-backend 4.0.0')).not.toBeNull();
   });
 });
+
+describe('DiagnosticoScreen — backend incompatible resaltado (prueba manual de la Etapa 4)', () => {
+  it('la línea del backend va en rojo', () => {
+    const original = diagnostics.backendStatus;
+    diagnostics.backendStatus = { kind: 'incompatible', backendVersion: '3.0.0' };
+    try {
+      render(<DiagnosticoScreen />);
+      expect(screen.getByText('Backend: contrato 3.0.0 · incompatible').style.color).toBe(
+        'var(--color-danger)',
+      );
+    } finally {
+      diagnostics.backendStatus = original;
+    }
+  });
+});

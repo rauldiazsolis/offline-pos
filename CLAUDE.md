@@ -523,44 +523,9 @@ real: volver de un popup con Esc).
 **Venta de la Etapa 4 (#99)** — el POS nunca se autobloquea:
 
 - **Cantidades con signo y hasta 3 decimales** (`,` o `.`), en el prefijo `<n>*` y en número + Enter
-  sobre la línea seleccionada (`parse-command-bar.ts::parseQuantityText`); más de 3 decimales es un
-  error en el slot ("Hasta 3 decimales en la cantidad"), nunca un redondeo silencioso. El carrito
-  suma neto por producto: puede crear o dejar una línea en negativo (`-2*coca` sin línea previa es una
-  devolución) y 0 exacto la borra; número + Enter con 0 también. Redondeo en un solo lugar
-  (`domain/rounding.ts`): cantidades a 3, importes a 2, y `calculateTotals` redondea cada campo (el
-  total sale de los otros ya redondeados). Un descuento de línea va sobre el valor absoluto con el
-  signo de la línea.
-- **Tickets en 0 o negativos**: `closeSale` exige que todos los pagos tengan el signo del total (en
-  negativo, suma exacta; en 0, sin pagos). Cobro (`domain/tender.ts::tenderMode`) en **modo
-  devolución** con total negativo: título "Devolver X", se tipea en positivo cuánto se devuelve por
-  medio, sin vuelto, suma exacta (`sale/refund-amount-mismatch`); cuenta corriente acredita sin pedir
-  hold (sigue exigiendo cliente). Un ticket negativo suma stock (`delta = -qty`).
-- **Cobro**: Efectivo arranca con |total| precargado y seleccionado (`checkout-controller.ts::
-  enterCheckout`, lo llama `triggerCheckout`); Enter y ↓ pasan al campo siguiente, ↑ al anterior, sin
-  ciclar y salteando Cuenta corriente deshabilitada (`moveCheckoutField`); Ctrl+Enter confirma, Esc
-  cancela. Cobrar limpia la línea seleccionada del carrito.
-- **Advertencias en vez de bloqueos** (`domain/sale-warnings.ts`, `ui/format-warning.ts`, cierra #12):
-  stock insuficiente (solo `tracksStock`, cantidad positiva) y productos/clientes bloqueados se
-  muestran en ámbar (`--color-warning`/`--color-chrome-warning`), siempre con texto: en la búsqueda
-  ("Bloqueado: …", "Stock: N"), en la lista de `@`, debajo de la línea del carrito ("⚠ Stock
-  disponible: N"), en la tarjeta de Cliente, en un bloque "Advertencias" de Cobro y en el slot de la
-  barra al agregar o ajustar (`commandBarWarningSignal`: no selecciona el texto, se borra con la
-  próxima tecla; un error tiene precedencia). El stock sale de `ui/state/stock.ts::
-  stockSnapshotSignal` (la tabla entera en memoria).
-- **La anulación es un ticket propio** (`domain/sale-lifecycle.ts::buildVoidSale`): líneas y pagos
-  invertidos, `voidsSaleId` al original (que no se toca), el pago `account` pierde su `reference`
-  (acreditación); `storage/sale-repository.ts::voidSaleAndPersist` la persiste como cualquier venta
-  (índice Dexie `voidsSaleId`, versión 6). Ventana de 24 h móviles (`isWithinVoidWindow`), no se
-  anula dos veces (`sale/already-voided`) ni una anulación (`sale/cannot-void-a-void`); una devolución
-  común sí. `/ANULAR` (`listVoidCandidates`) lista los últimos 20 tickets de 24 h, con la original
-  anulada ("Anulada") y la anulación ("Anulación de HH:MM · $X") atenuadas y sin acción; `/RESUMEN`
-  marca lo mismo (`isVoided`, que también reconoce el `status: 'voided'` legado).
-
-**Venta de la Etapa 4 (#99)** — el POS nunca se autobloquea:
-
-- **Cantidades con signo y hasta 3 decimales** (`,` o `.`), en el prefijo `<n>*` y en número + Enter
-  sobre la línea seleccionada (`parse-command-bar.ts::parseQuantityText`); más de 3 decimales es un
-  error en el slot ("Hasta 3 decimales en la cantidad"), nunca un redondeo silencioso. El carrito
+  sobre la línea seleccionada (`parse-command-bar.ts::parseQuantityText`); con más de 3 decimales se
+  redondea a 3 y se avisa en el slot ("Cantidad redondeada a N"), nunca en silencio. Un `-` pegado a un
+  texto vale `-1*` (`-regalo$100`, `-aceite`). El carrito
   suma neto por producto: puede crear o dejar una línea en negativo (`-2*coca` sin línea previa es una
   devolución) y 0 exacto la borra; número + Enter con 0 también. Redondeo en un solo lugar
   (`domain/rounding.ts`): cantidades a 3, importes a 2, y `calculateTotals` redondea cada campo (el

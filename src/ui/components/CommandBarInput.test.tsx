@@ -700,7 +700,7 @@ describe('CommandBarInput', () => {
       expect(cartSignal.value.lines[0]?.qty).toBe(-2);
     });
 
-    it('más de 3 decimales sobre la línea seleccionada es un error en el slot (#99)', () => {
+    it('más de 3 decimales sobre la línea seleccionada se redondea y avisa (#99)', () => {
       cartSignal.value = {
         lines: [{ kind: 'freeform', description: 'Queso', qty: 1, unitPrice: 100 }],
       };
@@ -710,8 +710,8 @@ describe('CommandBarInput', () => {
 
       fireEvent.input(input, { target: { value: '1,2345' } });
       fireEvent.keyDown(input, { key: 'Enter' });
-      expect(commandBarErrorSignal.value).toBe('Hasta 3 decimales en la cantidad');
-      expect(cartSignal.value.lines[0]?.qty).toBe(1);
+      expect(cartSignal.value.lines[0]?.qty).toBe(1.235);
+      expect(commandBarWarningSignal.value).toBe('Cantidad redondeada a 1.235');
     });
 
     it('Supr sobre una línea del medio selecciona la que se corrió a ese índice', () => {
@@ -1099,5 +1099,34 @@ describe('advertencias (#99)', () => {
 
     fireEvent.input(input, { target: { value: 'a' } });
     expect(commandBarWarningSignal.value).toBeNull();
+  });
+});
+
+describe('prueba manual de la Etapa 4', () => {
+  beforeEach(() => {
+    commandBarWarningSignal.value = null;
+  });
+
+  it('un prefijo con más de 3 decimales agrega redondeado y lo avisa', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '0.2001*regalo$100' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines[0]?.qty).toBe(0.2);
+    expect(commandBarWarningSignal.value).toBe('Cantidad redondeada a 0.2');
+  });
+
+  it('-regalo$100 crea una línea libre con cantidad -1', () => {
+    render(<CommandBarInput />);
+    const input = screen.getByLabelText('Barra de comandos');
+
+    fireEvent.input(input, { target: { value: '-regalo$100' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(cartSignal.value.lines).toEqual([
+      { kind: 'freeform', description: 'regalo', qty: -1, unitPrice: 100 },
+    ]);
   });
 });

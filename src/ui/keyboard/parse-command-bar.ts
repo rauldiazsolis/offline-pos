@@ -1,3 +1,4 @@
+import { roundQuantity } from '../../domain/rounding.ts';
 import { parseAmount } from '../parse-amount.ts';
 
 /**
@@ -19,21 +20,35 @@ export type ParsedCommand =
   | { kind: 'parse-error'; message: string };
 
 const QUANTITY_PATTERN = /^-?\d+(?:[.,]\d+)?$/;
-/** Mensaje del slot para una cantidad con más de 3 decimales (prefijo o número + Enter). */
-export const TOO_MANY_DECIMALS_MESSAGE = 'Hasta 3 decimales en la cantidad';
+const QUANTITY_PREFIX = /^(-?\d+(?:[.,]\d+)?)\*(.*)$/;
 
-/** Cantidad tipeada (#99): con signo, separador `,` o `.`, hasta 3 decimales. */
+/**
+ * Cantidad tipeada (#99): con signo, separador `,` o `.`. Con más de 3
+ * decimales se redondea a 3 (`rounded: true`) — decisión de la prueba manual
+ * de la Etapa 4: el cajero ve el aviso "Cantidad redondeada a N" en vez de un
+ * error.
+ */
 export function parseQuantityText(
   raw: string,
-): { ok: true; qty: number } | { ok: false; reason: 'not-a-quantity' | 'too-many-decimals' } {
+): { ok: true; qty: number; rounded: boolean } | { ok: false; reason: 'not-a-quantity' } {
   if (!QUANTITY_PATTERN.test(raw)) {
     return { ok: false, reason: 'not-a-quantity' };
   }
   const decimals = raw.split(/[.,]/)[1] ?? '';
-  if (decimals.length > 3) {
-    return { ok: false, reason: 'too-many-decimals' };
+  const qty = Number(raw.replace(',', '.'));
+  return decimals.length > 3
+    ? { ok: true, qty: roundQuantity(qty), rounded: true }
+    : { ok: true, qty, rounded: false };
+}
+
+/** La cantidad del prefijo `<n>*` si se redondeó (más de 3 decimales), para avisarlo al confirmar. */
+export function roundedQuantityPrefix(buffer: string): number | undefined {
+  const match = QUANTITY_PREFIX.exec(buffer);
+  if (match === null) {
+    return undefined;
   }
-  return { ok: true, qty: Number(raw.replace(',', '.')) };
+  const parsed = parseQuantityText(match[1] ?? '');
+  return parsed.ok && parsed.rounded ? parsed.qty : undefined;
 }
 
 export function parseCommandBar(buffer: string, options: { finalizing: boolean }): ParsedCommand {
@@ -86,19 +101,19 @@ export function parseCommandBar(buffer: string, options: { finalizing: boolean }
   // código/búsqueda — regla 4 aplica "antes de cualquier búsqueda", y una
   // línea libre también cuenta: "3*regalo$100" es 3 unidades a $100 c/u
   // ($300), no la descripción literal "3*regalo". Desde #99 la cantidad
-  // lleva signo y hasta 3 decimales (`1,5*queso`, `-2*coca`).
-  const quantityMatch = /^(-?\d+(?:[.,]\d+)?)\*(.*)$/.exec(buffer);
+  // lleva signo y hasta 3 decimales (`1,5*queso`, `-2*coca`; con más, se
+  // redondea). Un `-` pegado a un texto vale `-1*` (`-regalo$100`,
+  // `-aceite`); `-<dígitos>` sigue siendo un recargo/cantidad a medio tipear.
+  const quantityMatch = QUANTITY_PREFIX.exec(buffer);
+  const minusText = quantityMatch === null ? /^-(?![\d\s*])(.+)$/.exec(buffer) : null;
   let qty = 1;
   if (quantityMatch) {
     const parsedQty = parseQuantityText(quantityMatch[1] ?? '1');
-    if (!parsedQty.ok) {
-      return finalizing
-        ? { kind: 'parse-error', message: TOO_MANY_DECIMALS_MESSAGE }
-        : { kind: 'typing' };
-    }
-    qty = parsedQty.qty;
+    qty = parsedQty.ok ? parsedQty.qty : 1;
+  } else if (minusText) {
+    qty = -1;
   }
-  const rest = quantityMatch ? (quantityMatch[2] ?? '') : buffer;
+  const rest = quantityMatch ? (quantityMatch[2] ?? '') : minusText ? (minusText[1] ?? '') : buffer;
 
   if (rest === '') {
     if (finalizing) {

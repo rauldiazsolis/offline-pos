@@ -429,3 +429,9 @@ Click en una fila = seleccionarla (lo mismo que llegar con ↑/↓). El foco se 
   de "Anulación de HH:MM" salía en 12 h con `es-AR` — `formatTime` fuerza 24 h.
 - **OpenAPI**: validado con prettier (parsea YAML) y un chequeo de que cada `$ref` resuelve, en vez de
   `@redocly/cli`.
+- **Acordado en la prueba manual**: más de 3 decimales ya no es un error — se redondea a 3 y se avisa en
+  el slot ("Cantidad redondeada a N"), en el prefijo y en número + Enter; un `-` pegado a un texto
+  vale `-1*` (`-regalo$100`, `-aceite`); una devolución se destaca en rojo (título, importe y botón
+  "Confirmar devolución" `.btn-danger` en Cobro; líneas negativas y total negativo en el carrito); y
+  `/DIAGNOSTICO` resalta el backend incompatible (rojo) o en mantenimiento (ámbar). La revisión general
+  de cantidades, precios y búsquedas en la barra quedó en #119.

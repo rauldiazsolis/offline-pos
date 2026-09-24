@@ -189,3 +189,19 @@ describe('CartView — advertencias (#99)', () => {
     expect(screen.getByText('⚠ Bloqueado: Deuda')).not.toBeNull();
   });
 });
+
+describe('CartView — devolución destacada (prueba manual de la Etapa 4)', () => {
+  it('una línea negativa se resalta y el total negativo va en rojo', () => {
+    cartSignal.value = {
+      lines: [{ kind: 'freeform', description: 'regalo', qty: -1, unitPrice: 100 }],
+    };
+    const { container } = render(<CartView />);
+
+    expect(container.querySelector('.cart-view__refund-line')).not.toBeNull();
+    const totalsCard = container.querySelector<HTMLElement>('.cart-view__totals');
+    if (totalsCard === null) throw new Error('setup falló');
+    expect(within(totalsCard).getAllByText(formatMoney(-100)).at(-1)?.style.color).toBe(
+      'var(--color-danger)',
+    );
+  });
+});

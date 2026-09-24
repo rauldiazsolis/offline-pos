@@ -17,7 +17,7 @@ import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { formatDate, formatMoney, formatQuantity } from '../format.ts';
-import { parseQuantityText, TOO_MANY_DECIMALS_MESSAGE } from '../keyboard/parse-command-bar.ts';
+import { parseQuantityText } from '../keyboard/parse-command-bar.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
@@ -163,12 +163,8 @@ export function CommandBarInput() {
       if (cartSelectionIndexSignal.value !== null) {
         const parsedQty = parseQuantityText(buffer);
         if (parsedQty.ok) {
-          void setSelectedCartLineQuantity(parsedQty.qty);
+          void setSelectedCartLineQuantity(parsedQty.qty, { rounded: parsedQty.rounded });
           commandBarBufferSignal.value = '';
-          return;
-        }
-        if (parsedQty.reason === 'too-many-decimals') {
-          commandBarErrorSignal.value = TOO_MANY_DECIMALS_MESSAGE;
           return;
         }
       }

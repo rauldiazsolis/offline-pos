@@ -17,6 +17,7 @@ import {
 } from '../../storage/customer-repository.ts';
 import { lineWarnings } from '../../domain/sale-warnings.ts';
 import { describeError } from '../errors.ts';
+import { formatQuantity } from '../format.ts';
 import { formatWarning } from '../format-warning.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
@@ -49,7 +50,7 @@ import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, disabledCommandMessage } from './commands.ts';
-import { parseCommandBar } from './parse-command-bar.ts';
+import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { syncNow } from '../../sync/engine.ts';
 
@@ -408,6 +409,19 @@ function runCommand(name: string, _args: string[]): void {
 
 /** Se llama al presionar Enter con la barra de comandos activa (no en modo navegación del carrito). */
 export function submitCommandBar(): void {
+  // Más de 3 decimales en el prefijo se redondea (#99): se avisa si la acción salió bien.
+  const rounded = roundedQuantityPrefix(commandBarBufferSignal.value);
+  doSubmitCommandBar();
+  if (
+    rounded !== undefined &&
+    commandBarBufferSignal.value === '' &&
+    commandBarErrorSignal.value === null
+  ) {
+    prependCommandBarWarning(roundedQuantityWarning(rounded));
+  }
+}
+
+function doSubmitCommandBar(): void {
   const parsed = parseCommandBar(commandBarBufferSignal.value, { finalizing: true });
 
   switch (parsed.kind) {
@@ -611,6 +625,16 @@ export function removeSelectedCartLine(): void {
   }
 }
 
+/** Suma una advertencia al slot de la barra (#99), delante de las que ya haya. */
+function prependCommandBarWarning(text: string): void {
+  const current = commandBarWarningSignal.value;
+  commandBarWarningSignal.value = current === null ? text : `${text} · ${current}`;
+}
+
+function roundedQuantityWarning(qty: number): string {
+  return `Cantidad redondeada a ${formatQuantity(qty)}`;
+}
+
 function doSetSelectedCartLineQuantity(qty: number): void {
   const index = cartSelectionIndexSignal.value;
   if (index === null) {
@@ -629,7 +653,13 @@ function doSetSelectedCartLineQuantity(qty: number): void {
 }
 
 /** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
-export function setSelectedCartLineQuantity(qty: number): Promise<void> {
+export function setSelectedCartLineQuantity(
+  qty: number,
+  options: { rounded?: boolean } = {},
+): Promise<void> {
   doSetSelectedCartLineQuantity(qty);
+  if (options.rounded === true && commandBarErrorSignal.value === null) {
+    prependCommandBarWarning(roundedQuantityWarning(qty));
+  }
   return Promise.resolve();
 }

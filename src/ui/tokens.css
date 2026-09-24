@@ -18,6 +18,8 @@
   --color-success: #16a34a;
   /* advertencia (#99): stock insuficiente, bloqueos — siempre con texto, nunca solo color */
   --color-warning: #b45309;
+  /* fondo tenue de una línea de devolución en el carrito (#99) */
+  --color-refund-bg: #fef2f2;
   --color-focus-ring: #2563eb;
   /* texto de ejemplo de un campo vacío: bien distinto de un dato cargado */
   --color-placeholder: #a1a1aa;
