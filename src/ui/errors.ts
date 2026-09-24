@@ -9,11 +9,9 @@ import type { Failure } from '../domain/result.ts';
 export function describeError(failure: Failure): string {
   switch (failure.error) {
     case 'cart/invalid-quantity':
-      return `Cantidad inválida (${String(failure.meta.quantity)}).`;
+      return `Cantidad inválida: ${String(failure.meta.quantity)}. Usá hasta 3 decimales, distinta de 0.`;
     case 'cart/line-not-found':
       return 'No hay una línea del carrito en esa posición.';
-    case 'cart/nothing-to-subtract':
-      return 'Ese producto no está en el carrito.';
     case 'cart/invalid-discount':
       return 'Descuento inválido.';
     case 'cart/invalid-freeform-line':
@@ -27,8 +25,6 @@ export function describeError(failure: Failure): string {
       return `No hay ninguna línea libre "${failure.meta.description}" en el carrito.`;
     case 'cart/invalid-global-adjustment':
       return `Recargo/descuento inválido (${String(failure.meta.percentage)}%). No se puede descontar más del 100%.`;
-    case 'sale/insufficient-stock':
-      return `Stock insuficiente (pedido ${String(failure.meta.requested)}, disponible ${String(failure.meta.available)}).`;
     case 'sale/empty-cart':
       return 'El carrito está vacío.';
     case 'sale/invalid-payment-amount':

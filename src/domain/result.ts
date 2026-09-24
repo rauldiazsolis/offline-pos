@@ -22,14 +22,12 @@ export type ErrorMeta = {
   // cart.ts
   'cart/invalid-quantity': { quantity: number };
   'cart/line-not-found': { lineIndex: number };
-  'cart/nothing-to-subtract': { productId: string };
   'cart/invalid-discount': { discount: Discount };
   'cart/invalid-freeform-line': { field: 'description' | 'unitPrice' | 'qty' };
   'cart/freeform-line-not-found': { description: string };
   'cart/invalid-global-adjustment': { percentage: number };
 
   // sale.ts
-  'sale/insufficient-stock': { productId: string; requested: number; available: number };
   'sale/empty-cart': undefined;
   'sale/invalid-payment-amount': { index: number };
   'sale/insufficient-payment': { total: number; paid: number };

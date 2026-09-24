@@ -55,8 +55,9 @@ import { syncNow } from '../../sync/engine.ts';
  */
 
 /**
- * Agregar un producto es async (lookup de stock vía Dexie), y crear un
- * cliente nuevo desde `@` también (persiste en Dexie + encola outbox). Sin
+ * Crear un cliente nuevo desde `@` es async (persiste en Dexie + encola
+ * outbox); agregar un producto también lo era (lookup de stock) hasta #99,
+ * que sacó el bloqueo por stock. Sin
  * este rastreo, `Ctrl+Enter`/`/COBRAR` disparado inmediatamente después
  * podría cambiar de pantalla antes de que la operación termine — una
  * carrera real, no solo teórica (la agarró el test e2e de cobro en Fase 1).
@@ -205,10 +206,8 @@ async function createAndAttachCustomer(name: string): Promise<void> {
   clearBuffer();
 }
 
-async function addByProduct(product: Product, qty: number): Promise<void> {
-  const repo = getCatalogRepository();
-  const stock = await repo.getStock(product.id);
-  const result = addProductLine(cartSignal.value, { product, stock, qty });
+function addByProduct(product: Product, qty: number): void {
+  const result = addProductLine(cartSignal.value, { product, qty });
   if (applyCartResult(result)) {
     selectResultingLine(
       result.value,
@@ -218,14 +217,14 @@ async function addByProduct(product: Product, qty: number): Promise<void> {
   }
 }
 
-async function addByCode(code: string, qty: number): Promise<void> {
+function addByCode(code: string, qty: number): void {
   const repo = getCatalogRepository();
   const product = repo.findByBarcodeOrSku(code);
   if (product === undefined) {
     commandBarErrorSignal.value = `No se encontró ningún producto con "${code}".`;
     return;
   }
-  await addByProduct(product, qty);
+  addByProduct(product, qty);
 }
 
 /**
@@ -438,7 +437,7 @@ export function submitCommandBar(): void {
       return;
     }
     case 'barcode':
-      trackPendingBarOperation(addByCode(parsed.code, parsed.qty));
+      addByCode(parsed.code, parsed.qty);
       return;
     case 'search': {
       const results = searchResultsSignal.value;
@@ -462,7 +461,7 @@ export function submitCommandBar(): void {
         }
         return;
       }
-      trackPendingBarOperation(addByProduct(selected.result.product, parsed.qty));
+      addByProduct(selected.result.product, parsed.qty);
     }
   }
 }
@@ -557,35 +556,21 @@ export function removeSelectedCartLine(): void {
   }
 }
 
-async function doSetSelectedCartLineQuantity(qty: number): Promise<void> {
+function doSetSelectedCartLineQuantity(qty: number): void {
   const index = cartSelectionIndexSignal.value;
   if (index === null) {
     return;
   }
-  const line = cartSignal.value.lines[index];
-  if (line === undefined) {
-    return;
+  const result = setLineQuantity(cartSignal.value, index, qty);
+  if (applyCartResult(result)) {
+    // Con 0 la línea se borra (#99): misma selección resultante que Supr.
+    const newLength = result.value.lines.length;
+    cartSelectionIndexSignal.value = newLength === 0 ? null : Math.min(index, newLength - 1);
   }
-
-  if (line.kind === 'product') {
-    const repo = getCatalogRepository();
-    const product = repo.getProduct(line.productId);
-    const stock = await repo.getStock(line.productId);
-    applyCartResult(
-      setLineQuantity(cartSignal.value, index, qty, {
-        ...(product !== undefined ? { product } : {}),
-        ...(stock !== undefined ? { stock } : {}),
-      }),
-    );
-    return;
-  }
-
-  applyCartResult(setLineQuantity(cartSignal.value, index, qty));
 }
 
 /** Número + Enter con la barra vacía: reemplaza la cantidad de la línea del carrito seleccionada. */
 export function setSelectedCartLineQuantity(qty: number): Promise<void> {
-  const promise = doSetSelectedCartLineQuantity(qty);
-  trackPendingBarOperation(promise);
-  return promise;
+  doSetSelectedCartLineQuantity(qty);
+  return Promise.resolve();
 }
