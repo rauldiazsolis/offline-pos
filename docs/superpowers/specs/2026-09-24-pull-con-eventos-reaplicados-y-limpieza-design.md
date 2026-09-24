@@ -160,7 +160,9 @@ Lo que tenga más de 7 días (`createdAt`) **y** esté sincronizado:
 - **Ventas** cuyo evento `sale` no está pendiente (está `synced`, o ya se borró — lo pendiente nunca se
   borra, así que ausente implica sincronizado) y, si fue anulada, cuya anulación tampoco está pendiente.
 - **`stockMovements` y `accountMovements`**: los que tienen `saleId` siguen a su venta (se borran con
-  ella); los que no, siguen a su propio evento con el mismo criterio que las ventas.
+  ella). Un `stockMovement` sin venta sigue a su propio evento con el mismo criterio que las ventas; un
+  `accountMovement` sin venta no tiene evento propio y se conserva (hoy no existen; la Etapa 6 define
+  su regla cuando genere cobranzas).
 - **Turnos de caja cerrados** con más de 7 días (no viajan desde v3: "sincronizado" no aplica), salvo el
   ancla.
 
@@ -218,8 +220,9 @@ una transacción Dexie. Sin comando para forzarla (si hiciera falta, `pos.cleanu
 
 ### `/DIAGNOSTICO` y `pos.status()` (misma foto, `sync/diagnostics.ts`)
 
-- **Lotes**: el lote en curso muestra también el estado que informó el backend, o "no recibido por el
-  backend" (se guarda en el `PushLot` como `lastReportedStatus` opcional). Cada lote en espera muestra
+- **Lotes**: el lote en curso muestra "no recibido por el backend" cuando un pull lo confirmó (se
+  guarda en el `PushLot` como `notReceivedAt` opcional). Si el backend lo informa, deja de ser el lote
+  en curso (ack recuperado) y se ve con su estado entre los lotes en espera. Cada lote en espera muestra
   cuántos eventos tiene, además de su último estado.
 - **Último pull**: "Aplicado completo", "Aplicado + N eventos reaplicados (lotes en cola y pendientes)"
   o "Stock y saldos retenidos: lote `<id>` procesando — cursor de clientes retenido".
