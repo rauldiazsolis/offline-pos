@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
 import { err, ok, type Result } from '../../domain/result.ts';
 import { toZodIssues } from '../../domain/zod-issues.ts';
 import type { GoogleSheetsConfig } from './config.ts';
@@ -16,7 +17,13 @@ export type BridgeRequest = {
  */
 const bridgeEnvelopeSchema = z.discriminatedUnion('ok', [
   z.object({ ok: z.literal(true), data: z.unknown() }),
-  z.object({ ok: z.literal(false), error: z.string() }),
+  z.object({
+    ok: z.literal(false),
+    error: z.string(),
+    // 4.0.0 (#99): un puente que no habla esta versión lo dice con este código.
+    code: z.string().optional(),
+    contractVersion: z.string().optional(),
+  }),
 ]);
 
 /**
@@ -28,7 +35,8 @@ const bridgeEnvelopeSchema = z.discriminatedUnion('ok', [
  * dispara para `application/json` (o cualquier header custom) cross-origin.
  * Con `text/plain` es un "simple request" sin preflight; el script parsea
  * el body con `JSON.parse(e.postData.contents)` igual. Por eso la
- * idempotency key y el secreto viajan dentro del envelope, no como headers.
+ * idempotency key, el secreto y la versión del contrato (4.0.0, #99) viajan
+ * dentro del envelope, no como headers.
  */
 export async function callBridge<S extends z.ZodType>(
   config: GoogleSheetsConfig,
@@ -37,6 +45,7 @@ export async function callBridge<S extends z.ZodType>(
 ): Promise<Result<z.infer<S>>> {
   const body = {
     action: request.action,
+    contractVersion: POS_CONTRACT_VERSION,
     payload: request.payload ?? {},
     ...(request.idempotencyKey !== undefined ? { idempotencyKey: request.idempotencyKey } : {}),
     ...(config.sharedSecret !== undefined ? { sharedSecret: config.sharedSecret } : {}),
@@ -76,6 +85,13 @@ export async function callBridge<S extends z.ZodType>(
     return err('sync/invalid-payload', { issues: toZodIssues(envelope.error) });
   }
   if (!envelope.data.ok) {
+    const { code, contractVersion } = envelope.data;
+    if (code === 'incompatible-contract' && contractVersion !== undefined) {
+      return err('sync/incompatible-contract', {
+        backend: contractVersion,
+        pos: POS_CONTRACT_VERSION,
+      });
+    }
     return err('sync/remote-error', { message: envelope.data.error });
   }
 

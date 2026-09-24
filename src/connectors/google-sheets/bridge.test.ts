@@ -12,6 +12,8 @@ const responseSchema = z.object({
   ok: z.boolean(),
   data: z.unknown().optional(),
   error: z.string().optional(),
+  code: z.string().optional(),
+  contractVersion: z.string().optional(),
 });
 
 function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
@@ -34,8 +36,8 @@ function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
     vm.runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
   }
 
-  function call(action: string, payload: unknown = {}, idempotencyKey?: string) {
-    const body = JSON.stringify({ action, payload, idempotencyKey });
+  function raw(request: Record<string, unknown>) {
+    const body = JSON.stringify(request);
     const output: unknown = vm.runInContext(
       `doPost({ postData: { contents: ${JSON.stringify(body)} } })`,
       context,
@@ -43,7 +45,11 @@ function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
     return responseSchema.parse(JSON.parse(outputSchema.parse(output).content));
   }
 
-  return { spreadsheet, call };
+  function call(action: string, payload: unknown = {}, idempotencyKey?: string) {
+    return raw({ action, payload, idempotencyKey });
+  }
+
+  return { spreadsheet, call, raw };
 }
 
 /** Filas de datos no vacías de una pestaña, con las fechas como ISO para poder comparar. */
@@ -258,9 +264,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         '',
         'Cerrada',
         '',
-        '',
         'dev-1',
-        '',
         '',
         '',
         '',
@@ -281,9 +285,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         '',
         'Cerrada',
         '',
-        '',
         'dev-1',
-        '',
         '',
         '',
         '',
@@ -370,7 +372,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         deviceId: 'dev-1',
         events: [
           { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
-          { type: 'sale-void', id: 'e2', saleId: 'nope', voidedAt: NOW },
+          { type: 'sale-void', id: 'e2', saleId: 'nope', voidedAt: NOW }, // tipo legado (4.0.0)
           { type: 'account-hold-confirm', id: 'e3', holdId: 'h-2', saleId: 'tampoco' },
         ],
       },
@@ -388,7 +390,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     ).lots;
     expect(lots['lot-1']?.status).toBe('issues');
     expect(lots['lot-1']?.issues).toEqual([
-      { message: expect.stringContaining('Venta no encontrada: nope') as unknown, eventId: 'e2' },
+      { message: expect.stringContaining('sale-void') as unknown, eventId: 'e2' },
       {
         message: expect.stringContaining('Venta a cuenta no encontrada: tampoco') as unknown,
         eventId: 'e3',
@@ -413,36 +415,6 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     const pull = pullBatch(call, {}, ['nunca-existio']);
 
     expect((pull.data as { lots: Record<string, unknown> }).lots).toEqual({});
-  });
-
-  it('pushSaleVoid marca (no borra) las filas de la venta con estado, fecha y motivo', () => {
-    const { spreadsheet, call } = loadBridge();
-    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
-
-    const response = call(
-      'pushBatch',
-      {
-        deviceId: 'dev-1',
-        events: [
-          {
-            type: 'sale-void',
-            id: 'e2',
-            saleId: 's1',
-            voidedAt: '2026-01-03T09:00:00.000Z',
-            voidReason: 'error de carga',
-          },
-        ],
-      },
-      'lot-2',
-    );
-
-    expect(response.ok).toBe(true);
-    for (const line of table(spreadsheet, 'Ventas')) {
-      expect(line.slice(13, 16)).toEqual(['Anulada', '2026-01-03T09:00:00.000Z', 'error de carga']);
-    }
-    for (const line of table(spreadsheet, 'Pagos')) {
-      expect(line[5]).toBe('Anulada');
-    }
   });
 
   it('pushAccountHoldConfirm deriva cliente y monto de Ventas y Pagos', () => {
@@ -789,31 +761,6 @@ describe('contrato v3 (#96)', () => {
     expect(lots[0]).toEqual(expect.arrayContaining(['lot-1', 'dev-1']));
   });
 
-  it('la anulación deja su propia sucursal y punto de venta', () => {
-    const { spreadsheet, call } = loadBridge();
-    call('pushBatch', { deviceId: 'dev-1', events: [v3SaleEvent()] }, 'lot-1');
-
-    call(
-      'pushBatch',
-      {
-        deviceId: 'dev-2',
-        events: [
-          {
-            type: 'sale-void',
-            id: 'v1',
-            createdAt: NOW,
-            origin: { branch: 'Norte', pointOfSale: 'Caja 2' },
-            saleId: 's1',
-            voidedAt: NOW,
-          },
-        ],
-      },
-      'lot-2',
-    );
-
-    expect(table(spreadsheet, 'Ventas')[0]?.slice(-2)).toEqual(['Norte', 'Caja 2']);
-  });
-
   it('cash-movement escribe una fila en MovimientosCaja con valores en español', () => {
     const { spreadsheet, call } = loadBridge();
 
@@ -977,5 +924,109 @@ describe('instalación', () => {
       ok: false,
       error: 'Falta el archivo columnas.gs en el proyecto de Apps Script',
     });
+  });
+});
+
+describe('contrato 4.0.0 (#99)', () => {
+  function rawCall(spreadsheetCall: ReturnType<typeof loadBridge>, body: Record<string, unknown>) {
+    return spreadsheetCall.raw(body);
+  }
+
+  it('la acción info devuelve la versión y el estado, sin tocar la planilla', () => {
+    const bridge = loadBridge();
+
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.0.0' });
+
+    expect(response).toEqual({
+      ok: true,
+      data: {
+        contractVersion: '4.0.0',
+        status: 'ok',
+        backend: { name: 'pos-sheets-bridge', version: '4.0.0' },
+      },
+    });
+    expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
+  });
+
+  it('un request con otro major responde incompatible-contract sin escribir nada', () => {
+    const bridge = loadBridge();
+
+    const response = rawCall(bridge, {
+      action: 'pushBatch',
+      contractVersion: '3.0.0',
+      idempotencyKey: 'lot-1',
+      payload: { deviceId: 'dev-1', events: [saleEvent('e1')] },
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      code: 'incompatible-contract',
+      contractVersion: '4.0.0',
+    });
+    expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
+  });
+
+  it('un request sin contractVersion se procesa (criterio del puente)', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    const response = call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
+
+    expect(response.ok).toBe(true);
+    expect(table(spreadsheet, 'Ventas')).toHaveLength(2);
+  });
+
+  it('una venta con voidsSaleId escribe "Anula a" y marca las filas del original como anuladas', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
+
+    const voidTicket = {
+      ...SALE,
+      id: 'v1',
+      total: -2100,
+      voidsSaleId: 's1',
+      voidReason: 'error de carga',
+      lines: SALE.lines.map((line) => ({ ...line, qty: -line.qty })),
+      payments: [
+        { method: 'cash', amount: -1000 },
+        { method: 'account', amount: -1100 },
+      ],
+    };
+    const response = call(
+      'pushBatch',
+      { deviceId: 'dev-1', events: [saleEvent('e2', voidTicket)] },
+      'lot-2',
+    );
+
+    expect(response.ok).toBe(true);
+    const ventas = table(spreadsheet, 'Ventas');
+    expect(ventas.filter((row) => row[0] === 's1').map((row) => row[13])).toEqual([
+      'Anulada',
+      'Anulada',
+    ]);
+    const voidRows = ventas.filter((row) => row[0] === 'v1');
+    expect(voidRows.map((row) => [row[13], row[14], row.at(-1)])).toEqual([
+      ['Cerrada', 'error de carga', 's1'],
+      ['Cerrada', 'error de carga', 's1'],
+    ]);
+    const pagos = table(spreadsheet, 'Pagos');
+    expect(pagos.filter((row) => row[0] === 's1').map((row) => row[5])).toEqual([
+      'Anulada',
+      'Anulada',
+    ]);
+    // La acreditación va al libro de CuentaCorriente con su signo.
+    expect(table(spreadsheet, 'CuentaCorriente').some((row) => row.includes(-1100))).toBe(true);
+  });
+
+  it('la anulación de una venta que la planilla no tiene no falla', () => {
+    const { call } = loadBridge();
+
+    call(
+      'pushBatch',
+      { deviceId: 'dev-1', events: [saleEvent('e1', { ...SALE, id: 'v1', voidsSaleId: 'nope' })] },
+      'lot-1',
+    );
+    const pull = pullBatch(call, {}, ['lot-1']);
+
+    expect((pull.data as { lots: unknown }).lots).toEqual({ 'lot-1': { status: 'ok' } });
   });
 });

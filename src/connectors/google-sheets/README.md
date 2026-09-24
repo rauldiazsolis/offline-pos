@@ -7,8 +7,9 @@ Script** (`bridge.gs`) desplegado como Web App.
 > Estado: conectado al POS desde la Etapa 2 del epic #68 — se elige en `/CONFIG` con el tipo de
 > conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
 > contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
-> Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**: ver
-> "Actualizar el puente a la v3 del contrato" más abajo si ya tenías una planilla andando.
+> Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, y desde la
+> Etapa 4 (#99) el **contrato 4.0.0**: ver "Actualizar el puente a la v3 del contrato" y "Contrato
+> 4.0.0" más abajo si ya tenías una planilla andando.
 
 ## Setup (comerciante)
 
@@ -98,22 +99,48 @@ final las columnas **opcionales** que le falten (una requerida que falta sigue s
 tablas nativas de Sheets no se usan porque crearlas desde Apps Script exige el servicio avanzado de
 Sheets API, que necesita un permiso mucho más amplio (todas tus planillas o todo tu Drive).
 
+## Contrato 4.0.0 (#99)
+
+- **Acción `info`**: devuelve `{ contractVersion: '4.0.0', status: 'ok', backend: { name:
+'pos-sheets-bridge', version } }`. Es liviana (no toma el lock ni crea pestañas); el POS la usa
+  para probar la conexión en `/CONFIG`, al arrancar y después de un error. La planilla nunca está en
+  mantenimiento: siempre `ok`.
+- **`contractVersion` en el cuerpo** de cada request (el `doPost` de Apps Script no expone headers).
+  Si su versión mayor no es la del puente, responde `{ ok: false, code: 'incompatible-contract',
+contractVersion: '<la del puente>', error }` **sin procesar nada**: el POS no recibe ack y el lote
+  queda en su outbox hasta que se redespliegue el puente. Un request sin `contractVersion` (un POS
+  anterior) se procesa.
+- **La anulación es una venta más**: el ticket de anulación llega como `sale` con líneas y pagos
+  invertidos, `voidsSaleId` (la venta que anula) y `voidReason`. Se escribe como cualquier venta, con
+  la columna nueva **Anula a** y el Motivo de anulación; las filas del original en Ventas y Pagos pasan
+  a Estado = Anulada (sin borrar). Si la planilla todavía no tiene el original, no es un error. La
+  acreditación de cuenta corriente (un pago `account` negativo sin hold) entra a `CuentaCorriente`
+  con su signo.
+- Ya no existe el evento `sale-void`: un POS 4.0.0 no lo manda, y uno que llegue queda como _issue_
+  del lote. Las columnas **Anulada el**, **Sucursal de anulación** y **Punto de venta de anulación**
+  de una planilla existente quedan como están, sin uso (`ensureColumns` solo agrega).
+
+Para actualizar: mismos pasos que "Actualizar el puente a la v3 del contrato" (reemplazar
+`bridge.gs` y `columnas.gs`, nueva versión de la misma implementación). La columna Anula a aparece
+sola al final de Ventas.
+
 ## Qué hace cada operación
 
 Desde la Etapa 2 (#87) el puente expone solo dos acciones — igual que el contrato REST —, cada una
 resolviendo internamente varias de las operaciones de antes:
 
-| Operación del POS                           | Comportamiento                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pushBatch`                                 | Aplica **todo el lote de una sola vez**: una fila por línea/pago en `Ventas`/`Pagos` (`sale`), marca Estado = Anulada sin borrar y anota la sucursal/punto de venta de la anulación (`sale-void`), una fila en `Clientes` (`customer`), una fila en `CuentaCorriente` derivada de `Ventas`/`Pagos` (`account-hold-confirm`), una fila en `MovimientosCaja` (`cash-movement`), una fila por medio en `Cobranzas` más el total en negativo en `CuentaCorriente` (`customer-payment`). Cada fila lleva Dispositivo (del lote), Sucursal y Punto de venta (del evento). `stock-movement`/`account-hold-release` son no-ops. Un evento que no se puede aplicar (ej. `sale-void` de una venta que esa fila todavía no tiene, o un tipo que el contrato v3 no tiene, como un `cash-session` viejo) queda como _issue_ del lote con el id del evento — nunca tumba el resto del lote ni el ack. |
-| `pullBatch`                                 | Trae `Productos` y `Clientes` (con Alta y bloqueo), completo o solo lo que cambió desde el cursor de cada uno (ver "Cursor de pull" abajo), más el estado (`ok`/`issues`/ausente) de los `idempotencyKey` de push que se le pidan. Sheets procesa cada lote dentro del mismo request, así que nunca informa `queued`/`processing`. Como todo el request corre con el lock del script, la foto y los estados de lote son siempre del mismo instante (requisito del contrato); y como no trae stock ni saldo, la reaplicación de eventos del POS (#98) no hace nada con este conector. `tracksStock: false` fijo: el POS nunca bloquea una venta por falta de stock.                                                                                                                                                                                                                      |
-| `requestAccountHold` / `releaseAccountHold` | Locales, sin red: el fiado es sin bloqueo (siempre aprobado).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Operación del POS                           | Comportamiento                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pushBatch`                                 | Aplica **todo el lote de una sola vez**: una fila por línea/pago en `Ventas`/`Pagos` (`sale`; si es una anulación, con Anula a, y las filas del original pasan a Estado = Anulada sin borrar), una fila en `Clientes` (`customer`), una fila en `CuentaCorriente` derivada de `Ventas`/`Pagos` (`account-hold-confirm`), una fila en `MovimientosCaja` (`cash-movement`), una fila por medio en `Cobranzas` más el total en negativo en `CuentaCorriente` (`customer-payment`). Cada fila lleva Dispositivo (del lote), Sucursal y Punto de venta (del evento). `stock-movement`/`account-hold-release` son no-ops. Un evento que no se puede aplicar (ej. `account-hold-confirm` de una venta que la planilla todavía no tiene, o un tipo que el contrato 4.0.0 no tiene, como un `cash-session` o un `sale-void` viejos) queda como _issue_ del lote con el id del evento — nunca tumba el resto del lote ni el ack. |
+| `pullBatch`                                 | Trae `Productos` y `Clientes` (con Alta y bloqueo), completo o solo lo que cambió desde el cursor de cada uno (ver "Cursor de pull" abajo), más el estado (`ok`/`issues`/ausente) de los `idempotencyKey` de push que se le pidan. Sheets procesa cada lote dentro del mismo request, así que nunca informa `queued`/`processing`. Como todo el request corre con el lock del script, la foto y los estados de lote son siempre del mismo instante (requisito del contrato); y como no trae stock ni saldo, la reaplicación de eventos del POS (#98) no hace nada con este conector. `tracksStock: false` fijo: el POS nunca bloquea una venta por falta de stock.                                                                                                                                                                                                                                                     |
+| `requestAccountHold` / `releaseAccountHold` | Locales, sin red: el fiado es sin bloqueo (siempre aprobado).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Limitaciones conocidas:
 
 - `CuentaCorriente` es el libro completo del cliente: holds confirmados (positivo), pagos a cuenta
   sin hold — fiado vendido sin red (positivo) o acreditación (negativo) — con su signo tal cual, y
-  cobranzas (el total en negativo). Anular una venta no agrega un contra-asiento.
+  cobranzas (el total en negativo). Anular una venta a cuenta sin hold acredita con su propia fila
+  negativa (4.0.0); una venta con hold confirmado no genera contra-asiento.
 - El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
 - Una fila borrada de `Productos`/`Clientes` no genera un "tombstone": el delta de `pullBatch` no
   informa bajas, solo altas y cambios. Una baja se refleja recién en la próxima foto completa (al
@@ -155,7 +182,8 @@ evita el preflight `OPTIONS` que Apps Script no maneja) y body JSON:
     ]
   },
   "idempotencyKey": "01J...",
-  "sharedSecret": "..."
+  "sharedSecret": "...",
+  "contractVersion": "4.0.0"
 }
 ```
 
@@ -164,9 +192,10 @@ Respuesta (siempre HTTP 200; el resultado viaja en el body):
 ```json
 { "ok": true, "data": {} }
 { "ok": false, "error": "mensaje" }
+{ "ok": false, "error": "mensaje", "code": "incompatible-contract", "contractVersion": "4.0.0" }
 ```
 
-Acciones: `pullBatch` (payload `{ deviceId, cursors: { products?, customers? }, pendingLotIds: [] }`,
+Acciones: `info` (sin payload; versión y estado, sin lock), `pullBatch` (payload `{ deviceId, cursors: { products?, customers? }, pendingLotIds: [] }`,
 responde `data: { products: { items, nextCursor? }, customers: { items, nextCursor? }, lots: {} }`,
 con `issues` de cada lote como `{ message, eventId? }`); `pushBatch` (payload
 `{ deviceId, events: [...] }`, cada evento con su sobre `id`/`createdAt`/`origin`, responde `data: {}`). `pushBatch` es idempotente por
@@ -208,8 +237,8 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
    Punto de venta.
 4. Idempotencia: repetir exactamente el mismo `pushBatch` (mismo `idempotencyKey`, mismos eventos) →
    `ok: true` y **no** se agregan filas de nuevo.
-5. Issue de lote: en un `pushBatch` nuevo, incluir un evento `sale-void` con un `saleId` inexistente
-   junto a uno válido → el `ok` del push sigue siendo `true`, el evento válido se aplica, y un
+5. Issue de lote: en un `pushBatch` nuevo, incluir un evento `account-hold-confirm` con un `saleId`
+   inexistente junto a uno válido → el `ok` del push sigue siendo `true`, el evento válido se aplica, y un
    `pullBatch` posterior con ese `idempotencyKey` en `pendingLotIds` responde
    `lots: { '<id>': { status: 'issues', issues: [{ message, eventId }] } }`.
 6. `pushBatch` con `account-hold-confirm` (`{ holdId, saleId }` de una venta ya pusheada) → una fila
@@ -242,9 +271,14 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     en este README.
 17. Planilla de una etapa anterior (encabezados viejos, sin `_PushLots`/`_Snapshot`): llamar cualquier
     acción → los encabezados pasan a español, los datos y valores viejos (`cash`, `cerrada`) se leen,
-    las pestañas nuevas se crean solas y un `sale-void` de una venta vieja funciona.
+    las pestañas nuevas se crean solas y la anulación de una venta vieja (un `sale` con `voidsSaleId`)
+    la marca como Anulada.
 18. Contrato v3 sobre una planilla anterior: seguir "Actualizar el puente a la v3 del contrato" → las
     columnas nuevas aparecen al final de cada pestaña sin tocar los datos, Alta se completa, y marcar
     "Sí" en Bloqueado de un producto lo trae con `blocked: { reason }` en el siguiente `pullBatch`.
 
-Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96).
+19. Contrato 4.0.0: `info` responde la versión y `status: 'ok'`; un request con
+    `contractVersion: '3.0.0'` responde `code: 'incompatible-contract'` sin escribir nada; anular una
+    venta desde el POS escribe sus filas con Anula a y deja las del original en Anulada.
+
+Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99).

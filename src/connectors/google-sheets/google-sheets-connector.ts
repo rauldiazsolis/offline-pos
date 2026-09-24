@@ -1,15 +1,17 @@
 import { z } from 'zod';
-import { POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
 import { ok, type Result } from '../../domain/result.ts';
 import { newId } from '../../storage/ids.ts';
 import {
+  backendInfoSchema,
   batchLotStatusSchema,
   connectorCustomerSchema,
   connectorProductSchema,
   pullResultSchema,
+  toBackendInfo,
   toLots,
   withCursor,
   type AccountHoldResult,
+  type BackendInfo,
   type Connector,
   type PullBatchParams,
   type PullBatchResult,
@@ -47,9 +49,10 @@ const emptyDataSchema = z.object({});
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
   return {
-    // Provisorio hasta la Tarea 12 del plan de #99 (acción `info` del puente).
-    getInfo: () =>
-      Promise.resolve(ok({ contractVersion: POS_CONTRACT_VERSION, status: 'ok' as const })),
+    async getInfo(): Promise<Result<BackendInfo>> {
+      const result = await callBridge(config, { action: 'info' }, backendInfoSchema);
+      return result.ok ? ok(toBackendInfo(result.value)) : result;
+    },
 
     async pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>> {
       const result = await callBridge(

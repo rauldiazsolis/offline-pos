@@ -48,6 +48,7 @@ describe('callBridge — request', () => {
     expect(init.headers).toEqual({ 'Content-Type': 'text/plain;charset=utf-8' });
     expect(JSON.parse(init.body as string)).toEqual({
       action: 'pushSale',
+      contractVersion: '4.0.0',
       payload: { sale: { id: 's1' } },
       idempotencyKey: 's1',
       sharedSecret: 's3cr3t',
@@ -61,7 +62,11 @@ describe('callBridge — request', () => {
     await callBridge(configWithoutSecret, { action: 'pullProducts' }, dataSchema);
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(init.body as string)).toEqual({ action: 'pullProducts', payload: {} });
+    expect(JSON.parse(init.body as string)).toEqual({
+      action: 'pullProducts',
+      contractVersion: '4.0.0',
+      payload: {},
+    });
   });
 });
 
@@ -160,5 +165,29 @@ describe('callBridge — response', () => {
       expect(result.error).toBe('sync/invalid-payload');
       expect(result.meta).toMatchObject({ issues: [{ path: 'value' }] });
     }
+  });
+});
+
+describe('callBridge — contrato 4.0.0 (#99)', () => {
+  it('un puente con otro contrato devuelve sync/incompatible-contract', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          ok: false,
+          error: 'Contrato incompatible',
+          code: 'incompatible-contract',
+          contractVersion: '3.0.0',
+        }),
+      ),
+    );
+
+    const result = await callBridge(config, { action: 'pushBatch' }, dataSchema);
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'sync/incompatible-contract',
+      meta: { backend: '3.0.0', pos: '4.0.0' },
+    });
   });
 });
