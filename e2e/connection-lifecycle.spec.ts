@@ -72,13 +72,15 @@ async function routeSheetsBridge(page: Page): Promise<void> {
   });
 }
 
+// Fecha de hoy: una venta sincronizada de hace más de 7 días la borra la limpieza (#98) apenas
+// termina el pull de aplicar la conexión, y la terminal quedaría sin datos que conservar.
 const closedSale = {
   id: 'e2e-sale-1',
   lines: [],
   payments: [],
   total: 0,
   status: 'closed',
-  createdAt: '2026-01-01T00:00:00.000Z',
+  createdAt: new Date().toISOString(),
 };
 
 async function storedConfig(page: Page): Promise<Record<string, unknown> | null> {
