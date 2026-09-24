@@ -67,14 +67,6 @@ export function toBatchItem(event: OutboxEvent): OutboxBatchItem {
       return { type: 'sale', sale: event.sale, ...envelope };
     case 'stock-movement':
       return { type: 'stock-movement', movement: event.movement, ...envelope };
-    case 'sale-void':
-      return {
-        type: 'sale-void',
-        saleId: event.saleId,
-        voidedAt: event.voidedAt,
-        ...(event.voidReason !== undefined ? { voidReason: event.voidReason } : {}),
-        ...envelope,
-      };
     case 'customer':
       return { type: 'customer', customer: event.customer, ...envelope };
     case 'account-hold-confirm':

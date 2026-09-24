@@ -8,7 +8,6 @@ import type { StockMovement } from './stock.ts';
 export type OutboxEventPayload =
   | { type: 'sale'; sale: Sale }
   | { type: 'stock-movement'; movement: StockMovement }
-  | { type: 'sale-void'; saleId: string; voidedAt: string; voidReason?: string }
   | { type: 'customer'; customer: Customer }
   | { type: 'account-hold-confirm'; holdId: string; saleId: string }
   | { type: 'account-hold-release'; holdId: string }
@@ -22,8 +21,8 @@ export type OutboxEventPayload =
  * ya viajó (`status`) y cuándo se creó (orden de armado del lote,
  * `createdAt`). `id` es también el id que identifica al evento dentro del
  * lote que lo incluye — para 'sale', 'stock-movement', 'customer',
- * 'cash-movement' y 'customer-payment' es el id de la propia entidad (la entidad ES el evento a sincronizar); 'sale-void',
- * 'account-hold-confirm' y 'account-hold-release' son operaciones distintas
+ * 'cash-movement' y 'customer-payment' es el id de la propia entidad (la entidad ES el evento a
+ * sincronizar); 'account-hold-confirm' y 'account-hold-release' son operaciones distintas
  * sobre un recurso ya enviado, así que cada una necesita su propio id nuevo.
  */
 export type OutboxEvent = OutboxEventPayload & {
@@ -35,11 +34,15 @@ export type OutboxEvent = OutboxEventPayload & {
 };
 
 /**
- * Tipos que el contrato v3 ya no tiene (`cash-session`, sin turnos de caja,
- * epic #94). Un evento así que haya quedado pendiente en una terminal no viaja
- * nunca: `storage/local-data.ts::listPendingOutbox` lo marca como enviado.
+ * Tipos que el contrato ya no tiene: `cash-session` (v3, sin turnos de caja,
+ * epic #94) y `sale-void` (4.0.0, #99: la anulación viaja como un `sale` con
+ * `voidsSaleId`). Un evento así que haya quedado pendiente en una terminal no
+ * viaja nunca: `storage/local-data.ts::listPendingOutbox` lo marca como
+ * enviado. Un `sale-void` pendiente ya mandó su stock por sus propios
+ * `stock-movement`; se pierde solo el aviso de la anulación (riesgo aceptado:
+ * no hay terminales en producción).
  */
-export const LEGACY_OUTBOX_TYPES: ReadonlySet<string> = new Set(['cash-session']);
+export const LEGACY_OUTBOX_TYPES: ReadonlySet<string> = new Set(['cash-session', 'sale-void']);
 
 export function isLegacyOutboxType(type: string): boolean {
   return LEGACY_OUTBOX_TYPES.has(type);
@@ -71,26 +74,6 @@ export function buildOutboxEventsForStockMovements(
     createdAt: params.now,
     origin: params.origin,
   }));
-}
-
-export function buildOutboxEventForVoid(params: {
-  id: string;
-  saleId: string;
-  voidedAt: string;
-  voidReason?: string;
-  now: string;
-  origin: EventOrigin;
-}): OutboxEvent {
-  return {
-    type: 'sale-void',
-    saleId: params.saleId,
-    voidedAt: params.voidedAt,
-    ...(params.voidReason !== undefined ? { voidReason: params.voidReason } : {}),
-    id: params.id,
-    status: 'pending',
-    createdAt: params.now,
-    origin: params.origin,
-  };
 }
 
 export function buildOutboxEventForCustomer(

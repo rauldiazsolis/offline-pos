@@ -73,7 +73,9 @@ describe('VoidSaleScreen', () => {
 
     fireEvent.keyDown(getContainer(), { key: 'Enter' });
 
-    await vi.waitUntil(async () => (await db.sales.get(closed.value.id))?.status === 'voided');
+    await vi.waitUntil(
+      async () => (await db.sales.where('voidsSaleId').equals(closed.value.id).count()) === 1,
+    );
   });
 });
 
@@ -93,7 +95,9 @@ describe('VoidSaleScreen — mouse (Etapa 2 de #94)', () => {
     expect(screen.getByText(/¿Anular esta venta\?/)).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Anular (Enter)' }));
 
-    await vi.waitUntil(async () => (await db.sales.get(closed.value.id))?.status === 'voided');
+    await vi.waitUntil(
+      async () => (await db.sales.where('voidsSaleId').equals(closed.value.id).count()) === 1,
+    );
   });
 
   it('"Volver (Esc)" en la confirmación vuelve a la lista sin anular', async () => {

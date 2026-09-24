@@ -51,14 +51,14 @@ export function reapplyEffects(events: readonly OutboxEvent[]): ReapplyEffects {
       case 'customer-payment':
         add(balance, event.payment.customerId, -event.payment.total);
         break;
-      case 'sale-void':
       case 'customer':
       case 'account-hold-confirm':
       case 'account-hold-release':
       case 'cash-movement':
         break;
       default: {
-        // Un tipo que el contrato ya no tiene (p. ej. `cash-session`) no mueve stock ni saldo.
+        // Un tipo que el contrato ya no tiene (`cash-session`, `sale-void`) no mueve stock ni saldo:
+        // un ticket de anulación viaja como `sale` y lo cubre el caso de arriba.
         event satisfies never;
       }
     }

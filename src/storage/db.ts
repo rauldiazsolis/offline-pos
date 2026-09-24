@@ -61,6 +61,11 @@ class PosDatabase extends Dexie {
     this.version(5).stores({
       cashSessions: 'id, openedAt',
     });
+    // #99: la anulación es un ticket propio que apunta al original — el índice
+    // responde "¿esta venta ya tiene anulación?" sin recorrer la tabla.
+    this.version(6).stores({
+      sales: 'id, status, createdAt, voidsSaleId',
+    });
   }
 }
 

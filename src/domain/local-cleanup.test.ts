@@ -54,28 +54,28 @@ describe('planLocalCleanup', () => {
     expect(plan.accountMovements).toEqual(['a-old']);
   });
 
-  it('nunca borra una venta con su evento o su anulación pendientes', () => {
+  it('nunca borra una venta con su evento pendiente', () => {
     const pendingEvents = [
       { id: 's1', type: 'sale', status: 'pending', createdAt: old },
-      {
-        id: 'v2',
-        type: 'sale-void',
-        saleId: 's2',
-        voidedAt: old,
-        status: 'pending',
-        createdAt: old,
-      },
+    ] as OutboxEvent[];
+    const plan = planLocalCleanup(input({ pendingEvents, sales: [{ id: 's1', createdAt: old }] }));
+    expect(plan.sales).toEqual([]);
+  });
+
+  it('cada venta por su propia edad: una vieja cuya anulación está pendiente sí se borra (#99)', () => {
+    const pendingEvents = [
+      { id: 'v2', type: 'sale', status: 'pending', createdAt: old },
     ] as OutboxEvent[];
     const plan = planLocalCleanup(
       input({
         pendingEvents,
         sales: [
-          { id: 's1', createdAt: old },
           { id: 's2', createdAt: old },
+          { id: 'v2', createdAt: old },
         ],
       }),
     );
-    expect(plan.sales).toEqual([]);
+    expect(plan.sales).toEqual(['s2']);
   });
 
   it('borra eventos synced viejos salvo los protegidos (lotes en espera o en curso)', () => {

@@ -274,26 +274,6 @@ describe('toBatchItem', () => {
     ],
     [
       {
-        type: 'sale-void' as const,
-        saleId: 'sale-1',
-        voidedAt: now,
-        voidReason: 'error',
-        id: 'void-1',
-        status: 'pending' as const,
-        createdAt: now,
-      },
-      {
-        type: 'sale-void',
-        saleId: 'sale-1',
-        voidedAt: now,
-        voidReason: 'error',
-        id: 'void-1',
-        createdAt: now,
-        origin: {},
-      },
-    ],
-    [
-      {
         type: 'customer' as const,
         customer: { id: 'c1', name: 'Juan Pérez', createdAt: now },
         id: 'c1',

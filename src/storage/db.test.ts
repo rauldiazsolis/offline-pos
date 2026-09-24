@@ -81,9 +81,8 @@ describe('PosDatabase', () => {
   it('encuentra eventos de outbox pendientes vía el índice status', async () => {
     await db.outbox.add({
       id: 'e1',
-      type: 'sale-void',
-      saleId: 'sale-1',
-      voidedAt: '2026-01-02T00:00:00.000Z',
+      type: 'account-hold-release',
+      holdId: 'hold-1',
       status: 'pending',
       createdAt: '2026-01-02T00:00:00.000Z',
     });

@@ -87,7 +87,7 @@ describe('flujo de confirmación', () => {
     cancelVoidConfirmation();
 
     expect(voidConfirmingSignal.value).toBe(false);
-    await expect(db.sales.where('status').equals('voided').count()).resolves.toBe(0);
+    await expect(db.sales.count()).resolves.toBe(1);
   });
 
   it('confirmVoid anula la venta seleccionada y sale de la pantalla', async () => {
@@ -99,8 +99,8 @@ describe('flujo de confirmación', () => {
 
     await confirmVoid();
 
-    const stored = await db.sales.get(closed.value.id);
-    expect(stored?.status).toBe('voided');
+    // #99: la anulación es un ticket propio que apunta al original.
+    await expect(db.sales.where('voidsSaleId').equals(closed.value.id).count()).resolves.toBe(1);
     expect(activeScreenSignal.value).toBe('sale');
   });
 });

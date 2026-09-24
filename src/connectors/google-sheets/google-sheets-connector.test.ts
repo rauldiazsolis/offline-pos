@@ -246,14 +246,6 @@ describe('pushBatch', () => {
     const envelope = { createdAt: now, origin: {} };
     const allEvents: OutboxBatchItem[] = [
       { type: 'sale', id: 'sale-1', ...envelope, sale },
-      {
-        type: 'sale-void',
-        id: 'void-1',
-        ...envelope,
-        saleId: 'sale-1',
-        voidedAt: '2026-01-02T00:00:00.000Z',
-        voidReason: 'error de precio',
-      },
       { type: 'customer', id: 'c1', ...envelope, customer },
       {
         type: 'account-hold-confirm',

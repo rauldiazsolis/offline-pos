@@ -88,9 +88,8 @@ describe('reapplyEffects', () => {
     expect(reapplyEffects(events).balance).toEqual(new Map([['c1', -40]]));
   });
 
-  it('anulación, cliente, holds y movimientos de caja no mueven stock ni saldo', () => {
+  it('cliente, holds y movimientos de caja no mueven stock ni saldo', () => {
     const events: OutboxEvent[] = [
-      { ...envelope, id: 'v1', type: 'sale-void', saleId: 's1', voidedAt: now },
       {
         ...envelope,
         id: 'c1',
@@ -162,5 +161,22 @@ describe('reapplyEffects', () => {
     expect(effects.balance.get('c1')).toBe(0.3);
     expect(roundQuantity(1.23456)).toBe(1.235);
     expect(roundAmount(1.005 + 0.001)).toBe(1.01);
+  });
+
+  it('un ticket de anulación viaja como sale: su pago a cuenta negativo acredita (#99)', () => {
+    const events: OutboxEvent[] = [
+      {
+        ...envelope,
+        id: 'V1',
+        type: 'sale',
+        sale: sale('V1', {
+          customerId: 'C1',
+          voidsSaleId: 'S1',
+          total: -150,
+          payments: [{ method: 'account', amount: -150 }],
+        }),
+      },
+    ];
+    expect(reapplyEffects(events).balance.get('C1')).toBe(-150);
   });
 });
