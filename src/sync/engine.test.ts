@@ -1,11 +1,13 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '../domain/result.ts';
+import { buildOutboxEventsForStockMovements, markSynced } from '../domain/outbox.ts';
 import { markLotFailed as markLotFailedForTest, buildPushLot } from '../domain/push-lot.ts';
 import { db } from '../storage/db.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
+  lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
@@ -15,7 +17,9 @@ import {
   syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
+import { getLastCleanup } from './cleanup-schedule.ts';
 import { saveSyncConfig } from './config.ts';
+import type { BatchLotStatus } from './connector.ts';
 import {
   getCustomersCursor,
   getLastFullSyncAt,
@@ -74,6 +78,7 @@ afterEach(async () => {
   localStorage.clear();
   setOnline(true);
   syncLogSignal.value = [];
+  lastPullApplicationSignal.value = null;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -152,12 +157,14 @@ describe('pushPendingLot', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('tras el ack, agrega el lote a la lista de espera de resolución', async () => {
+  it('tras el ack, agrega el lote a la lista de espera con sus eventos', async () => {
     await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
 
     await pushPendingLot(fakeConnector({ pushBatch: () => Promise.resolve(ok(undefined)) }), now);
 
-    expect(getAwaitingLots()).toHaveLength(1);
+    const awaiting = getAwaitingLots();
+    expect(awaiting).toHaveLength(1);
+    expect(awaiting[0]?.eventIds).toEqual(['sale-1']);
   });
 
   it('un fallo de red deja los eventos pending y guarda el lote con backoff, sin agregarlo a la espera', async () => {
@@ -587,91 +594,175 @@ describe('runPullCycle — delta', () => {
   });
 });
 
-describe('runPullCycle — gateado por lotes de push pendientes', () => {
-  it('si un lote que nos interesa sigue pending, no aplica el pull y no toca el catálogo local', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    addAwaitingLot({ id: 'lot-1', sentAt: now });
-    await db.products.put({
-      id: 'p1',
-      sku: 'S1',
-      barcodes: [],
-      name: 'Viejo',
-      price: 1,
-      taxRate: 0,
-      category: 'x',
-      tracksStock: false,
-    });
-    const pullBatch = vi.fn().mockResolvedValue(
+describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
+  const productRow = {
+    id: 'p1',
+    sku: 'S1',
+    barcodes: [],
+    name: 'Viejo',
+    price: 1,
+    taxRate: 0,
+    category: 'x',
+    tracksStock: true,
+  };
+
+  function pullWith(lots: Record<string, BatchLotStatus>, stockQty = 10) {
+    return vi.fn().mockResolvedValue(
       ok({
-        products: {
+        products: { items: [{ ...productRow, name: 'Nuevo', createdAt: now }], nextCursor: 'pc-2' },
+        customers: {
           items: [
-            {
-              id: 'p1',
-              sku: 'S1',
-              barcodes: [],
-              name: 'Nuevo',
-              price: 999,
-              taxRate: 0,
-              category: 'x',
-              tracksStock: false,
-            },
+            { id: 'c1', name: 'Ana', createdAt: now, creditLimit: 1000, margin: 0, balance: 500 },
           ],
+          nextCursor: 'cc-2',
         },
-        customers: { items: [] },
-        stock: [],
-        lots: { 'lot-1': { status: 'queued' } },
+        stock: [{ productId: 'p1', quantity: stockQty, updatedAt: now }],
+        lots,
       }),
     );
+  }
 
-    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
-
-    expect(report).toEqual({ ok: false, error: 'sync/pending-lot', meta: undefined });
-    expect((await db.products.get('p1'))?.name).toBe('Viejo'); // no se aplicó nada
-    // Sigue esperando, con el último estado informado (contrato v3).
-    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now, lastStatus: 'queued' }]);
-    // El descarte por lote pendiente es el comportamiento esperado del diseño, no un error real —
-    // console.info (para debuguear), nunca console.error.
-    expect(syncLogSignal.value[0]?.result).toEqual({
-      ok: false,
-      error: 'sync/pending-lot',
-      meta: undefined,
+  async function seedLocal(): Promise<void> {
+    await db.products.put(productRow);
+    await db.stock.put({ productId: 'p1', quantity: 4, updatedAt: now });
+    await db.customerAccounts.put({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      balance: 50,
+      updatedAt: now,
     });
+  }
+
+  it('processing: aplica datos maestros, retiene stock y saldo y no avanza el cursor de clientes', async () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await seedLocal();
+    addAwaitingLot({ id: 'lot-1', sentAt: now, eventIds: ['e1'] });
+
+    const report = await runPullCycle(
+      fakeConnector({ pullBatch: pullWith({ 'lot-1': { status: 'processing' } }) }),
+      now,
+    );
+
+    expect(report.ok).toBe(true);
+    expect((await db.products.get('p1'))?.name).toBe('Nuevo');
+    expect((await db.stock.get('p1'))?.quantity).toBe(4);
+    expect((await db.customerAccounts.get('c1'))?.balance).toBe(50);
+    expect(getProductsCursor()).toBe('pc-2');
+    expect(getCustomersCursor()).toBeUndefined();
+    expect(lastPullApplicationSignal.value).toEqual({ kind: 'retained', lotIds: ['lot-1'] });
+    expect(syncStatusSignal.value).toBe('online-idle');
+    expect(syncLogSignal.value[0]?.application).toEqual({ kind: 'retained', lotIds: ['lot-1'] });
     expect(infoSpy).toHaveBeenCalledTimes(1);
     expect(errorSpy).not.toHaveBeenCalled();
+    expect(getAwaitingLots()).toEqual([
+      { id: 'lot-1', sentAt: now, eventIds: ['e1'], lastStatus: 'processing' },
+    ]);
   });
 
-  it('si el backend no informa nada sobre un lote que esperamos, se trata como processing (contrato v3)', async () => {
-    addAwaitingLot({ id: 'lot-1', sentAt: now });
-    const pullBatch = vi
-      .fn()
-      .mockResolvedValue(
-        ok({ products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }),
-      );
-
-    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
-
-    expect(report.ok).toBe(false);
-    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now }]);
-  });
-
-  it('un lote processing también descarta el pull y guarda el último estado', async () => {
+  it('un lote con ack que el backend no informa retiene igual (contrato v3)', async () => {
     vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    addAwaitingLot({ id: 'lot-1', sentAt: now });
-    const pullBatch = vi.fn().mockResolvedValue(
-      ok({
-        products: { items: [] },
-        customers: { items: [] },
-        stock: [{ productId: 'p1', quantity: 3, updatedAt: now }],
-        lots: { 'lot-1': { status: 'processing' } },
-      }),
+    await seedLocal();
+    addAwaitingLot({ id: 'lot-1', sentAt: now, eventIds: ['e1'] });
+
+    await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
+
+    expect((await db.stock.get('p1'))?.quantity).toBe(4);
+    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now, eventIds: ['e1'] }]);
+  });
+
+  it('queued: toma el valor del backend y le reaplica los eventos del lote', async () => {
+    await seedLocal();
+    const movement = buildOutboxEventsForStockMovements(
+      [{ id: 'm1', productId: 'p1', delta: -3, reason: 'sale', createdAt: now }],
+      { now, origin: { branch: 'b', pointOfSale: 'p' } },
+    ).map(markSynced);
+    await db.outbox.bulkAdd(movement);
+    addAwaitingLot({ id: 'lot-1', sentAt: now, eventIds: ['m1'] });
+
+    await runPullCycle(
+      fakeConnector({ pullBatch: pullWith({ 'lot-1': { status: 'queued' } }) }),
+      now,
     );
 
-    const report = await runPullCycle(fakeConnector({ pullBatch }), now);
+    expect((await db.stock.get('p1'))?.quantity).toBe(7);
+    expect((await db.customerAccounts.get('c1'))?.balance).toBe(500);
+    expect(getCustomersCursor()).toBe('cc-2');
+    expect(lastPullApplicationSignal.value).toEqual({ kind: 'reapplied', events: 1 });
+  });
 
-    expect(report).toMatchObject({ ok: false, error: 'sync/pending-lot' });
-    expect(await db.stock.count()).toBe(0);
-    expect(getAwaitingLots()).toEqual([{ id: 'lot-1', sentAt: now, lastStatus: 'processing' }]);
+  it('sin lotes: reaplica los pendientes nunca enviados (el pull ya no pisa ventas sin enviar)', async () => {
+    await seedLocal();
+    await db.outbox.bulkAdd(
+      buildOutboxEventsForStockMovements(
+        [{ id: 'm1', productId: 'p1', delta: -2, reason: 'sale', createdAt: now }],
+        { now, origin: { branch: 'b', pointOfSale: 'p' } },
+      ),
+    );
+
+    await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
+
+    expect((await db.stock.get('p1'))?.quantity).toBe(8);
+  });
+
+  it('manda el lote en curso en pendingLotIds; si el backend no lo conoce, lo marca no recibido y reaplica sus eventos', async () => {
+    await seedLocal();
+    await db.outbox.bulkAdd(
+      buildOutboxEventsForStockMovements(
+        [{ id: 'm1', productId: 'p1', delta: -1, reason: 'sale', createdAt: now }],
+        { now, origin: { branch: 'b', pointOfSale: 'p' } },
+      ),
+    );
+    setCurrentPushLot(buildPushLot(['m1'], { id: 'cur', now }));
+    const pullBatch = pullWith({});
+
+    await runPullCycle(fakeConnector({ pullBatch }), now);
+
+    expect(pullBatch).toHaveBeenCalledWith(expect.objectContaining({ pendingLotIds: ['cur'] }));
+    expect(getCurrentPushLot()?.notReceivedAt).toBe(now);
+    expect((await db.stock.get('p1'))?.quantity).toBe(9);
+    expect((await db.outbox.get('m1'))?.status).toBe('pending');
+  });
+
+  it('si el backend conoce el lote en curso, recupera el ack: eventos synced, lote a la espera, sin reenviar', async () => {
+    await seedLocal();
+    await db.outbox.bulkAdd(
+      buildOutboxEventsForStockMovements(
+        [{ id: 'm1', productId: 'p1', delta: -1, reason: 'sale', createdAt: now }],
+        { now, origin: { branch: 'b', pointOfSale: 'p' } },
+      ),
+    );
+    setCurrentPushLot(buildPushLot(['m1'], { id: 'cur', now }));
+
+    await runPullCycle(fakeConnector({ pullBatch: pullWith({ cur: { status: 'queued' } }) }), now);
+
+    expect(getCurrentPushLot()).toBeUndefined();
+    expect((await db.outbox.get('m1'))?.status).toBe('synced');
+    expect(getAwaitingLots()).toEqual([
+      { id: 'cur', sentAt: now, eventIds: ['m1'], lastStatus: 'queued' },
+    ]);
+    expect((await db.stock.get('p1'))?.quantity).toBe(9);
+
+    const pushBatch = vi.fn().mockResolvedValue(ok(undefined));
+    await pushPendingLot(fakeConnector({ pushBatch }), now);
+    expect(pushBatch).not.toHaveBeenCalled();
+  });
+
+  it('una foto completa que retiene no cuenta como hecha', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    await seedLocal();
+    addAwaitingLot({ id: 'lot-1', sentAt: now, eventIds: ['e1'] });
+
+    await runPullCycle(
+      fakeConnector({ pullBatch: pullWith({ 'lot-1': { status: 'processing' } }) }),
+      now,
+      { full: true },
+    );
+
+    expect(getLastFullSyncAt()).toBeUndefined();
+    expect(getCustomersCursor()).toBeUndefined();
+    expect((await db.stock.get('p1'))?.quantity).toBe(4);
   });
 
   it('un lote resuelto ok se saca de la lista de espera y el pull se aplica normalmente', async () => {
@@ -733,6 +824,7 @@ describe('runPullCycle — gateado por lotes de push pendientes', () => {
       kind: 'pull',
       request: { deviceId: 'dev-1', cursors: {}, pendingLotIds: [] },
       result: { ok: true },
+      application: { kind: 'applied' },
     });
     expect(errorSpy).not.toHaveBeenCalled();
     expect(warnSpy).not.toHaveBeenCalled();
@@ -938,6 +1030,44 @@ describe('runPullCycleNow', () => {
 
     expect(syncConfiguredSignal.value).toBe(true);
     expect(syncStatusSignal.value).toBe('online-idle');
+  });
+
+  it('después de un pull exitoso corre la limpieza (como mucho una vez cada 24 h)', async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: () =>
+            Promise.resolve({
+              products: { items: [] },
+              customers: { items: [] },
+              stock: [],
+              lots: {},
+            }),
+        } as Response),
+      ),
+    );
+
+    await runPullCycleNow();
+
+    expect(getLastCleanup()).not.toBeUndefined();
+  });
+
+  it('un pull que falla no dispara la limpieza', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('Failed to fetch'))),
+    );
+
+    await runPullCycleNow();
+
+    expect(getLastCleanup()).toBeUndefined();
   });
 
   it('la primera vez de la sesión es una foto completa: sin cursores en el body', async () => {

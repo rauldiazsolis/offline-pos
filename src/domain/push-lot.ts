@@ -13,6 +13,11 @@ export type PushLot = {
   retries: number;
   nextAttemptAt: string;
   lastError?: string;
+  /**
+   * Un pull informó que el backend no conoce este lote (Etapa 3, #98): nunca
+   * llegó. Solo para `/DIAGNOSTICO`; el lote se reintenta igual.
+   */
+  notReceivedAt?: string;
 };
 
 const BASE_RETRY_DELAY_MS = 1000;
@@ -52,4 +57,9 @@ export const PUSH_ERROR_RETRY_THRESHOLD = 3;
 /** true si el lote en vuelo lleva varios reintentos fallidos seguidos — dispara `sync-error` en la barra. */
 export function isPushStruggling(lot: PushLot | undefined): boolean {
   return lot !== undefined && lot.retries >= PUSH_ERROR_RETRY_THRESHOLD;
+}
+
+/** Marca que el backend, consultado en un pull, no conoce este lote (#98). El id y los eventIds no cambian. */
+export function markLotNotReceived(lot: PushLot, now: string): PushLot {
+  return { ...lot, notReceivedAt: now };
 }

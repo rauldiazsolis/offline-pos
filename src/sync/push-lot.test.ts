@@ -65,6 +65,19 @@ describe('lotes esperando resolución', () => {
     expect(ids[0]).toBe('lot-0');
     expect(ids.at(-1)).toBe('lot-24');
   });
+
+  it('updateAwaitingLots conserva los eventIds de cada lote', () => {
+    addAwaitingLot({ id: 'lot-1', sentAt: '2026-09-24T10:00:00.000Z', eventIds: ['e1', 'e2'] });
+    updateAwaitingLots(new Set(), { 'lot-1': 'queued' });
+    expect(getAwaitingLots()).toEqual([
+      {
+        id: 'lot-1',
+        sentAt: '2026-09-24T10:00:00.000Z',
+        eventIds: ['e1', 'e2'],
+        lastStatus: 'queued',
+      },
+    ]);
+  });
 });
 
 describe('clearPushLotState', () => {

@@ -3,6 +3,7 @@ import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
 import type { LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
+import type { PullApplication } from '../../sync/pull-rule.ts';
 
 /**
  * Estado de sincronización para la barra de estado (ver §7 del doc de
@@ -94,6 +95,17 @@ export function setPushLotIssues(issues: LotIssue[] | null): void {
 }
 
 /**
+ * Cómo se aplicó el último pull exitoso (Etapa 3 de #94, #98): `retained`
+ * = datos maestros aplicados, stock y saldos locales a la espera de que el
+ * backend termine un lote. La barra de estado lo muestra; no es un error.
+ */
+export const lastPullApplicationSignal = signal<PullApplication | null>(null);
+
+export function setLastPullApplication(application: PullApplication | null): void {
+  lastPullApplicationSignal.value = application;
+}
+
+/**
  * Historial de los últimos intentos de push/pull, para `/DIAGNOSTICO` — el
  * usuario probó el conector de Sheets contra un despliegue real y se topó
  * con un error sin poder ver el detalle (la Console del navegador no
@@ -108,6 +120,8 @@ export type SyncLogEntry = {
   kind: 'push' | 'pull';
   request: unknown;
   result: { ok: true } | { ok: false; error: ErrorCode; meta: unknown };
+  /** Solo en un pull exitoso: cómo se aplicó (#98). */
+  application?: PullApplication;
 };
 
 const SYNC_LOG_MAX_ENTRIES = 20;

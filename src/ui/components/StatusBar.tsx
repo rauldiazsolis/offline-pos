@@ -1,6 +1,7 @@
 import { describeError } from '../errors.ts';
 import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import {
+  lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
@@ -65,9 +66,14 @@ function statusText(): string {
       ? `Sincronizado (${new Date(lastSyncedAt).toLocaleTimeString()})`
       : 'Sincronizado';
   const counts = localCatalogCountsSignal.value;
-  return counts !== null
-    ? `${synced} · ${String(counts.products)} productos · ${String(counts.customers)} clientes`
-    : synced;
+  const base =
+    counts !== null
+      ? `${synced} · ${String(counts.products)} productos · ${String(counts.customers)} clientes`
+      : synced;
+  // Un pull que retuvo stock y saldos no es un error (#98): solo se avisa.
+  return lastPullApplicationSignal.value?.kind === 'retained'
+    ? `${base} · stock y saldos en espera del backend`
+    : base;
 }
 
 export function StatusBar() {

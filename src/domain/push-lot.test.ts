@@ -4,6 +4,7 @@ import {
   isLotDue,
   isPushStruggling,
   markLotFailed,
+  markLotNotReceived,
   nextRetryDelayMs,
   PUSH_ERROR_RETRY_THRESHOLD,
 } from './push-lot.ts';
@@ -74,5 +75,23 @@ describe('isPushStruggling', () => {
 
     lot = markLotFailed(lot, { now: '2026-01-01T00:00:00.000Z', error: 'x' });
     expect(isPushStruggling(lot)).toBe(true);
+  });
+});
+
+describe('markLotNotReceived', () => {
+  it('anota cuándo el backend informó que no recibió el lote, sin tocar id ni eventos', () => {
+    const lot = buildPushLot(['e1', 'e2'], { id: 'lot-1', now: '2026-09-24T10:00:00.000Z' });
+    const marked = markLotNotReceived(lot, '2026-09-24T10:05:00.000Z');
+    expect(marked).toEqual({ ...lot, notReceivedAt: '2026-09-24T10:05:00.000Z' });
+  });
+
+  it('un reintento fallido conserva la marca', () => {
+    const lot = markLotNotReceived(
+      buildPushLot(['e1'], { id: 'lot-1', now: '2026-09-24T10:00:00.000Z' }),
+      '2026-09-24T10:05:00.000Z',
+    );
+    expect(markLotFailed(lot, { now: '2026-09-24T10:06:00.000Z', error: 'x' }).notReceivedAt).toBe(
+      '2026-09-24T10:05:00.000Z',
+    );
   });
 });

@@ -105,21 +105,28 @@ paths:
         darse cuenta de las bajas — un delta nunca las informa). `stock`
         nunca tiene cursor: siempre viaja completo, es liviano.
 
-        `lots` en la respuesta solo trae estado para los ids de
-        `pendingLotIds` que el backend todavía reconoce — un id ausente en
-        la respuesta se trata, del lado del POS, como `processing` (lo más
-        conservador: nunca aplicar datos si no se puede confirmar que un
-        lote de interés ya se resolvió). La foto y los estados de lote
-        tienen que ser **del mismo instante** (consistentes entre sí).
+        `lots` en la respuesta trae estado para los ids de `pendingLotIds`
+        que el backend recibió; un id que no recibió se omite. Del lado del
+        POS, un lote con ack que no viene informado cuenta como `processing`;
+        el lote que el POS mandó sin recibir ack (también viaja en
+        `pendingLotIds`) y no viene informado, como **no recibido**. Si viene
+        informado, el POS lo toma como un ack recuperado y no lo reenvía.
 
-        **Regla de aplicación (la más importante de este endpoint)**: en
-        esta versión del POS, si algún lote de `pendingLotIds` sigue
-        `queued` o `processing` (o no viene informado), el POS descarta el
-        resto de esta respuesta entera — ni el delta ni la foto completa se
-        aplican — y reintenta más tarde. La Etapa 3 del epic #94 (#98)
-        refina esta regla (datos maestros siempre; stock/saldo reaplicando
-        los eventos de los lotes `queued`). Un lote `issues` nunca bloquea:
-        el POS solo le muestra los avisos al humano.
+        **Consistencia**: la foto (productos, clientes con su saldo, stock) y
+        los estados de lote tienen que ser **del mismo instante**. Un lote
+        `queued` todavía no tiene ningún efecto en la foto; uno `ok`/`issues`
+        ya los tiene todos. Todo cambio de saldo de un cliente mueve su
+        cursor (`updatedAt`), así viaja en el pull por delta.
+
+        **Regla de aplicación del POS (Etapa 3 del epic #94, #98)**: datos
+        maestros y bloqueos de productos y clientes se aplican siempre. Stock
+        y saldos: si algún lote sigue `processing` (o equivalente), el POS
+        conserva los suyos y no avanza el cursor de clientes; si no, toma los
+        del backend y les reaplica los efectos de los eventos de lotes
+        `queued` y de los que todavía no envió. El backend puede bloquear
+        productos y clientes por lo que surja al procesar un lote, aun
+        mientras está `processing`. Un lote `issues` nunca bloquea: el POS
+        solo le muestra los avisos al humano.
       requestBody:
         required: true
         content:
@@ -529,7 +536,10 @@ components:
         pendingLotIds:
           type: array
           items: { type: string }
-          description: idempotency_id de lotes de push que el POS mandó y todavía no confirmó ok/issues.
+          description: |
+            idempotency_id de lotes de push que el POS mandó y todavía no
+            confirmó ok/issues, más el lote en curso cuyo ack no llegó (si hay
+            uno). El backend informa solo los que recibió.
 
     ProductsPullResult:
       type: object

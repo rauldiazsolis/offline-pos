@@ -6,7 +6,7 @@ import type { Sale } from '../domain/sale.ts';
 import type { StockItem } from '../domain/stock.ts';
 import type { ProbeSnapshot } from '../sync/pull-snapshot.ts';
 import { db } from './db.ts';
-import { applySnapshotReconciled, reconcileSnapshot } from './reconcile.ts';
+import { applySnapshotReconciled } from './reconcile.ts';
 
 const now = '2026-01-01T00:00:00.000Z';
 
@@ -46,16 +46,25 @@ async function ids(
   return (await db.table(table).toCollection().primaryKeys()).sort();
 }
 
-describe('reconcileSnapshot — bajas', () => {
+/** Lo mismo que hacía `reconcileSnapshot` (se sacó en #98): la reconciliación dentro de su transacción. */
+async function reconcile(snap: ProbeSnapshot, params: { now: string; allowEmptyTables?: boolean }) {
+  return db.transaction(
+    'rw',
+    [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
+    () => applySnapshotReconciled(snap, params),
+  );
+}
+
+describe('applySnapshotReconciled — bajas', () => {
   it('actualiza lo que llegó y borra los productos que ya no vienen', async () => {
     await db.products.bulkPut([product('p1'), product('p2'), product('p3')]);
 
-    const result = await reconcileSnapshot(
+    const result = await reconcile(
       snapshot({ products: [product('p1', 'Renombrado'), product('p2')] }),
       { now },
     );
 
-    expect(result).toEqual({ ok: true, value: { skipped: [] } });
+    expect(result).toEqual({ skipped: [] });
     expect(await ids('products')).toEqual(['p1', 'p2']);
     expect((await db.products.get('p1'))?.name).toBe('Renombrado');
   });
@@ -64,7 +73,7 @@ describe('reconcileSnapshot — bajas', () => {
     await db.products.put(product('p1'));
     await db.stock.bulkPut([stockOf('p1'), stockOf('p9')]);
 
-    await reconcileSnapshot(snapshot({ products: [product('p1')], stock: [stockOf('p1', 7)] }), {
+    await reconcile(snapshot({ products: [product('p1')], stock: [stockOf('p1', 7)] }), {
       now,
     });
 
@@ -82,7 +91,7 @@ describe('reconcileSnapshot — bajas', () => {
       { customerId: 'c2', creditLimit: 100, margin: 0, balance: 0, updatedAt: now },
     ]);
 
-    await reconcileSnapshot(
+    await reconcile(
       snapshot({
         products: [product('p1')],
         customers: [
@@ -108,7 +117,7 @@ describe('reconcileSnapshot — bajas', () => {
       updatedAt: now,
     });
 
-    await reconcileSnapshot(
+    await reconcile(
       snapshot({
         products: [product('p1')],
         customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
@@ -121,13 +130,13 @@ describe('reconcileSnapshot — bajas', () => {
   });
 });
 
-describe('reconcileSnapshot — salvaguardas', () => {
+describe('applySnapshotReconciled — salvaguardas', () => {
   it('conserva un cliente creado acá cuyo alta todavía está pendiente en el outbox', async () => {
     const local = { id: 'c-local', name: 'Nuevo', createdAt: now };
     await db.customers.bulkPut([local, { id: 'c-viejo', name: 'Viejo', createdAt: now }]);
     await db.outbox.add(buildOutboxEventForCustomer(local, { now, origin: {} }));
 
-    await reconcileSnapshot(
+    await reconcile(
       snapshot({
         products: [product('p1')],
         customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
@@ -146,7 +155,7 @@ describe('reconcileSnapshot — salvaguardas', () => {
       status: 'synced',
     });
 
-    await reconcileSnapshot(
+    await reconcile(
       snapshot({
         products: [product('p1')],
         customers: [{ id: 'c1', name: 'Ana', createdAt: now }],
@@ -160,9 +169,9 @@ describe('reconcileSnapshot — salvaguardas', () => {
   it('un snapshot vacío con datos locales no borra nada y lo informa como omitido', async () => {
     await db.products.bulkPut([product('p1'), product('p2')]);
 
-    const result = await reconcileSnapshot(snapshot(), { now });
+    const result = await reconcile(snapshot(), { now });
 
-    expect(result).toEqual({ ok: true, value: { skipped: ['products'] } });
+    expect(result).toEqual({ skipped: ['products'] });
     expect(await ids('products')).toEqual(['p1', 'p2']);
   });
 
@@ -173,29 +182,29 @@ describe('reconcileSnapshot — salvaguardas', () => {
       { id: 'c2', name: 'Beto', createdAt: now },
     ]);
 
-    const result = await reconcileSnapshot(
+    const result = await reconcile(
       snapshot({ products: [], customers: [{ id: 'c1', name: 'Ana', createdAt: now }] }),
       { now },
     );
 
-    expect(result).toEqual({ ok: true, value: { skipped: ['products'] } });
+    expect(result).toEqual({ skipped: ['products'] });
     expect(await ids('products')).toEqual(['p1', 'p2']);
     expect(await ids('customers')).toEqual(['c1']);
   });
 
   it('tablas vacías sin nada local que borrar no cuentan como omitidas', async () => {
-    const result = await reconcileSnapshot(snapshot({ products: [product('p1')] }), { now });
+    const result = await reconcile(snapshot({ products: [product('p1')] }), { now });
 
-    expect(result).toEqual({ ok: true, value: { skipped: [] } });
+    expect(result).toEqual({ skipped: [] });
     expect(await ids('products')).toEqual(['p1']);
   });
 
   it('stock vacío con stock local: se conserva y se informa (un backend sin stock nunca lo tuvo)', async () => {
     await db.stock.put(stockOf('p1'));
 
-    const result = await reconcileSnapshot(snapshot({ products: [product('p1')] }), { now });
+    const result = await reconcile(snapshot({ products: [product('p1')] }), { now });
 
-    expect(result).toEqual({ ok: true, value: { skipped: ['stock'] } });
+    expect(result).toEqual({ skipped: ['stock'] });
     expect(await ids('stock')).toEqual(['p1']);
   });
 
@@ -217,27 +226,10 @@ describe('reconcileSnapshot — salvaguardas', () => {
       createdAt: now,
     });
 
-    await reconcileSnapshot(snapshot({ products: [product('p1')] }), { now });
+    await reconcile(snapshot({ products: [product('p1')] }), { now });
 
     await expect(db.sales.count()).resolves.toBe(1);
     await expect(db.outbox.count()).resolves.toBe(1);
-  });
-
-  it('si la transacción falla no cambia nada y devuelve sync/reconcile-failed', async () => {
-    await db.products.put(product('p1'));
-    const broken = snapshot({
-      products: [{ ...product('p2'), barcodes: undefined as unknown as string[] }],
-    });
-    db.close();
-
-    const result = await reconcileSnapshot(broken, { now });
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toBe('sync/reconcile-failed');
-    }
-    await db.open();
-    expect(await ids('products')).toEqual(['p1']);
   });
 });
 

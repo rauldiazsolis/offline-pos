@@ -78,8 +78,8 @@ export function describeError(failure: Failure): string {
     }
     case 'sync/reconcile-failed':
       return `No se pudo actualizar el catálogo local (${failure.meta.message}).`;
-    case 'sync/pending-lot':
-      return 'Se pausó la aplicación de datos: todavía se está confirmando un envío anterior. Se reintenta solo.';
+    case 'storage/cleanup-failed':
+      return `No se pudieron borrar los datos locales viejos: ${failure.meta.message}`;
     case 'sync/push-issues':
       return `El sistema externo reportó un problema con un envío ya confirmado: ${failure.meta.issues[0] ?? ''}`;
     case 'connection/sync-busy':

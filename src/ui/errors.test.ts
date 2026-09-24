@@ -96,6 +96,12 @@ describe('describeError', () => {
     ).toBe('No se pudo actualizar el catálogo local (boom).');
   });
 
+  it('storage/cleanup-failed: dice que no se pudo limpiar y por qué', () => {
+    expect(
+      describeError({ ok: false, error: 'storage/cleanup-failed', meta: { message: 'boom' } }),
+    ).toBe('No se pudieron borrar los datos locales viejos: boom');
+  });
+
   it('connection/sync-busy pide esperar y reintentar', () => {
     expect(describeError({ ok: false, error: 'connection/sync-busy', meta: undefined })).toBe(
       'Hay una sincronización en curso que todavía no terminó. Esperá unos segundos y probá de nuevo.',
@@ -116,11 +122,6 @@ describe('describeError', () => {
         meta: { message: 'Failed to fetch' },
       }),
     ).toBe('No se pudo reiniciar el minibackend de demo (Failed to fetch). ¿Está corriendo?');
-  });
-
-  it('sync/pending-lot: explica que se esperó a que un envío anterior se confirme (#87)', () => {
-    const message = describeError({ ok: false, error: 'sync/pending-lot', meta: undefined });
-    expect(message).toMatch(/envío anterior/i);
   });
 
   it('sync/push-issues: incluye el primer issue reportado por el backend (#87)', () => {

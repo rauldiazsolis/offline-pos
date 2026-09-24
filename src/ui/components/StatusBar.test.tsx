@@ -3,6 +3,7 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import {
+  lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
@@ -18,6 +19,7 @@ beforeEach(() => {
   lastSyncFailureSignal.value = null;
   localCatalogCountsSignal.value = null;
   syncConfiguredSignal.value = true;
+  lastPullApplicationSignal.value = null;
 });
 
 describe('StatusBar', () => {
@@ -115,5 +117,21 @@ describe('StatusBar — click (Etapa 2 de #94)', () => {
     render(<StatusBar />);
     fireEvent.click(screen.getByTitle('Ver diagnóstico de sincronización (/DIAGNOSTICO)'));
     expect(activeScreenSignal.value).toBe('diagnostico');
+  });
+});
+
+describe('StatusBar — pull que retiene (#98)', () => {
+  it('avisa que stock y saldos esperan al backend, sin marcar error', () => {
+    syncStatusSignal.value = 'online-idle';
+    lastPullApplicationSignal.value = { kind: 'retained', lotIds: ['L1'] };
+    render(<StatusBar />);
+    expect(screen.getByText(/Sincronizado.*stock y saldos en espera del backend/)).not.toBeNull();
+  });
+
+  it('sin retención no muestra el aviso', () => {
+    syncStatusSignal.value = 'online-idle';
+    lastPullApplicationSignal.value = { kind: 'reapplied', events: 2 };
+    render(<StatusBar />);
+    expect(screen.queryByText(/en espera del backend/)).toBeNull();
   });
 });

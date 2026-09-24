@@ -8,7 +8,12 @@ import { syncNow } from '../../sync/engine.ts';
 import { peekDeviceId } from '../../sync/terminal-identity.ts';
 import { exportLocalData, resetTerminal, type LocalDataDump } from '../../sync/terminal-data.ts';
 import { describeError } from '../errors.ts';
-import { formatAwaitingLotStatus, formatLotIssue } from '../format-lot.ts';
+import {
+  formatAwaitingLotStatus,
+  formatCleanup,
+  formatLotIssue,
+  formatPullApplication,
+} from '../format-lot.ts';
 import type { SyncLogEntry } from '../state/sync.ts';
 
 /**
@@ -41,11 +46,17 @@ export type PosStatus = {
     reintento: number;
     proximoIntento: string;
     ultimoError: string | null;
+    /** El backend, consultado en un pull, no conoce este lote (#98). */
+    noRecibido: string | null;
   } | null;
   ultimoPullOk: string | null;
+  /** Cómo se aplicó el último pull exitoso (#98). */
+  ultimoPullAplicado: string | null;
   errorDeSync: string | null;
   issuesDelBackend: string[] | null;
   lotesEnEspera: { id: string; enviado: string; estado: string }[];
+  /** Última limpieza de datos locales y ancla del arqueo (#98). */
+  limpieza: { ultima: string; ancla: string };
   log: { hora: string; tipo: SyncLogEntry['kind']; request: unknown; resultado: string }[];
 };
 
@@ -115,8 +126,13 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
             reintento: currentLot.retries,
             proximoIntento: currentLot.nextAttemptAt,
             ultimoError: currentLot.lastError ?? null,
+            noRecibido: currentLot.notReceivedAt ?? null,
           },
     ultimoPullOk: diagnostics.lastSyncedAt,
+    ultimoPullAplicado:
+      diagnostics.lastPullApplication !== null
+        ? formatPullApplication(diagnostics.lastPullApplication)
+        : null,
     errorDeSync:
       diagnostics.lastSyncFailure === null ? null : describeError(diagnostics.lastSyncFailure),
     issuesDelBackend: diagnostics.pushLotIssues?.map(formatLotIssue) ?? null,
@@ -125,6 +141,9 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
       enviado: lot.sentAt,
       estado: formatAwaitingLotStatus(lot),
     })),
+    limpieza: (({ last, anchor }) => ({ ultima: last, ancla: anchor }))(
+      formatCleanup(diagnostics.lastCleanup),
+    ),
     log: diagnostics.log.map((entry) => ({
       hora: entry.at,
       tipo: entry.kind,

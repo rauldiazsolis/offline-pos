@@ -9,14 +9,28 @@ const diagnostics: SyncDiagnostics = {
   config: ok({ type: 'rest', baseUrl: 'http://localhost:4000' }),
   lockHeld: false,
   online: true,
-  currentLot: undefined,
+  currentLot: {
+    id: 'LOT-CUR',
+    eventIds: ['e1'],
+    createdAt: '2026-09-23T10:00:00.000Z',
+    retries: 1,
+    nextAttemptAt: '2026-09-23T10:01:00.000Z',
+    notReceivedAt: '2026-09-23T10:00:30.000Z',
+  },
   awaitingLots: [
     { id: 'LOT-A', sentAt: '2026-09-23T11:00:00.000Z', lastStatus: 'processing' },
-    { id: 'LOT-B', sentAt: '2026-09-23T11:01:00.000Z', lastStatus: 'queued' },
+    {
+      id: 'LOT-B',
+      sentAt: '2026-09-23T11:01:00.000Z',
+      lastStatus: 'queued',
+      eventIds: ['e1', 'e2'],
+    },
     { id: 'LOT-C', sentAt: '2026-09-23T11:02:00.000Z' },
   ],
   lastSyncedAt: null,
   lastSyncFailure: null,
+  lastPullApplication: { kind: 'retained', lotIds: ['LOT-A'] },
+  lastCleanup: undefined,
   pushLotIssues: [{ message: 'Stock negativo', eventId: 'm1' }],
   deviceId: 'dev-1',
   log: [],
@@ -33,10 +47,23 @@ describe('DiagnosticoScreen (contrato v3)', () => {
     render(<DiagnosticoScreen />);
 
     expect(screen.getByText('dev-1')).not.toBeNull();
-    expect(screen.getByText(/LOT-A .*procesando/)).not.toBeNull();
+    expect(screen.getByText(/LOT-A — enviado .*procesando/)).not.toBeNull();
     expect(screen.getByText(/LOT-B .*en cola/)).not.toBeNull();
     expect(screen.getByText(/LOT-C .*sin informar/)).not.toBeNull();
     expect(screen.getByText(/Stock negativo \(evento m1\)/)).not.toBeNull();
+  });
+
+  it('muestra cómo se aplicó el último pull, los eventos de cada lote y el lote en curso no recibido', () => {
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText(/Stock y saldos retenidos: lote LOT-A procesando/)).not.toBeNull();
+    expect(screen.getByText(/LOT-B .*en cola · 2 eventos/)).not.toBeNull();
+    expect(screen.getByText(/No recibido por el backend/)).not.toBeNull();
+  });
+
+  it('muestra la sección de limpieza', () => {
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Limpieza de datos locales')).not.toBeNull();
+    expect(screen.getByText('Todavía no corrió')).not.toBeNull();
   });
 });
 

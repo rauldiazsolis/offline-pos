@@ -1,4 +1,6 @@
+import type { CleanupRecord } from '../sync/cleanup-schedule.ts';
 import type { LotIssue } from '../sync/connector.ts';
+import type { PullApplication } from '../sync/pull-rule.ts';
 import type { AwaitingLot } from '../sync/push-lot.ts';
 
 /**
@@ -7,12 +9,51 @@ import type { AwaitingLot } from '../sync/push-lot.ts';
  */
 const LOT_STATUS_LABEL = { queued: 'en cola', processing: 'procesando' } as const;
 
-/** Último estado en curso informado por el backend (contrato v3, #96); sin informar todavía, lo dice. */
+function eventCount(count: number): string {
+  return `${String(count)} ${count === 1 ? 'evento' : 'eventos'}`;
+}
+
+/**
+ * Último estado en curso informado por el backend (contrato v3, #96); sin informar todavía, lo
+ * dice. Con la cantidad de eventos del lote si se conoce (#98).
+ */
 export function formatAwaitingLotStatus(lot: AwaitingLot): string {
-  return lot.lastStatus !== undefined ? LOT_STATUS_LABEL[lot.lastStatus] : 'sin informar';
+  const status = lot.lastStatus !== undefined ? LOT_STATUS_LABEL[lot.lastStatus] : 'sin informar';
+  return lot.eventIds !== undefined ? `${status} · ${eventCount(lot.eventIds.length)}` : status;
+}
+
+/** Cómo se aplicó el último pull exitoso (#98) — `/DIAGNOSTICO` y `pos.status()`. */
+export function formatPullApplication(application: PullApplication): string {
+  switch (application.kind) {
+    case 'applied':
+      return 'Aplicado completo';
+    case 'reapplied':
+      return `Aplicado + ${eventCount(application.events)} reaplicados (lotes en cola y pendientes)`;
+    case 'retained':
+      return `Stock y saldos retenidos: lote ${application.lotIds.join(', ')} procesando — cursor de clientes retenido`;
+  }
 }
 
 /** Un aviso del backend sobre un lote, con el evento al que se refiere si lo informó. */
 export function formatLotIssue(issue: LotIssue): string {
   return issue.eventId !== undefined ? `${issue.message} (evento ${issue.eventId})` : issue.message;
+}
+
+/** Última limpieza de datos locales y ancla del arqueo (#98) — `/DIAGNOSTICO` y `pos.status()`. */
+export function formatCleanup(record: CleanupRecord | undefined): { last: string; anchor: string } {
+  if (record === undefined) {
+    return { last: 'Todavía no corrió', anchor: 'Sin turnos cerrados' };
+  }
+  const { counts } = record;
+  const movements = counts.stockMovements + counts.accountMovements;
+  return {
+    last:
+      `${new Date(record.at).toLocaleString()} — ${String(counts.sales)} ventas, ` +
+      `${String(movements)} movimientos, ${String(counts.outbox)} eventos, ` +
+      `${String(counts.cashSessions)} turnos`,
+    anchor:
+      record.anchorClosedAt !== undefined
+        ? `Último turno cerrado: ${new Date(record.anchorClosedAt).toLocaleString()}`
+        : 'Sin turnos cerrados',
+  };
 }

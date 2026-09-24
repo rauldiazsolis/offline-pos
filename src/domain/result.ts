@@ -52,8 +52,6 @@ export type ErrorMeta = {
   // sync/config.ts, sync/engine.ts, connectors/rest/rest-fetch-connector.ts
   'sync/invalid-payload': { issues: { path: string; message: string }[] };
   'sync/request-failed': { status?: number; message: string };
-  // sync/engine.ts (pull batch, #87): un lote de push que nos interesa sigue sin resolverse
-  'sync/pending-lot': undefined;
   // sync/engine.ts: el backend reportó problemas en un lote ya resuelto — informativo, no bloquea
   'sync/push-issues': { issues: string[] };
   'sync/config-missing': undefined;
@@ -68,6 +66,8 @@ export type ErrorMeta = {
   // storage/reconcile.ts (foto completa del catálogo)
   'sync/empty-snapshot': { tables: ('products' | 'stock' | 'customers')[] };
   'sync/reconcile-failed': { message: string };
+  // storage/local-cleanup.ts (limpieza a 7 días, #98)
+  'storage/cleanup-failed': { message: string };
 
   // sale-lifecycle.ts, checkout-controller.ts (cuenta corriente)
   'account/hold-rejected': { reasonCode: string };
