@@ -42,7 +42,9 @@ function stubRestBackend(): void {
       const body =
         path === '/sync/pull'
           ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
-          : {};
+          : path === '/info'
+            ? { contractVersion: '4.0.0', status: 'ok' }
+            : {};
       return Promise.resolve(okResponse(body));
     }),
   );

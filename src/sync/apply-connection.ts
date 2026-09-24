@@ -13,6 +13,8 @@ import {
   setConnectionState,
   setLastSyncFailure,
   setLastSyncedAt,
+  setBackendCheckDue,
+  setBackendStatus,
   setLocalCatalogCounts,
   setSyncConfigured,
   setSyncStatus,
@@ -150,6 +152,9 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setLastSyncFailure(null);
     setLocalCatalogCounts(await countLocalCatalog());
     await refreshStockSnapshot();
+    // Otra conexión (#99): su estado se pregunta antes del próximo ciclo.
+    setBackendStatus({ kind: 'unknown' });
+    setBackendCheckDue(true);
     setSyncStatus('online-idle');
     return ok(undefined);
   } finally {

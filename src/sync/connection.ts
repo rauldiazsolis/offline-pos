@@ -1,4 +1,6 @@
+import { POS_CONTRACT_VERSION } from '../domain/contract-version.ts';
 import { err, type Result } from '../domain/result.ts';
+import { classifyBackendInfo } from './backend-status.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector } from './connector.ts';
 import { createConnector, type ConnectorConfig } from './connector-registry.ts';
@@ -45,10 +47,36 @@ export async function probeConnection(
   options.onProgress?.('pulling');
   try {
     const connector = options.connector ?? createConnector(config);
-    return await withTimeout(pullEverything(connector), options.timeoutMs ?? PROBE_TIMEOUT_MS);
+    return await withTimeout(checkThenPull(connector), options.timeoutMs ?? PROBE_TIMEOUT_MS);
   } finally {
     release();
   }
+}
+
+/**
+ * 4.0.0 (#99): antes del pull, `getInfo` — un backend incompatible o en
+ * mantenimiento hace fallar la prueba con su motivo (el wizard ofrece
+ * "Reintentar" y "Corregir datos").
+ */
+async function checkThenPull(connector: Connector): Promise<Result<ProbeSnapshot>> {
+  const info = await connector.getInfo();
+  if (!info.ok) {
+    return info;
+  }
+  const status = classifyBackendInfo(info.value);
+  if (status.kind === 'incompatible') {
+    return err('sync/incompatible-contract', {
+      backend: info.value.contractVersion,
+      pos: POS_CONTRACT_VERSION,
+    });
+  }
+  if (status.kind === 'maintenance') {
+    return err(
+      'sync/backend-maintenance',
+      info.value.message !== undefined ? { message: info.value.message } : {},
+    );
+  }
+  return pullEverything(connector);
 }
 
 function normalizeEndpoint(raw: string): string {

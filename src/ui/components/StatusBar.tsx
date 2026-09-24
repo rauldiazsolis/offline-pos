@@ -1,6 +1,8 @@
 import { describeError } from '../errors.ts';
 import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
+import { contractMajor, POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
 import {
+  backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -26,6 +28,13 @@ function statusColor(): string {
   if (!syncConfiguredSignal.value || status === 'offline') {
     return 'var(--color-chrome-text-muted)';
   }
+  const backend = backendStatusSignal.value;
+  if (backend.kind === 'incompatible') {
+    return 'var(--color-danger)';
+  }
+  if (backend.kind === 'maintenance') {
+    return 'var(--color-chrome-warning)';
+  }
   if (status === 'syncing') {
     return 'var(--color-accent)';
   }
@@ -44,6 +53,16 @@ function statusText(): string {
   }
   if (!syncConfiguredSignal.value) {
     return 'Sin configurar — /CONFIG';
+  }
+  // 4.0.0 (#99): detrás de "sin configurar" y de offline, delante del resto. La venta sigue.
+  const backend = backendStatusSignal.value;
+  if (backend.kind === 'incompatible') {
+    return `Backend incompatible (contrato ${backend.backendVersion}, se necesita ${contractMajor(POS_CONTRACT_VERSION)}.x)`;
+  }
+  if (backend.kind === 'maintenance') {
+    return backend.info.message !== undefined
+      ? `Backend en mantenimiento: ${backend.info.message}`
+      : 'Backend en mantenimiento';
   }
   if (status === 'syncing') {
     return `Sincronizando (${String(pending)})`;

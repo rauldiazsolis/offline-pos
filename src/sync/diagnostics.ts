@@ -1,11 +1,13 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
 import {
+  backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   pushLotIssuesSignal,
   syncLogSignal,
+  type BackendStatus,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
 import { getLastCleanup, type CleanupRecord } from './cleanup-schedule.ts';
@@ -33,6 +35,8 @@ export type SyncDiagnostics = {
   /** Cómo se aplicó el último pull exitoso (#98). */
   lastPullApplication: PullApplication | null;
   pushLotIssues: LotIssue[] | null;
+  /** Estado del backend según su último `getInfo` (4.0.0, #99). */
+  backendStatus: BackendStatus;
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
   deviceId: string;
   log: SyncLogEntry[];
@@ -51,6 +55,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     lastSyncFailure: lastSyncFailureSignal.value,
     lastPullApplication: lastPullApplicationSignal.value,
     pushLotIssues: pushLotIssuesSignal.value,
+    backendStatus: backendStatusSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,
     lastCleanup: getLastCleanup(),

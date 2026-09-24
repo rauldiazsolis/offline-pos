@@ -11,7 +11,11 @@ import {
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
+  backendCheckDueSignal,
+  backendStatusSignal,
   pushLotIssuesSignal,
+  setBackendCheckDue,
+  setBackendStatus,
   setSyncPaused,
   syncConfiguredSignal,
   syncLogSignal,
@@ -38,6 +42,7 @@ import {
   runPullCycle,
   runPullCycleNow,
   runPushCycle,
+  runPushThenPull,
   startSyncEngine,
   syncNow,
   toBatchItem,
@@ -62,6 +67,10 @@ const now = '2026-01-01T00:00:00.000Z';
 
 beforeEach(async () => {
   setDeviceIdForTests('dev-1');
+  // Estado del backend (4.0.0, #99): los tests de siempre arrancan con el chequeo ya hecho; los
+  // de "estado del backend" lo prenden a propósito.
+  setBackendStatus({ kind: 'unknown' });
+  setBackendCheckDue(false);
   await db.open();
   setCatalogRepository({
     search: () => [],
@@ -1126,7 +1135,7 @@ describe('syncNow (/SINCRONIZAR)', () => {
 
     await syncNow();
 
-    expect(calls).toEqual(['POST /sync/push', 'POST /sync/pull']);
+    expect(calls).toEqual(['GET /info', 'POST /sync/push', 'POST /sync/pull']);
   });
 });
 
@@ -1201,7 +1210,9 @@ function stubRestFetch(failures = 0): string[] {
       const body =
         path === '/sync/pull'
           ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
-          : {};
+          : path === '/info'
+            ? { contractVersion: '4.0.0', status: 'ok' }
+            : {};
       return Promise.resolve({
         ok: !fail,
         status: fail ? 500 : 200,
@@ -1281,7 +1292,8 @@ describe('requestPushSoon y reintentos agendados', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await settled();
 
-    expect(calls).toEqual(['POST /sync/push', 'POST /sync/push']);
+    // Un 500 no es un fallo de red: antes del reintento se pregunta el estado del backend (#99).
+    expect(calls).toEqual(['POST /sync/push', 'GET /info', 'POST /sync/push']);
     expect((await db.outbox.get('sale-1'))?.status).toBe('synced');
   });
 });
@@ -1535,5 +1547,142 @@ describe('runPullCycleNow — foto completa y reconciliación de bajas (integrac
       meta: { tables: ['products'] },
     });
     expect(getLastFullSyncAt()).toBeUndefined();
+  });
+});
+
+describe('estado del backend (contrato 4.0.0, #99)', () => {
+  type Stub = {
+    info?: { contractVersion: string; status: 'ok' | 'maintenance'; message?: string } | 'network';
+    push?: 'ok' | 'incompatible';
+    pull?: 'ok' | 'remote-error';
+  };
+
+  function stubBackend(stub: Stub): { calls: string[]; set: (next: Stub) => void } {
+    let current = stub;
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        calls.push(`${init?.method ?? 'GET'} ${path}`);
+        if (path === '/info') {
+          if (current.info === 'network') {
+            return Promise.reject(new Error('Failed to fetch'));
+          }
+          return Promise.resolve(
+            jsonResponse(current.info ?? { contractVersion: '4.0.0', status: 'ok' }),
+          );
+        }
+        if (path === '/sync/push' && current.push === 'incompatible') {
+          return Promise.resolve(
+            jsonResponse({ code: 'incompatible-contract', contractVersion: '3.0.0' }, 409),
+          );
+        }
+        if (path === '/sync/pull' && current.pull === 'remote-error') {
+          return Promise.resolve(jsonResponse({}, 500));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            path === '/sync/pull'
+              ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
+              : {},
+          ),
+        );
+      }),
+    );
+    return {
+      calls,
+      set: (next) => {
+        current = next;
+      },
+    };
+  }
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return {
+      ok: status < 400,
+      status,
+      statusText: String(status),
+      json: () => Promise.resolve(body),
+    } as Response;
+  }
+
+  beforeEach(async () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+    await db.outbox.add(pendingSaleEvent());
+    setBackendCheckDue(true);
+  });
+
+  it('en mantenimiento no corre push ni pull, y cuando vuelve ok se retoma solo', async () => {
+    const backend = stubBackend({
+      info: { contractVersion: '4.0.0', status: 'maintenance', message: 'Cierre de mes' },
+    });
+
+    await runPushThenPull();
+
+    expect(backend.calls).toEqual(['GET /info', 'GET /info']);
+    expect(backendStatusSignal.value.kind).toBe('maintenance');
+
+    backend.set({});
+    await runPushCycle();
+
+    expect(backend.calls.slice(2)).toEqual(['GET /info', 'POST /sync/push']);
+    expect(backendStatusSignal.value.kind).toBe('ok');
+  });
+
+  it('un backend que informa 3.0.0 es incompatible y no corre nada', async () => {
+    const backend = stubBackend({ info: { contractVersion: '3.0.0', status: 'ok' } });
+
+    await runPushCycle();
+
+    expect(backend.calls).toEqual(['GET /info']);
+    expect(backendStatusSignal.value).toMatchObject({
+      kind: 'incompatible',
+      backendVersion: '3.0.0',
+    });
+  });
+
+  it('un 409 en el push deja el estado incompatible y el lote sigue en curso', async () => {
+    stubBackend({ push: 'incompatible' });
+
+    await runPushCycle();
+
+    expect(backendStatusSignal.value).toMatchObject({
+      kind: 'incompatible',
+      backendVersion: '3.0.0',
+    });
+    expect(getCurrentPushLot()?.eventIds).toEqual(['sale-1']);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+  });
+
+  it('con getInfo sin red y estado unknown, los ciclos corren como siempre', async () => {
+    const backend = stubBackend({ info: 'network' });
+
+    await runPushCycle();
+
+    expect(backend.calls).toEqual(['GET /info', 'POST /sync/push']);
+    expect(backendStatusSignal.value.kind).toBe('unknown');
+  });
+
+  it('un error remoto en el pull agenda un getInfo antes del ciclo siguiente', async () => {
+    const backend = stubBackend({ pull: 'remote-error' });
+    await runPushCycle();
+    expect(backendCheckDueSignal.value).toBe(false);
+
+    await runPullCycleNow({ full: true });
+    expect(backendCheckDueSignal.value).toBe(true);
+
+    backend.set({});
+    await runPullCycleNow({ full: true });
+    expect(backend.calls.slice(-2)).toEqual(['GET /info', 'POST /sync/pull']);
+  });
+
+  it('/SINCRONIZAR pregunta getInfo primero', async () => {
+    const backend = stubBackend({});
+    setBackendCheckDue(false);
+
+    await syncNow();
+
+    expect(backend.calls[0]).toBe('GET /info');
   });
 });
