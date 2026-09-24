@@ -59,6 +59,8 @@ export type ErrorMeta = {
   // sync/connection.ts (prueba de conexión) y connectors/google-sheets/bridge-client.ts
   'sync/timeout': { seconds: number };
   'sync/remote-error': { message: string };
+  'sync/incompatible-contract': { backend: string; pos: string };
+  'sync/backend-maintenance': { message?: string };
   // sync/apply-connection.ts
   'connection/apply-failed': { message: string };
   // sync/connection.ts: un ciclo de sync en curso no terminó a tiempo para probar

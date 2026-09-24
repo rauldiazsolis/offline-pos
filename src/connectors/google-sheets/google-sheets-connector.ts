@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
 import { ok, type Result } from '../../domain/result.ts';
 import { newId } from '../../storage/ids.ts';
 import {
@@ -46,6 +47,10 @@ const emptyDataSchema = z.object({});
  */
 export function createGoogleSheetsConnector(config: GoogleSheetsConfig): Connector {
   return {
+    // Provisorio hasta la Tarea 12 del plan de #99 (acción `info` del puente).
+    getInfo: () =>
+      Promise.resolve(ok({ contractVersion: POS_CONTRACT_VERSION, status: 'ok' as const })),
+
     async pushBatch(batch: PushBatch, idempotencyId: string): Promise<Result<void>> {
       const result = await callBridge(
         config,

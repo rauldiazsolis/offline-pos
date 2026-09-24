@@ -1,3 +1,4 @@
+import { contractMajor } from '../domain/contract-version.ts';
 import type { Failure } from '../domain/result.ts';
 import { formatMoney } from './format.ts';
 
@@ -73,6 +74,12 @@ export function describeError(failure: Failure): string {
     }
     case 'sync/timeout':
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
+    case 'sync/incompatible-contract':
+      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractMajor(failure.meta.pos)}.x.`;
+    case 'sync/backend-maintenance':
+      return failure.meta.message !== undefined
+        ? `El backend está en mantenimiento: ${failure.meta.message}`
+        : 'El backend está en mantenimiento.';
     case 'sync/remote-error':
       return `El sistema externo respondió con un error: ${failure.meta.message}`;
     case 'sync/empty-snapshot': {
