@@ -11,6 +11,7 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
+import { isDemoModeSignal, startOnboardingHandshake } from '../state/demo-mode.ts';
 
 /**
  * Barra de estado (extremo opuesto a la barra de comandos). Hasta la Etapa 2
@@ -112,17 +113,47 @@ export function StatusBar() {
         borderBottom: '2px solid var(--color-chrome-border)',
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          background: statusColor(),
-          flexShrink: 0,
-        }}
-      />
-      {statusText()}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <span
+          aria-hidden="true"
+          style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: statusColor(),
+            flexShrink: 0,
+          }}
+        />
+        {statusText()}
+      </div>
+
+      {isDemoModeSignal.value && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            startOnboardingHandshake();
+          }}
+          style={{
+            background: 'var(--color-accent, #6366f1)',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: 'var(--radius-sm, 6px)',
+            padding: '2px 8px',
+            fontSize: 'var(--font-size-xs, 12px)',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            marginLeft: 'auto',
+          }}
+          title="Conectar a Mini-ERP en la nube para sincronizar tus ventas"
+        >
+          <span>🚀</span>
+          <span>Conectar Mini-ERP</span>
+        </button>
+      )}
     </div>
   );
 }
