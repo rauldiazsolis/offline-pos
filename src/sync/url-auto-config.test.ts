@@ -9,6 +9,7 @@ import { handleUrlAutoConfig } from './url-auto-config.ts';
 import type { LocalDataSummary } from '../storage/local-data.ts';
 import { configFieldValuesSignal, configTerminalSignal, configTypeSignal } from '../ui/state/sync-config.ts';
 import { loadSyncConfig } from './config.ts';
+import type { ApplyConnectionParams } from './apply-connection.ts';
 
 // Mock de probe y applyConnection
 vi.mock('./connection.ts', () => ({
@@ -24,7 +25,7 @@ vi.mock('./connection.ts', () => ({
 }));
 
 vi.mock('./apply-connection.ts', () => ({
-  applyConnection: vi.fn().mockImplementation(async (params) => {
+  applyConnection: vi.fn().mockImplementation(async (params: ApplyConnectionParams) => {
     // Simular guardado exitoso
     const { saveSyncConfig } = await import('./config.ts');
     saveSyncConfig({ ...params.candidate, verifiedAt: params.now });

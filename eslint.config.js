@@ -14,6 +14,7 @@ export default defineConfig([
       '.vite',
       'eslint.config.js',
       'dev-orchestrator.mjs',
+      'mini-erp/**',
     ],
   },
   js.configs.recommended,

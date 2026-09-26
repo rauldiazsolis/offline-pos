@@ -13,7 +13,7 @@ const PENDING_WIPE_TIME = 'offline-pos:pending-wipe-time';
 export function initDemoMode(hasUserData: boolean): boolean {
   if (typeof window === 'undefined') return false;
 
-  const isDev = Boolean(import.meta.env?.DEV);
+  const isDev = import.meta.env.DEV;
   const url = new URL(window.location.href);
   const requestedDemo = url.searchParams.has('demo') || url.searchParams.get('mode') === 'demo';
   const savedDemo = localStorage.getItem(DEMO_STORAGE_KEY) === 'true';
@@ -46,9 +46,9 @@ export function startOnboardingHandshake(erpBaseUrl = 'http://localhost:4100'): 
   if (typeof window === 'undefined') return;
 
   const wipeKey =
-    typeof crypto !== 'undefined' && crypto.randomUUID
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
-      : `wipe_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      : `wipe_${String(Date.now())}_${Math.random().toString(36).slice(2, 8)}`;
 
   localStorage.setItem(PENDING_WIPE_KEY, wipeKey);
   localStorage.setItem(PENDING_WIPE_TIME, Date.now().toString());
