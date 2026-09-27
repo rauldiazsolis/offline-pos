@@ -12,6 +12,9 @@ import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
+import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
+import { initDemoMode } from './state/demo-mode.ts';
+import { handleUrlAutoConfig } from '../sync/url-auto-config.ts';
 import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
 import { identityResetSignal } from './state/sync-config.ts';
 
@@ -55,6 +58,11 @@ export async function bootstrap(): Promise<void> {
   }
   startCartPersistence();
 
+  // Gestión de modo Demo y configuración automática vía URL (Onboarding / WhatsApp)
+  const localSummary = await summarizeLocalData();
+  initDemoMode(hasUserData(localSummary));
+  const autoConfig = await handleUrlAutoConfig(localSummary);
+
   // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
   // conexión activa la app solo muestra el wizard de `/CONFIG` (ver
   // `ui/app.tsx`), precargado con lo guardado y abierto en el primer paso que
@@ -63,7 +71,7 @@ export async function bootstrap(): Promise<void> {
   const state = connectionState(configResult);
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
-  if (state !== 'active') {
+  if (state !== 'active' || (autoConfig.handled && autoConfig.mode === 'wizard-fallback')) {
     await openRequiredWizard();
   }
 
