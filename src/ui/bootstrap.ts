@@ -13,6 +13,8 @@ import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
+import { getCashBalance } from '../storage/cash-repository.ts';
+import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
 import { initDemoMode } from './state/demo-mode.ts';
 import { handleUrlAutoConfig } from '../sync/url-auto-config.ts';
 import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
@@ -45,6 +47,9 @@ export async function bootstrap(): Promise<void> {
   setCatalogRepository(catalogRepository);
   setCustomerRepository(await loadCustomerRepository());
   await refreshStockSnapshot();
+  // Etapa 5 de #94 (#100): el aviso "Sin arqueo en 24 h" de la barra de estado.
+  lastCashCountAtSignal.value = (await getCashBalance()).lastCountAt;
+  startCashClock();
 
   // Restaurar antes de empezar a persistir (issue #17): así el primer
   // disparo del effect no reescribe innecesariamente el mismo valor que se

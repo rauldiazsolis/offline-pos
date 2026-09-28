@@ -12,6 +12,9 @@ import {
   syncStatusSignal,
 } from '../state/sync.ts';
 import { isDemoModeSignal, startOnboardingHandshake } from '../state/demo-mode.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
+import { enterCashScreen } from '../keyboard/cash-controller.ts';
+import { cashCountOverdueSignal } from '../state/cash.ts';
 
 /**
  * Barra de estado (extremo opuesto a la barra de comandos). Hasta la Etapa 2
@@ -22,6 +25,10 @@ import { isDemoModeSignal, startOnboardingHandshake } from '../state/demo-mode.t
  * de comandos (`keepFocusOnMouseDown` en la pantalla de venta). Lee solo los signals de
  * `state/sync.ts` — no toca `navigator.onLine` directo, eso ya lo resuelve
  * `sync/engine.ts`. Los 4 textos son los de §7 del doc de diseño.
+ *
+ * A la derecha, independiente del estado de sync y de la conectividad, el aviso "Sin arqueo en
+ * 24 h" (Etapa 5 de #94, #100): un botón que abre `/CAJA` en Arqueo sin abrir `/DIAGNOSTICO` y
+ * sin sacarle el foco a la barra de comandos.
  */
 /** Color del punto de estado — misma info que el texto, reforzada visualmente (pase de diseño). */
 function statusColor(): string {
@@ -127,33 +134,59 @@ export function StatusBar() {
         {statusText()}
       </div>
 
-      {isDemoModeSignal.value && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            startOnboardingHandshake();
-          }}
-          style={{
-            background: 'var(--color-accent, #6366f1)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 'var(--radius-sm, 6px)',
-            padding: '2px 8px',
-            fontSize: 'var(--font-size-xs, 12px)',
-            fontWeight: 'bold',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            marginLeft: 'auto',
-          }}
-          title="Conectar a Mini-ERP en la nube para sincronizar tus ventas"
-        >
-          <span>🚀</span>
-          <span>Conectar Mini-ERP</span>
-        </button>
-      )}
+      <div
+        style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+      >
+        {cashCountOverdueSignal.value && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={keepFocusOnMouseDown}
+            onClick={(event) => {
+              event.stopPropagation();
+              enterCashScreen('count');
+            }}
+            title="Hacer un arqueo (/CAJA)"
+            style={{
+              background: 'transparent',
+              color: 'var(--color-chrome-warning)',
+              border: '1px solid var(--color-chrome-warning)',
+              borderRadius: 'var(--radius-sm, 6px)',
+              padding: '2px 8px',
+              fontSize: 'var(--font-size-xs, 12px)',
+              cursor: 'pointer',
+            }}
+          >
+            Sin arqueo en 24 h
+          </button>
+        )}
+        {isDemoModeSignal.value && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              startOnboardingHandshake();
+            }}
+            style={{
+              background: 'var(--color-accent, #6366f1)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm, 6px)',
+              padding: '2px 8px',
+              fontSize: 'var(--font-size-xs, 12px)',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            title="Conectar a Mini-ERP en la nube para sincronizar tus ventas"
+          >
+            <span>🚀</span>
+            <span>Conectar Mini-ERP</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
