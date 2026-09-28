@@ -90,4 +90,8 @@ describe('PosDatabase', () => {
     const pending = await db.outbox.where('status').equals('pending').toArray();
     expect(pending).toHaveLength(1);
   });
+
+  it('las cobranzas tienen índice voidsPaymentId (v9, #125)', async () => {
+    expect(await db.customerPayments.where('voidsPaymentId').equals('x').count()).toBe(0);
+  });
 });

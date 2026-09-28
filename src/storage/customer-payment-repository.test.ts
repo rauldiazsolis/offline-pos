@@ -4,7 +4,12 @@ import type { Payment } from '../domain/sale.ts';
 import { localDateKey } from '../domain/ticket-number.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { getReceiptCounter } from '../sync/receipt-counter.ts';
-import { collectAndPersist } from './customer-payment-repository.ts';
+import {
+  collectAndPersist,
+  loadPaymentVoidOriginals,
+  loadVoidedPaymentIds,
+  voidCollectionAndPersist,
+} from './customer-payment-repository.ts';
 import { db } from './db.ts';
 import { closeSaleAndPersist } from './sale-repository.ts';
 
@@ -138,5 +143,78 @@ describe('collectAndPersist (#101)', () => {
     expect(await db.accountMovements.count()).toBe(0);
     expect(await db.customerBalances.count()).toBe(0);
     expect(await db.outbox.count()).toBe(0);
+  });
+});
+
+describe('voidCollectionAndPersist (#125)', () => {
+  async function voidIt(paymentId: string) {
+    const result = await voidCollectionAndPersist(paymentId);
+    if (!result.ok) throw new Error(`esperaba ok: ${result.error}`);
+    return result.value;
+  }
+
+  it('guarda una cobranza negativa con el recibo siguiente, devuelve el saldo y encola el evento', async () => {
+    const original = await collect();
+
+    const record = await voidIt(original.payment.id);
+
+    expect(record.payment).toMatchObject({
+      customerId: 'c1',
+      total: -700,
+      voidsPaymentId: original.payment.id,
+      receipt: { date: original.payment.receipt.date, number: 2 },
+      payments: [
+        { method: 'cash', amount: -500 },
+        { method: 'transfer', amount: -200 },
+      ],
+    });
+    expect(record.balanceBefore).toBe(-700);
+    expect(record.balanceAfter).toBe(0);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(0);
+    expect(await db.customerPayments.get(original.payment.id)).toEqual(original.payment);
+    const movements = (await db.accountMovements.toArray()).filter(
+      (movement) => movement.paymentId === record.payment.id,
+    );
+    expect(movements).toEqual([
+      expect.objectContaining({ type: 'payment', amount: 700, customerId: 'c1' }),
+    ]);
+    const event = await db.outbox.get(record.payment.id);
+    expect(event).toMatchObject({ type: 'customer-payment', payment: record.payment });
+    expect(getReceiptCounter()).toEqual({ date: record.payment.receipt.date, last: 2 });
+  });
+
+  it('no anula dos veces ni anula una anulación', async () => {
+    const original = await collect();
+    const voided = await voidIt(original.payment.id);
+
+    expect(await voidCollectionAndPersist(original.payment.id)).toMatchObject({
+      ok: false,
+      error: 'customer-payment/already-voided',
+    });
+    expect(await voidCollectionAndPersist(voided.payment.id)).toMatchObject({
+      ok: false,
+      error: 'customer-payment/cannot-void-a-void',
+    });
+  });
+
+  it('una cobranza que no está es not-found', async () => {
+    expect(await voidCollectionAndPersist('nope')).toEqual({
+      ok: false,
+      error: 'customer-payment/not-found',
+      meta: { paymentId: 'nope' },
+    });
+  });
+
+  it('loadVoidedPaymentIds y loadPaymentVoidOriginals cruzan por voidsPaymentId', async () => {
+    const original = await collect();
+    const other = await collect();
+    const voided = await voidIt(original.payment.id);
+
+    expect(await loadVoidedPaymentIds([original.payment.id, other.payment.id])).toEqual(
+      new Set([original.payment.id]),
+    );
+    expect(await loadPaymentVoidOriginals([voided.payment, other.payment])).toEqual(
+      new Map([[original.payment.id, original.payment]]),
+    );
   });
 });
