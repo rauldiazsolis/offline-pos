@@ -4,6 +4,8 @@ import type { CashCount } from '../domain/cash-count.ts';
 import type { CashMovement } from '../domain/cash-movement.ts';
 import type { CashConcept } from '../domain/concept-ranking.ts';
 import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
+import type { CustomerBalance } from '../domain/customer-balance.ts';
+import type { CustomerPayment } from '../domain/customer-payment.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
@@ -33,6 +35,8 @@ class PosDatabase extends Dexie {
   outbox!: EntityTable<OutboxEvent, 'id', OutboxEvent>;
   customers!: EntityTable<Customer, 'id'>;
   customerAccounts!: EntityTable<CustomerAccount, 'customerId'>;
+  customerBalances!: EntityTable<CustomerBalance, 'customerId'>;
+  customerPayments!: EntityTable<CustomerPayment, 'id'>;
   accountMovements!: EntityTable<AccountMovement, 'id'>;
   draftCart!: EntityTable<DraftCart, 'id'>;
   cashMovements!: EntityTable<CashMovement, 'id'>;
@@ -78,6 +82,29 @@ class PosDatabase extends Dexie {
       cashConcepts: '[direction+concept], direction',
       cashSessions: null,
     });
+    // Etapa 6 de #94 (#101): el saldo sale de la cuenta a su propia tabla (cualquier cliente puede
+    // tener saldo, tenga o no crédito) y las cobranzas se guardan localmente (recibo, saldo de
+    // efectivo, /RESUMEN).
+    this.version(8)
+      .stores({
+        customerBalances: 'customerId',
+        customerPayments: 'id, createdAt, customerId',
+      })
+      .upgrade(async (tx) => {
+        const accounts = tx.table<CustomerAccount & { balance?: number }, string>(
+          'customerAccounts',
+        );
+        const balances: CustomerBalance[] = [];
+        await accounts.toCollection().modify((account) => {
+          balances.push({
+            customerId: account.customerId,
+            balance: account.balance ?? 0,
+            updatedAt: account.updatedAt,
+          });
+          delete account.balance;
+        });
+        await tx.table<CustomerBalance, string>('customerBalances').bulkPut(balances);
+      });
   }
 }
 

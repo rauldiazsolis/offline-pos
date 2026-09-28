@@ -7,8 +7,8 @@ import type { ConnectorCustomer } from './connector.ts';
  * Stock y clientes del pull tal como se van a aplicar (spec de #98, §1). Pura.
  *
  * - Reteniendo (algún lote `processing`): el stock queda el local entero y
- *   cada cliente con cuenta local conserva su saldo local; datos maestros y
- *   bloqueos llegan igual.
+ *   cada cliente con saldo local conserva su saldo local (`customerBalances`,
+ *   #101: tenga o no cuenta corriente); datos maestros y bloqueos llegan igual.
  * - Sin retener: valor del backend + efectos de los eventos a reaplicar. El
  *   stock viaja completo, así que un producto con efectos y sin fila parte de
  *   0; el saldo se ajusta solo en los clientes que vinieron con saldo (los que

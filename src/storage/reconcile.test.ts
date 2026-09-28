@@ -41,7 +41,7 @@ afterEach(async () => {
 });
 
 async function ids(
-  table: 'products' | 'customers' | 'customerAccounts' | 'stock',
+  table: 'products' | 'customers' | 'customerAccounts' | 'customerBalances' | 'stock',
 ): Promise<unknown[]> {
   return (await db.table(table).toCollection().primaryKeys()).sort();
 }
@@ -50,7 +50,7 @@ async function ids(
 async function reconcile(snap: ProbeSnapshot, params: { now: string; allowEmptyTables?: boolean }) {
   return db.transaction(
     'rw',
-    [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
+    [db.products, db.stock, db.customers, db.customerAccounts, db.customerBalances, db.outbox],
     () => applySnapshotReconciled(snap, params),
   );
 }
@@ -87,8 +87,8 @@ describe('applySnapshotReconciled — bajas', () => {
       { id: 'c2', name: 'Beto', createdAt: now },
     ]);
     await db.customerAccounts.bulkPut([
-      { customerId: 'c1', creditLimit: 100, margin: 0, balance: 0, updatedAt: now },
-      { customerId: 'c2', creditLimit: 100, margin: 0, balance: 0, updatedAt: now },
+      { customerId: 'c1', creditLimit: 100, margin: 0, updatedAt: now },
+      { customerId: 'c2', creditLimit: 100, margin: 0, updatedAt: now },
     ]);
 
     await reconcile(
@@ -113,7 +113,6 @@ describe('applySnapshotReconciled — bajas', () => {
       customerId: 'c1',
       creditLimit: 100,
       margin: 0,
-      balance: 0,
       updatedAt: now,
     });
 
@@ -127,6 +126,34 @@ describe('applySnapshotReconciled — bajas', () => {
 
     expect(await ids('customers')).toEqual(['c1']);
     expect(await ids('customerAccounts')).toEqual([]);
+  });
+
+  it('saldos (#101): el que vino pisa, el de un cliente sin saldo se conserva, el de uno ausente se borra', async () => {
+    await db.customers.bulkPut([
+      { id: 'c1', name: 'Ana', createdAt: now },
+      { id: 'c2', name: 'Beto', createdAt: now },
+      { id: 'c3', name: 'Caro', createdAt: now },
+    ]);
+    await db.customerBalances.bulkPut([
+      { customerId: 'c1', balance: 10, updatedAt: now },
+      { customerId: 'c2', balance: 20, updatedAt: now },
+      { customerId: 'c3', balance: 30, updatedAt: now },
+    ]);
+
+    await reconcile(
+      snapshot({
+        products: [product('p1')],
+        customers: [
+          { id: 'c1', name: 'Ana', createdAt: now, balance: -5 },
+          { id: 'c2', name: 'Beto', createdAt: now },
+        ],
+      }),
+      { now },
+    );
+
+    expect(await ids('customerBalances')).toEqual(['c1', 'c2']);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(-5);
+    expect((await db.customerBalances.get('c2'))?.balance).toBe(20);
   });
 });
 

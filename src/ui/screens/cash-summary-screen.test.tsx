@@ -76,6 +76,7 @@ beforeEach(async () => {
         ? { id: 'c1', name: 'Paula Torres', createdAt: '2026-01-01T00:00:00.000Z' }
         : undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
+    getCustomerBalance: () => Promise.resolve(undefined),
   });
   activeScreenSignal.value = 'cash-summary';
   dayViewSignal.value = dayView([

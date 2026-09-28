@@ -146,9 +146,12 @@ async function resolveAccountReference(amount: number): Promise<Result<string | 
     return ok(holdResult.value.holdId);
   }
 
-  const account = await getCustomerRepository().getCustomerAccount(customer.id);
-  if (account === undefined || !canChargeOffline(account, amount)) {
-    const missing = account === undefined ? amount : amount - availableCredit(account);
+  // El saldo vive aparte del crédito (#101): sin cuenta se rechaza igual, aunque haya saldo a favor.
+  const repository = getCustomerRepository();
+  const account = await repository.getCustomerAccount(customer.id);
+  const balance = (await repository.getCustomerBalance(customer.id)) ?? 0;
+  if (account === undefined || !canChargeOffline(account, balance, amount)) {
+    const missing = account === undefined ? amount : amount - availableCredit(account, balance);
     return err('account/offline-limit-exceeded', { missing });
   }
   return ok(undefined);

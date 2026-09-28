@@ -82,17 +82,24 @@ describe('loadCustomerRepository', () => {
     expect(await repo.getCustomerAccount('nadie')).toBeUndefined();
   });
 
-  it('getCustomerAccount lee el balance cacheado más reciente', async () => {
+  it('getCustomerAccount lee la cuenta cacheada más reciente', async () => {
+    const repo = await loadCustomerRepository();
     await db.customerAccounts.add({
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 300,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
+    expect((await repo.getCustomerAccount('c1'))?.creditLimit).toBe(1000);
+  });
+
+  it('getCustomerBalance lee el saldo más reciente, sin cuenta corriente (#101)', async () => {
     const repo = await loadCustomerRepository();
-    expect((await repo.getCustomerAccount('c1'))?.balance).toBe(300);
+    expect(await repo.getCustomerBalance('c1')).toBeUndefined();
+    await db.customerBalances.add({ customerId: 'c1', balance: -300, updatedAt: 'x' });
+
+    expect(await repo.getCustomerBalance('c1')).toBe(-300);
   });
 });
 

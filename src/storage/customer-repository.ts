@@ -25,8 +25,13 @@ export type CustomerRepository = {
    */
   listRecent(limit?: number): CustomerSearchResult[];
   getCustomer(customerId: string): Customer | undefined;
-  /** Async y siempre fresco: el balance cacheado puede cambiar en la sesión (ver sale-repository.ts). */
+  /** Async y siempre fresco: la cuenta cacheada puede cambiar en la sesión (un pull). */
   getCustomerAccount(customerId: string): Promise<CustomerAccount | undefined>;
+  /**
+   * Saldo del cliente (#101, `customerBalances`), tenga o no cuenta corriente. Async y siempre
+   * fresco: cambia en la sesión con cada venta a cuenta, cobranza o pull.
+   */
+  getCustomerBalance(customerId: string): Promise<number | undefined>;
 };
 
 export async function loadCustomerRepository(): Promise<CustomerRepository> {
@@ -46,6 +51,7 @@ export async function loadCustomerRepository(): Promise<CustomerRepository> {
       alphabetical.slice(0, limit).map((customer) => ({ customer, score: 1 })),
     getCustomer: (customerId) => customersById.get(customerId),
     getCustomerAccount: (customerId) => db.customerAccounts.get(customerId),
+    getCustomerBalance: async (customerId) => (await db.customerBalances.get(customerId))?.balance,
   };
 }
 

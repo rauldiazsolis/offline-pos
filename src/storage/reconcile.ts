@@ -31,7 +31,9 @@ export async function applySnapshotReconciled(
   snapshot: ProbeSnapshot,
   params: { now: string; allowEmptyTables?: boolean },
 ): Promise<{ skipped: SnapshotTable[] }> {
-  const { customers, accounts } = splitConnectorCustomers(snapshot.customers, { now: params.now });
+  const { customers, accounts, balances } = splitConnectorCustomers(snapshot.customers, {
+    now: params.now,
+  });
   const skipped: SnapshotTable[] = [];
 
   /** Claves locales que la foto no trae; vacío con algo por borrar = tabla omitida. */
@@ -91,6 +93,15 @@ export async function applySnapshotReconciled(
     const localAccounts = await db.customerAccounts.toCollection().primaryKeys();
     await db.customerAccounts.bulkDelete(
       localAccounts.filter((customerId) => !keepAccounts.has(customerId)),
+    );
+
+    // Saldos (#101): el que vino pisa; el de un cliente que vino sin saldo se conserva (el local ya
+    // incluye lo de esta terminal); el de un cliente que ya no existe se borra.
+    await db.customerBalances.bulkPut(balances);
+    const remainingCustomers = new Set(await db.customers.toCollection().primaryKeys());
+    const localBalances = await db.customerBalances.toCollection().primaryKeys();
+    await db.customerBalances.bulkDelete(
+      localBalances.filter((customerId) => !remainingCustomers.has(customerId)),
     );
   }
   return { skipped };

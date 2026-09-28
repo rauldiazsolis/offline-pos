@@ -25,12 +25,13 @@ function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
 }
 
-function fakeCustomerRepository(account: CustomerAccount | undefined): void {
+function fakeCustomerRepository(account: CustomerAccount | undefined, balance?: number): void {
   setCustomerRepository({
     search: () => [],
     listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(account),
+    getCustomerBalance: () => Promise.resolve(balance),
   });
 }
 
@@ -208,7 +209,6 @@ describe('cuenta corriente', () => {
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
@@ -225,9 +225,35 @@ describe('cuenta corriente', () => {
       customerId: 'c1',
       creditLimit: 100,
       margin: 0,
-      balance: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
+
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('sin red, evalúa el margen con el saldo de customerBalances (#101)', async () => {
+    attachedCustomerSignal.value = customer;
+    setOnline(false);
+    fakeCustomerRepository(
+      { customerId: 'c1', creditLimit: 1000, margin: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
+      900,
+    );
+
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).toContain('100');
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('sin red y sin cuenta, un saldo a favor no habilita fiado (#101)', async () => {
+    attachedCustomerSignal.value = customer;
+    setOnline(false);
+    fakeCustomerRepository(undefined, -5000);
 
     checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();

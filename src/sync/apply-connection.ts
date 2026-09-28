@@ -100,14 +100,18 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     try {
       await db.transaction('rw', db.tables, async () => {
         if (params.local === 'wipe') {
-          const { customers, accounts } = splitConnectorCustomers(params.snapshot.customers, {
-            now: params.now,
-          });
+          const { customers, accounts, balances } = splitConnectorCustomers(
+            params.snapshot.customers,
+            {
+              now: params.now,
+            },
+          );
           await clearAllTables();
           await db.products.bulkPut(params.snapshot.products);
           await db.stock.bulkPut(params.snapshot.stock);
           await db.customers.bulkPut(customers);
           await db.customerAccounts.bulkPut(accounts);
+          await db.customerBalances.bulkPut(balances);
           return;
         }
         // Mantener: la foto es la fuente de verdad del catálogo y los clientes

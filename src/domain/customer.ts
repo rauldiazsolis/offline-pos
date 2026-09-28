@@ -1,3 +1,5 @@
+import type { CustomerBalance } from './customer-balance.ts';
+
 /**
  * Identificación de cliente (RF-16) — separada a propósito de la cuenta
  * corriente: un `Customer` no sabe nada de crédito. `CustomerAccount` es el
@@ -17,32 +19,35 @@ export type Customer = {
 };
 
 /**
- * Cuenta corriente de un cliente. `balance` es lo que el cliente ya debe
- * (cacheado, puede estar desactualizado offline); `margin` es el colchón que
- * el comercio le da a ESE cliente en particular, definido del lado del
- * backend (llega en el pull) — no es una config local del POS. `unrestricted`
- * (Etapa 3, #69) es una capacidad declarada por el backend/conector para ESE
- * cliente puntual — no algo que el POS infiera de qué conector está activo:
- * `canChargeOffline` la usa para aprobar sin evaluar `creditLimit`/`margin`/
- * `balance` en absoluto, que en ese caso quedan sin usar (nunca inventados
- * con un valor real, ver "No inventar datos que no llegaron del backend" en
- * CLAUDE.md).
+ * Condiciones de crédito (cuenta corriente) de un cliente. `margin` es el
+ * colchón que el comercio le da a ESE cliente en particular, definido del
+ * lado del backend (llega en el pull) — no es una config local del POS.
+ * `unrestricted` (Etapa 3, #69) es una capacidad declarada por el
+ * backend/conector para ESE cliente puntual — no algo que el POS infiera de
+ * qué conector está activo: `canChargeOffline` la usa para aprobar sin evaluar
+ * `creditLimit`/`margin`/saldo en absoluto, que en ese caso quedan sin usar
+ * (nunca inventados con un valor real, ver "No inventar datos que no llegaron
+ * del backend" en CLAUDE.md).
+ *
+ * El saldo **no** vive acá desde #101: es `CustomerBalance`, que puede tener
+ * cualquier cliente con o sin crédito — así un saldo a favor nunca se confunde
+ * con crédito.
  */
 export type CustomerAccount = {
   customerId: string;
   creditLimit: number;
   margin: number;
-  balance: number;
   updatedAt: string; // ISO 8601
   unrestricted?: boolean;
 };
 
 /**
- * Registro local de auditoría de un movimiento de cuenta corriente — mismo
- * rol que `StockMovement` para el stock: además de servir de rastro
- * (RNF-07), se usa para descontar `CustomerAccount.balance` cacheado en el
- * momento (ver `storage/sale-repository.ts`), así una segunda venta a cuenta
- * en la misma sesión offline ve el saldo ya actualizado.
+ * Registro local de auditoría de un movimiento de cuenta — mismo rol que
+ * `StockMovement` para el stock: además de servir de rastro (RNF-07), se usa
+ * para mover el saldo de `customerBalances` en el momento (ver
+ * `storage/sale-repository.ts` y `storage/customer-payment-repository.ts`),
+ * así una segunda venta a cuenta en la misma sesión offline ve el saldo ya
+ * actualizado.
  */
 export type AccountMovement = {
   id: string; // ULID
@@ -50,6 +55,8 @@ export type AccountMovement = {
   type: 'sale' | 'payment' | 'adjustment';
   amount: number;
   saleId?: string;
+  /** La cobranza que lo generó (`type: 'payment'`, #101). */
+  paymentId?: string;
   holdId?: string;
   createdAt: string; // ISO 8601
 };
@@ -76,10 +83,12 @@ export function buildCustomer(
 /**
  * Crédito disponible para gastar offline: lo que el backend permite
  * (`creditLimit`), más el margen que le dio a este cliente en particular,
- * menos lo que ya debe.
+ * menos lo que ya debe (`balance`, de `customerBalances` — sin saldo conocido
+ * cuenta como 0). Un saldo a favor suma, pero solo si hay cuenta: sin
+ * `CustomerAccount` no se llega acá.
  */
-export function availableCredit(account: CustomerAccount): number {
-  return account.creditLimit + account.margin - account.balance;
+export function availableCredit(account: CustomerAccount, balance: number): number {
+  return account.creditLimit + account.margin - balance;
 }
 
 /**
@@ -87,11 +96,15 @@ export function availableCredit(account: CustomerAccount): number {
  * disponible — salvo que la cuenta sea `unrestricted` (Etapa 3, #69), en cuyo
  * caso se aprueba sin evaluar `availableCredit` en absoluto.
  */
-export function canChargeOffline(account: CustomerAccount, amount: number): boolean {
+export function canChargeOffline(
+  account: CustomerAccount,
+  balance: number,
+  amount: number,
+): boolean {
   if (account.unrestricted) {
     return true;
   }
-  return amount <= availableCredit(account);
+  return amount <= availableCredit(account, balance);
 }
 
 /**
@@ -105,6 +118,11 @@ export function canChargeOffline(account: CustomerAccount, amount: number): bool
  * salvo que declare `unrestricted: true` (Etapa 3, #69): ahí sí se arma la
  * cuenta, completando en `0` lo que falte (valores que quedan sin usar, no
  * es "inventar crédito" — es declarar que esos números no aplican).
+ *
+ * `balance` es el saldo del cliente tenga o no crédito (contrato 4.2.0,
+ * #101): siempre que viene arma un `CustomerBalance`; un `balance` solo es
+ * "saldo sin cuenta corriente". Sin `balance` no hay saldo que aplicar (el
+ * POS conserva el local).
  *
  * `createdAt` es la fecha de alta real que manda el backend (contrato v3,
  * #96) — antes era la hora del pull, lo que dejaba sin sentido "Alta:
@@ -129,7 +147,7 @@ export function splitConnectorCustomer(
     blocked?: { reason: string } | undefined;
   },
   params: { now: string },
-): { customer: Customer; account?: CustomerAccount } {
+): { customer: Customer; account?: CustomerAccount; balance?: CustomerBalance } {
   const customer: Customer = {
     id: raw.id,
     name: raw.name,
@@ -142,8 +160,19 @@ export function splitConnectorCustomer(
   const hasFullCreditData =
     raw.creditLimit !== undefined && raw.margin !== undefined && raw.balance !== undefined;
 
+  const withBalance: { balance?: CustomerBalance } =
+    raw.balance !== undefined
+      ? {
+          balance: {
+            customerId: raw.id,
+            balance: raw.balance,
+            updatedAt: raw.updatedAt ?? params.now,
+          },
+        }
+      : {};
+
   if (!hasFullCreditData && raw.unrestricted !== true) {
-    return { customer };
+    return { customer, ...withBalance };
   }
 
   return {
@@ -152,10 +181,10 @@ export function splitConnectorCustomer(
       customerId: raw.id,
       creditLimit: raw.creditLimit ?? 0,
       margin: raw.margin ?? 0,
-      balance: raw.balance ?? 0,
       updatedAt: raw.updatedAt ?? params.now,
       ...(raw.unrestricted === true ? { unrestricted: true } : {}),
     },
+    ...withBalance,
   };
 }
 
@@ -167,17 +196,21 @@ export function splitConnectorCustomer(
 export function splitConnectorCustomers(
   raws: Parameters<typeof splitConnectorCustomer>[0][],
   params: { now: string },
-): { customers: Customer[]; accounts: CustomerAccount[] } {
+): { customers: Customer[]; accounts: CustomerAccount[]; balances: CustomerBalance[] } {
   const customers: Customer[] = [];
   const accounts: CustomerAccount[] = [];
+  const balances: CustomerBalance[] = [];
   for (const raw of raws) {
     const split = splitConnectorCustomer(raw, params);
     customers.push(split.customer);
     if (split.account !== undefined) {
       accounts.push(split.account);
     }
+    if (split.balance !== undefined) {
+      balances.push(split.balance);
+    }
   }
-  return { customers, accounts };
+  return { customers, accounts, balances };
 }
 
 /** Movimiento de cuenta generado al cerrar una venta con un pago `'account'`. */
@@ -196,6 +229,24 @@ export function buildAccountMovementForSale(params: {
     amount: params.amount,
     saleId: params.saleId,
     ...(params.holdId !== undefined ? { holdId: params.holdId } : {}),
+    createdAt: params.now,
+  };
+}
+
+/** Movimiento de cuenta generado por una cobranza sin venta (#101): `amount` negativo. */
+export function buildAccountMovementForPayment(params: {
+  id: string;
+  customerId: string;
+  amount: number;
+  paymentId: string;
+  now: string;
+}): AccountMovement {
+  return {
+    id: params.id,
+    customerId: params.customerId,
+    type: 'payment',
+    amount: params.amount,
+    paymentId: params.paymentId,
     createdAt: params.now,
   };
 }

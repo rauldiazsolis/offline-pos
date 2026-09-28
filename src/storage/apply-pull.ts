@@ -47,19 +47,17 @@ export async function applyPull(input: PullApplyInput): Promise<Result<PullApply
     return ok(
       await db.transaction(
         'rw',
-        [db.products, db.stock, db.customers, db.customerAccounts, db.outbox],
+        [db.products, db.stock, db.customers, db.customerAccounts, db.customerBalances, db.outbox],
         async () => {
           const events = input.retain ? [] : await eventsToReapply(input.queuedEventIds);
-          const localAccounts = input.retain ? await db.customerAccounts.toArray() : [];
+          const localBalances = input.retain ? await db.customerBalances.toArray() : [];
           const adjusted = adjustPull({
             customers: input.result.customers.items,
             stock: input.result.stock,
             retain: input.retain,
             effects: reapplyEffects(events),
             localStock: input.retain ? await db.stock.toArray() : [],
-            localBalances: new Map(
-              localAccounts.map((account) => [account.customerId, account.balance]),
-            ),
+            localBalances: new Map(localBalances.map((row) => [row.customerId, row.balance])),
             now: input.now,
           });
 
@@ -83,12 +81,16 @@ export async function applyPull(input: PullApplyInput): Promise<Result<PullApply
             await db.stock.bulkPut(adjusted.stock);
           }
           if (adjusted.customers.length > 0) {
-            const { customers, accounts } = splitConnectorCustomers(adjusted.customers, {
+            const { customers, accounts, balances } = splitConnectorCustomers(adjusted.customers, {
               now: input.now,
             });
             await db.customers.bulkPut(customers);
             if (accounts.length > 0) {
               await db.customerAccounts.bulkPut(accounts);
+            }
+            // Solo los que vinieron con saldo: el de un cliente sin `balance` se conserva (#101).
+            if (balances.length > 0) {
+              await db.customerBalances.bulkPut(balances);
             }
           }
           return { skipped: [], reappliedEvents: events.length };
