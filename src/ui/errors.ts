@@ -125,6 +125,8 @@ export function describeError(failure: Failure): string {
       return failure.meta.reason === 'empty'
         ? 'Ingresá al menos un monto.'
         : 'Los montos de la cobranza tienen que ser mayores a cero.';
+    case 'customer-payment/persist-failed':
+      return `No se pudo guardar la cobranza (${failure.meta.message}).`;
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':

@@ -24,6 +24,19 @@ describe('describeError', () => {
     ).toBe('No se pudo guardar el movimiento de caja (boom).');
   });
 
+  it('códigos de cobranza (#101)', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'customer-payment/persist-failed',
+        meta: { message: 'boom' },
+      }),
+    ).toBe('No se pudo guardar la cobranza (boom).');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/invalid', meta: { reason: 'empty' } }),
+    ).toBe('Ingresá al menos un monto.');
+  });
+
   it('demo/unavailable-for-connector', () => {
     const message = describeError({
       ok: false,
