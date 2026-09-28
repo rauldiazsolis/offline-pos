@@ -3,6 +3,9 @@ import { completeWizardRest, confirmCheckout, fillPayment } from './helpers.ts';
 
 const BACKEND_URL = 'http://localhost:4000';
 
+// Los dos tests resetean el mismo minibackend: en paralelo, uno le borraría los datos al otro.
+test.describe.configure({ mode: 'serial' });
+
 test('vender con el minibackend real configurado: la venta llega al backend', async ({ page }) => {
   // `demo-backend/data/demo.sqlite` está en `.gitignore` y sobrevive entre
   // corridas locales de `pnpm test:e2e` (nada lo borra salvo un checkout
@@ -42,7 +45,6 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await commandBar.fill('/SINCRONIZAR');
   await commandBar.press('Enter');
 
-
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
   await commandBar.press('Enter');
@@ -68,4 +70,64 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
       { timeout: 20_000 },
     )
     .toBe(true);
+});
+
+test('una cobranza llega al minibackend con su recibo y el saldo vuelve en el pull (#101)', async ({
+  page,
+}) => {
+  await page.request.post(`${BACKEND_URL}/_demo/reset`);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await completeWizardRest(page, {
+    baseUrl: BACKEND_URL,
+    apiKey: 'demo-api-key',
+    type: 'rest-demo',
+    branch: 'Sucursal e2e',
+    pointOfSale: 'Caja e2e',
+  });
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+
+  // Carlos Pérez viene sembrado con saldo 1200 (debe).
+  await commandBar.fill('@Carlos');
+  await expect(page.getByText('Carlos Pérez')).toBeVisible();
+  await commandBar.press('Enter');
+  await expect(page.getByTestId('customer-balance')).toContainText('Debe');
+
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Cobranza a Carlos Pérez' })).toBeVisible();
+  await page.getByLabel('Efectivo').fill('200');
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByRole('heading', { name: 'Recibo de cobranza' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(`${BACKEND_URL}/_demo/api/customer-payments`);
+        const payments = (await response.json()) as {
+          customerId: string;
+          total: number;
+          receipt?: { number: number };
+        }[];
+        return payments.some(
+          (payment) =>
+            payment.customerId === 'cust-02' &&
+            payment.total === 200 &&
+            payment.receipt?.number === 1,
+        );
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(true);
+
+  // Después de un pull, el saldo del backend (1200 - 200) en la tarjeta.
+  await commandBar.fill('/SINCRONIZAR');
+  await commandBar.press('Enter');
+  await commandBar.fill('@Carlos');
+  await expect(page.getByText('Carlos Pérez')).toBeVisible();
+  await commandBar.press('Enter');
+  await expect(page.getByTestId('customer-balance')).toHaveText(/Saldo: Debe \$?1[.,]?000/, {
+    timeout: 20_000,
+  });
 });

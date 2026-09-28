@@ -94,6 +94,25 @@ test.describe('pantalla de venta', () => {
     await expect(commandBar).toBeFocused();
   });
 
+  test('cobranza a puros clicks: campo, confirmar y cancelar (#101)', async ({ page }) => {
+    const commandBar = page.getByLabel('Barra de comandos');
+    await commandBar.fill('@Cliente Mouse');
+    await commandBar.press('Enter');
+    await commandBar.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Cobranza a Cliente Mouse' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cancelar (Esc)' }).click();
+    await expect(commandBar).toBeFocused();
+
+    await commandBar.press('Enter');
+    await page.getByLabel('Transferencia').click();
+    await expect(page.getByLabel('Transferencia')).toBeFocused();
+    await page.keyboard.type('80');
+    await page.getByRole('button', { name: 'Confirmar cobranza (Ctrl+Enter)' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Recibo de cobranza' })).toBeVisible();
+  });
+
   test('click en la barra de estado abre /DIAGNOSTICO', async ({ page }) => {
     await page.getByTitle('Ver diagnóstico de sincronización (/DIAGNOSTICO)').click();
 
