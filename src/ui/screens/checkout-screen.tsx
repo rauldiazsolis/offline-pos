@@ -1,5 +1,5 @@
 import { useSignalEffect } from '@preact/signals';
-import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
+import type { TargetedKeyboardEvent } from 'preact';
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { PaymentMethod } from '../../domain/sale.ts';
 import { cartWarnings } from '../../domain/sale-warnings.ts';
@@ -18,9 +18,7 @@ import {
   submitCheckout,
 } from '../keyboard/checkout-controller.ts';
 import { remapDecimalKey } from '../keyboard/decimal-key.ts';
-import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { formatBalance } from '../format-balance.ts';
-import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
@@ -30,68 +28,14 @@ import {
   TENDERABLE_METHODS,
 } from '../state/checkout.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
-
-const overlayStyle = {
-  height: 'var(--app-height)',
-  overflowY: 'auto' as const,
-  display: 'flex',
-  flexDirection: 'column' as const,
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 'var(--space-4)',
-  background: 'var(--color-surface)',
-};
-
-const dialogStyle = {
-  width: '100%',
-  maxWidth: '720px',
-  background: 'var(--color-bg)',
-  borderRadius: 'var(--radius-md)',
-  boxShadow: 'var(--shadow-card)',
-  padding: 'var(--space-4)',
-  display: 'flex',
-  flexDirection: 'column' as const,
-  gap: 'var(--space-3)',
-  color: 'var(--color-text)',
-  fontFamily: 'var(--font-sans)',
-};
-
-const fieldRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 'var(--space-3)',
-};
-
-const fieldInputStyle = {
-  width: '160px',
-  fontFamily: 'var(--font-mono)',
-  fontSize: 'var(--font-size-base)',
-  padding: 'var(--space-2)',
-  borderRadius: 'var(--radius-md)',
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text)',
-  textAlign: 'right' as const,
-};
-
-const cardStyle = {
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: 'var(--space-3)',
-  display: 'flex',
-  flexDirection: 'column' as const,
-  gap: 'var(--space-2)',
-};
-
-const rowStyle = { display: 'flex', justifyContent: 'space-between' };
-
-const sectionLabelStyle = {
-  fontSize: 'var(--font-size-sm)',
-  color: 'var(--color-text-muted)',
-  textTransform: 'uppercase' as const,
-  letterSpacing: '.04em',
-};
+import { PaymentFields } from '../components/PaymentFields.tsx';
+import {
+  cardStyle,
+  dialogStyle,
+  overlayStyle,
+  rowStyle,
+  sectionLabelStyle,
+} from './dialog-styles.ts';
 
 /**
  * Pantalla de cobro (`/COBRAR`, `Ctrl+Enter` o Enter con la barra vacía) —
@@ -134,36 +78,35 @@ export function CheckoutScreen() {
     }
   });
 
-  const handleKeyDown =
-    (method: PaymentMethod) => (event: TargetedKeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        cancelCheckout();
-        return;
-      }
-      if (event.key === 'Enter' && event.ctrlKey) {
-        event.preventDefault();
-        void submitCheckout();
-        return;
-      }
-      if (event.key === 'Enter' || event.key === 'ArrowDown') {
-        event.preventDefault();
-        focusField(moveCheckoutField(method, 1));
-        return;
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        focusField(moveCheckoutField(method, -1));
-        return;
-      }
-      remapDecimalKey(event);
-    };
+  const handleKeyDown = (
+    method: PaymentMethod,
+    event: TargetedKeyboardEvent<HTMLInputElement>,
+  ): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelCheckout();
+      return;
+    }
+    if (event.key === 'Enter' && event.ctrlKey) {
+      event.preventDefault();
+      void submitCheckout();
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusField(moveCheckoutField(method, 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusField(moveCheckoutField(method, -1));
+      return;
+    }
+    remapDecimalKey(event);
+  };
 
-  const handleInput = (method: PaymentMethod) => (event: TargetedEvent<HTMLInputElement>) => {
-    checkoutBuffersSignal.value = {
-      ...checkoutBuffersSignal.value,
-      [method]: event.currentTarget.value,
-    };
+  const handleInput = (method: PaymentMethod, value: string): void => {
+    checkoutBuffersSignal.value = { ...checkoutBuffersSignal.value, [method]: value };
     checkoutErrorSignal.value = null;
   };
 
@@ -216,46 +159,15 @@ export function CheckoutScreen() {
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 'var(--space-4)' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-            {TENDERABLE_METHODS.map((method, index) => {
-              const disabled = method === 'account' && !hasCustomer;
-              const raw = checkoutBuffersSignal.value[method];
-              // Solo marca el campo — nunca bloquea el tipeo ni descarta el
-              // texto: la validación real (y el error) pasa recién al
-              // confirmar (Ctrl+Enter).
-              const isInvalid = raw.trim() !== '' && parseNonNegativeAmount(raw) === undefined;
-              return (
-                <label key={method} style={fieldRowStyle}>
-                  <span>{PAYMENT_METHOD_LABELS[method]}</span>
-                  <input
-                    ref={(element) => {
-                      if (index === 0) {
-                        firstFieldRef.current = element;
-                      }
-                      if (element === null) {
-                        fieldRefs.current.delete(method);
-                      } else {
-                        fieldRefs.current.set(method, element);
-                      }
-                    }}
-                    type="text"
-                    inputMode="decimal"
-                    value={raw}
-                    onInput={handleInput(method)}
-                    onKeyDown={handleKeyDown(method)}
-                    disabled={disabled}
-                    placeholder="0,00"
-                    aria-label={PAYMENT_METHOD_LABELS[method]}
-                    style={{
-                      ...fieldInputStyle,
-                      opacity: disabled ? 0.5 : 1,
-                      borderColor: isInvalid ? 'var(--color-danger)' : 'var(--color-border)',
-                    }}
-                  />
-                </label>
-              );
-            })}
-          </div>
+          <PaymentFields
+            methods={TENDERABLE_METHODS}
+            buffers={checkoutBuffersSignal.value}
+            isDisabled={(method) => method === 'account' && !hasCustomer}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            firstFieldRef={firstFieldRef}
+            fieldRefs={fieldRefs}
+          />
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             <div style={cardStyle}>

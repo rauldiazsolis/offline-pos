@@ -57,7 +57,6 @@ describe('triggerCheckout (sin turnos desde la Etapa 5, #100)', () => {
     expect(activeScreenSignal.value).toBe('checkout');
     expect(commandBarErrorSignal.value).toBeNull();
   });
-
 });
 
 describe('comandos habilitados (Etapa 2 de #94)', () => {
@@ -257,13 +256,27 @@ describe('Enter con la barra vacía (#99)', () => {
     expect(activeScreenSignal.value).toBe('checkout');
   });
 
-  it('sin líneas y con cliente avisa que la cobranza sin venta llega después', async () => {
+  it('sin líneas y con cliente abre la cobranza sin venta (#101)', async () => {
     attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
 
     await submitEmptyCommandBar();
 
-    expect(commandBarErrorSignal.value).toBe('Cobranza sin venta: llega en una próxima versión.');
-    expect(activeScreenSignal.value).toBe('sale');
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(activeScreenSignal.value).toBe('collection');
+  });
+
+  it('/COBRAR y Ctrl+Enter sin líneas y con cliente también abren la cobranza (#101)', async () => {
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+
+    updateCommandBarBuffer('/COBRAR');
+    submitCommandBar();
+    await vi.waitFor(() => {
+      expect(activeScreenSignal.value).toBe('collection');
+    });
+
+    activeScreenSignal.value = 'sale';
+    await triggerCheckout();
+    expect(activeScreenSignal.value).toBe('collection');
   });
 
   it('sin líneas ni cliente no hace nada', async () => {
