@@ -173,10 +173,10 @@ Limitaciones conocidas:
 - El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
 - Una fila borrada de `Productos`/`Clientes` no genera un "tombstone": el delta de `pullBatch` no
   informa bajas, solo altas y cambios. Una baja se refleja recién en la próxima foto completa (al
-  configurar, cada 2h o a pedido — mismo mecanismo que documenta CLAUDE.md para la reconciliación en
+  configurar, cada 2h o a pedido — mismo mecanismo que documenta `src/sync/AGENTS.md` para la reconciliación en
   general).
 - `/DEMO_RESET` no existe con este conector (solo lo declara el tipo `rest-demo`, ver "Comandos por
-  conector" en CLAUDE.md): no aparece en el menú de "/". La planilla nunca se resetea desde el POS.
+  conector" en `src/connectors/AGENTS.md`): no aparece en el menú de "/". La planilla nunca se resetea desde el POS.
 
 ## Cursor de pull (Etapa 2, #87)
 

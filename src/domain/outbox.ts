@@ -15,7 +15,7 @@ export type OutboxEventPayload =
   | { type: 'customer-payment'; payment: CustomerPayment };
 
 /**
- * Evento inmutable de sincronización (ver "Patrón outbox" en CLAUDE.md). El
+ * Evento inmutable de sincronización (ver "Patrón outbox" en AGENTS.md). El
  * reintento/backoff ya no es por evento — es por LOTE de push
  * (`domain/push-lot.ts`, #87) — así que `OutboxEvent` solo necesita saber si
  * ya viajó (`status`) y cuándo se creó (orden de armado del lote,

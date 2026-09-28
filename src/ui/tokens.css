@@ -1,5 +1,5 @@
 /**
- * Design tokens básicos — ver "UX keyboard-first" en CLAUDE.md.
+ * Design tokens básicos — ver "UX keyboard-first" en AGENTS.md.
  *
  * Solo la base mínima para no bloquear Fase 1: color, espaciado, tipografía
  * y foco visible, en un único tema claro. Nombradas por rol (--color-bg, no
@@ -25,7 +25,7 @@
   --color-placeholder: #a1a1aa;
 
   /* "chrome" oscuro — barra de comandos y barra de estado (pase de diseño,
-     ver CLAUDE.md). El resto de la app (carrito, pantallas de tarea) sigue
+     ver src/ui/AGENTS.md). El resto de la app (carrito, pantallas de tarea) sigue
      sobre los tokens claros de arriba — es un contraste deliberado tipo
      "consola arriba/abajo, documento en el medio", no un modo oscuro
      conmutable. */
@@ -56,7 +56,7 @@
   --font-size-lg: 20px;
   --font-size-xl: 28px;
 
-  /* foco — visible siempre, nunca depende de :hover (ver CLAUDE.md) */
+  /* foco — visible siempre, nunca depende de :hover (ver AGENTS.md) */
   --focus-ring-width: 2px;
 }
 
@@ -140,7 +140,7 @@ button:not(:disabled) {
  * Ciclo 8: por debajo de 1024px de ancho, en vez de reflow (que rompería la
  * proporción 2/3–1/3 del carrito — Ciclo 7 decidió a propósito un único
  * layout, sin versión angosta) se aplica `zoom` — Chromium es el navegador
- * de referencia (CLAUDE.md), `zoom` no es estándar pero anda bien ahí y
+ * de referencia (AGENTS.md), `zoom` no es estándar pero anda bien ahí y
  * evita la complejidad de un `transform: scale()` (que no reserva su
  * propio espacio de layout, hay que compensarlo a mano).
  *
@@ -207,7 +207,7 @@ button:not(:disabled) {
  * La barra de comandos vive sobre "chrome" oscuro (ver --color-chrome-*) —
  * un outline claro ahí no se lee bien, así que el foco se marca con un
  * borde inferior en el mismo azul de acento en vez del outline por default.
- * Sigue siendo "foco siempre visible" (CLAUDE.md), solo con otra técnica.
+ * Sigue siendo "foco siempre visible" (AGENTS.md), solo con otra técnica.
  */
 .command-bar-input:focus-visible {
   outline: none;

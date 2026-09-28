@@ -1,7 +1,7 @@
 import type { Discount } from './sale.ts';
 
 /**
- * Result<T> casero — ver "Manejo de errores" en CLAUDE.md.
+ * Result<T> casero — ver "Manejo de errores" en AGENTS.md.
  *
  * Regla general: las funciones de negocio nunca lanzan. Un error de negocio
  * anticipado (algo que el dominio ya sabe que puede pasar) se modela siempre

@@ -39,7 +39,7 @@ import {
 
 /**
  * El único input siempre enfocado durante la operación normal (ver
- * "UX keyboard-first" en CLAUDE.md). Solo maneja el `<input>` real — la
+ * "UX keyboard-first" en AGENTS.md). Solo maneja el `<input>` real — la
  * lógica de qué hacer con cada tecla vive en `command-bar-controller.ts`.
  */
 export function CommandBarInput() {

@@ -6,7 +6,7 @@ import type { RefObject } from 'preact';
  * Preact difiere `useEffect` a un frame (vía rAF): una tecla enviada muy
  * rápido después de montar (un test e2e, o `autoFocus` nativo del navegador
  * al re-insertar el elemento dinámicamente) puede perderse o simplemente no
- * disparar el foco. Ver CLAUDE.md, "Patrones establecidos" — este hook
+ * disparar el foco. Ver src/ui/AGENTS.md, "Patrones de UI" — este hook
  * consolida el patrón que ya usaban `CheckoutScreen`/`ConfigScreen`/
  * `VoidSaleScreen`/`ReceiptScreen` cada uno por su cuenta, y que
  * `CommandBarInput` no tenía (usaba `autoFocus` nativo, la causa real de un

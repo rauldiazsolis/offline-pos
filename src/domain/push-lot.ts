@@ -5,7 +5,7 @@
  * envío), el reintento es del lote entero, no de un evento individual.
  */
 export type PushLot = {
-  /** ULID, congelado junto con `eventIds` para toda la vida de este lote — ver CLAUDE.md. */
+  /** ULID, congelado junto con `eventIds` para toda la vida de este lote — ver src/sync/AGENTS.md. */
   id: string;
   /** Conjunto exacto de outbox.id incluidos — nunca se recalcula en un reintento. */
   eventIds: string[];

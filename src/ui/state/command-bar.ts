@@ -17,7 +17,7 @@ export const commandBarBufferSignal = signal('');
 
 /**
  * Mensaje de error de parseo, para el slot de altura fija junto a la barra
- * (ver "UX keyboard-first" en CLAUDE.md). Se limpia con cualquier edición o
+ * (ver "Barra de comandos" en src/ui/AGENTS.md). Se limpia con cualquier edición o
  * comando exitoso — nunca por timeout.
  */
 export const commandBarErrorSignal = signal<string | null>(null);

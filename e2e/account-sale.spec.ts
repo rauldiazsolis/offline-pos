@@ -31,7 +31,7 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   const customerId = customer?.id;
 
   // La cuenta cacheada en producción vendría de un pull real — acá se
-  // siembra directo (no hay backend en los e2e, ver CLAUDE.md).
+  // siembra directo (no hay backend en los e2e, ver e2e/AGENTS.md).
   await putIntoStore(page, 'customerAccounts', {
     customerId,
     creditLimit: 2000,

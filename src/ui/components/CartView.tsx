@@ -328,7 +328,7 @@ function TotalsCard({ cart, totals }: { cart: Cart; totals: Totals }): JSX.Eleme
 
 /**
  * Carrito en curso. La selección visual (↑/↓ con la barra de comandos
- * vacía, ver CLAUDE.md) la maneja `cartSelectionIndexSignal`, no un segundo
+ * vacía, ver src/ui/AGENTS.md) la maneja `cartSelectionIndexSignal`, no un segundo
  * foco de teclado. Cliente adjunto y resumen de venta son bloques fijos —
  * solo la tabla scrollea (issue #18); en pantallas anchas pasan a una
  * columna lateral fija (issue #19) vía `cart-view.css`, sin cambiar nada

@@ -33,7 +33,7 @@ export function getAllFromStore<T>(page: Page, storeName: string): Promise<T[]> 
  * Escribe una fila directo en IndexedDB, sin pasar por Dexie/el código de la
  * app — mismo criterio que `getAllFromStore`. Se usa para sembrar una
  * `CustomerAccount` que en producción vendría de un pull real (no hay
- * backend en los e2e, ver CLAUDE.md), así se puede probar la evaluación de
+ * backend en los e2e, ver e2e/AGENTS.md), así se puede probar la evaluación de
  * crédito offline sin necesitar un conector de verdad.
  */
 export function putIntoStore(page: Page, storeName: string, value: unknown): Promise<void> {

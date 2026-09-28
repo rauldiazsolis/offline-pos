@@ -27,7 +27,7 @@ function handleMouseDown(event: MouseEvent): void {
  * Pantalla de venta: barra de estado arriba (info pasiva, "chrome" oscuro),
  * carrito en el medio (contenido claro, único que hace scroll — ver
  * `height`+`overflow` de abajo), barra de comandos abajo (siempre enfocada,
- * "chrome" oscuro) — ver "UX keyboard-first" en CLAUDE.md.
+ * "chrome" oscuro) — ver "UX keyboard-first" en AGENTS.md.
  *
  * El input queda cerca de las manos y de donde aparece la línea nueva
  * (`addProductLine` siempre agrega al final del carrito, o sea justo arriba
