@@ -5,9 +5,12 @@ import { formatMoney } from '../format.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { customerBalancesSignal } from '../state/customer-balance.ts';
+import { saveSyncConfig } from '../../sync/config.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 
 beforeEach(() => {
+  customerBalancesSignal.value = new Map();
   cartSignal.value = { lines: [] };
   cartSelectionIndexSignal.value = null;
   attachedCustomerSignal.value = undefined;
@@ -99,8 +102,42 @@ describe('CartView', () => {
     const { container: withCustomer } = render(<CartView />);
     const cardWith = withCustomer.querySelector('.cart-view__customer');
 
-    expect(cardWithout?.children.length).toBe(4);
+    // Cinco desde #101: la fila "Saldo".
+    expect(cardWithout?.children.length).toBe(5);
     expect(cardWith?.children.length).toBe(cardWithout?.children.length);
+  });
+
+  describe('saldo del cliente (#101)', () => {
+    const ana = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+
+    beforeEach(() => {
+      saveSyncConfig({ type: 'rest', baseUrl: 'http://x', locale: 'es-AR' });
+    });
+
+    it('muestra lo que debe, lo que tiene a favor o "Sin saldo"', () => {
+      attachedCustomerSignal.value = ana;
+      customerBalancesSignal.value = new Map([['c1', 1500]]);
+      const { unmount } = render(<CartView />);
+      expect(screen.getByTestId('customer-balance').textContent).toBe('Saldo: Debe $1.500,00');
+      unmount();
+
+      customerBalancesSignal.value = new Map([['c1', -200]]);
+      const second = render(<CartView />);
+      expect(screen.getByTestId('customer-balance').textContent).toBe('Saldo: A favor $200,00');
+      second.unmount();
+
+      customerBalancesSignal.value = new Map();
+      render(<CartView />);
+      expect(screen.getByTestId('customer-balance').textContent).toBe('Saldo: Sin saldo');
+      localStorage.clear();
+    });
+
+    it('con "Consumidor Final" la fila queda en blanco', () => {
+      customerBalancesSignal.value = new Map([['c1', 1500]]);
+      render(<CartView />);
+      expect(screen.getByTestId('customer-balance').textContent.trim()).toBe('');
+      localStorage.clear();
+    });
   });
 
   it('muestra los labels "Cliente" y "Resumen de venta"', () => {

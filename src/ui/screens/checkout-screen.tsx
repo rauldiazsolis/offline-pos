@@ -12,12 +12,14 @@ import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
   amountTendered,
   cancelCheckout,
+  accountBalancePreview,
   changePreview,
   moveCheckoutField,
   submitCheckout,
 } from '../keyboard/checkout-controller.ts';
 import { remapDecimalKey } from '../keyboard/decimal-key.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
+import { formatBalance } from '../format-balance.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { cartSignal } from '../state/cart.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
@@ -168,6 +170,7 @@ export function CheckoutScreen() {
   const totals = calculateTotals(cartSignal.value);
   const paid = amountTendered();
   const change = changePreview();
+  const balancePreview = accountBalancePreview();
   const hasCustomer = attachedCustomerSignal.value !== undefined;
   const mode = tenderMode(totals.total);
   const catalog = getCatalogRepository();
@@ -291,6 +294,14 @@ export function CheckoutScreen() {
                   }}
                 >
                   {formatMoney(change)}
+                </div>
+              </div>
+            )}
+            {balancePreview !== undefined && (
+              <div style={cardStyle}>
+                <div style={sectionLabelStyle}>Saldo del cliente</div>
+                <div style={{ fontFamily: 'var(--font-mono)' }}>
+                  {`${formatBalance(balancePreview.before)} → ${formatBalance(balancePreview.after)}`}
                 </div>
               </div>
             )}

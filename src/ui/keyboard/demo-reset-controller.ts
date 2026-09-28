@@ -4,6 +4,7 @@ import { demoReset } from '../../storage/demo-reset.ts';
 import { describeError } from '../errors.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
+import { refreshCustomerBalances } from '../state/customer-balance.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
@@ -49,6 +50,7 @@ export async function confirmDemoReset(): Promise<void> {
   setCatalogRepository(await loadCatalogRepository());
   setCustomerRepository(await loadCustomerRepository());
   await refreshStockSnapshot();
+  await refreshCustomerBalances();
   cartSignal.value = { lines: [] };
   cartSelectionIndexSignal.value = null;
   resetAttachedCustomer();

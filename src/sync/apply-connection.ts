@@ -8,6 +8,7 @@ import { applySnapshotReconciled } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import { refreshStockSnapshot } from '../ui/state/stock.ts';
+import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   setActiveConnectorType,
   setConnectionState,
@@ -156,6 +157,7 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setLastSyncFailure(null);
     setLocalCatalogCounts(await countLocalCatalog());
     await refreshStockSnapshot();
+    await refreshCustomerBalances();
     // Otra conexión (#99): su estado se pregunta antes del próximo ciclo.
     setBackendStatus({ kind: 'unknown' });
     setBackendCheckDue(true);

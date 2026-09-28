@@ -15,6 +15,8 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { customerBalancesSignal } from '../state/customer-balance.ts';
+import { formatBalance } from '../format-balance.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import './cart-view.css';
 
@@ -137,6 +139,12 @@ function CustomerCard({ customer }: { customer: Customer | undefined }): JSX.Ele
         </div>
       )}
       {blockedText !== undefined && <div style={warningStyle}>{blockedText}</div>}
+      {/* #101: fila fija, en blanco con "Consumidor Final" — ninguna posición se mueve. */}
+      <div data-testid="customer-balance" style={{ color: 'var(--color-text-muted)' }}>
+        {customer !== undefined
+          ? `Saldo: ${formatBalance(customerBalancesSignal.value.get(customer.id))}`
+          : ' '}
+      </div>
     </div>
   );
 }
