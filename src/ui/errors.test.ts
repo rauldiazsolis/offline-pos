@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { describeError } from './errors.ts';
 
 describe('describeError', () => {
+  it('sync/incompatible-contract dice qué versión hace falta', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'sync/incompatible-contract',
+        meta: { backend: '4.0.0', pos: '4.1.0' },
+      }),
+    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.1 o posterior.');
+  });
+
   it('códigos de caja (#100)', () => {
     expect(describeError({ ok: false, error: 'cash/invalid-amount', meta: { amount: -1 } })).toBe(
       'Monto inválido.',

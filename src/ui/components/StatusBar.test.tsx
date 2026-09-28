@@ -186,7 +186,7 @@ describe('StatusBar — estado del backend (#99)', () => {
     const { container } = render(<StatusBar />);
 
     expect(
-      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.x)'),
+      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.1 o posterior)'),
     ).not.toBeNull();
     const dot = container.querySelector<HTMLElement>('[aria-hidden="true"]');
     expect(dot?.style.background).toBe('var(--color-danger)');

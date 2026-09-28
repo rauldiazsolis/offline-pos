@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { contractMajor, isCompatibleContract } from './contract-version.ts';
+import {
+  contractRequirement,
+  isCompatibleContract,
+  POS_CONTRACT_VERSION,
+} from './contract-version.ts';
 
 describe('isCompatibleContract (#99)', () => {
+  it('el POS habla 4.1.0 (#120: Sale.ticket)', () => {
+    expect(POS_CONTRACT_VERSION).toBe('4.1.0');
+  });
+
   it('mismo major y minor igual o mayor', () => {
-    expect(isCompatibleContract('4.0.0')).toBe(true);
+    expect(isCompatibleContract('4.1.0')).toBe(true);
     expect(isCompatibleContract('4.2.1')).toBe(true);
   });
 
@@ -13,14 +21,14 @@ describe('isCompatibleContract (#99)', () => {
   });
 
   it('un backend en un minor anterior es incompatible', () => {
-    expect(isCompatibleContract('4.0.0', '4.1.0')).toBe(false);
+    expect(isCompatibleContract('4.0.0')).toBe(false);
   });
 
   it('un formato inválido es incompatible', () => {
     expect(isCompatibleContract('abc')).toBe(false);
   });
 
-  it('contractMajor', () => {
-    expect(contractMajor('4.0.0')).toBe('4');
+  it('contractRequirement', () => {
+    expect(contractRequirement('4.1.0')).toBe('4.1 o posterior');
   });
 });
