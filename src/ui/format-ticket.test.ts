@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { saveSyncConfig } from '../sync/config.ts';
 import { formatTime } from './format.ts';
-import { formatTicketDate, ticketLabel, voidOfLabel } from './format-ticket.ts';
+import { formatTicketDate, receiptLabel, ticketLabel, voidOfLabel } from './format-ticket.ts';
 
 const at = '2026-09-24T17:05:00.000Z';
 
@@ -33,5 +33,12 @@ describe('format-ticket (#120)', () => {
     ).toBe('Anulación del #12 del 23/09');
     expect(voidOfLabel(voidTicket, { createdAt: at })).toBe(`Anulación de ${formatTime(at)}`);
     expect(voidOfLabel(voidTicket, undefined)).toBe('Anulación');
+  });
+});
+
+describe('receiptLabel (#101)', () => {
+  it('"Recibo #3", o "Recibo" a secas sin número', () => {
+    expect(receiptLabel({ receipt: { date: '2026-09-27', number: 3 } })).toBe('Recibo #3');
+    expect(receiptLabel({})).toBe('Recibo');
   });
 });

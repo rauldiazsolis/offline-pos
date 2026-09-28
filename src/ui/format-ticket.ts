@@ -1,3 +1,4 @@
+import type { CustomerPayment } from '../domain/customer-payment.ts';
 import type { Sale } from '../domain/sale.ts';
 import { localDateKey } from '../domain/ticket-number.ts';
 import { formatTime } from './format.ts';
@@ -10,6 +11,11 @@ export function formatTicketDate(date: string): string {
 /** "Ticket #12"; una venta anterior a la numeración (#120) es "Ticket" a secas. */
 export function ticketLabel(sale: Pick<Sale, 'ticket'>): string {
   return sale.ticket !== undefined ? `Ticket #${String(sale.ticket.number)}` : 'Ticket';
+}
+
+/** "Recibo #3" (#101); una cobranza anterior a la numeración es "Recibo" a secas. */
+export function receiptLabel(payment: Pick<CustomerPayment, 'receipt'>): string {
+  return payment.receipt !== undefined ? `Recibo #${String(payment.receipt.number)}` : 'Recibo';
 }
 
 /**

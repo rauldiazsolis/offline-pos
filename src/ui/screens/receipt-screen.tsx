@@ -12,7 +12,8 @@ import {
   type CollectionReceipt,
 } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { ticketLabel } from '../format-ticket.ts';
+import { formatBalance } from '../format-balance.ts';
+import { receiptLabel, ticketLabel } from '../format-ticket.ts';
 import './receipt-screen.css';
 
 function lineLabel(line: SaleLine): string {
@@ -189,12 +190,39 @@ function SaleReceiptBody({ sale }: { sale: Sale }) {
   );
 }
 
-/** Recibo de una cobranza sin venta (#101). */
+const dividerStyle = { border: 'none', borderTop: '1px dashed var(--color-border)' };
+const receiptRowStyle = { display: 'flex', justifyContent: 'space-between' };
+
+/**
+ * Recibo de una cobranza sin venta (#101): número del día, cliente, pagos por medio, total y cómo
+ * quedó el saldo. Sin vuelto: el total es lo acreditado.
+ */
 function CollectionReceiptBody({ receipt }: { receipt: CollectionReceipt }) {
+  const { payment } = receipt;
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: 0 }}>Recibo de cobranza</h1>
+      <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{receiptLabel(payment)}</p>
+      <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+        {new Date(payment.createdAt).toLocaleString()}
+      </p>
       <p style={{ margin: 0 }}>{receipt.customerName}</p>
+      <hr style={dividerStyle} />
+      {payment.payments.map((item, index) => (
+        <div key={index} style={receiptRowStyle}>
+          <span>{PAYMENT_METHOD_LABELS[item.method]}</span>
+          <span>{formatMoney(item.amount)}</span>
+        </div>
+      ))}
+      <hr style={dividerStyle} />
+      <div style={{ ...receiptRowStyle, fontWeight: 'bold' }}>
+        <span>Total</span>
+        <span>{formatMoney(payment.total)}</span>
+      </div>
+      <p style={{ margin: 0 }}>{`Saldo anterior: ${formatBalance(receipt.balanceBefore)}`}</p>
+      <p style={{ margin: 0, fontWeight: 'bold' }}>
+        {`Saldo nuevo: ${formatBalance(receipt.balanceAfter)}`}
+      </p>
     </>
   );
 }
