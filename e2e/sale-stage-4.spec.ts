@@ -105,11 +105,12 @@ test('anular genera un ticket propio y /ANULAR marca la original y la anulación
 
   await commandBar.fill('/anular');
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Anular venta' })).toBeVisible();
-  await expect(page.getByRole('listitem').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Anular' })).toBeVisible();
+  await expect(page.getByTestId('void-row').first()).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(page.getByText('¿Anular esta venta? Enter confirma, Esc cancela.')).toBeVisible();
+  await expect(page.getByRole('dialog')).toContainText('¿Anular el Ticket #2?');
   await page.keyboard.press('Enter');
+  await expect(page.getByText('Anulado el Ticket #2 con el Ticket #3')).toBeVisible();
   await expect(commandBar).toBeVisible();
 
   const sales = await getAllFromStore<StoredSale>(page, 'sales');
@@ -119,6 +120,6 @@ test('anular genera un ticket propio y /ANULAR marca la original y la anulación
 
   await commandBar.fill('/anular');
   await commandBar.press('Enter');
-  await expect(page.getByText('Anulada', { exact: true })).toBeVisible();
-  await expect(page.getByText(/^Anulación del #2 · 900,00$/)).toBeVisible();
+  await expect(page.getByText('· Anulada', { exact: true })).toBeVisible();
+  await expect(page.getByText('· Anulación del #2', { exact: true })).toBeVisible();
 });

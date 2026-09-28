@@ -31,7 +31,7 @@ async function routeRestBackend(page: Page): Promise<{ pulls: () => number }> {
       path === '/sync/pull'
         ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
         : path === '/info'
-          ? { contractVersion: '4.2.0', status: 'ok' }
+          ? { contractVersion: '4.3.0', status: 'ok' }
           : {};
     await route.fulfill({
       status: 200,
@@ -50,7 +50,7 @@ async function routeSheetsBridge(page: Page): Promise<void> {
     const { action } = JSON.parse(route.request().postData() ?? '{}') as { action?: string };
     const data =
       action === 'info'
-        ? { contractVersion: '4.2.0', status: 'ok' }
+        ? { contractVersion: '4.3.0', status: 'ok' }
         : {
             products: {
               items: [

@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
         ok: true,
         data:
           action === 'info'
-            ? { contractVersion: '4.2.0', status: 'ok' }
+            ? { contractVersion: '4.3.0', status: 'ok' }
             : { products: { items: [] }, customers: { items: [] }, lots: {} },
       }),
     });

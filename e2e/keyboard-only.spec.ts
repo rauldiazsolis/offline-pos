@@ -31,7 +31,7 @@ test('venta → /ANULAR → Esc → la barra de comandos recupera el foco', asyn
 
   await commandBar.fill('/ANULAR');
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Anular venta' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Anular' })).toBeVisible();
 
   await page.keyboard.press('Escape');
 
@@ -137,7 +137,7 @@ test('venta → /ANULAR → click en "Volver a la venta (Esc)" → la barra de c
 
   await commandBar.fill('/ANULAR');
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Anular venta' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Anular' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Volver a la venta (Esc)' }).click();
 
