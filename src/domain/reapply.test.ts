@@ -88,6 +88,25 @@ describe('reapplyEffects', () => {
     expect(reapplyEffects(events).balance).toEqual(new Map([['c1', -40]]));
   });
 
+  it('la anulación de una cobranza devuelve el saldo (#125)', () => {
+    const payment = (id: string, total: number, voidsPaymentId?: string): OutboxEvent => ({
+      ...envelope,
+      id,
+      type: 'customer-payment',
+      payment: {
+        id,
+        customerId: 'c1',
+        payments: [{ method: 'cash', amount: total }],
+        total,
+        createdAt: now,
+        ...(voidsPaymentId !== undefined ? { voidsPaymentId } : {}),
+      },
+    });
+    expect(reapplyEffects([payment('cp1', 40), payment('cp2', -40, 'cp1')]).balance).toEqual(
+      new Map([['c1', 0]]),
+    );
+  });
+
   it('cliente, holds y movimientos de caja no mueven stock ni saldo', () => {
     const events: OutboxEvent[] = [
       {

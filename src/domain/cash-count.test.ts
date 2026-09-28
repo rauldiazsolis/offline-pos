@@ -83,6 +83,20 @@ describe('calculateCashBalance', () => {
 });
 
 describe('calculateCashBalance con cobranzas (#101)', () => {
+  it('una anulación de cobranza resta su efectivo (#125)', () => {
+    expect(
+      calculateCashBalance({
+        lastCount: undefined,
+        sales: [],
+        movements: [],
+        collections: [
+          { createdAt: '2026-09-28T09:00:00.000Z', payments: [{ method: 'cash', amount: 200 }] },
+          { createdAt: '2026-09-28T10:00:00.000Z', payments: [{ method: 'cash', amount: -200 }] },
+        ],
+      }),
+    ).toBe(0);
+  });
+
   it('suma el efectivo de las cobranzas posteriores al arqueo', () => {
     expect(
       calculateCashBalance({

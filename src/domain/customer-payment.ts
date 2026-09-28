@@ -1,12 +1,14 @@
 import { err, ok, type Result } from './result.ts';
 import { roundAmount } from './rounding.ts';
 import type { Payment, PaymentMethod } from './sale.ts';
+import { isWithinVoidWindow } from './sale-lifecycle.ts';
 import type { DailyNumber } from './ticket-number.ts';
 
 /**
  * Cobranza sin venta (contrato v3, #96 — la genera la Etapa 6): un pago a
  * favor de un cliente identificado, tenga o no cuenta corriente. Sin vuelto:
- * lo tendido es lo acreditado. No se anula (RNF-07).
+ * lo tendido es lo acreditado. Se anula con otra cobranza negativa (#125); la
+ * original no se toca (RNF-07).
  */
 export type CustomerPayment = {
   id: string; // ULID
@@ -16,6 +18,8 @@ export type CustomerPayment = {
   createdAt: string; // ISO 8601
   /** Número de recibo del día local (#101). Una cobranza anterior no tiene y nunca se le inventa. */
   receipt?: DailyNumber;
+  /** Solo en la anulación de una cobranza (4.3.0, #125): la cobranza que anula. */
+  voidsPaymentId?: string;
 };
 
 export function buildCustomerPayment(params: {
@@ -41,6 +45,45 @@ export function buildCustomerPayment(params: {
     total,
     createdAt: params.now,
   });
+}
+
+/**
+ * La anulación de una cobranza como documento propio (#125), espejo de `buildVoidSale`: los mismos
+ * medios en negativo, el total invertido y `voidsPaymentId` a la original, que no se toca (RNF-07).
+ * Sin `receipt`: el número lo asigna storage dentro de la transacción, como a cualquier cobranza.
+ */
+export function buildVoidCustomerPayment(
+  original: CustomerPayment,
+  params: { id: string; now: string; isAlreadyVoided: boolean },
+): Result<CustomerPayment> {
+  if (original.voidsPaymentId !== undefined) {
+    return err('customer-payment/cannot-void-a-void', undefined);
+  }
+  if (params.isAlreadyVoided) {
+    return err('customer-payment/already-voided', undefined);
+  }
+  if (!isWithinVoidWindow(original, params.now)) {
+    return err('customer-payment/void-window-expired', { createdAt: original.createdAt });
+  }
+  return ok({
+    id: params.id,
+    customerId: original.customerId,
+    payments: original.payments.map((payment) => ({
+      method: payment.method,
+      amount: -payment.amount,
+    })),
+    total: -original.total,
+    createdAt: params.now,
+    voidsPaymentId: original.id,
+  });
+}
+
+/** Anulada: hay una cobranza que la anula (#125). */
+export function isVoidedPayment(
+  payment: Pick<CustomerPayment, 'id'>,
+  voidedPaymentIds: ReadonlySet<string>,
+): boolean {
+  return voidedPaymentIds.has(payment.id);
 }
 
 /** Los medios de una cobranza (#101): todos menos cuenta corriente, en el orden de Cobro. */

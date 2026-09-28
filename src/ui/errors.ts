@@ -127,6 +127,14 @@ export function describeError(failure: Failure): string {
         : 'Los montos de la cobranza tienen que ser mayores a cero.';
     case 'customer-payment/persist-failed':
       return `No se pudo guardar la cobranza (${failure.meta.message}).`;
+    case 'customer-payment/cannot-void-a-void':
+      return 'Esta cobranza ya es una anulación: no se puede anular.';
+    case 'customer-payment/already-voided':
+      return 'Esa cobranza ya estaba anulada.';
+    case 'customer-payment/void-window-expired':
+      return 'Solo se pueden anular cobranzas de las últimas 24 horas.';
+    case 'customer-payment/not-found':
+      return 'No se encontró esa cobranza.';
     case 'demo/reset-failed':
       return `No se pudo reiniciar la demo (${failure.meta.message}).`;
     case 'demo/backend-reset-failed':

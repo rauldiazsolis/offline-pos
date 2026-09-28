@@ -37,6 +37,25 @@ describe('describeError', () => {
     ).toBe('Ingresá al menos un monto.');
   });
 
+  it('códigos de la anulación de una cobranza (#125)', () => {
+    expect(
+      describeError({ ok: false, error: 'customer-payment/cannot-void-a-void', meta: undefined }),
+    ).toBe('Esta cobranza ya es una anulación: no se puede anular.');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/already-voided', meta: undefined }),
+    ).toBe('Esa cobranza ya estaba anulada.');
+    expect(
+      describeError({
+        ok: false,
+        error: 'customer-payment/void-window-expired',
+        meta: { createdAt: '2026-09-27T09:00:00.000Z' },
+      }),
+    ).toBe('Solo se pueden anular cobranzas de las últimas 24 horas.');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/not-found', meta: { paymentId: 'cp1' } }),
+    ).toBe('No se encontró esa cobranza.');
+  });
+
   it('demo/unavailable-for-connector', () => {
     const message = describeError({
       ok: false,
