@@ -30,7 +30,14 @@ describe('isCleanupDue', () => {
     expect(isCleanupDue(undefined, now)).toBe(true);
     const last = {
       at: now,
-      counts: { sales: 0, stockMovements: 0, accountMovements: 0, outbox: 0, cashSessions: 0 },
+      counts: {
+        sales: 0,
+        stockMovements: 0,
+        accountMovements: 0,
+        outbox: 0,
+        cashMovements: 0,
+        cashCounts: 0,
+      },
     };
     expect(
       isCleanupDue(last, new Date(Date.parse(now) + CLEANUP_INTERVAL_MS - 1).toISOString()),
@@ -38,6 +45,21 @@ describe('isCleanupDue', () => {
     expect(isCleanupDue(last, new Date(Date.parse(now) + CLEANUP_INTERVAL_MS).toISOString())).toBe(
       true,
     );
+  });
+});
+
+describe('getLastCleanup', () => {
+  it('un registro con la forma anterior (turnos) se ignora y la limpieza vuelve a tocar', () => {
+    localStorage.setItem(
+      'offline-pos:cleanup:last-run',
+      JSON.stringify({
+        at: now,
+        counts: { sales: 0, stockMovements: 0, accountMovements: 0, outbox: 0, cashSessions: 0 },
+        anchorClosedAt: now,
+      }),
+    );
+    expect(getLastCleanup()).toBeUndefined();
+    expect(isCleanupDue(getLastCleanup(), now)).toBe(true);
   });
 });
 

@@ -39,10 +39,13 @@ export function formatLotIssue(issue: LotIssue): string {
   return issue.eventId !== undefined ? `${issue.message} (evento ${issue.eventId})` : issue.message;
 }
 
-/** Última limpieza de datos locales y ancla del arqueo (#98) — `/DIAGNOSTICO` y `pos.status()`. */
+/**
+ * Última limpieza de datos locales y su ancla, el último arqueo (#98, #100) — `/DIAGNOSTICO` y
+ * `pos.status()`.
+ */
 export function formatCleanup(record: CleanupRecord | undefined): { last: string; anchor: string } {
   if (record === undefined) {
-    return { last: 'Todavía no corrió', anchor: 'Sin turnos cerrados' };
+    return { last: 'Todavía no corrió', anchor: 'Sin arqueos' };
   }
   const { counts } = record;
   const movements = counts.stockMovements + counts.accountMovements;
@@ -50,10 +53,10 @@ export function formatCleanup(record: CleanupRecord | undefined): { last: string
     last:
       `${new Date(record.at).toLocaleString()} — ${String(counts.sales)} ventas, ` +
       `${String(movements)} movimientos, ${String(counts.outbox)} eventos, ` +
-      `${String(counts.cashSessions)} turnos`,
+      `${String(counts.cashMovements)} movimientos de caja, ${String(counts.cashCounts)} arqueos`,
     anchor:
-      record.anchorClosedAt !== undefined
-        ? `Último turno cerrado: ${new Date(record.anchorClosedAt).toLocaleString()}`
-        : 'Sin turnos cerrados',
+      record.anchorAt !== undefined
+        ? `Último arqueo: ${new Date(record.anchorAt).toLocaleString()}`
+        : 'Sin arqueos',
   };
 }

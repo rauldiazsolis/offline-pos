@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { runLocalCleanup, type CleanupReport } from '../storage/local-cleanup.ts';
 import { getAwaitingLots, getCurrentPushLot } from './push-lot.ts';
 
@@ -13,10 +14,35 @@ export const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type CleanupRecord = CleanupReport & { at: string };
 
+/**
+ * Un registro guardado antes de la Etapa 5 (#100: con turnos) no valida: se lee como si la
+ * limpieza no hubiera corrido nunca y vuelve a correr — nunca borra de más.
+ */
+const cleanupRecordSchema = z.object({
+  at: z.string(),
+  counts: z.object({
+    sales: z.number(),
+    stockMovements: z.number(),
+    accountMovements: z.number(),
+    outbox: z.number(),
+    cashMovements: z.number(),
+    cashCounts: z.number(),
+  }),
+  anchorAt: z.string().optional(),
+});
+
 export function getLastCleanup(): CleanupRecord | undefined {
   try {
     const raw = localStorage.getItem(LAST_CLEANUP_KEY);
-    return raw === null ? undefined : (JSON.parse(raw) as CleanupRecord);
+    if (raw === null) {
+      return undefined;
+    }
+    const parsed = cleanupRecordSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      return undefined;
+    }
+    const { anchorAt, ...rest } = parsed.data;
+    return anchorAt !== undefined ? { ...rest, anchorAt } : rest;
   } catch {
     return undefined;
   }

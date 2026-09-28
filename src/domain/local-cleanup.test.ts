@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { CashSession } from './cash-session.ts';
 import { planLocalCleanup, type CleanupInput } from './local-cleanup.ts';
 import type { OutboxEvent } from './outbox.ts';
 
 const now = '2026-09-24T12:00:00.000Z';
 const old = '2026-09-10T12:00:00.000Z'; // 14 días
 const recent = '2026-09-20T12:00:00.000Z'; // 4 días
+const twelveDays = '2026-09-12T12:00:00.000Z';
+const nineDays = '2026-09-15T12:00:00.000Z';
+const eightDays = '2026-09-16T12:00:00.000Z';
 
 function input(overrides: Partial<CleanupInput> = {}): CleanupInput {
   return {
@@ -16,18 +18,11 @@ function input(overrides: Partial<CleanupInput> = {}): CleanupInput {
     stockMovements: [],
     accountMovements: [],
     syncedEvents: [],
-    cashSessions: [],
+    cashMovements: [],
+    cashCounts: [],
+    // Por defecto hay un arqueo reciente: lo anterior sigue la regla de edad.
+    lastCount: { id: 'c-anchor', createdAt: recent },
     ...overrides,
-  };
-}
-
-function session(id: string, sales: string[], closedAt?: string): CashSession {
-  return {
-    id,
-    openedAt: old,
-    openingAmount: 0,
-    sales,
-    ...(closedAt !== undefined ? { closedAt } : {}),
   };
 }
 
@@ -92,36 +87,75 @@ describe('planLocalCleanup', () => {
     expect(plan.outbox).toEqual(['e-old']);
   });
 
-  it('el último turno cerrado y el abierto son el ancla: se conservan con sus ventas', () => {
+  it('sin ningún arqueo no se borran ventas ni movimientos de caja (base 0 del saldo)', () => {
     const plan = planLocalCleanup(
       input({
-        sales: [
-          { id: 's-a', createdAt: old },
-          { id: 's-b', createdAt: old },
-          { id: 's-c', createdAt: old },
-        ],
-        cashSessions: [
-          session('t1', ['s-a'], '2026-09-05T12:00:00.000Z'),
-          session('t2', ['s-b'], '2026-09-11T12:00:00.000Z'),
-          session('t3', ['s-c']),
-        ],
+        lastCount: undefined,
+        sales: [{ id: 's-old', createdAt: old }],
+        cashMovements: [{ id: 'cm-old', createdAt: old }],
+        stockMovements: [{ id: 'm-old', createdAt: old }],
       }),
     );
-    expect(plan.anchor?.id).toBe('t2');
-    expect(plan.cashSessions).toEqual(['t1']);
-    expect(plan.sales).toEqual(['s-a']);
+    expect(plan.sales).toEqual([]);
+    expect(plan.cashMovements).toEqual([]);
+    expect(plan.stockMovements).toEqual(['m-old']);
+    expect(plan.anchorAt).toBeUndefined();
   });
 
-  it('un turno cerrado hace menos de 7 días no se borra aunque no sea el ancla', () => {
+  it('el último arqueo es el ancla: lo posterior se conserva aunque tenga más de 7 días', () => {
     const plan = planLocalCleanup(
       input({
-        cashSessions: [
-          session('t1', [], '2026-09-19T12:00:00.000Z'),
-          session('t2', [], '2026-09-21T12:00:00.000Z'),
+        lastCount: { id: 'c-9', createdAt: nineDays },
+        sales: [
+          { id: 's-10', createdAt: old },
+          { id: 's-8', createdAt: eightDays },
+        ],
+        stockMovements: [
+          { id: 'm-10', createdAt: old },
+          { id: 'm-8', createdAt: eightDays },
+        ],
+        cashMovements: [
+          { id: 'cm-10', createdAt: old },
+          { id: 'cm-8', createdAt: eightDays },
+        ],
+        cashCounts: [
+          { id: 'c-12', createdAt: twelveDays },
+          { id: 'c-9', createdAt: nineDays },
         ],
       }),
     );
-    expect(plan.cashSessions).toEqual([]);
+    expect(plan.anchorAt).toBe(nineDays);
+    expect(plan.sales).toEqual(['s-10']);
+    expect(plan.stockMovements).toEqual(['m-10']);
+    expect(plan.cashMovements).toEqual(['cm-10']);
+    expect(plan.cashCounts).toEqual(['c-12']);
+  });
+
+  it('un movimiento de caja con su evento pendiente no se borra', () => {
+    const pendingEvents = [
+      { id: 'cm1', type: 'cash-movement', status: 'pending', createdAt: old },
+    ] as OutboxEvent[];
+    const plan = planLocalCleanup(
+      input({ pendingEvents, cashMovements: [{ id: 'cm1', createdAt: old }] }),
+    );
+    expect(plan.cashMovements).toEqual([]);
+  });
+
+  it('un arqueo viejo espera a que el evento de su ajuste no esté pendiente', () => {
+    const pendingEvents = [
+      { id: 'adj1', type: 'cash-movement', status: 'pending', createdAt: old },
+    ] as OutboxEvent[];
+    const plan = planLocalCleanup(
+      input({
+        pendingEvents,
+        cashCounts: [
+          { id: 'c-a', createdAt: old, adjustmentId: 'adj1' },
+          { id: 'c-b', createdAt: old, adjustmentId: 'adj2' },
+          { id: 'c-c', createdAt: old },
+        ],
+      }),
+    );
+    expect(plan.cashCounts).toEqual(['c-b', 'c-c']);
   });
 
   it('un movimiento pendiente nunca se borra', () => {
@@ -156,19 +190,6 @@ describe('planLocalCleanup', () => {
     );
     expect(plan.sales).toEqual(['s-old']);
     expect(plan.stockMovements).toEqual([]);
-  });
-
-  it('los movimientos de las ventas del ancla se conservan con ellas', () => {
-    const plan = planLocalCleanup(
-      input({
-        sales: [{ id: 's-a', createdAt: old }],
-        stockMovements: [{ id: 'm-a', saleId: 's-a', createdAt: old }],
-        accountMovements: [{ id: 'a-a', saleId: 's-a', createdAt: old }],
-        cashSessions: [session('t1', ['s-a'], old)],
-      }),
-    );
-    expect(plan.stockMovements).toEqual([]);
-    expect(plan.accountMovements).toEqual([]);
   });
 
   it('un movimiento de cuenta viaja en el evento de su venta: se conserva mientras esté pendiente', () => {
