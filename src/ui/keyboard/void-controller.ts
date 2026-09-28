@@ -1,4 +1,5 @@
-import { listVoidCandidates, voidSaleAndPersist } from '../../storage/sale-repository.ts';
+import { voidSaleAndPersist } from '../../storage/sale-repository.ts';
+import { listVoidCandidates } from '../../storage/void-repository.ts';
 import { describeError } from '../errors.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
@@ -9,6 +10,7 @@ import {
   voidLoadedSignal,
   voidSelectionIndexSignal,
   voidableSalesSignal,
+  type SaleVoidCandidate,
 } from '../state/void-sale.ts';
 
 function isVoidable(index: number): boolean {
@@ -26,7 +28,9 @@ export async function loadVoidableSales(): Promise<void> {
   voidConfirmingSignal.value = false;
   voidErrorSignal.value = null;
   voidLoadedSignal.value = false;
-  voidableSalesSignal.value = await listVoidCandidates(new Date().toISOString());
+  voidableSalesSignal.value = (await listVoidCandidates(new Date().toISOString())).filter(
+    (candidate): candidate is SaleVoidCandidate => candidate.kind === 'sale',
+  );
   voidLoadedSignal.value = true;
   const first = voidableSalesSignal.value.findIndex((candidate) => candidate.state === 'voidable');
   voidSelectionIndexSignal.value = first === -1 ? null : first;

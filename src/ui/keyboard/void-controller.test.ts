@@ -107,6 +107,7 @@ describe('exitVoidScreen', () => {
     activeScreenSignal.value = 'void';
     voidableSalesSignal.value = [
       {
+        kind: 'sale',
         sale: {
           id: 's1',
           lines: [],
@@ -171,7 +172,7 @@ describe('marcas de anulado (#99)', () => {
     await loadVoidableSales();
 
     const states = voidableSalesSignal.value.map((candidate) => candidate.state);
-    expect(states).toEqual(['voidable', 'void-ticket', 'voided']);
+    expect(states).toEqual(['voidable', 'void-document', 'voided']);
     expect(voidSelectionIndexSignal.value).toBe(0);
     expect(voidableSalesSignal.value[0]?.sale.id).toBe(voidableId);
     moveVoidSelection(1);

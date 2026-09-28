@@ -4,7 +4,7 @@ import type { Cart } from '../domain/cart.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
 import type { Sale } from '../domain/sale.ts';
-import { closeSaleAndPersist, listVoidCandidates, voidSaleAndPersist } from './sale-repository.ts';
+import { closeSaleAndPersist, voidSaleAndPersist } from './sale-repository.ts';
 import { localDateKey } from '../domain/ticket-number.ts';
 import { getTicketCounter, setTicketCounter, TICKET_COUNTER_KEY } from '../sync/ticket-counter.ts';
 
@@ -296,55 +296,6 @@ describe('voidSaleAndPersist (anulación como ticket propio, #99)', () => {
       ok: false,
       error: 'sale/cannot-void-a-void',
     });
-  });
-});
-
-describe('listVoidCandidates (#99)', () => {
-  const now = '2026-09-24T12:00:00.000Z';
-  const sale = (id: string, createdAt: string, extra: Partial<Sale> = {}): Sale => ({
-    id,
-    lines: [],
-    payments: [],
-    total: 100,
-    status: 'closed',
-    createdAt,
-    ...extra,
-  });
-
-  it('solo las últimas 24 h, más nuevo primero, con el estado de cada una', async () => {
-    await db.sales.bulkAdd([
-      sale('old', '2026-09-23T11:00:00.000Z'),
-      sale('voided', '2026-09-24T09:00:00.000Z'),
-      sale('void-of', '2026-09-24T10:00:00.000Z', { voidsSaleId: 'voided', total: -100 }),
-      sale('common', '2026-09-24T11:00:00.000Z'),
-      sale('legacy', '2026-09-24T08:00:00.000Z', { status: 'voided' }),
-    ]);
-
-    const candidates = await listVoidCandidates(now);
-
-    expect(candidates.map((candidate) => [candidate.sale.id, candidate.state])).toEqual([
-      ['common', 'voidable'],
-      ['void-of', 'void-ticket'],
-      ['voided', 'voided'],
-      ['legacy', 'voided'],
-    ]);
-    expect(candidates[1]?.original?.id).toBe('voided');
-  });
-
-  it('tope de 20', async () => {
-    await db.sales.bulkAdd(
-      Array.from({ length: 25 }, (_, index) =>
-        sale(
-          `s${String(index).padStart(2, '0')}`,
-          `2026-09-24T11:${String(index).padStart(2, '0')}:00.000Z`,
-        ),
-      ),
-    );
-
-    const candidates = await listVoidCandidates(now);
-
-    expect(candidates).toHaveLength(20);
-    expect(candidates[0]?.sale.id).toBe('s24');
   });
 });
 

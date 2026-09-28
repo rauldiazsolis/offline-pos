@@ -1,7 +1,6 @@
 import { useSignalEffect } from '@preact/signals';
 import { useLayoutEffect } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
-import type { VoidCandidate } from '../../storage/sale-repository.ts';
 import { formatMoney } from '../format.ts';
 import { ticketLabel, voidOfLabel } from '../format-ticket.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
@@ -21,14 +20,15 @@ import {
   voidLoadedSignal,
   voidSelectionIndexSignal,
   voidableSalesSignal,
+  type SaleVoidCandidate,
 } from '../state/void-sale.ts';
 
 /** Texto de una fila sin acción (#99): la original ya anulada, o el ticket de una anulación. */
-function candidateLabel(candidate: VoidCandidate): string | undefined {
+function candidateLabel(candidate: SaleVoidCandidate): string | undefined {
   if (candidate.state === 'voided') {
     return 'Anulada';
   }
-  if (candidate.state === 'void-ticket') {
+  if (candidate.state === 'void-document') {
     const { original } = candidate;
     const label = voidOfLabel(candidate.sale, original);
     return original !== undefined ? `${label} · ${formatMoney(original.total)}` : label;
