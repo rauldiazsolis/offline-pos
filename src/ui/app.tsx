@@ -9,7 +9,7 @@ import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
 import { ReceiptScreen } from './screens/receipt-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
-import { VoidSaleScreen } from './screens/void-sale-screen.tsx';
+import { VoidScreen } from './screens/void-screen.tsx';
 import { activeScreenSignal } from './state/screen.ts';
 import { connectionStateSignal } from './state/sync.ts';
 import { MIN_SUPPORTED_WIDTH_PX, viewportWidthSignal } from './state/viewport.ts';
@@ -29,7 +29,7 @@ function ActiveScreen() {
     case 'receipt':
       return <ReceiptScreen />;
     case 'void':
-      return <VoidSaleScreen />;
+      return <VoidScreen />;
     case 'config':
       return <ConfigScreen />;
     case 'cash':
