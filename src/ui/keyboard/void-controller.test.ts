@@ -21,6 +21,7 @@ import {
   voidConfirmingSignal,
   voidErrorSignal,
   voidFilterSignal,
+  voidMessageSignal,
   voidSelectionIndexSignal,
 } from '../state/void.ts';
 import {
@@ -30,7 +31,6 @@ import {
   escapeVoidScreen,
   exitVoidScreen,
   loadVoidCandidates,
-  moveVoidSelection,
   selectForVoid,
   updateVoidFilter,
   voidBalancePreview,
@@ -97,7 +97,8 @@ beforeEach(async () => {
 
   voidCandidatesSignal.value = [];
   voidFilterSignal.value = '';
-  voidSelectionIndexSignal.value = null;
+  voidSelectionIndexSignal.value = 0;
+  voidMessageSignal.value = null;
   voidConfirmingSignal.value = false;
   voidErrorSignal.value = null;
   commandBarNoticeSignal.value = null;
@@ -140,11 +141,13 @@ describe('loadVoidCandidates', () => {
     expect(voidSelectionIndexSignal.value).toBe(0);
   });
 
-  it('no selecciona nada si no hay ventas', async () => {
+  it('sin ventas la lista queda vacía y Enter no hace nada', async () => {
     await loadVoidCandidates();
+    selectForVoid();
 
     expect(filteredVoidCandidatesSignal.value).toEqual([]);
-    expect(voidSelectionIndexSignal.value).toBeNull();
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBeNull();
   });
 });
 
@@ -196,14 +199,7 @@ describe('exitVoidScreen', () => {
     expect(activeScreenSignal.value).toBe('sale');
     expect(voidCandidatesSignal.value).toEqual([]);
     expect(voidFilterSignal.value).toBe('');
-    expect(voidSelectionIndexSignal.value).toBeNull();
-  });
-});
-
-describe('moveVoidSelection', () => {
-  it('no hace nada si no hay ventas', () => {
-    moveVoidSelection(1);
-    expect(voidSelectionIndexSignal.value).toBeNull();
+    expect(voidSelectionIndexSignal.value).toBe(0);
   });
 });
 
@@ -228,50 +224,121 @@ describe('activateVoidRow (click, Etapa 2 de #94)', () => {
   });
 });
 
-describe('marcas de anulado (#99)', () => {
-  async function seedVoidedAndVoidable(): Promise<{ voidableId: string }> {
-    const first = await sell();
-    tick();
-    const voided = await voidSaleAndPersist(first.id);
-    if (!voided.ok) throw new Error('setup falló');
-    const second = await sell();
-    return { voidableId: second.id };
-  }
-
-  it('preselecciona el primer anulable y ↑/↓ saltean las filas sin acción', async () => {
-    const { voidableId } = await seedVoidedAndVoidable();
-
-    await loadVoidCandidates();
-
-    const states = filteredVoidCandidatesSignal.value.map((candidate) => candidate.state);
-    expect(states).toEqual(['voidable', 'void-document', 'voided']);
-    expect(voidSelectionIndexSignal.value).toBe(0);
-    const first = filteredVoidCandidatesSignal.value[0];
-    expect(first !== undefined ? candidateId(first) : undefined).toBe(voidableId);
-    moveVoidSelection(1);
-    expect(voidSelectionIndexSignal.value).toBe(0);
-  });
-
-  it('activateVoidRow sobre una fila sin acción no hace nada', async () => {
-    await seedVoidedAndVoidable();
-    await loadVoidCandidates();
-
-    activateVoidRow(2);
-
-    expect(voidSelectionIndexSignal.value).toBe(0);
-    expect(voidConfirmingSignal.value).toBe(false);
-  });
-
-  it('sin ninguna fila anulable, la selección queda en null y no confirma', async () => {
+describe('filas sin acción (#99; navegables desde la prueba manual de #125)', () => {
+  it('la selección arranca en la fila más nueva, aunque no se pueda anular', async () => {
     const sale = await sell();
     tick();
     await voidSaleAndPersist(sale.id);
 
     await loadVoidCandidates();
+
+    const states = filteredVoidCandidatesSignal.value.map((candidate) => candidate.state);
+    expect(states).toEqual(['void-document', 'voided']);
+    expect(voidSelectionIndexSignal.value).toBe(0);
+  });
+
+  it('Enter sobre la anulación no abre el modal: dice que es una anulación', async () => {
+    const sale = await sell();
+    tick();
+    await voidSaleAndPersist(sale.id);
+    await loadVoidCandidates();
+
     selectForVoid();
 
-    expect(voidSelectionIndexSignal.value).toBeNull();
     expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBe(
+      'El Ticket #2 es la anulación del Ticket #1: no se puede anular.',
+    );
+  });
+
+  it('Enter sobre la original anulada no abre el modal: dice con qué se anuló', async () => {
+    const sale = await sell();
+    tick();
+    await voidSaleAndPersist(sale.id);
+    await loadVoidCandidates();
+    voidSelectionIndexSignal.value = 1;
+
+    selectForVoid();
+
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBe('El Ticket #1 ya está anulado (con el Ticket #2).');
+  });
+
+  it('click en una fila sin acción la selecciona y muestra el mensaje', async () => {
+    const payment = await collect();
+    tick();
+    await voidCollectionAndPersist(payment.id);
+    await loadVoidCandidates();
+
+    activateVoidRow(1);
+
+    expect(voidSelectionIndexSignal.value).toBe(1);
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBe('El Recibo #1 ya está anulado (con el Recibo #2).');
+    activateVoidRow(0);
+    expect(voidMessageSignal.value).toBe(
+      'El Recibo #2 es la anulación del Recibo #1: no se puede anular.',
+    );
+  });
+
+  it('con el filtro, la original anulada sigue nombrando a su anulación aunque no se vea', async () => {
+    // Una línea libre sin dígitos: "#1" solo encuentra el ticket 1, no su anulación.
+    tick();
+    const closed = await closeSaleAndPersist({
+      cart: { lines: [{ kind: 'freeform', description: 'regalo', qty: 1, unitPrice: 100 }] },
+      payments: [{ method: 'cash', amount: 100 }],
+    });
+    if (!closed.ok) throw new Error(closed.error);
+    const sale = closed.value;
+    tick();
+    await voidSaleAndPersist(sale.id);
+    await loadVoidCandidates();
+    updateVoidFilter('#1');
+
+    selectForVoid();
+
+    expect(filteredVoidCandidatesSignal.value).toHaveLength(1);
+    expect(voidMessageSignal.value).toBe('El Ticket #1 ya está anulado (con el Ticket #2).');
+  });
+
+  it('una venta con el status legado no tiene documento de anulación que nombrar', async () => {
+    await db.sales.add({
+      id: 'legacy',
+      lines: [],
+      payments: [],
+      total: 100,
+      status: 'voided',
+      createdAt: new Date(clock - 60_000).toISOString(),
+    });
+    await loadVoidCandidates();
+
+    selectForVoid();
+
+    expect(voidMessageSignal.value).toMatch(/^El ticket de las .+ ya está anulado\.$/);
+  });
+
+  it('una anulación cuya original ya no está se nombra sin ella', async () => {
+    const payment = await collect();
+    tick();
+    await voidCollectionAndPersist(payment.id);
+    await db.customerPayments.delete(payment.id);
+    await loadVoidCandidates();
+
+    selectForVoid();
+
+    expect(voidMessageSignal.value).toBe('El Recibo #2 es una anulación: no se puede anular.');
+  });
+
+  it('la próxima acción borra el mensaje', async () => {
+    const sale = await sell();
+    tick();
+    await voidSaleAndPersist(sale.id);
+    await loadVoidCandidates();
+    selectForVoid();
+
+    updateVoidFilter('t');
+
+    expect(voidMessageSignal.value).toBeNull();
   });
 });
 
@@ -292,7 +359,7 @@ describe('/ANULAR con cobranzas (#125)', () => {
     await sell();
     await collect();
     await loadVoidCandidates();
-    moveVoidSelection(1);
+    voidSelectionIndexSignal.value = 1;
 
     updateVoidFilter('arroz');
 
@@ -300,14 +367,16 @@ describe('/ANULAR con cobranzas (#125)', () => {
     expect(voidSelectionIndexSignal.value).toBe(0);
   });
 
-  it('un filtro sin coincidencias deja la selección en null', async () => {
+  it('con un filtro sin coincidencias, Enter no hace nada', async () => {
     await sell();
     await loadVoidCandidates();
 
     updateVoidFilter('zzz');
+    selectForVoid();
 
     expect(filteredVoidCandidatesSignal.value).toEqual([]);
-    expect(voidSelectionIndexSignal.value).toBeNull();
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBeNull();
   });
 
   it('Esc con filtro lo limpia; sin filtro sale a la venta', async () => {

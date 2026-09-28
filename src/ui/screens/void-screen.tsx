@@ -6,16 +6,19 @@ import { formatMoney } from '../format.ts';
 import { voidOfLabel, voidOfReceiptLabel } from '../format-ticket.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
-import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
+import {
+  useTicketListNavigation,
+  type TicketListNavigation,
+} from '../hooks/use-ticket-list-navigation.ts';
 import {
   activateVoidRow,
   cancelVoidConfirmation,
   candidateCustomerName,
+  clearVoidMessage,
   confirmVoid,
   escapeVoidScreen,
   exitVoidScreen,
   loadVoidCandidates,
-  moveVoidSelection,
   selectForVoid,
   updateVoidFilter,
   voidBalancePreview,
@@ -28,9 +31,16 @@ import {
   voidErrorSignal,
   voidFilterSignal,
   voidLoadedSignal,
+  voidMessageSignal,
   voidSelectionIndexSignal,
 } from '../state/void.ts';
 
+const listStyle = {
+  flex: 1,
+  minHeight: 0,
+  overflowY: 'auto' as const,
+  position: 'relative' as const,
+};
 const emptyMessageStyle = {
   padding: 'var(--space-3)',
   color: 'var(--color-text-muted)',
@@ -55,15 +65,108 @@ function candidateTotal(candidate: VoidCandidate): number {
 }
 
 /**
+ * Una fila de `/ANULAR`: la fila compartida con `/RESUMEN` más la selección, la marca y el click.
+ * Componente propio (no un `.map()` inline): el ref callback de `nav.ticketRef(index)` se lee en el
+ * nivel superior de su render, la forma que espera `react-hooks/refs` (como en `/RESUMEN`).
+ */
+function VoidRow({
+  candidate,
+  index,
+  query,
+  nav,
+  onActivate,
+}: {
+  candidate: VoidCandidate;
+  index: number;
+  query: string;
+  nav: TicketListNavigation;
+  onActivate: (index: number) => void;
+}) {
+  const common = {
+    index,
+    query,
+    selected: index === voidSelectionIndexSignal.value,
+    dimmed: candidate.state !== 'voidable',
+    mark: candidateMark(candidate),
+    rowRef: nav.ticketRef(index),
+    onClick: () => {
+      onActivate(index);
+    },
+    testId: 'void-row',
+  };
+  return candidate.kind === 'sale' ? (
+    <SaleDocumentRow sale={candidate.sale} {...common} />
+  ) : (
+    <CollectionDocumentRow
+      payment={candidate.payment}
+      customerName={candidateCustomerName(candidate)}
+      {...common}
+    />
+  );
+}
+
+/**
+ * Presentacional, como `MovementsTab` de `/RESUMEN`: `nav` lo arma `VoidScreen`, cuyo `onKeyDown`
+ * llama a `nav.handleKeyDown`. `position: relative` para que el `offsetTop` de cada fila, que usa la
+ * navegación, se mida desde la lista.
+ */
+function VoidList({
+  candidates,
+  query,
+  nav,
+  loaded,
+  hasVoidable,
+  hasAny,
+  onActivate,
+}: {
+  candidates: VoidCandidate[];
+  query: string;
+  nav: TicketListNavigation;
+  loaded: boolean;
+  hasVoidable: boolean;
+  hasAny: boolean;
+  onActivate: (index: number) => void;
+}) {
+  const rows = candidates.map((candidate, index) => (
+    <VoidRow
+      key={candidateId(candidate)}
+      candidate={candidate}
+      index={index}
+      query={query}
+      nav={nav}
+      onActivate={onActivate}
+    />
+  ));
+  return (
+    // `nav.containerRef` solo toca `.current` cuando Preact lo invoca o dentro de `handleKeyDown`
+    // (vía `onKeyDown`, nunca durante el render), igual que en `/RESUMEN`.
+    // eslint-disable-next-line react-hooks/refs
+    <div ref={nav.containerRef} style={listStyle}>
+      {loaded && !hasVoidable && (
+        <p style={emptyMessageStyle}>
+          No hay ventas ni cobranzas de las últimas 24 horas para anular.
+        </p>
+      )}
+      {loaded && hasAny && candidates.length === 0 && (
+        <p style={emptyMessageStyle}>Ningún documento coincide con la búsqueda.</p>
+      )}
+      {rows}
+    </div>
+  );
+}
+
+/**
  * `/ANULAR` (#125, con #110 y #58): la lista de Movimientos de `/RESUMEN` con las ventas y las
- * cobranzas de las últimas 24 h y su buscador, que es el único input y nunca pierde el foco. La
- * original anulada y la anulación se ven atenuadas y sin acción: ↑/↓ y el click las saltean. Enter
- * abre un modal chico de confirmación encima de la lista; anular no se puede deshacer. Teclado +
- * mouse: click en una fila anulable = seleccionarla + Enter; cada atajo tiene su botón.
+ * cobranzas de las últimas 24 h y su buscador, que es el único input y nunca pierde el foco. Se
+ * navega por todas las filas con la mecánica de `/RESUMEN` (`useTicketListNavigation`); la original
+ * anulada y la anulación se ven atenuadas y Enter sobre ellas dice por qué no se anulan. Sobre una
+ * anulable, Enter abre un modal chico de confirmación encima de la lista; anular no se puede
+ * deshacer. Teclado + mouse: click en una fila = seleccionarla + Enter; cada atajo tiene su botón.
  */
 export function VoidScreen() {
   const searchRef = useFocusOnMount<HTMLInputElement>();
-  const rowRef = useScrollSelectedIntoView(voidSelectionIndexSignal);
+  const candidates = filteredVoidCandidatesSignal.value;
+  const nav = useTicketListNavigation(voidSelectionIndexSignal, candidates.length);
 
   // Cargar al montar, reseteando antes del primer `await` (lo hace `loadVoidCandidates`).
   useLayoutEffect(() => {
@@ -88,9 +191,8 @@ export function VoidScreen() {
       }
       return;
     }
-    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      moveVoidSelection(event.key === 'ArrowUp' ? -1 : 1);
+    clearVoidMessage();
+    if (nav.handleKeyDown(event)) {
       return;
     }
     if (event.key === 'Enter') {
@@ -108,11 +210,16 @@ export function VoidScreen() {
     updateVoidFilter(event.currentTarget.value);
   };
 
-  const candidates = filteredVoidCandidatesSignal.value;
-  const selectedIndex = voidSelectionIndexSignal.value;
-  const selected = selectedIndex !== null ? candidates[selectedIndex] : undefined;
+  const activateRow = (index: number) => {
+    nav.select(index);
+    activateVoidRow(index);
+    searchRef.current?.focus();
+  };
+
+  const selected = candidates[voidSelectionIndexSignal.value];
   const loaded = voidLoadedSignal.value;
   const hasVoidable = voidCandidatesSignal.value.some((c) => c.state === 'voidable');
+  const hasAny = voidCandidatesSignal.value.length > 0;
   const preview = selected !== undefined ? voidBalancePreview(selected) : undefined;
   const query = voidFilterSignal.value;
 
@@ -173,44 +280,30 @@ export function VoidScreen() {
               padding: 'var(--space-1) var(--space-2)',
             }}
           />
+          {/* Slot de alto fijo (nunca corre el layout): por qué la fila elegida no se anula. */}
+          <p
+            role="status"
+            style={{
+              margin: 'var(--space-1) 0 0',
+              minHeight: '1.4em',
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-chrome-warning)',
+            }}
+          >
+            {voidMessageSignal.value ?? ''}
+          </p>
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {loaded && !hasVoidable && (
-          <p style={emptyMessageStyle}>
-            No hay ventas ni cobranzas de las últimas 24 horas para anular.
-          </p>
-        )}
-        {loaded && hasVoidable && candidates.length === 0 && (
-          <p style={emptyMessageStyle}>Ningún documento coincide con la búsqueda.</p>
-        )}
-        {candidates.map((candidate, index) => {
-          const common = {
-            index,
-            query,
-            selected: index === selectedIndex,
-            dimmed: candidate.state !== 'voidable',
-            mark: candidateMark(candidate),
-            rowRef: rowRef(index),
-            onClick: () => {
-              activateVoidRow(index);
-              searchRef.current?.focus();
-            },
-            testId: 'void-row',
-          };
-          return candidate.kind === 'sale' ? (
-            <SaleDocumentRow key={candidateId(candidate)} sale={candidate.sale} {...common} />
-          ) : (
-            <CollectionDocumentRow
-              key={candidateId(candidate)}
-              payment={candidate.payment}
-              customerName={candidateCustomerName(candidate)}
-              {...common}
-            />
-          );
-        })}
-      </div>
+      <VoidList
+        candidates={candidates}
+        query={query}
+        nav={nav}
+        loaded={loaded}
+        hasVoidable={hasVoidable}
+        hasAny={hasAny}
+        onActivate={activateRow}
+      />
 
       {voidConfirmingSignal.value && selected !== undefined && (
         <div

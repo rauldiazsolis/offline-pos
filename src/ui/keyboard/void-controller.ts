@@ -17,67 +17,97 @@ import {
   voidErrorSignal,
   voidFilterSignal,
   voidLoadedSignal,
+  voidMessageSignal,
   voidSelectionIndexSignal,
 } from '../state/void.ts';
 
-function isVoidable(index: number): boolean {
-  return filteredVoidCandidatesSignal.value[index]?.state === 'voidable';
-}
-
-function selectFirstVoidable(): void {
-  const first = filteredVoidCandidatesSignal.value.findIndex(
-    (candidate) => candidate.state === 'voidable',
-  );
-  voidSelectionIndexSignal.value = first === -1 ? null : first;
+function selectedCandidate(): VoidCandidate | undefined {
+  return filteredVoidCandidatesSignal.value[voidSelectionIndexSignal.value];
 }
 
 /**
  * Ventas y cobranzas de las últimas 24 h (#125), lo más nuevo primero. La selección arranca en la
- * anulable más nueva: la original ya anulada y la anulación no tienen acción.
+ * más nueva, como en `/RESUMEN`, aunque no se pueda anular.
  */
 export async function loadVoidCandidates(): Promise<void> {
   voidConfirmingSignal.value = false;
   voidErrorSignal.value = null;
+  voidMessageSignal.value = null;
   voidFilterSignal.value = '';
+  voidSelectionIndexSignal.value = 0;
   voidLoadedSignal.value = false;
   voidCandidatesSignal.value = await listVoidCandidates(new Date().toISOString());
   voidLoadedSignal.value = true;
-  selectFirstVoidable();
 }
 
-/** Cada tecla del buscador: filtra y vuelve a la primera anulable del resultado. */
+/** Cada tecla del buscador: filtra y vuelve a la primera fila del resultado. */
 export function updateVoidFilter(text: string): void {
   voidFilterSignal.value = text;
-  selectFirstVoidable();
+  voidSelectionIndexSignal.value = 0;
+  voidMessageSignal.value = null;
 }
 
-/** ↑/↓: al siguiente anulable en esa dirección, sin ciclar (saltea las filas sin acción). */
-export function moveVoidSelection(direction: 1 | -1): void {
-  const current = voidSelectionIndexSignal.value;
-  if (current === null) {
-    return;
-  }
-  const length = filteredVoidCandidatesSignal.value.length;
-  for (let index = current + direction; index >= 0 && index < length; index += direction) {
-    if (isVoidable(index)) {
-      voidSelectionIndexSignal.value = index;
-      return;
+/** Cualquier otra tecla o click borra el mensaje de una fila sin acción. */
+export function clearVoidMessage(): void {
+  voidMessageSignal.value = null;
+}
+
+/** El documento que anula a `candidate`, si está entre los candidatos (siempre es más nuevo). */
+function voidingDocumentName(candidate: VoidCandidate): string | undefined {
+  for (const other of voidCandidatesSignal.value) {
+    if (candidate.kind === 'sale' && other.kind === 'sale') {
+      if (other.sale.voidsSaleId === candidate.sale.id) return saleName(other.sale);
+    } else if (candidate.kind === 'collection' && other.kind === 'collection') {
+      if (other.payment.voidsPaymentId === candidate.payment.id) return receiptName(other.payment);
     }
   }
+  return undefined;
 }
 
-/** Enter sobre la lista: abre el modal de confirmación. */
-export function selectForVoid(): void {
-  const index = voidSelectionIndexSignal.value;
-  if (index !== null && isVoidable(index)) {
-    voidErrorSignal.value = null;
-    voidConfirmingSignal.value = true;
+/**
+ * Por qué una fila no se anula (prueba manual de #125): "El Ticket #1 ya está anulado (con el Ticket
+ * #3)." o "El Ticket #3 es la anulación del Ticket #1: no se puede anular.".
+ */
+function notVoidableMessage(candidate: VoidCandidate): string {
+  const name = documentName(candidate);
+  if (candidate.state === 'voided') {
+    const voider = voidingDocumentName(candidate);
+    return `El ${name} ya está anulado${voider !== undefined ? ` (con el ${voider})` : ''}.`;
   }
+  const original =
+    candidate.kind === 'sale'
+      ? candidate.original !== undefined
+        ? saleName(candidate.original)
+        : undefined
+      : candidate.original !== undefined
+        ? receiptName(candidate.original)
+        : undefined;
+  return original !== undefined
+    ? `El ${name} es la anulación del ${original}: no se puede anular.`
+    : `El ${name} es una anulación: no se puede anular.`;
 }
 
-/** Click en una fila anulable (Etapa 2 de #94): lo mismo que ↑/↓ hasta ella + Enter. */
+/**
+ * Enter sobre la lista: sobre una fila anulable abre el modal de confirmación; sobre la original ya
+ * anulada o sobre una anulación, dice por qué no se puede.
+ */
+export function selectForVoid(): void {
+  const candidate = selectedCandidate();
+  if (candidate === undefined) {
+    return;
+  }
+  if (candidate.state !== 'voidable') {
+    voidMessageSignal.value = notVoidableMessage(candidate);
+    return;
+  }
+  voidMessageSignal.value = null;
+  voidErrorSignal.value = null;
+  voidConfirmingSignal.value = true;
+}
+
+/** Click en una fila (Etapa 2 de #94): lo mismo que llegar a ella con ↑/↓ + Enter. */
 export function activateVoidRow(index: number): void {
-  if (!isVoidable(index)) {
+  if (filteredVoidCandidatesSignal.value[index] === undefined) {
     return;
   }
   voidSelectionIndexSignal.value = index;
@@ -94,7 +124,8 @@ export function cancelVoidConfirmation(): void {
 export function exitVoidScreen(): void {
   voidCandidatesSignal.value = [];
   voidFilterSignal.value = '';
-  voidSelectionIndexSignal.value = null;
+  voidSelectionIndexSignal.value = 0;
+  voidMessageSignal.value = null;
   voidConfirmingSignal.value = false;
   voidErrorSignal.value = null;
   voidLoadedSignal.value = false;
@@ -159,8 +190,7 @@ function finish(notice: string): void {
 
 /** Enter en el modal: anula con un documento propio (#99, #125) y vuelve a la venta con un aviso. */
 export async function confirmVoid(): Promise<void> {
-  const index = voidSelectionIndexSignal.value;
-  const candidate = index !== null ? filteredVoidCandidatesSignal.value[index] : undefined;
+  const candidate = selectedCandidate();
   if (candidate?.state !== 'voidable') {
     return;
   }

@@ -194,8 +194,8 @@ y el texto de búsqueda de ventas y cobranzas). Las filas reciben lo que necesit
   con su marca; ↑/↓ y el click las saltean.
 - **Foco y teclas**: el buscador es el único input y está siempre enfocado (patrón de `/RESUMEN`).
   Tipear filtra; la selección pasa a la primera fila anulable del resultado. ↑/↓ mueven la
-  selección entre las anulables, sin ciclar, con selección por índice que saltea y
-  `useScrollSelectedIntoView`. Enter abre la confirmación sobre la seleccionada. Esc limpia el
+  selección entre las anulables, sin ciclar, con el hook de lista de `/RESUMEN`
+  (`useTicketListNavigation`), que ya hace el scroll de una fila de varias líneas. Enter abre la confirmación sobre la seleccionada. Esc limpia el
   buscador si tiene texto; si no, sale a la venta. Un click en una fila anulable = seleccionarla +
   Enter (`activateVoidRow`).
 - **Mensajes**: sin nada anulable en las 24 h, "No hay ventas ni cobranzas de las últimas 24 horas
@@ -304,9 +304,12 @@ renombran a `void-*` sin "sale" si el cambio es mecánico): candidatos, filtro, 
 
 ## Desvíos de la implementación
 
-- **Navegación de `/ANULAR`** (§4): selección por índice que saltea las filas sin acción, con
-  `useScrollSelectedIntoView`, en lugar de `useTicketListNavigation` — ese hook elige la fila por
-  geometría del scroll y no puede saltear filas no seleccionables.
+- **Filas sin acción navegables** (§4, decidido en la prueba manual): ↑/↓ y el click recorren también
+  la original anulada y la anulación, como en `/RESUMEN`, con `useTicketListNavigation` (el plan
+  había cambiado a selección por índice para poder saltearlas; con este cambio ya no hace falta). La
+  selección arranca en la fila más nueva. Enter o click sobre una fila sin acción no abre el modal:
+  un mensaje debajo del buscador dice que ya está anulada (y con qué documento) o que es una
+  anulación.
 - **Foco con el modal abierto** (§4, "Modal de confirmación"): el foco se queda en el buscador en vez
   de pasar al contenedor del modal, y mientras el modal está abierto el buscador no recibe texto
   (Enter anula, Esc vuelve, Tab llega a los botones). Mantiene "un único input siempre enfocado".

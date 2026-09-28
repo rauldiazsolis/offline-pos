@@ -197,14 +197,17 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   (`ui/document-search.ts`). Ventas y cobranzas de las últimas 24 h, sin tope, lo más nuevo primero
   (`storage/void-repository.ts::listVoidCandidates`, unión `VoidCandidate` venta | cobranza). Nunca
   se muestra un ULID.
-- **Filas sin acción**: la original anulada y la anulación se ven atenuadas con su marca; ↑/↓ y el
-  click las saltean. La selección es por índice sobre la lista filtrada, con `useScrollSelectedIntoView`
-  — no `useTicketListNavigation`, que elige la fila por geometría del scroll y no puede saltear.
-- **Buscador**: el único input, siempre enfocado. Tipear filtra y la selección pasa a la primera
-  anulable del resultado; Esc lo limpia si tiene texto y, si no, sale a la venta. Sin nada anulable,
+- **Filas sin acción**: la original anulada y la anulación se ven atenuadas con su marca, y se
+  navegan como cualquier otra (decisión de la prueba manual de #125): ↑/↓, PageUp/PageDown y el click
+  usan la mecánica de `/RESUMEN` (`useTicketListNavigation`). Enter o click sobre una de ellas no abre
+  el modal: dice por qué en un slot de alto fijo debajo del buscador ("El Ticket #1 ya está anulado
+  (con el Ticket #3)." / "El Ticket #3 es la anulación del Ticket #1: no se puede anular."), que se
+  borra con la próxima tecla.
+- **Buscador**: el único input, siempre enfocado. Tipear filtra y la selección vuelve a la primera
+  fila del resultado (al abrir, la más nueva); Esc lo limpia si tiene texto y, si no, sale a la venta. Sin nada anulable,
   "No hay ventas ni cobranzas de las últimas 24 horas para anular." (arriba de las filas sin acción);
   con un filtro sin coincidencias, "Ningún documento coincide con la búsqueda.".
-- **Modal de confirmación**: tarjeta chica sobre la lista, con la pregunta ("¿Anular el Ticket #1?",
+- **Modal de confirmación** (solo sobre una fila anulable): tarjeta chica sobre la lista, con la pregunta ("¿Anular el Ticket #1?",
   "¿Anular el Recibo #1 de Ana?"; sin número, "el ticket de las 17:20"), el total y, en una cobranza
   con saldo conocido, "Saldo de Ana: A favor $500,00 → Sin saldo". "Volver (Esc)" y "Anular (Enter)";
   un error de negocio se muestra adentro. El foco se queda en el buscador y, con el modal abierto, el

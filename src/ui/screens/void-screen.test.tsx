@@ -79,7 +79,7 @@ beforeEach(async () => {
   });
   voidCandidatesSignal.value = [];
   voidFilterSignal.value = '';
-  voidSelectionIndexSignal.value = null;
+  voidSelectionIndexSignal.value = 0;
   voidConfirmingSignal.value = false;
   activeScreenSignal.value = 'void';
 });
@@ -229,6 +229,29 @@ describe('VoidScreen', () => {
     expect(screen.getByText(EMPTY)).not.toBeNull();
     fireEvent.keyDown(search(), { key: 'Enter' });
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe(
+      'El Recibo #2 es la anulación del Recibo #1: no se puede anular.',
+    );
+  });
+
+  it('↓ llega a la original anulada; Enter dice con qué se anuló y la próxima tecla lo borra', async () => {
+    const payment = await collect();
+    tick();
+    await voidCollectionAndPersist(payment.id);
+
+    render(<VoidScreen />);
+    await screen.findAllByTestId('void-row');
+    fireEvent.keyDown(search(), { key: 'ArrowDown' });
+    expect(voidSelectionIndexSignal.value).toBe(1);
+    fireEvent.keyDown(search(), { key: 'Enter' });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe(
+      'El Recibo #1 ya está anulado (con el Recibo #2).',
+    );
+    fireEvent.keyDown(search(), { key: 'ArrowUp' });
+    expect(screen.getByRole('status').textContent).toBe('');
+    expect(voidSelectionIndexSignal.value).toBe(0);
   });
 
   it('las ventas llevan su número y la marca de anulada o anulación', async () => {
@@ -270,7 +293,7 @@ describe('VoidScreen — mouse (Etapa 2 de #94)', () => {
     );
   });
 
-  it('click en una fila sin acción no abre el modal', async () => {
+  it('click en una fila sin acción la selecciona y dice por qué no se anula', async () => {
     const sale = await sell();
     tick();
     await voidSaleAndPersist(sale.id);
@@ -280,6 +303,10 @@ describe('VoidScreen — mouse (Etapa 2 de #94)', () => {
     fireEvent.click(rows[1] as HTMLElement);
 
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(voidSelectionIndexSignal.value).toBe(1);
+    expect(screen.getByRole('status').textContent).toBe(
+      'El Ticket #1 ya está anulado (con el Ticket #2).',
+    );
   });
 
   it('"Volver (Esc)" en el modal vuelve a la lista sin anular', async () => {
