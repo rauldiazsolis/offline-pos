@@ -391,3 +391,23 @@ describe('anulación como venta (4.0.0, #99)', () => {
     expect(db.prepare('SELECT COUNT(*) c FROM sales').get()).toEqual({ c: 2 });
   });
 });
+
+describe('número de ticket (4.1.0, #120)', () => {
+  it('la venta se guarda con su ticket, que llega al panel', async () => {
+    await push('lot-ticket', [
+      {
+        type: 'sale',
+        id: 's1',
+        sale: { id: 's1', total: 100, payments: [], ticket: { date: '2026-09-24', number: 12 } },
+      },
+    ]);
+
+    const row = db.prepare('SELECT payload FROM sales WHERE id = ?').get('s1') as {
+      payload: string;
+    };
+    expect((JSON.parse(row.payload) as { ticket: unknown }).ticket).toEqual({
+      date: '2026-09-24',
+      number: 12,
+    });
+  });
+});
