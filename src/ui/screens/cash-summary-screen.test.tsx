@@ -30,7 +30,7 @@ function dayView(sales: Sale[], extra: Partial<DayView> = {}): DayView {
     isToday: true,
     oldestDate: today,
     sales,
-    entries: buildDayEntries({ sales, movements: [], counts: [] }),
+    entries: buildDayEntries({ sales, movements: [], counts: [], collections: [] }),
     summary: {
       totalSold: 350,
       ticketCount: 2,
@@ -38,10 +38,14 @@ function dayView(sales: Sale[], extra: Partial<DayView> = {}): DayView {
       adjustmentTotal: -10,
       totalsByMethod: { cash: 300, debit: 50, credit: 0, transfer: 0, qr: 0, account: 0 },
       otherPayments: 50,
-      cash: { sales: 300, income: 0, expense: 0, countAdjustments: 0 },
+      cash: { sales: 300, income: 0, expense: 0, countAdjustments: 0, collections: 0 },
+      collections: { total: 0, count: 0 },
+      collectionsByMethod: { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 },
     },
     voidedSaleIds: new Set(),
     voidOriginals: new Map(),
+    collections: [],
+    customerNames: new Map(),
     ...extra,
   };
 }
@@ -282,6 +286,7 @@ describe('movimientos de caja y arqueos (#100)', () => {
         counts: [
           { id: 'c1', expected: 1000, counted: 1200, createdAt: '2026-01-01T07:00:00.000Z' },
         ],
+        collections: [],
       }),
     };
     render(<CashSummaryScreen />);

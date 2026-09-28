@@ -1,3 +1,4 @@
+import type { CustomerPayment } from '../domain/customer-payment.ts';
 import {
   buildDayEntries,
   calculateDaySummary,
@@ -5,7 +6,13 @@ import {
   type DaySummary,
 } from '../domain/day-summary.ts';
 import type { Sale } from '../domain/sale.ts';
-import { localDateKey, localDayRange, saleDateKey, shiftDateKey } from '../domain/ticket-number.ts';
+import {
+  collectionDateKey,
+  localDateKey,
+  localDayRange,
+  saleDateKey,
+  shiftDateKey,
+} from '../domain/ticket-number.ts';
 import { getCashBalance, type CashBalance } from './cash-repository.ts';
 import { db } from './db.ts';
 import { loadVoidedSaleIds, loadVoidOriginals } from './sale-repository.ts';
@@ -24,6 +31,10 @@ export type DayView = {
   voidedSaleIds: Set<string>;
   /** Para cada ticket de anulación, la venta que anula (si sigue en la base). */
   voidOriginals: Map<string, Sale>;
+  /** Cobranzas del día (#101), agrupadas por `receipt.date` si lo tienen. */
+  collections: CustomerPayment[];
+  /** Nombre de cada cliente de las cobranzas del día (el que siga en la base). */
+  customerNames: Map<string, string>;
   /** Saldo de efectivo actual, solo si el día es hoy. */
   balance?: CashBalance;
 };
@@ -33,6 +44,7 @@ async function oldestDataAt(): Promise<string | undefined> {
     db.sales.orderBy('createdAt').first(),
     db.cashMovements.orderBy('createdAt').first(),
     db.cashCounts.orderBy('createdAt').first(),
+    db.customerPayments.orderBy('createdAt').first(),
   ]);
   return firsts
     .flatMap((item) => (item !== undefined ? [item.createdAt] : []))
@@ -41,22 +53,31 @@ async function oldestDataAt(): Promise<string | undefined> {
 }
 
 /**
- * Las ventas, los movimientos de caja y los arqueos de un día local. Las ventas se agrupan por
- * `ticket.date` si lo tienen (una numerada antes de la medianoche puede tener `createdAt` del día
- * siguiente si el reloj se corrigió); por eso se leen con un día más a cada lado.
+ * Las ventas, los movimientos de caja, los arqueos y las cobranzas de un día local. Las ventas se
+ * agrupan por `ticket.date` y las cobranzas por `receipt.date` si lo tienen (uno numerado antes de
+ * la medianoche puede tener `createdAt` del día siguiente si el reloj se corrigió); por eso se leen
+ * con un día más a cada lado.
  */
 export async function getDaySummary(date: string, now: string): Promise<DayView> {
   const today = localDateKey(now);
   const day = localDayRange(date);
   const wideFrom = localDayRange(shiftDateKey(date, -1)).from;
   const wideTo = localDayRange(shiftDateKey(date, 1)).to;
-  const [candidates, movements, counts, oldest] = await Promise.all([
+  const [candidates, movements, counts, collectionCandidates, oldest] = await Promise.all([
     db.sales.where('createdAt').between(wideFrom, wideTo, true, false).toArray(),
     db.cashMovements.where('createdAt').between(day.from, day.to, true, false).toArray(),
     db.cashCounts.where('createdAt').between(day.from, day.to, true, false).toArray(),
+    db.customerPayments.where('createdAt').between(wideFrom, wideTo, true, false).toArray(),
     oldestDataAt(),
   ]);
   const sales = candidates.filter((sale) => saleDateKey(sale) === date);
+  const collections = collectionCandidates.filter((payment) => collectionDateKey(payment) === date);
+  const customers = await db.customers.bulkGet([
+    ...new Set(collections.map((payment) => payment.customerId)),
+  ]);
+  const customerNames = new Map(
+    customers.flatMap((customer) => (customer !== undefined ? [[customer.id, customer.name]] : [])),
+  );
   const voidedSaleIds = await loadVoidedSaleIds(sales.map((sale) => sale.id));
   for (const sale of sales) {
     if (sale.status === 'voided') {
@@ -69,10 +90,12 @@ export async function getDaySummary(date: string, now: string): Promise<DayView>
     isToday: date === today,
     oldestDate: oldestKey < today ? oldestKey : today,
     sales,
-    entries: buildDayEntries({ sales, movements, counts }),
-    summary: calculateDaySummary({ sales, movements, voidedSaleIds }),
+    entries: buildDayEntries({ sales, movements, counts, collections }),
+    summary: calculateDaySummary({ sales, movements, voidedSaleIds, collections }),
     voidedSaleIds,
     voidOriginals: await loadVoidOriginals(sales),
+    collections,
+    customerNames,
   };
   return date === today ? { ...view, balance: await getCashBalance() } : view;
 }

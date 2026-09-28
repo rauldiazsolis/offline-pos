@@ -147,6 +147,10 @@ function entrySearchText(entry: DayEntry): string {
       }`;
     case 'count':
       return 'arqueo';
+    case 'collection': {
+      const number = entry.payment.receipt?.number;
+      return `${number !== undefined ? `${String(number)} #${String(number)}` : ''} recibo cobranza`;
+    }
   }
 }
 
@@ -158,6 +162,8 @@ function entryKey(entry: DayEntry): string {
       return `m:${entry.movement.id}`;
     case 'count':
       return `c:${entry.count.id}`;
+    case 'collection':
+      return `p:${entry.payment.id}`;
   }
 }
 

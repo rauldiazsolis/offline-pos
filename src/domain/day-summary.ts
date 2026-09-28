@@ -1,10 +1,15 @@
 import type { CashCount } from './cash-count.ts';
 import type { CashMovement } from './cash-movement.ts';
+import type { CustomerPayment } from './customer-payment.ts';
 import { roundAmount } from './rounding.ts';
 import { isVoided } from './sale-lifecycle.ts';
 import type { PaymentMethod, Sale } from './sale.ts';
 
-/** Números del panel lateral de `/RESUMEN` para un día (spec de #100, §5). */
+/**
+ * Números del panel lateral de `/RESUMEN` para un día (spec de #100, §5). Una cobranza (#101) no
+ * es una venta: no suma al total vendido, a los tickets, a `totalsByMethod` ni a otros pagos; tiene
+ * sus propios totales (`collections`, `collectionsByMethod`) y su fila en el efectivo del día.
+ */
 export type DaySummary = {
   /** Neto de `Sale.total`: una anulación resta por su signo. */
   totalSold: number;
@@ -13,17 +18,34 @@ export type DaySummary = {
   /** Tickets del día que tienen una anulación (o el `status: 'voided'` legado). */
   voidedCount: number;
   adjustmentTotal: number;
+  /** Solo ventas. */
   totalsByMethod: Record<PaymentMethod, number>;
   otherPayments: number;
-  /** Efectivo del día: cobros netos, ingresos y egresos manuales, y ajustes por arqueo con signo. */
-  cash: { sales: number; income: number; expense: number; countAdjustments: number };
+  /**
+   * Efectivo del día: cobros netos, ingresos y egresos manuales, ajustes por arqueo con signo y el
+   * efectivo de las cobranzas.
+   */
+  cash: {
+    sales: number;
+    income: number;
+    expense: number;
+    countAdjustments: number;
+    collections: number;
+  };
+  collections: { total: number; count: number };
+  collectionsByMethod: Record<PaymentMethod, number>;
 };
 
-/** Una fila de la pestaña Movimientos: una venta, un movimiento de caja o un arqueo. */
+/** Una fila de la pestaña Movimientos: una venta, un movimiento de caja, un arqueo o una cobranza. */
 export type DayEntry =
   | { kind: 'sale'; at: string; sale: Sale }
   | { kind: 'movement'; at: string; movement: CashMovement }
-  | { kind: 'count'; at: string; count: CashCount };
+  | { kind: 'count'; at: string; count: CashCount }
+  | { kind: 'collection'; at: string; payment: CustomerPayment };
+
+function emptyByMethod(): Record<PaymentMethod, number> {
+  return { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 };
+}
 
 function rawLinesSubtotal(lines: Sale['lines']): number {
   return lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
@@ -37,15 +59,9 @@ export function calculateDaySummary(params: {
   sales: readonly Sale[];
   movements: readonly CashMovement[];
   voidedSaleIds: ReadonlySet<string>;
+  collections: readonly CustomerPayment[];
 }): DaySummary {
-  const totalsByMethod: Record<PaymentMethod, number> = {
-    cash: 0,
-    debit: 0,
-    credit: 0,
-    transfer: 0,
-    qr: 0,
-    account: 0,
-  };
+  const totalsByMethod = emptyByMethod();
   let totalSold = 0;
   let adjustmentTotal = 0;
   for (const sale of params.sales) {
@@ -68,6 +84,17 @@ export function calculateDaySummary(params: {
       expense += movement.amount;
     }
   }
+  const collectionsByMethod = emptyByMethod();
+  let collectionsTotal = 0;
+  for (const collection of params.collections) {
+    collectionsTotal += collection.total;
+    for (const payment of collection.payments) {
+      collectionsByMethod[payment.method] += payment.amount;
+    }
+  }
+  for (const method of Object.keys(collectionsByMethod) as PaymentMethod[]) {
+    collectionsByMethod[method] = roundAmount(collectionsByMethod[method]);
+  }
   const otherPayments =
     totalsByMethod.debit +
     totalsByMethod.credit +
@@ -86,21 +113,32 @@ export function calculateDaySummary(params: {
       income: roundAmount(income),
       expense: roundAmount(expense),
       countAdjustments: roundAmount(countAdjustments),
+      collections: collectionsByMethod.cash,
     },
+    collections: { total: roundAmount(collectionsTotal), count: params.collections.length },
+    collectionsByMethod,
   };
 }
 
-/** La pestaña Movimientos: ventas, movimientos de caja y arqueos del día, por hora. */
+/** La pestaña Movimientos: ventas, movimientos de caja, arqueos y cobranzas del día, por hora. */
 export function buildDayEntries(params: {
   sales: readonly Sale[];
   movements: readonly CashMovement[];
   counts: readonly CashCount[];
+  collections: readonly CustomerPayment[];
 }): DayEntry[] {
   return [
     ...params.sales.map((sale): DayEntry => ({ kind: 'sale', at: sale.createdAt, sale })),
-    ...params.movements.map(
-      (movement): DayEntry => ({ kind: 'movement', at: movement.createdAt, movement }),
-    ),
+    ...params.movements.map((movement): DayEntry => ({
+      kind: 'movement',
+      at: movement.createdAt,
+      movement,
+    })),
     ...params.counts.map((count): DayEntry => ({ kind: 'count', at: count.createdAt, count })),
+    ...params.collections.map((payment): DayEntry => ({
+      kind: 'collection',
+      at: payment.createdAt,
+      payment,
+    })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 }

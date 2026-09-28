@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CashCount } from './cash-count.ts';
 import type { CashMovement } from './cash-movement.ts';
+import type { CustomerPayment } from './customer-payment.ts';
 import { buildDayEntries, calculateDaySummary } from './day-summary.ts';
 import type { Sale } from './sale.ts';
 
@@ -30,6 +31,17 @@ function movement(overrides: Partial<CashMovement> = {}): CashMovement {
 
 const noVoids = new Set<string>();
 
+function collection(overrides: Partial<CustomerPayment> = {}): CustomerPayment {
+  return {
+    id: 'cp1',
+    customerId: 'c1',
+    payments: [{ method: 'cash', amount: 100 }],
+    total: 100,
+    createdAt: '2026-09-24T11:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('calculateDaySummary', () => {
   it('una venta y su anulación: total 0, dos tickets, una anulada', () => {
     const original = sale();
@@ -45,6 +57,7 @@ describe('calculateDaySummary', () => {
       sales: [original, voidTicket],
       movements: [],
       voidedSaleIds: new Set(['s1']),
+      collections: [],
     });
 
     expect(summary).toMatchObject({ totalSold: 0, ticketCount: 2, voidedCount: 1 });
@@ -56,6 +69,7 @@ describe('calculateDaySummary', () => {
       sales: [sale({ status: 'voided' })],
       movements: [],
       voidedSaleIds: noVoids,
+      collections: [],
     });
 
     expect(summary).toMatchObject({ totalSold: 0, ticketCount: 1, voidedCount: 1 });
@@ -75,6 +89,7 @@ describe('calculateDaySummary', () => {
       ],
       movements: [],
       voidedSaleIds: noVoids,
+      collections: [],
     });
 
     expect(summary.totalsByMethod).toMatchObject({ cash: 400, debit: 350, qr: 250 });
@@ -86,6 +101,7 @@ describe('calculateDaySummary', () => {
       sales: [sale({ total: 900, payments: [{ method: 'cash', amount: 900 }] })],
       movements: [],
       voidedSaleIds: noVoids,
+      collections: [],
     });
 
     expect(summary.adjustmentTotal).toBe(-100);
@@ -101,9 +117,16 @@ describe('calculateDaySummary', () => {
         movement({ id: 'm4', direction: 'out', amount: 50, source: 'count-adjustment' }),
       ],
       voidedSaleIds: noVoids,
+      collections: [],
     });
 
-    expect(summary.cash).toEqual({ sales: 1000, income: 500, expense: 200, countAdjustments: -20 });
+    expect(summary.cash).toEqual({
+      sales: 1000,
+      income: 500,
+      expense: 200,
+      countAdjustments: -20,
+      collections: 0,
+    });
   });
 });
 
@@ -119,9 +142,66 @@ describe('buildDayEntries', () => {
       sales: [sale({ createdAt: '2026-09-24T10:00:00.000Z' })],
       movements: [movement({ createdAt: '2026-09-24T09:00:00.000Z' })],
       counts: [count],
+      collections: [],
     });
 
     expect(entries.map((entry) => entry.kind)).toEqual(['count', 'movement', 'sale']);
     expect(entries[0]?.at).toBe(count.createdAt);
+  });
+});
+
+describe('cobranzas en el resumen del día (#101)', () => {
+  const collections = [
+    collection({
+      id: 'cp1',
+      payments: [
+        { method: 'cash', amount: 500 },
+        { method: 'transfer', amount: 200 },
+      ],
+      total: 700,
+      createdAt: '2026-09-24T11:00:00.000Z',
+    }),
+    collection({
+      id: 'cp2',
+      payments: [{ method: 'debit', amount: 100 }],
+      total: 100,
+      createdAt: '2026-09-24T09:30:00.000Z',
+    }),
+  ];
+
+  it('se suman aparte: no son ventas', () => {
+    const summary = calculateDaySummary({
+      sales: [sale()],
+      movements: [],
+      voidedSaleIds: noVoids,
+      collections,
+    });
+
+    expect(summary).toMatchObject({ totalSold: 1000, ticketCount: 1 });
+    expect(summary.collections).toEqual({ total: 800, count: 2 });
+    expect(summary.collectionsByMethod).toEqual({
+      cash: 500,
+      debit: 100,
+      credit: 0,
+      transfer: 200,
+      qr: 0,
+      account: 0,
+    });
+    expect(summary.totalsByMethod.cash).toBe(1000);
+    expect(summary.otherPayments).toBe(0);
+    expect(summary.cash).toMatchObject({ sales: 1000, collections: 500 });
+  });
+
+  it('Movimientos intercala las cobranzas por hora', () => {
+    const entries = buildDayEntries({
+      sales: [sale({ createdAt: '2026-09-24T10:00:00.000Z' })],
+      movements: [],
+      counts: [],
+      collections,
+    });
+
+    expect(entries.map((entry) => entry.kind)).toEqual(['collection', 'sale', 'collection']);
+    const first = entries[0];
+    expect(first?.kind === 'collection' ? first.payment.id : undefined).toBe('cp2');
   });
 });
