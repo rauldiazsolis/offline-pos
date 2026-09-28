@@ -23,6 +23,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarNoticeSignal,
   commandBarWarningSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
@@ -42,8 +43,7 @@ import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
-import { getCurrentOpenCashSession } from '../../storage/cash-session-repository.ts';
-import { enterCashScreen } from './cash-session-controller.ts';
+import { enterCashScreen } from './cash-controller.ts';
 import { enterCheckout } from './checkout-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
@@ -172,6 +172,7 @@ export function updateCommandBarBuffer(value: string): void {
   commandBarBufferSignal.value = value;
   commandBarErrorSignal.value = null;
   commandBarWarningSignal.value = null;
+  commandBarNoticeSignal.value = null;
   // Issue #28: cualquier tecla que cambie el buffer reabre el overlay que
   // corresponda al contenido nuevo, aunque se haya cerrado con Esc.
   overlayDismissedSignal.value = false;
@@ -300,15 +301,6 @@ export async function triggerCheckout(): Promise<void> {
   const availability = commandAvailability('COBRAR');
   if (!availability.enabled) {
     commandBarErrorSignal.value = disabledCommandMessage('COBRAR', availability.reason);
-    return;
-  }
-  const openSession = await getCurrentOpenCashSession();
-  if (openSession === undefined) {
-    commandBarErrorSignal.value = describeError({
-      ok: false,
-      error: 'cash-session/none-open',
-      meta: undefined,
-    });
     return;
   }
   enterCheckout();

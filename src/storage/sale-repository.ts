@@ -220,14 +220,9 @@ export async function closeSaleAndPersist(params: {
   const now = new Date().toISOString();
   const origin = currentEventOrigin();
 
-  // Fase 6: no se puede cerrar una venta sin un turno de caja abierto — el
-  // gate real vive acá (`command-bar-controller.ts::triggerCheckout` ya
-  // chequea lo mismo antes, para fallar rápido sin llegar a abrir la
-  // pantalla de cobro, pero esta es la verificación de fondo).
+  // Etapa 5 de #94 (#100): se vende sin turno. Si quedó uno abierto de
+  // antes, la venta se sigue registrando en él hasta que se eliminen.
   const openSession = await getCurrentOpenCashSession();
-  if (openSession === undefined) {
-    return err('cash-session/none-open', undefined);
-  }
 
   const saleResult = closeSale({
     cart: params.cart,

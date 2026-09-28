@@ -47,16 +47,16 @@ afterEach(async () => {
   await db.delete();
 });
 
-describe('triggerCheckout (Fase 6: gate de turno de caja)', () => {
+describe('triggerCheckout (sin turnos desde la Etapa 5, #100)', () => {
   beforeEach(() => {
     cartSignal.value = { lines: [freeformLine] };
   });
 
-  it('sin turno abierto, muestra un error y no cambia de pantalla', async () => {
+  it('sin turno abierto, igual pasa a la pantalla de cobro', async () => {
     await triggerCheckout();
 
-    expect(activeScreenSignal.value).toBe('sale');
-    expect(commandBarErrorSignal.value).not.toBeNull();
+    expect(activeScreenSignal.value).toBe('checkout');
+    expect(commandBarErrorSignal.value).toBeNull();
   });
 
   it('con un turno abierto, pasa a la pantalla de cobro', async () => {

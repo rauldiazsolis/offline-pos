@@ -10,6 +10,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarNoticeSignal,
   commandBarWarningSignal,
   commandSelectionIndexSignal,
   customerSelectionIndexSignal,
@@ -1042,6 +1043,29 @@ describe('CommandBarInput — mouse (Etapa 2 de #94)', () => {
       expect(cartSignal.value.lines).toHaveLength(1);
     });
     expect(cartSignal.value.lines[0]).toMatchObject({ productId: 'p2' });
+  });
+});
+
+describe('aviso informativo (#100)', () => {
+  afterEach(() => {
+    commandBarNoticeSignal.value = null;
+    commandBarErrorSignal.value = null;
+  });
+
+  it('se ve en el slot, se borra con la próxima tecla y un error tiene precedencia', () => {
+    commandBarNoticeSignal.value = 'Ingreso registrado';
+    render(<CommandBarInput />);
+
+    expect(screen.getByRole('status').textContent).toBe('Ingreso registrado');
+
+    commandBarErrorSignal.value = 'Falta el artículo';
+    return waitFor(() => {
+      expect(screen.queryByText('Ingreso registrado')).toBeNull();
+    }).then(() => {
+      commandBarErrorSignal.value = null;
+      fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: 'a' } });
+      expect(commandBarNoticeSignal.value).toBeNull();
+    });
   });
 });
 

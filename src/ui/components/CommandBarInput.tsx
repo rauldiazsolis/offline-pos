@@ -24,6 +24,7 @@ import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
+  commandBarNoticeSignal,
   commandBarWarningSignal,
   commandResultsSignal,
   commandSelectionIndexSignal,
@@ -88,6 +89,8 @@ export function CommandBarInput() {
   const hasError = commandBarErrorSignal.value !== null;
   // #99: una advertencia usa el mismo slot; el error tiene precedencia.
   const hasWarning = !hasError && commandBarWarningSignal.value !== null;
+  // Etapa 5 de #94 (#100): un aviso informativo ("Ingreso registrado"), el último en precedencia.
+  const hasNotice = !hasError && !hasWarning && commandBarNoticeSignal.value !== null;
   const hasCommandResults = showCommandList && commandResults.length > 0;
   // Con query hay algo para mostrar siempre (la lista, o "+ Crear cliente");
   // con query vacía, solo si hay clientes recientes — si no, no hay nada que
@@ -103,7 +106,12 @@ export function CommandBarInput() {
   // que corresponda a lo nuevo.
   const showOverlay =
     !overlayDismissedSignal.value &&
-    (hasError || hasWarning || hasCommandResults || hasCustomerResults || hasSearchResults);
+    (hasError ||
+      hasWarning ||
+      hasNotice ||
+      hasCommandResults ||
+      hasCustomerResults ||
+      hasSearchResults);
 
   // updateCommandBarBuffer (no tocar los signals directo): además de
   // actualizar el buffer, resetea/reindexa la selección de las tres listas
@@ -287,6 +295,13 @@ export function CommandBarInput() {
                 }}
               >
                 ⚠ {commandBarWarningSignal.value}
+              </p>
+            ) : hasNotice ? (
+              <p
+                role="status"
+                style={{ margin: 0, padding: 'var(--space-2)', color: 'var(--color-chrome-text)' }}
+              >
+                {commandBarNoticeSignal.value}
               </p>
             ) : hasCommandResults ? (
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>

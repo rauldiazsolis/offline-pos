@@ -159,12 +159,12 @@ describe('closeSaleAndPersist', () => {
     expect(confirmEvent).toMatchObject({ holdId: 'hold-1', saleId: result.value.id });
   });
 
-  it('rechaza cerrar la venta sin un turno de caja abierto', async () => {
+  it('cierra la venta sin un turno de caja abierto (Etapa 5, #100)', async () => {
     await closeCashSessionAndPersist({ closingAmount: 0 }); // cierra el turno que abrió el beforeEach
 
     const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
 
-    expect(result).toEqual({ ok: false, error: 'cash-session/none-open', meta: undefined });
+    expect(result.ok).toBe(true);
   });
 
   it('agrega el id de la venta al turno de caja abierto', async () => {

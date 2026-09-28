@@ -1,5 +1,5 @@
 import './tokens.css';
-import { CashSessionScreen } from './screens/cash-session-screen.tsx';
+import { CashScreen } from './screens/cash-screen.tsx';
 import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
 import { CheckoutScreen } from './screens/checkout-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
@@ -30,7 +30,7 @@ function ActiveScreen() {
     case 'config':
       return <ConfigScreen />;
     case 'cash':
-      return <CashSessionScreen />;
+      return <CashScreen />;
     case 'cash-summary':
       return <CashSummaryScreen />;
     case 'demo-reset':
