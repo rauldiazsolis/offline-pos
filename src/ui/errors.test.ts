@@ -7,9 +7,9 @@ describe('describeError', () => {
       describeError({
         ok: false,
         error: 'sync/incompatible-contract',
-        meta: { backend: '4.0.0', pos: '4.2.0' },
+        meta: { backend: '4.0.0', pos: '4.3.0' },
       }),
-    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.2 o posterior.');
+    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.3 o posterior.');
   });
 
   it('códigos de caja (#100)', () => {

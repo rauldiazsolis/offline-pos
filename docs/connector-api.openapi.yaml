@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '4.2.0'
+  version: '4.3.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
@@ -12,7 +12,20 @@ info:
     issue #96; `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`,
     issue #99; `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`,
     issues #100 y #120; `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`,
-    issue #101).
+    issue #101; `docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`,
+    issue #125).
+
+    **4.3.0 respecto de 4.2.0** (aditivo, #125):
+      - `CustomerPayment.voidsPaymentId` opcional: la anulación de una
+        cobranza es otra cobranza, con los mismos medios en negativo, `total`
+        negativo, el mismo `customerId`, su propio `receipt` y
+        `voidsPaymentId` apuntando a la que anula. Viaja como un evento
+        `customer-payment` más. La original nunca se modifica. El backend la
+        trata como cualquier cobranza (el saldo se mueve por `-total`, así que
+        sube) y puede usar `voidsPaymentId` para auditoría o para marcar la
+        original.
+      - Un POS 4.3.0 considera incompatible a un backend 4.2: podría rechazar
+        o malinterpretar una cobranza negativa.
 
     **4.2.0 respecto de 4.1.0** (aditivo, Etapa 6 del epic #94):
       - `CustomerPayment.receipt` opcional (`{ date, number }`): el número de
@@ -522,15 +535,15 @@ components:
       required: [id, customerId, payments, total, createdAt]
       description: |
         Cobranza sin venta, a favor de un cliente identificado (tenga o no
-        cuenta corriente). Sin vuelto: lo tendido es lo acreditado. No se
-        anula: se corrige con otro registro.
+        cuenta corriente). Sin vuelto: lo tendido es lo acreditado. Se anula
+        con otra cobranza (4.3.0): ver `voidsPaymentId`.
       properties:
         id: { type: string }
         customerId: { type: string }
         payments:
           type: array
           items: { $ref: '#/components/schemas/Payment' }
-          description: method != account, amount > 0.
+          description: 'method != account; amount > 0, salvo en una anulación (voidsPaymentId), donde todos son < 0.'
         total: { type: number, description: Suma de payments. }
         createdAt: { type: string, format: date-time }
         receipt:
@@ -544,6 +557,13 @@ components:
           properties:
             date: { type: string, format: date, example: '2026-09-27' }
             number: { type: integer, minimum: 1, example: 3 }
+        voidsPaymentId:
+          type: string
+          description: |
+            Solo en la anulación de una cobranza (4.3.0, #125): el id de la
+            cobranza que anula. Mismos medios con `amount` negativo, `total`
+            negativo, mismo `customerId` y su propio `receipt`. El original
+            nunca se modifica.
 
     EventOrigin:
       type: object

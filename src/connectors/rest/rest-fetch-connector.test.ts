@@ -334,18 +334,18 @@ describe('contrato 4.0.0 (#99)', () => {
   it('getInfo hace GET /info con Authorization y la versión del contrato', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ contractVersion: '4.2.0', status: 'ok' }));
+      .mockResolvedValue(jsonResponse({ contractVersion: '4.3.0', status: 'ok' }));
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await createRestFetchConnector(config).getInfo();
 
-    expect(result).toEqual({ ok: true, value: { contractVersion: '4.2.0', status: 'ok' } });
+    expect(result).toEqual({ ok: true, value: { contractVersion: '4.3.0', status: 'ok' } });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.example.com/info');
     expect(init.method).toBe('GET');
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer secret-key',
-      'X-POS-Contract-Version': '4.2.0',
+      'X-POS-Contract-Version': '4.3.0',
     });
   });
 
@@ -367,7 +367,7 @@ describe('contrato 4.0.0 (#99)', () => {
     await connector.requestAccountHold({ customerId: 'c1', amount: 10 }, 'k');
 
     for (const call of fetchMock.mock.calls as [string, RequestInit][]) {
-      expect(call[1].headers).toMatchObject({ 'X-POS-Contract-Version': '4.2.0' });
+      expect(call[1].headers).toMatchObject({ 'X-POS-Contract-Version': '4.3.0' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -393,7 +393,7 @@ describe('contrato 4.0.0 (#99)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'sync/incompatible-contract',
-      meta: { backend: '3.0.0', pos: '4.2.0' },
+      meta: { backend: '3.0.0', pos: '4.3.0' },
     });
   });
 

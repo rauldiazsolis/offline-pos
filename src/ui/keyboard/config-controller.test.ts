@@ -63,7 +63,7 @@ function stubRestBackend(): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn((url: string) => {
     const path = new URL(url).pathname;
     if (path === '/info') {
-      return Promise.resolve(okResponse({ contractVersion: '4.2.0', status: 'ok' }));
+      return Promise.resolve(okResponse({ contractVersion: '4.3.0', status: 'ok' }));
     }
     if (path === '/sync/pull') {
       return Promise.resolve(
