@@ -1,6 +1,7 @@
 import { buildCashCount, calculateCashBalance, type CashCount } from '../domain/cash-count.ts';
 import { buildManualCashMovement, type CashMovement } from '../domain/cash-movement.ts';
 import { conceptKey, rankConcepts, recordConceptUse } from '../domain/concept-ranking.ts';
+import type { CustomerPayment } from '../domain/customer-payment.ts';
 import { buildOutboxEventForCashMovement } from '../domain/outbox.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import type { Sale } from '../domain/sale.ts';
@@ -20,33 +21,41 @@ function persistFailed(error: unknown): Result<never> {
 
 /**
  * Lo que entra en el saldo: el último arqueo y lo creado después. Se llama dentro de una
- * transacción que incluye `cashCounts`, `sales` y `cashMovements`, así el saldo que se calcula es
- * el de ese momento.
+ * transacción que incluye `cashCounts`, `sales`, `cashMovements` y `customerPayments` (#101), así
+ * el saldo que se calcula es el de ese momento.
  */
 async function readBalanceInputs(): Promise<{
   lastCount: CashCount | undefined;
   sales: Sale[];
   movements: CashMovement[];
+  collections: CustomerPayment[];
 }> {
   const lastCount = await db.cashCounts.orderBy('createdAt').last();
   const since = lastCount?.createdAt;
-  const [sales, movements] = await Promise.all([
+  const [sales, movements, collections] = await Promise.all([
     since === undefined ? db.sales.toArray() : db.sales.where('createdAt').above(since).toArray(),
     since === undefined
       ? db.cashMovements.toArray()
       : db.cashMovements.where('createdAt').above(since).toArray(),
+    since === undefined
+      ? db.customerPayments.toArray()
+      : db.customerPayments.where('createdAt').above(since).toArray(),
   ]);
-  return { lastCount, sales, movements };
+  return { lastCount, sales, movements, collections };
 }
 
 export async function getCashBalance(): Promise<CashBalance> {
-  return db.transaction('r', [db.cashCounts, db.sales, db.cashMovements], async () => {
-    const inputs = await readBalanceInputs();
-    const balance = calculateCashBalance(inputs);
-    return inputs.lastCount !== undefined
-      ? { balance, lastCountAt: inputs.lastCount.createdAt }
-      : { balance };
-  });
+  return db.transaction(
+    'r',
+    [db.cashCounts, db.sales, db.cashMovements, db.customerPayments],
+    async () => {
+      const inputs = await readBalanceInputs();
+      const balance = calculateCashBalance(inputs);
+      return inputs.lastCount !== undefined
+        ? { balance, lastCountAt: inputs.lastCount.createdAt }
+        : { balance };
+    },
+  );
 }
 
 /**
@@ -63,7 +72,7 @@ export async function recordCashCount(
   try {
     return await db.transaction(
       'rw',
-      [db.cashCounts, db.sales, db.cashMovements, db.outbox],
+      [db.cashCounts, db.sales, db.cashMovements, db.customerPayments, db.outbox],
       async () => {
         const expected = calculateCashBalance(await readBalanceInputs());
         const built = buildCashCount({
@@ -115,7 +124,11 @@ export async function recordCashMovement(input: {
       const rows = await db.cashConcepts.where('direction').equals(movement.direction).toArray();
       const existing = rows.find((row) => conceptKey(row.concept) === conceptKey(movement.concept));
       await db.cashConcepts.put(
-        recordConceptUse(existing, { direction: movement.direction, concept: movement.concept, now }),
+        recordConceptUse(existing, {
+          direction: movement.direction,
+          concept: movement.concept,
+          now,
+        }),
       );
     });
   } catch (error) {
