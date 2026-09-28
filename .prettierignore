@@ -6,6 +6,9 @@ pnpm-lock.yaml
 
 # Documentos de prosa, formateados a mano — no tocar tablas/wrapping.
 CLAUDE.md
+/AGENTS.md
+src/**/AGENTS.md
+e2e/AGENTS.md
 pos-web-diseno-arquitectura.md
 docs/historia.md
 
