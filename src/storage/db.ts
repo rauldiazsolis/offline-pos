@@ -1,6 +1,9 @@
-import Dexie, { type EntityTable } from 'dexie';
+import Dexie, { type EntityTable, type Table } from 'dexie';
 import type { Cart } from '../domain/cart.ts';
+import type { CashCount } from '../domain/cash-count.ts';
+import type { CashMovement } from '../domain/cash-movement.ts';
 import type { CashSession } from '../domain/cash-session.ts';
+import type { CashConcept } from '../domain/concept-ranking.ts';
 import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
@@ -34,6 +37,9 @@ class PosDatabase extends Dexie {
   accountMovements!: EntityTable<AccountMovement, 'id'>;
   draftCart!: EntityTable<DraftCart, 'id'>;
   cashSessions!: EntityTable<CashSession, 'id'>;
+  cashMovements!: EntityTable<CashMovement, 'id'>;
+  cashCounts!: EntityTable<CashCount, 'id'>;
+  cashConcepts!: Table<CashConcept, [CashConcept['direction'], string]>;
 
   constructor() {
     super('offline-pos');
@@ -65,6 +71,14 @@ class PosDatabase extends Dexie {
     // responde "¿esta venta ya tiene anulación?" sin recorrer la tabla.
     this.version(6).stores({
       sales: 'id, status, createdAt, voidsSaleId',
+    });
+    // Etapa 5 de #94 (#100): caja sin turnos. `cashMovements` son los del contrato (todos con su
+    // evento en el outbox); `cashCounts` guarda cada arqueo, aunque no tenga diferencia (base del
+    // saldo); `cashConcepts` es la estadística de conceptos, nunca se limpia a los 7 días.
+    this.version(7).stores({
+      cashMovements: 'id, createdAt',
+      cashCounts: 'id, createdAt',
+      cashConcepts: '[direction+concept], direction',
     });
   }
 }
