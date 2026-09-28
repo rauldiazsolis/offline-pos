@@ -1,5 +1,6 @@
 import { err, ok, type Result } from './result.ts';
 import type { Payment } from './sale.ts';
+import type { DailyNumber } from './ticket-number.ts';
 
 /**
  * Cobranza sin venta (contrato v3, #96 — la genera la Etapa 6): un pago a
@@ -12,6 +13,8 @@ export type CustomerPayment = {
   payments: Payment[];
   total: number;
   createdAt: string; // ISO 8601
+  /** Número de recibo del día local (#101). Una cobranza anterior no tiene y nunca se le inventa. */
+  receipt?: DailyNumber;
 };
 
 export function buildCustomerPayment(params: {
