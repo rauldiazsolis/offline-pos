@@ -91,6 +91,11 @@ export type ErrorMeta = {
   'cash-session/persist-failed': { message: string };
   'cash-session/none-ever': undefined; // storage/cash-summary-repository.ts
 
+  // cash-count.ts, cash-movement.ts, storage/cash-repository.ts (caja sin turnos, #100)
+  'cash/invalid-amount': { amount: number };
+  'cash/concept-required': undefined;
+  'cash/persist-failed': { message: string };
+
   // customer-payment.ts (cobranza sin venta, contrato v3)
   'customer-payment/invalid': { reason: 'empty' | 'account-method' | 'non-positive-amount' };
 

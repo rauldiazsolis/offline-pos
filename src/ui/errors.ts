@@ -124,6 +124,12 @@ export function describeError(failure: Failure): string {
       return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
     case 'cash-session/none-ever':
       return 'No hay ningún turno de caja para consultar.';
+    case 'cash/invalid-amount':
+      return 'Monto inválido.';
+    case 'cash/concept-required':
+      return 'Falta el concepto.';
+    case 'cash/persist-failed':
+      return `No se pudo guardar el movimiento de caja (${failure.meta.message}).`;
     case 'customer-payment/invalid':
       if (failure.meta.reason === 'account-method') {
         return 'La cobranza no admite cuenta corriente.';
