@@ -17,7 +17,16 @@ import {
 } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
 import type { StockMovement } from '../domain/stock.ts';
+import {
+  lastTicketNumberOn,
+  localDateKey,
+  localDayRange,
+  nextTicketNumber,
+  shiftDateKey,
+  type TicketNumber,
+} from '../domain/ticket-number.ts';
 import { currentEventOrigin } from '../sync/terminal-identity.ts';
+import { getTicketCounter, setTicketCounter } from '../sync/ticket-counter.ts';
 import { getCurrentOpenCashSession } from './cash-session-repository.ts';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
@@ -94,7 +103,14 @@ async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
  * Persiste una venta ya armada (un cierre o el ticket de una anulación, #99)
  * con todo lo que la acompaña, en una sola transacción: la venta, sus
  * movimientos de stock y de cuenta, sus eventos del outbox y, si hay un turno
- * abierto, su registro en él.
+ * abierto, su registro en él. Devuelve la venta con su número de ticket.
+ *
+ * El número (#120) se asigna **adentro** de la transacción: dos cierres casi
+ * simultáneos no pueden leer el mismo "último número". Por eso los eventos del
+ * outbox también se arman adentro (son funciones puras, no cortan la
+ * transacción de Dexie): tienen que viajar con el número. El contador de
+ * `localStorage` se escribe después del commit; si esa escritura falla, el
+ * próximo número se deriva de las ventas locales del día.
  */
 async function persistSaleDocument(
   sale: Sale,
@@ -105,7 +121,7 @@ async function persistSaleDocument(
     openSession: CashSession | undefined;
     pendingHold?: { holdId: string };
   },
-): Promise<Result<void>> {
+): Promise<Result<Sale & { ticket: TicketNumber }>> {
   const { now, origin, openSession } = params;
   const trackedProductIds = await trackedProductIdsFor(sale.lines);
   const movements = buildStockMovementsForSale(sale, {
@@ -114,24 +130,12 @@ async function persistSaleDocument(
     newMovementId: newId,
     trackedProductIds,
   });
-  const outboxEvents = [
-    buildOutboxEventForSale(sale, { now, origin }),
-    ...buildOutboxEventsForStockMovements(movements, { now, origin }),
-    ...(params.pendingHold !== undefined
-      ? [
-          buildOutboxEventForHoldConfirm({
-            id: newId(),
-            holdId: params.pendingHold.holdId,
-            saleId: sale.id,
-            now,
-            origin,
-          }),
-        ]
-      : []),
-  ];
+  const stored = getTicketCounter();
+  const holdConfirmId = newId();
 
+  let numbered: Sale & { ticket: TicketNumber };
   try {
-    await db.transaction(
+    numbered = await db.transaction(
       'rw',
       [
         db.sales,
@@ -143,13 +147,48 @@ async function persistSaleDocument(
         db.cashSessions,
       ],
       async () => {
-        await db.sales.add(sale);
+        const date = localDateKey(sale.createdAt);
+        // Un día más ancho a cada lado por si una venta de hoy se numeró con
+        // otra fecha (reloj corregido): manda `ticket.date`, no la hora.
+        const nearby = await db.sales
+          .where('createdAt')
+          .between(
+            localDayRange(shiftDateKey(date, -1)).from,
+            localDayRange(shiftDateKey(date, 1)).to,
+            true,
+            false,
+          )
+          .toArray();
+        const withTicket = {
+          ...sale,
+          ticket: {
+            date,
+            number: nextTicketNumber({ date, stored, lastLocal: lastTicketNumberOn(nearby, date) }),
+          },
+        };
+        const outboxEvents = [
+          buildOutboxEventForSale(withTicket, { now, origin }),
+          ...buildOutboxEventsForStockMovements(movements, { now, origin }),
+          ...(params.pendingHold !== undefined
+            ? [
+                buildOutboxEventForHoldConfirm({
+                  id: holdConfirmId,
+                  holdId: params.pendingHold.holdId,
+                  saleId: withTicket.id,
+                  now,
+                  origin,
+                }),
+              ]
+            : []),
+        ];
+        await db.sales.add(withTicket);
         await applyStockMovements(movements, now);
-        await applyAccountMovements(sale, now);
+        await applyAccountMovements(withTicket, now);
         await db.outbox.bulkAdd(outboxEvents);
         if (openSession !== undefined) {
-          await db.cashSessions.put(recordSaleInCashSession(openSession, sale.id));
+          await db.cashSessions.put(recordSaleInCashSession(openSession, withTicket.id));
         }
+        return withTicket;
       },
     );
   } catch (error) {
@@ -157,7 +196,8 @@ async function persistSaleDocument(
       message: error instanceof Error ? error.message : String(error),
     });
   }
-  return ok(undefined);
+  setTicketCounter({ date: numbered.ticket.date, last: numbered.ticket.number });
+  return ok(numbered);
 }
 
 /**
@@ -211,7 +251,7 @@ export async function closeSaleAndPersist(params: {
   if (!persisted.ok) {
     return persisted;
   }
-  return ok(sale);
+  return ok(persisted.value);
 }
 
 /**
@@ -259,7 +299,7 @@ export async function voidSaleAndPersist(
   if (!persisted.ok) {
     return persisted;
   }
-  return ok(voidTicket);
+  return ok(persisted.value);
 }
 
 /** Una fila de `/ANULAR` (#99): anulable, original ya anulada, o el ticket de una anulación. */

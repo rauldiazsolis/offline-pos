@@ -10,6 +10,8 @@ import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
 import type { Sale } from '../domain/sale.ts';
 import { closeSaleAndPersist, listVoidCandidates, voidSaleAndPersist } from './sale-repository.ts';
+import { localDateKey } from '../domain/ticket-number.ts';
+import { getTicketCounter, setTicketCounter, TICKET_COUNTER_KEY } from '../sync/ticket-counter.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -363,5 +365,63 @@ describe('listVoidCandidates (#99)', () => {
 
     expect(candidates).toHaveLength(20);
     expect(candidates[0]?.sale.id).toBe('s24');
+  });
+});
+
+describe('número de ticket (#120)', () => {
+  const pay = [{ method: 'cash' as const, amount: 200 }];
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  async function closeOne(): Promise<Sale> {
+    const result = await closeSaleAndPersist({ cart, payments: pay });
+    if (!result.ok) throw new Error('setup falló');
+    return result.value;
+  }
+
+  it('numera las ventas del día en orden y guarda el contador', async () => {
+    const first = await closeOne();
+    const second = await closeOne();
+
+    expect(first.ticket).toEqual({ date: localDateKey(first.createdAt), number: 1 });
+    expect(second.ticket?.number).toBe(2);
+    expect(getTicketCounter()).toEqual({ date: localDateKey(second.createdAt), last: 2 });
+    await expect(db.sales.get(second.id)).resolves.toMatchObject({ ticket: second.ticket });
+  });
+
+  it('el evento sale del outbox lleva el número', async () => {
+    const sale = await closeOne();
+    const event = await db.outbox.get(sale.id);
+    expect(event?.type === 'sale' ? event.sale.ticket : undefined).toEqual(sale.ticket);
+  });
+
+  it('la anulación es un ticket propio y consume número', async () => {
+    await closeOne();
+    const second = await closeOne();
+    const result = await voidSaleAndPersist(second.id);
+    expect(result.ok && result.value.ticket?.number).toBe(3);
+  });
+
+  it('contador perdido: retoma desde las ventas locales', async () => {
+    await closeOne();
+    localStorage.removeItem(TICKET_COUNTER_KEY);
+    const next = await closeOne();
+    expect(next.ticket?.number).toBe(2);
+  });
+
+  it('datos locales borrados: el contador evita repetir', async () => {
+    await closeOne();
+    await closeOne();
+    await db.sales.clear();
+    const next = await closeOne();
+    expect(next.ticket?.number).toBe(3);
+  });
+
+  it('día nuevo: un contador de otra fecha no cuenta', async () => {
+    setTicketCounter({ date: '2000-01-01', last: 99 });
+    const sale = await closeOne();
+    expect(sale.ticket?.number).toBe(1);
   });
 });
