@@ -65,9 +65,9 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'delta',
     fields: restConfigFields,
     commands: [],
-    description: 'Cualquier backend que implemente el contrato del Connector API v3.',
+    description: 'Cualquier backend que implemente el contrato del Connector API.',
     setupHelp: [
-      'El backend tiene que implementar el contrato v3 (docs/connector-api.openapi.yaml).',
+      'El backend tiene que implementar el contrato del Connector API (docs/connector-api.openapi.yaml).',
       'Cargá la URL base del backend, por ejemplo https://api.mi-negocio.com.',
       'Si el backend pide una API key, cargala; si no, dejala vacía.',
     ],
@@ -92,7 +92,9 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'snapshot',
     fields: googleSheetsConfigFields,
     commands: [],
-    description: 'Una planilla de Google Sheets, a través de un puente de Apps Script.',
+    // Congelado en el contrato 4.2 (#127): con un POS posterior, el puente figura como incompatible.
+    description:
+      'Una planilla de Google Sheets, a través de un puente de Apps Script. Sin mantenimiento: habla el contrato 4.2.',
     setupHelp: [
       'En la planilla: Extensiones → Apps Script. Pegá bridge.gs y columnas.gs (están en src/connectors/google-sheets/).',
       'Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier persona.',

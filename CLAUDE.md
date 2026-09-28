@@ -14,6 +14,54 @@ facturación) vía un contrato de API propio versionado — el POS no conoce nin
 Fuera de alcance por ahora: facturación fiscal de un país específico, multi-tenant/SaaS, pasarelas
 de pago y cobranzas con medios múltiples (eso es v2 — hoy el pago es solo `medio + monto`).
 
+## Cómo trabajamos
+
+Convenciones de proceso acordadas con el usuario (antes vivían en la memoria local de Claude, #117).
+
+- **Idioma**: todo en español — respuestas, resúmenes, informes, preguntas, specs, planes, commits y
+  comentarios —, aunque el pedido o las instrucciones de un skill vengan en inglés.
+- **Plan antes de codear**: un trabajo de varios pasos (una etapa, un ciclo) arranca con un plan que el
+  usuario revisa y aprueba; solo se saltea si él lo dice para ese trabajo puntual. El plan se ejecuta
+  **inline** (`superpowers:executing-plans`, tarea por tarea con checkpoints), no con un subagente por
+  tarea: el ritmo pausado le da tiempo de revisar cada paso.
+- **Informe final con prueba manual**: al terminar, un informe más instrucciones paso a paso de qué
+  hacer en la UI y qué se debería ver — la prueba en el navegador la hace el usuario.
+- **Revisión sin cambios**: en una revisión (entre etapas, o una tanda de observaciones) no se toca
+  código salvo pedido explícito en el momento; las observaciones se anotan como issues. Contestar una
+  pregunta de alcance ("¿esto lo resolvemos ahora?") **no** es la luz verde para implementar: esa es
+  aparte y explícita ("dale, implementá").
+- **Ramas y PR**: cada etapa en su propia rama, con commits chicos verificados localmente
+  (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`, y `pnpm test:e2e` cuando aplica). El PR
+  se abre recién al terminar la etapa, después de la revisión y de sus cambios pedidos (el CI remoto
+  solo corre en PR y en `main`, así corre una vez por etapa), y se mergea con **merge commit**, nunca
+  squash: el historial commit por commit sirve para revisar y hacer bisect.
+- **CI**: después de un push no se espera ni se lee el CI de GitHub (hacerlo enlentece los comandos
+  locales); alcanzan los chequeos locales. Si el CI falla, el usuario avisa.
+- **Issues en GitHub**, nunca en un markdown del repo. "Anotá: …" crea un issue y se sigue con lo que
+  se estaba haciendo. Se agrupan por **feature** (slice vertical de dominio a UI) con etiquetas
+  `feature:<slug>` (`feature:transversal` para lo que cruza todo; los bugs también llevan la suya); un
+  issue que junta varias pantallas se parte en uno por feature al planificarlo y queda como tracking
+  con checklist. El cuerpo tiene que alcanzar para arrancar una sesión nueva sin más contexto
+  (contexto, causa o hueco, archivos, preguntas abiertas). Etiqueta `backlog`: se prioriza después de
+  lo ya diseñado.
+- **Claude mantiene los issues** (el usuario no los edita a mano): al mergear una etapa, cierra su
+  issue con un comentario que apunta al PR y tilda el epic ("— PR #N"). En el cuerpo del PR va
+  **"Closes #N"** — GitHub no reconoce "Cierra #N" — y después del merge se verifica que se haya cerrado.
+- **Dependencias**: con varias opciones equivalentes, la librería va detrás de un puerto (ver
+  "Patrones establecidos") y se prefiere la que tenga menos dependencias propias
+  (`npm view <paquete> dependencies`), aunque sea menos popular.
+
+## POS y mini-erp: desarrollo separado
+
+`mini-erp/` es un backend propio (Express + SQLite multitenant) que implementa el Connector API: uno
+más de los backends que usan el POS, no parte del POS. Desde el 2026-09-28 los dos se desarrollan por
+separado: **ningún cambio del POS dispara cambios en el mini-erp, ni al revés, sin autorización
+explícita del usuario en ese momento**. Un cambio de contrato en el POS se anuncia (qué rompe en los
+backends) y, a lo sumo, se propone un issue `feature:mini-erp`; no se adapta el mini-erp en el mismo
+trabajo. Trabajando en el mini-erp rigen su `mini-erp/AGENTS.md` y `.agents/rules/mini-erp.md`, que no
+permiten tocar el resto del repo. Hasta la Etapa 6 de #94 el mini-erp se adaptó dentro de las etapas
+del POS (Etapas 5 y 6); eso quedó atrás.
+
 ## Stack
 
 | Capa | Elección |
@@ -324,15 +372,30 @@ incompatible a un backend 4.1 ("se necesita 4.2 o posterior"). El minibackend ll
 cualquier cliente (arranca en 0 con su primer movimiento) y muestra recibos y saldos en `/_demo`; el
 puente de Sheets (hay que redesplegar `bridge.gs` y `columnas.gs`) escribe "Fecha del recibo" y "N° de
 recibo" en Cobranzas y calcula el saldo de cada cliente sumando el libro `CuentaCorriente` (entra en
-el fingerprint, así viaja en el delta); el mini-erp habla 4.2.0 y guarda el recibo en el payload (la
-validación Zod de `customer-payment` queda en #122).
+el fingerprint, así viaja en el delta). (El mini-erp se adaptó a 4.2.0 dentro de esta etapa, antes de
+separar los dos desarrollos.)
+
+**Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
+mismo trabajo — es la referencia ejecutable del contrato. El mini-erp no (ver "POS y mini-erp:
+desarrollo separado"). El conector de Google Sheets tampoco: **congelado en 4.2.0** desde el
+2026-09-28 (#127) — un cambio de contrato o de la interfaz `Connector` no lo hace evolucionar; solo se
+hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso deja de ser mecánico se
+frena y se consulta (adaptarlo o sacarlo del registro). La red de seguridad ya existe: el puente
+informa su versión (`bridge.gs::CONTRACT_VERSION`), así que con un POS posterior la terminal lo ve
+incompatible, no sincroniza y sigue vendiendo sin perder nada. Cada cambio de contrato suma en #127
+lo que haría falta para retomarlo; `/CONFIG` lo muestra como "Sin mantenimiento".
+
+**Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
+(el puente de Sheets usa `@OnlyCurrentDoc`). Si una función más linda necesita un scope más amplio, se
+descarta o se ofrece como decisión explícita del usuario — nunca se amplía por defecto (caso real: las
+tablas nativas de Sheets, que pedían acceso a todo Drive, se descartaron en la Etapa 2d).
 
 **Contrato 4.1.0 (#120)** — aditivo: `Sale.ticket?: { date, number }`, el número del ticket en su
 día local (ver "Caja sin turnos y numeración de tickets" en "UX keyboard-first"). Por la regla de
 compatibilidad, un POS 4.1.0 ve **incompatible** a un backend 4.0.0 (podría no guardar el número): el
 minibackend, el puente de Sheets (hay que redesplegar `bridge.gs`: dos columnas opcionales nuevas en
-Ventas, "Fecha del ticket" y "N° de ticket") y el mini-erp (`mini-erp/`, que valida la venta con Zod,
-#122 para el resto de los eventos) hablan 4.1.0. El mensaje dice "se necesita 4.1 o posterior"
+Ventas, "Fecha del ticket" y "N° de ticket") y el mini-erp (adaptado en esta etapa, antes de la
+separación) hablan 4.1.0. El mensaje dice "se necesita 4.1 o posterior"
 (`domain/contract-version.ts::contractRequirement`). `sync/connector.ts` no tiene schema de venta (las
 ventas solo se empujan), así que del lado del POS no hubo nada que aceptar.
 
@@ -1554,7 +1617,8 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   plan `docs/superpowers/plans/2026-09-24-caja-sin-turnos-y-numeracion.md`): ver "Caja sin turnos y
   numeración de tickets" en "UX keyboard-first", "Contrato 4.1.0" en "Connector API" y la limpieza a
   7 días en "Patrón outbox". Incluye al mini-erp (excepción puntual a su `AGENTS.md`, acordada con el
-  usuario: se modificó y commiteó desde el branch de la etapa); su alineación de estrictez quedó en
+  usuario: se modificó y commiteó desde el branch de la etapa; ya no se hace, ver "POS y mini-erp:
+  desarrollo separado"); su alineación de estrictez quedó en
   #122. Desvíos del plan (anotados en la spec): el minibackend y el mini-erp no suman columnas (la
   venta ya se guarda entera como JSON); no existe un comprobante de la anulación (anular vuelve a la
   venta); la fecha del último arqueo no se recalcula tras una limpieza (el ancla nunca se borra); el
