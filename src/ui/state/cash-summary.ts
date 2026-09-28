@@ -2,7 +2,7 @@ import { signal } from '@preact/signals';
 import type { CashSummaryContext } from '../../storage/cash-summary-repository.ts';
 
 /**
- * Estado de `/RESUMEN` — un signal por responsabilidad, mismo patrón que `cash-session.ts`.
+ * Estado de `/RESUMEN` — un signal por responsabilidad, mismo patrón que `cash.ts`.
  * `selectedTicketIndexSignal` arranca en `0` (no `null`): a diferencia de los overlays de la barra
  * de comandos, acá siempre hay "algún" ticket seleccionado apenas hay al menos uno (no hay ningún
  * estado "nada elegido" con la lista no vacía).

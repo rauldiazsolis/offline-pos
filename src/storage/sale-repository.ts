@@ -1,5 +1,4 @@
 import type { Cart } from '../domain/cart.ts';
-import { recordSaleInCashSession, type CashSession } from '../domain/cash-session.ts';
 import { buildAccountMovementForSale } from '../domain/customer.ts';
 import {
   buildOutboxEventForHoldConfirm,
@@ -27,7 +26,6 @@ import {
 } from '../domain/ticket-number.ts';
 import { currentEventOrigin } from '../sync/terminal-identity.ts';
 import { getTicketCounter, setTicketCounter } from '../sync/ticket-counter.ts';
-import { getCurrentOpenCashSession } from './cash-session-repository.ts';
 import { db } from './db.ts';
 import { newId } from './ids.ts';
 
@@ -102,8 +100,8 @@ async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
 /**
  * Persiste una venta ya armada (un cierre o el ticket de una anulación, #99)
  * con todo lo que la acompaña, en una sola transacción: la venta, sus
- * movimientos de stock y de cuenta, sus eventos del outbox y, si hay un turno
- * abierto, su registro en él. Devuelve la venta con su número de ticket.
+ * movimientos de stock y de cuenta y sus eventos del outbox. Devuelve la venta
+ * con su número de ticket.
  *
  * El número (#120) se asigna **adentro** de la transacción: dos cierres casi
  * simultáneos no pueden leer el mismo "último número". Por eso los eventos del
@@ -118,11 +116,10 @@ async function persistSaleDocument(
     reason: StockMovement['reason'];
     now: string;
     origin: EventOrigin;
-    openSession: CashSession | undefined;
     pendingHold?: { holdId: string };
   },
 ): Promise<Result<Sale & { ticket: TicketNumber }>> {
-  const { now, origin, openSession } = params;
+  const { now, origin } = params;
   const trackedProductIds = await trackedProductIdsFor(sale.lines);
   const movements = buildStockMovementsForSale(sale, {
     reason: params.reason,
@@ -144,7 +141,6 @@ async function persistSaleDocument(
         db.outbox,
         db.accountMovements,
         db.customerAccounts,
-        db.cashSessions,
       ],
       async () => {
         const date = localDateKey(sale.createdAt);
@@ -185,9 +181,6 @@ async function persistSaleDocument(
         await applyStockMovements(movements, now);
         await applyAccountMovements(withTicket, now);
         await db.outbox.bulkAdd(outboxEvents);
-        if (openSession !== undefined) {
-          await db.cashSessions.put(recordSaleInCashSession(openSession, withTicket.id));
-        }
         return withTicket;
       },
     );
@@ -220,10 +213,6 @@ export async function closeSaleAndPersist(params: {
   const now = new Date().toISOString();
   const origin = currentEventOrigin();
 
-  // Etapa 5 de #94 (#100): se vende sin turno. Si quedó uno abierto de
-  // antes, la venta se sigue registrando en él hasta que se eliminen.
-  const openSession = await getCurrentOpenCashSession();
-
   const saleResult = closeSale({
     cart: params.cart,
     payments: params.payments,
@@ -240,7 +229,6 @@ export async function closeSaleAndPersist(params: {
     reason: 'sale',
     now,
     origin,
-    openSession,
     ...(params.pendingHold !== undefined ? { pendingHold: params.pendingHold } : {}),
   });
   if (!persisted.ok) {
@@ -256,10 +244,6 @@ export async function closeSaleAndPersist(params: {
  * 'sale-void'`, reponen), sus movimientos de cuenta (acredita lo que se cargó
  * a cuenta corriente) y su evento `sale` en el outbox. El original no se toca
  * (RNF-07). Devuelve el ticket de anulación.
- *
- * Anular no exige un turno de caja abierto; si hay uno, la anulación queda
- * registrada en él (hasta la Etapa 5, #100), así el arqueo de `/CAJA`
- * descuenta el efectivo devuelto.
  */
 export async function voidSaleAndPersist(
   saleId: string,
@@ -284,12 +268,10 @@ export async function voidSaleAndPersist(
   }
   const voidTicket = voidResult.value;
 
-  const openSession = await getCurrentOpenCashSession();
   const persisted = await persistSaleDocument(voidTicket, {
     reason: 'sale-void',
     now,
     origin,
-    openSession,
   });
   if (!persisted.ok) {
     return persisted;

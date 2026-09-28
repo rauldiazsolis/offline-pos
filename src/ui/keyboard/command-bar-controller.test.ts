@@ -1,6 +1,5 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import {
   commandBarBufferSignal,
@@ -59,14 +58,6 @@ describe('triggerCheckout (sin turnos desde la Etapa 5, #100)', () => {
     expect(commandBarErrorSignal.value).toBeNull();
   });
 
-  it('con un turno abierto, pasa a la pantalla de cobro', async () => {
-    await openCashSessionAndPersist({ openingAmount: 0 });
-
-    await triggerCheckout();
-
-    expect(activeScreenSignal.value).toBe('checkout');
-    expect(commandBarErrorSignal.value).toBeNull();
-  });
 });
 
 describe('comandos habilitados (Etapa 2 de #94)', () => {
@@ -249,8 +240,7 @@ describe('availableCommands (Etapa 2c)', () => {
 });
 
 describe('Enter con la barra vacía (#99)', () => {
-  it('con líneas y turno abierto abre Cobro', async () => {
-    await openCashSessionAndPersist({ openingAmount: 0 });
+  it('con líneas abre Cobro', async () => {
     cartSignal.value = { lines: [freeformLine] };
 
     await submitEmptyCommandBar();
@@ -259,7 +249,6 @@ describe('Enter con la barra vacía (#99)', () => {
   });
 
   it('con una línea seleccionada igual abre Cobro', async () => {
-    await openCashSessionAndPersist({ openingAmount: 0 });
     cartSignal.value = { lines: [freeformLine] };
     cartSelectionIndexSignal.value = 0;
 

@@ -42,7 +42,7 @@ async function seedEverything(): Promise<void> {
   await db.products.put(product);
   await db.customers.put({ id: 'c1', name: 'Ana', createdAt: now });
   await db.sales.bulkPut([makeSale('s1'), makeSale('s2')]);
-  await db.cashSessions.put({ id: 'cs1', openedAt: now, openingAmount: 0, sales: [] });
+  await db.cashCounts.put({ id: 'cc1', expected: 0, counted: 0, createdAt: now });
   await db.outbox.put(buildOutboxEventForSale(makeSale('s1'), { now, origin: {} }));
   await db.outbox.put(markSynced(buildOutboxEventForSale(makeSale('s2'), { now, origin: {} })));
   await db.draftCart.put({
@@ -64,7 +64,8 @@ describe('summarizeLocalData', () => {
       products: 0,
       customers: 0,
       sales: 0,
-      cashSessions: 0,
+      cashMovements: 0,
+      cashCounts: 0,
       pendingOutbox: 0,
       pendingSales: 0,
       draftCartLines: 0,
@@ -79,7 +80,8 @@ describe('summarizeLocalData', () => {
       products: 1,
       customers: 1,
       sales: 2,
-      cashSessions: 1,
+      cashMovements: 0,
+      cashCounts: 1,
       pendingOutbox: 1,
       pendingSales: 1,
       draftCartLines: 2,
@@ -92,7 +94,8 @@ describe('hasUserData', () => {
     products: 10,
     customers: 10,
     sales: 0,
-    cashSessions: 0,
+    cashMovements: 0,
+    cashCounts: 0,
     pendingOutbox: 0,
     pendingSales: 0,
     draftCartLines: 0,
@@ -102,7 +105,7 @@ describe('hasUserData', () => {
     expect(hasUserData(empty)).toBe(false);
   });
 
-  it.each(['sales', 'cashSessions', 'pendingOutbox', 'draftCartLines'] as const)(
+  it.each(['sales', 'cashCounts', 'cashMovements', 'pendingOutbox', 'draftCartLines'] as const)(
     '%s > 0 sí lo son',
     (field) => {
       expect(hasUserData({ ...empty, [field]: 1 })).toBe(true);

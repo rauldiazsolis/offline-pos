@@ -1,6 +1,5 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openCashSessionAndPersist } from '../../storage/cash-session-repository.ts';
 import { db } from '../../storage/db.ts';
 import { commandBarErrorSignal } from '../state/command-bar.ts';
 import {
@@ -36,26 +35,17 @@ afterEach(async () => {
 });
 
 describe('triggerCashSummary', () => {
-  it('sin ningún turno, error en la barra de comandos y no navega', async () => {
-    await triggerCashSummary();
-
-    expect(activeScreenSignal.value).toBe('sale');
-    expect(commandBarErrorSignal.value).toBe('No hay ningún turno de caja para consultar.');
-  });
-
-  it('con un turno abierto, navega y carga el contexto', async () => {
-    await openCashSessionAndPersist({ openingAmount: 100 });
+  it('navega y carga el contexto de hoy', async () => {
 
     await triggerCashSummary();
 
     expect(activeScreenSignal.value).toBe('cash-summary');
-    expect(cashSummaryContextSignal.value?.isClosed).toBe(false);
+    expect(cashSummaryContextSignal.value?.sales).toEqual([]);
   });
 });
 
 describe('exitCashSummaryScreen', () => {
   it('resetea el estado y vuelve a la venta', async () => {
-    await openCashSessionAndPersist({ openingAmount: 100 });
     await triggerCashSummary();
     ticketFilterSignal.value = 'algo';
 

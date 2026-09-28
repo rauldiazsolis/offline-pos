@@ -160,5 +160,6 @@ describe('migración a la versión 7', () => {
     await expect(db.sales.get('s1')).resolves.toMatchObject({ id: 's1' });
     await expect(db.cashCounts.count()).resolves.toBe(0);
     await expect(db.cashMovements.count()).resolves.toBe(0);
+    expect(db.tables.map((table) => table.name)).not.toContain('cashSessions');
   });
 });

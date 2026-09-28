@@ -29,7 +29,7 @@ import { identityResetSignal } from './state/sync-config.ts';
  * siguen usando los tests unitarios. Los specs e2e que a propósito prueban el
  * flujo 100% offline sin ningún backend (`e2e/offline-sale.spec.ts`,
  * `e2e/account-sale.spec.ts`, `e2e/void-sale.spec.ts`, y los de
- * `e2e/cart-persistence.spec.ts`/`e2e/cash-session.spec.ts`/
+ * `e2e/cart-persistence.spec.ts`/`e2e/cash.spec.ts`/
  * `e2e/keyboard-only.spec.ts` que venden algo) no pueden importar esos
  * módulos TS (corren contra el build real en el navegador, no en Node) — en
  * su lugar siembran el mismo fixture directo en IndexedDB vía

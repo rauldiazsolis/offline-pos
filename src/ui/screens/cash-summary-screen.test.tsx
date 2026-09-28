@@ -52,13 +52,14 @@ beforeEach(async () => {
   });
   activeScreenSignal.value = 'cash-summary';
   cashSummaryContextSignal.value = {
-    session: { id: 'cs1', openedAt: '2026-01-01T09:00:00.000Z', openingAmount: 100, sales: [] },
     summary: {
-      salesCount: 2,
-      totalsByMethod: { cash: 300, debit: 50, credit: 0, transfer: 0, qr: 0, account: 0 },
-      totalCollected: 350,
+      totalSold: 350,
+      ticketCount: 2,
+      voidedCount: 0,
       adjustmentTotal: -10,
-      expectedCash: 400,
+      totalsByMethod: { cash: 300, debit: 50, credit: 0, transfer: 0, qr: 0, account: 0 },
+      otherPayments: 50,
+      cash: { sales: 300, income: 0, expense: 0, countAdjustments: 0 },
     },
     sales: [
       {
@@ -79,7 +80,6 @@ beforeEach(async () => {
         createdAt: '2026-01-01T11:00:00.000Z',
       },
     ],
-    isClosed: false,
     voidedSaleIds: new Set(),
     voidOriginals: new Map(),
   };
@@ -316,7 +316,7 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
   it('mousedown sobre algo no enfocable (el título) se cancela para no sacarle el foco al buscador', () => {
     render(<CashSummaryScreen />);
 
-    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del turno'));
+    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del día'));
 
     expect(notCancelled).toBe(false);
   });
@@ -324,7 +324,7 @@ describe('atajos de teclado nuevos (post-PR #65)', () => {
   it('el botón del medio no se cancela (autoscroll)', () => {
     render(<CashSummaryScreen />);
 
-    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del turno'), { button: 1 });
+    const notCancelled = fireEvent.mouseDown(screen.getByText('Resumen del día'), { button: 1 });
 
     expect(notCancelled).toBe(true);
   });

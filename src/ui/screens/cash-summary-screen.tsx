@@ -33,8 +33,6 @@ import {
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 
-const NON_CASH_METHODS: PaymentMethod[] = ['debit', 'credit', 'transfer', 'qr', 'account'];
-
 const sidebarCardStyle = {
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)',
@@ -441,11 +439,7 @@ export function CashSummaryScreen() {
     return null; // invariante: no se entra a esta pantalla sin contexto (ver triggerCashSummary)
   }
 
-  const { summary, isClosed } = context;
-  const otherPayments = NON_CASH_METHODS.reduce(
-    (sum, method) => sum + summary.totalsByMethod[method],
-    0,
-  );
+  const { summary } = context;
 
   const filterValue =
     tab === 'products'
@@ -561,14 +555,7 @@ export function CashSummaryScreen() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Resumen del turno</h1>
-            {isClosed && (
-              <span
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-chrome-text-muted)' }}
-              >
-                Turno cerrado
-              </span>
-            )}
+            <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Resumen del día</h1>
           </div>
           <button
             type="button"
@@ -684,12 +671,12 @@ export function CashSummaryScreen() {
                 fontWeight: 700,
               }}
             >
-              {formatMoney(summary.totalCollected)}
+              {formatMoney(summary.totalSold)}
             </p>
           </div>
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Tickets emitidos</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>{summary.salesCount}</p>
+            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>{summary.ticketCount}</p>
           </div>
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Desc/Recargos</p>
@@ -712,7 +699,7 @@ export function CashSummaryScreen() {
           <div style={sidebarCardStyle}>
             <p style={sectionLabelStyle}>Otros pagos</p>
             <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
-              {formatMoney(otherPayments)}
+              {formatMoney(summary.otherPayments)}
             </p>
           </div>
         </div>

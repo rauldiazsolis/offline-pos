@@ -14,12 +14,6 @@ describe('describeError', () => {
     ).toBe('No se pudo guardar el movimiento de caja (boom).');
   });
 
-  it('cash-session/none-ever', () => {
-    const message = describeError({ ok: false, error: 'cash-session/none-ever', meta: undefined });
-
-    expect(message).toBe('No hay ningún turno de caja para consultar.');
-  });
-
   it('demo/unavailable-for-connector', () => {
     const message = describeError({
       ok: false,

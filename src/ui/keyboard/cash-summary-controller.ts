@@ -1,6 +1,4 @@
 import { getCashSummaryContext } from '../../storage/cash-summary-repository.ts';
-import { describeError } from '../errors.ts';
-import { commandBarErrorSignal } from '../state/command-bar.ts';
 import {
   cashSummaryContextSignal,
   cashSummaryTabSignal,
@@ -13,17 +11,9 @@ import {
 } from '../state/cash-summary.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
-/** Capa de glue entre `/RESUMEN` y `storage/cash-summary-repository.ts` — mismo rol que `cash-session-controller.ts`. */
+/** Capa de glue entre `/RESUMEN` y `storage/cash-summary-repository.ts` — mismo rol que `cash-controller.ts`. */
 export async function triggerCashSummary(): Promise<void> {
-  const context = await getCashSummaryContext();
-  if (context === undefined) {
-    commandBarErrorSignal.value = describeError({
-      ok: false,
-      error: 'cash-session/none-ever',
-      meta: undefined,
-    });
-    return;
-  }
+  const context = await getCashSummaryContext(new Date().toISOString());
   cashSummaryContextSignal.value = context;
   cashSummaryTabSignal.value = 'tickets';
   ticketFilterSignal.value = '';
