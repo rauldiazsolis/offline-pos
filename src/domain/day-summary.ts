@@ -1,6 +1,6 @@
 import type { CashCount } from './cash-count.ts';
 import type { CashMovement } from './cash-movement.ts';
-import type { CustomerPayment } from './customer-payment.ts';
+import { isVoidedPayment, type CustomerPayment } from './customer-payment.ts';
 import { roundAmount } from './rounding.ts';
 import { isVoided } from './sale-lifecycle.ts';
 import type { PaymentMethod, Sale } from './sale.ts';
@@ -32,7 +32,8 @@ export type DaySummary = {
     countAdjustments: number;
     collections: number;
   };
-  collections: { total: number; count: number };
+  /** `count` incluye las anulaciones, como los tickets; `voidedCount`, las originales anuladas (#125). */
+  collections: { total: number; count: number; voidedCount: number };
   collectionsByMethod: Record<PaymentMethod, number>;
 };
 
@@ -59,6 +60,7 @@ export function calculateDaySummary(params: {
   sales: readonly Sale[];
   movements: readonly CashMovement[];
   voidedSaleIds: ReadonlySet<string>;
+  voidedPaymentIds: ReadonlySet<string>;
   collections: readonly CustomerPayment[];
 }): DaySummary {
   const totalsByMethod = emptyByMethod();
@@ -115,7 +117,13 @@ export function calculateDaySummary(params: {
       countAdjustments: roundAmount(countAdjustments),
       collections: collectionsByMethod.cash,
     },
-    collections: { total: roundAmount(collectionsTotal), count: params.collections.length },
+    collections: {
+      total: roundAmount(collectionsTotal),
+      count: params.collections.length,
+      voidedCount: params.collections.filter((payment) =>
+        isVoidedPayment(payment, params.voidedPaymentIds),
+      ).length,
+    },
     collectionsByMethod,
   };
 }

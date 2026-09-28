@@ -15,6 +15,7 @@ import {
 } from '../domain/ticket-number.ts';
 import { getCashBalance, type CashBalance } from './cash-repository.ts';
 import { db } from './db.ts';
+import { loadPaymentVoidOriginals, loadVoidedPaymentIds } from './customer-payment-repository.ts';
 import { loadVoidedSaleIds, loadVoidOriginals } from './sale-repository.ts';
 
 /** Lo que muestra `/RESUMEN` para un día calendario (spec de #100, §5). */
@@ -31,6 +32,10 @@ export type DayView = {
   voidedSaleIds: Set<string>;
   /** Para cada ticket de anulación, la venta que anula (si sigue en la base). */
   voidOriginals: Map<string, Sale>;
+  /** Cobranzas anuladas (#125): con otra cobranza que las anula. */
+  voidedPaymentIds: Set<string>;
+  /** Para cada anulación de cobranza, la cobranza que anula (si sigue en la base). */
+  paymentVoidOriginals: Map<string, CustomerPayment>;
   /** Cobranzas del día (#101), agrupadas por `receipt.date` si lo tienen. */
   collections: CustomerPayment[];
   /** Nombre de cada cliente de las cobranzas del día (el que siga en la base). */
@@ -84,6 +89,7 @@ export async function getDaySummary(date: string, now: string): Promise<DayView>
       voidedSaleIds.add(sale.id);
     }
   }
+  const voidedPaymentIds = await loadVoidedPaymentIds(collections.map((payment) => payment.id));
   const oldestKey = oldest !== undefined ? localDateKey(oldest) : today;
   const view: DayView = {
     date,
@@ -91,9 +97,17 @@ export async function getDaySummary(date: string, now: string): Promise<DayView>
     oldestDate: oldestKey < today ? oldestKey : today,
     sales,
     entries: buildDayEntries({ sales, movements, counts, collections }),
-    summary: calculateDaySummary({ sales, movements, voidedSaleIds, collections }),
+    summary: calculateDaySummary({
+      sales,
+      movements,
+      voidedSaleIds,
+      voidedPaymentIds,
+      collections,
+    }),
     voidedSaleIds,
     voidOriginals: await loadVoidOriginals(sales),
+    voidedPaymentIds,
+    paymentVoidOriginals: await loadPaymentVoidOriginals(collections),
     collections,
     customerNames,
   };
