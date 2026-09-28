@@ -1,0 +1,26 @@
+# e2e — Playwright
+
+Las reglas generales de testing (contra el build real, offline después de cargar, leer IndexedDB
+directo) están en "Testing" del [`AGENTS.md` de la raíz](../AGENTS.md).
+
+`e2e/keyboard-only.spec.ts` (Fase 4) es la "auditoría de accesibilidad por teclado" del roadmap
+hecha verificable en CI: un test por pantalla popup, navegando solo con teclado, que confirma
+explícitamente que la barra de comandos recupera el foco al volver — no una revisión manual sin
+rastro.
+
+`e2e/helpers.ts` (Fase 6) reúne acciones de setup que varios specs repiten y que tienen que pasar
+por la UI real, no por IndexedDB directo (`completeWizardRest`, `fillPayment`; `openCashSession` se
+eliminó en la Etapa 5: ya no hace falta un turno para cobrar) — distinto de `indexed-db.ts`, que es
+lectura/escritura cruda para datos que en producción vendrían de un pull (`CustomerAccount`) y que
+no tiene sentido ejercitar por UI en cada test.
+
+`e2e/fixtures.ts` (Etapa 2b) exporta un `test` de Playwright que siembra una conexión `active`
+(`ACTIVE_CONFIG`, con `verifiedAt`, sucursal y punto de venta, apuntando a un backend inalcanzable)
+y un id de dispositivo (`seedDeviceIdentity`, una vez por pestaña) antes de cargar la app: sin
+conexión activa la app solo muestra `/CONFIG`, así que todo spec que ejercite la app ya conectada
+(y offline) importa `test`/`expect` de ahí en vez de `@playwright/test`. Los que prueban el
+arranque y la configuración (`connection-lifecycle`, `minibackend-sync`) usan el de Playwright a
+secas. Para los unit tests, `src/test/fake-connector.ts` da un `Connector` de mentira. Un bug real de
+esta etapa, encontrado por el e2e y no por jsdom: `useSignalEffect` corre diferido y dejaba una
+ventana en la que tipear tras un error agregaba texto en vez de reemplazarlo — se usa
+`useLayoutEffect`.

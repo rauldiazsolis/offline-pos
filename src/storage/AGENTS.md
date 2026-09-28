@@ -1,0 +1,47 @@
+# src/storage — Dexie y persistencia
+
+Detalle de persistencia. Los principios (ULID con `storage/ids.ts::newId`, `try/catch` solo en
+adaptadores, puertos de búsqueda) están en el [`AGENTS.md` de la raíz](../../AGENTS.md). Otras reglas
+que rigen archivos de esta carpeta viven donde está el grueso del tema:
+
+- `apply-pull.ts`, `reconcile.ts`, `local-cleanup.ts`, `local-data.ts` (pull, foto completa,
+  limpieza, lista de pendientes): [`src/sync/AGENTS.md`](../sync/AGENTS.md).
+- `sale-repository.ts` (venta y anulación): el outbox en [`src/sync/AGENTS.md`](../sync/AGENTS.md) y
+  la anulación en [`src/domain/AGENTS.md`](../domain/AGENTS.md).
+- `demo-reset.ts`: [`src/connectors/AGENTS.md`](../connectors/AGENTS.md).
+- `cash-summary-repository.ts` (`/RESUMEN`): [`src/ui/AGENTS.md`](../ui/AGENTS.md).
+- Tests de Dexie con `fake-indexeddb`: "Testing" en la raíz.
+
+## Borrado de lo local
+
+Un solo lugar borra lo local: `clearAllTables` (`db.tables`, así una tabla futura queda incluida sola),
+compartido con `/DEMO_RESET`.
+
+## Tipo de inserción explícito en Dexie
+
+- **Tipo de inserción explícito en Dexie para tablas con unión discriminada**: el `EntityTable<T, PK>`
+  por defecto usa `Omit<T, PK>`, que colapsa la unión; para tablas así (`outbox`, `storage/db.ts`) va
+  `EntityTable<T, PK, T>` cuando el `id` siempre lo genera la app.
+
+## Caja: modelo local (Etapa 5, #100)
+
+- **Modelo local**: `cashMovements` (los `CashMovement` del contrato, cada uno con su evento
+  `cash-movement`), `cashCounts` (`domain/cash-count.ts::CashCount`: cada arqueo, **aunque no tenga
+  diferencia**, que no viaja pero es la base del saldo) y `cashConcepts` (estadística de conceptos),
+  Dexie versión 7 (que además borra `cashSessions`). `storage/cash-repository.ts` hace cada operación
+  en una transacción.
+
+## Cobranza: persistencia (Etapa 6, #101)
+
+- **Persistencia** (`storage/customer-payment-repository.ts::collectAndPersist`): en **una**
+  transacción el número de recibo, la cobranza (`customerPayments`, Dexie v8), su `AccountMovement`
+  (`type: 'payment'`, `paymentId`), el saldo (crea la fila si no existía) y el evento
+  `customer-payment` (armado adentro, viaja con el número). Recibos numerados por día como los
+  tickets (`domain/ticket-number.ts::nextDailyNumber`, `DailyNumber`), con su propio contador
+  best-effort (`offline-pos:receipt-counter`, `sync/receipt-counter.ts`; `sync/daily-counter.ts` es el
+  lector/escritor compartido con el de tickets).
+
+## Fixtures
+
+- **Clientes de ejemplo** (`storage/fixtures/customers.json`, unos 22, con documento y teléfono
+  variados y dos "Juan Pérez" a propósito para probar la desambiguación).

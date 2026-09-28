@@ -4,7 +4,7 @@ import { formatMoney } from './format.ts';
 
 /**
  * Traductor central de errores de negocio a mensajes para el cajero. Switch
- * exhaustivo sobre `ErrorCode` (ver CLAUDE.md): si se agrega un código nuevo
+ * exhaustivo sobre `ErrorCode` (ver AGENTS.md): si se agrega un código nuevo
  * a `ErrorMeta` y no se lo traduce acá, el `default` lo marca en tiempo de
  * compilación (`never`), no en producción.
  */

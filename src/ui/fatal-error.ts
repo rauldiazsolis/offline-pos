@@ -21,7 +21,7 @@ export function isBenignResizeObserverLoopError(message: string): boolean {
 /**
  * Manejador global de errores que ocurren fuera del árbol de componentes de
  * Preact (bootstrap, listeners globales — ver "Manejo de errores" en
- * CLAUDE.md). Todo lo que no es un error de negocio anticipado se deja
+ * AGENTS.md). Todo lo que no es un error de negocio anticipado se deja
  * explotar como excepción real hasta acá. Por ahora siempre decide "no se
  * puede continuar" y muestra una pantalla bloqueante, sin retry silencioso.
  *

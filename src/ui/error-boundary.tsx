@@ -5,7 +5,7 @@ type State = { error: Error | null };
 
 /**
  * Manejador global de errores que ocurren dentro del árbol de componentes
- * (ver "Manejo de errores" en CLAUDE.md) — lo que pasa fuera del árbol
+ * (ver "Manejo de errores" en AGENTS.md) — lo que pasa fuera del árbol
  * (bootstrap, listeners) lo cubre `fatal-error.ts`. Por ahora siempre
  * decide "no se puede continuar", sin intento de retry silencioso.
  */

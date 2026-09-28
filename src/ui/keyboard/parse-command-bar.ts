@@ -4,7 +4,7 @@ import { parseAmount } from '../parse-amount.ts';
 /**
  * Resultado de interpretar el buffer de la barra de comandos, según el
  * orden de prioridad fijo de §7 del doc de diseño (ver también "UX
- * keyboard-first" en CLAUDE.md). Función pura, sin DOM: recibe el buffer
+ * keyboard-first" en AGENTS.md). Función pura, sin DOM: recibe el buffer
  * completo tal cual está en el input en este instante — no hay estado
  * parcial que arrastrar entre llamadas.
  */

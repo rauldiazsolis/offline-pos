@@ -3,7 +3,7 @@ import type { CustomerBalance } from './customer-balance.ts';
 /**
  * Identificación de cliente (RF-16) — separada a propósito de la cuenta
  * corriente: un `Customer` no sabe nada de crédito. `CustomerAccount` es el
- * módulo aparte y opcional (ver "Modelo de dominio" en CLAUDE.md).
+ * módulo aparte y opcional (ver "Modelo de dominio" en AGENTS.md).
  */
 export type Customer = {
   id: string; // ULID si se crea local; el id del backend si vino de un pull
@@ -27,7 +27,7 @@ export type Customer = {
  * qué conector está activo: `canChargeOffline` la usa para aprobar sin evaluar
  * `creditLimit`/`margin`/saldo en absoluto, que en ese caso quedan sin usar
  * (nunca inventados con un valor real, ver "No inventar datos que no llegaron
- * del backend" en CLAUDE.md).
+ * del backend" en AGENTS.md).
  *
  * El saldo **no** vive acá desde #101: es `CustomerBalance`, que puede tener
  * cualquier cliente con o sin crédito — así un saldo a favor nunca se confunde

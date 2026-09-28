@@ -6,6 +6,6 @@ export const cartSignal = signal<Cart>({ lines: [] });
 
 /**
  * Línea del carrito seleccionada visualmente (↑/↓ con la barra vacía, ver
- * "UX keyboard-first" en CLAUDE.md). `null` = nada seleccionado.
+ * "Barra de comandos" en src/ui/AGENTS.md). `null` = nada seleccionado.
  */
 export const cartSelectionIndexSignal = signal<number | null>(null);

@@ -40,7 +40,7 @@ function pendingHeldFor(db: DatabaseSync, customerId: string): number {
  * Cuenta corriente (issue #55): la reserva síncrona sigue siendo la única
  * operación del contrato con respuesta inmediata (§5, #87) — su confirmación
  * y liberación pasaron a viajar dentro del lote de `/sync/push`
- * (`routes/sync.ts::applyBatchEvent`, ver CLAUDE.md "Connector API").
+ * (`routes/sync.ts::applyBatchEvent`, ver AGENTS.md "Connector API").
  * Sin TTL: un hold `pending` queda así hasta que el POS lo confirma o lo
  * libera (vía el lote) — decisión explícita para el demo, ver panel para
  * liberarlos a mano si queda alguno colgado.

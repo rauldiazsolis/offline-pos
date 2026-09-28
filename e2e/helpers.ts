@@ -29,7 +29,7 @@ const catalogFixture = JSON.parse(
  * la app, mismo criterio que `getAllFromStore`/`putIntoStore`) — desde
  * Fase 7, `bootstrap.ts` ya no siembra nada al arrancar (los datos vienen
  * del backend vía sync), así que los specs 100% offline (sin backend, ver
- * CLAUDE.md) necesitan poblar el catálogo a mano para poder buscar/vender.
+ * e2e/AGENTS.md) necesitan poblar el catálogo a mano para poder buscar/vender.
  * `CatalogRepository` (`storage/catalog-repository.ts`) se arma una sola vez
  * en el bootstrap a partir de lo que ya esté en Dexie — por eso hace falta
  * un `reload()` después de sembrar para que lo recoja. Llamar **antes** de

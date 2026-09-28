@@ -33,5 +33,5 @@ pnpm build        # build de producción
 
 - [`pos-web-diseno-arquitectura.md`](./pos-web-diseno-arquitectura.md) — diseño completo:
   requisitos, modelo de dominio, contrato del Connector API, decisiones de arquitectura.
-- [`CLAUDE.md`](./CLAUDE.md) — resumen operativo de convenciones para trabajar en este repo
+- [`AGENTS.md`](./AGENTS.md) — resumen operativo de convenciones para trabajar en este repo, con el detalle de cada carpeta en su propio `AGENTS.md` (`CLAUDE.md` solo lo importa)
   (estructura de carpetas, manejo de errores, patrones establecidos, estado del roadmap).

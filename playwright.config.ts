@@ -10,7 +10,7 @@ export default defineConfig({
     baseURL: `http://localhost:${String(PORT)}`,
     trace: 'on-first-retry',
   },
-  // Solo Chromium — es el navegador de referencia del proyecto (ver CLAUDE.md).
+  // Solo Chromium — es el navegador de referencia del proyecto (ver AGENTS.md).
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {

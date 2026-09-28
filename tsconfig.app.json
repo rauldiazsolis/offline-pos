@@ -28,7 +28,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* Strict (ver CLAUDE.md) */
+    /* Strict (ver AGENTS.md) */
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
