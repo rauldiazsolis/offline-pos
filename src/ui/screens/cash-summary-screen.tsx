@@ -3,15 +3,17 @@ import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useMemo } from 'preact/hooks';
 import type { CashCount } from '../../domain/cash-count.ts';
 import type { CashMovement } from '../../domain/cash-movement.ts';
+import type { CustomerPayment } from '../../domain/customer-payment.ts';
 import type { DayEntry } from '../../domain/day-summary.ts';
 import type { PaymentMethod, Sale, SaleLine } from '../../domain/sale.ts';
+import { roundAmount } from '../../domain/rounding.ts';
 import { isVoided } from '../../domain/sale-lifecycle.ts';
 import { calculateProductQuantities, type ProductQuantity } from '../../domain/sales-summary.ts';
 import { localDateKey } from '../../domain/ticket-number.ts';
 import type { DayView } from '../../storage/cash-summary-repository.ts';
 import { formatMoney, formatQuantity, formatTime } from '../format.ts';
 import { formatDayHeading } from '../format-day.ts';
-import { ticketLabel, voidOfLabel } from '../format-ticket.ts';
+import { receiptLabel, ticketLabel, voidOfLabel } from '../format-ticket.ts';
 import { highlightMatches } from '../highlight.tsx';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useIndexListNavigation } from '../hooks/use-index-list-navigation.ts';
@@ -122,7 +124,7 @@ function countText(count: CashCount): string {
 }
 
 /** Texto en el que busca el filtro de Movimientos, por tipo de fila. */
-function entrySearchText(entry: DayEntry): string {
+function entrySearchText(entry: DayEntry, customerNames: ReadonlyMap<string, string>): string {
   switch (entry.kind) {
     case 'sale': {
       const { sale } = entry;
@@ -148,8 +150,10 @@ function entrySearchText(entry: DayEntry): string {
     case 'count':
       return 'arqueo';
     case 'collection': {
+      // Como los tickets: encuentra "3", "#3" y el nombre del cliente (#101).
       const number = entry.payment.receipt?.number;
-      return `${number !== undefined ? `${String(number)} #${String(number)}` : ''} recibo cobranza`;
+      const customerName = customerNames.get(entry.payment.customerId) ?? '';
+      return `${number !== undefined ? String(number) : ''} recibo cobranza ${customerName}`;
     }
   }
 }
@@ -167,13 +171,17 @@ function entryKey(entry: DayEntry): string {
   }
 }
 
-/** El buscador encuentra también por número de ticket ("12" o "#12"). */
-function filterEntries(entries: DayEntry[], query: string): DayEntry[] {
+/** El buscador encuentra también por número de ticket o de recibo ("12" o "#12"). */
+function filterEntries(
+  entries: DayEntry[],
+  query: string,
+  customerNames: ReadonlyMap<string, string>,
+): DayEntry[] {
   const cleaned = query.trim().replace(/^#/, '');
   if (cleaned === '') return entries;
   const index = new Index({ tokenize: 'forward' });
   entries.forEach((entry, position) => {
-    index.add(position, entrySearchText(entry));
+    index.add(position, entrySearchText(entry, customerNames));
   });
   const positions = new Set(index.search(cleaned).map(Number));
   return entries.filter((_, position) => positions.has(position));
@@ -344,6 +352,50 @@ function MovementEntryRow({
   );
 }
 
+/** Cobranza sin venta (#101): "Recibo #3 · Ana", su total y, debajo, los medios. */
+function CollectionEntryRow({
+  payment,
+  customerName,
+  index,
+  query,
+  nav,
+  onSelect,
+}: RowProps & { payment: CustomerPayment; customerName: string }) {
+  const { isSelected, style } = rowContainerStyle(index);
+  return (
+    <div
+      ref={nav.ticketRef(index)}
+      onClick={() => {
+        onSelect(index);
+      }}
+      style={{
+        ...style,
+        padding: 'var(--space-2) var(--space-3)',
+        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+        <span style={{ fontWeight: 600 }}>
+          {highlightMatches(`${receiptLabel(payment)} · ${customerName}`, query.replace(/^#/, ''))}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+          {formatTime(payment.createdAt)}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          {payment.payments
+            .map((item) => `${PAYMENT_METHOD_LABELS[item.method]} $${formatMoney(item.amount)}`)
+            .join(' · ')}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+          {formatMoney(payment.total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function CountEntryRow({ count, index, nav, onSelect }: RowProps & { count: CashCount }) {
   const { isSelected, style } = rowContainerStyle(index);
   return (
@@ -396,6 +448,15 @@ function MovementsTab({
         return <MovementEntryRow key={entryKey(entry)} movement={entry.movement} {...props} />;
       case 'count':
         return <CountEntryRow key={entryKey(entry)} count={entry.count} {...props} />;
+      case 'collection':
+        return (
+          <CollectionEntryRow
+            key={entryKey(entry)}
+            payment={entry.payment}
+            customerName={view.customerNames.get(entry.payment.customerId) ?? ''}
+            {...props}
+          />
+        );
     }
   });
   const isOldest = view.date === view.oldestDate && !view.isToday;
@@ -520,15 +581,23 @@ function ProductsTab({
 
 const ALL_METHODS: PaymentMethod[] = ['cash', 'debit', 'credit', 'transfer', 'qr', 'account'];
 
+/** Por medio: ventas, cobranzas (#101) y el total de las dos. */
 function PaymentsTab({
   totalsByMethod,
+  collectionsByMethod,
   query,
   onSelect,
 }: {
   totalsByMethod: Record<PaymentMethod, number>;
+  collectionsByMethod: Record<PaymentMethod, number>;
   query: string;
   onSelect: (index: number) => void;
 }) {
+  const amountCellStyle = {
+    padding: 'var(--space-1) var(--space-3)',
+    textAlign: 'right' as const,
+    fontFamily: 'var(--font-mono)',
+  };
   const rowRef = useScrollSelectedIntoView(selectedPaymentIndexSignal);
   return (
     <div style={{ height: '100%', overflowY: 'auto' }}>
@@ -538,7 +607,11 @@ function PaymentsTab({
             <th style={{ textAlign: 'left', padding: 'var(--space-2) var(--space-3)' }}>
               Medio de pago
             </th>
-            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Monto</th>
+            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Ventas</th>
+            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>
+              Cobranzas
+            </th>
+            <th style={{ textAlign: 'right', padding: 'var(--space-2) var(--space-3)' }}>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -554,14 +627,10 @@ function PaymentsTab({
               <td style={{ padding: 'var(--space-1) var(--space-3)', fontWeight: 600 }}>
                 {highlightMatches(PAYMENT_METHOD_LABELS[method], query)}
               </td>
-              <td
-                style={{
-                  padding: 'var(--space-1) var(--space-3)',
-                  textAlign: 'right',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >
-                {formatMoney(totalsByMethod[method])}
+              <td style={amountCellStyle}>{formatMoney(totalsByMethod[method])}</td>
+              <td style={amountCellStyle}>{formatMoney(collectionsByMethod[method])}</td>
+              <td style={{ ...amountCellStyle, fontWeight: 700 }}>
+                {formatMoney(roundAmount(totalsByMethod[method] + collectionsByMethod[method]))}
               </td>
             </tr>
           ))}
@@ -629,10 +698,26 @@ function Sidebar({ view }: { view: DayView }) {
         </p>
       </div>
       <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Cobranzas</p>
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
+          {formatMoney(summary.collections.total)}
+          {summary.collections.count > 0 && (
+            <span style={{ color: 'var(--color-text-muted)' }}>
+              {' '}
+              {`(${String(summary.collections.count)} recibos)`}
+            </span>
+          )}
+        </p>
+      </div>
+      <div style={sidebarCardStyle}>
         <p style={sectionLabelStyle}>Efectivo</p>
         <div style={sidebarRowStyle}>
           <span>Cobros</span>
           <span>{formatMoney(summary.cash.sales)}</span>
+        </div>
+        <div style={sidebarRowStyle} data-testid="cash-collections-row">
+          <span>Cobranzas</span>
+          <span>{formatMoney(summary.cash.collections)}</span>
         </div>
         <div style={sidebarRowStyle}>
           <span>Ingresos</span>
@@ -669,8 +754,8 @@ function Sidebar({ view }: { view: DayView }) {
 /**
  * `/RESUMEN` por día calendario (Etapa 5 de #94, #100): arranca en hoy y navega de a un día con
  * "‹ Anterior (Alt+←)" / "Siguiente (Alt+→) ›", acotado entre el día más viejo con datos locales y
- * hoy. Panel lateral fijo más 3 pestañas: Movimientos (ventas, anulaciones, ingresos, egresos y
- * arqueos, por hora), Productos y Medios de pago.
+ * hoy. Panel lateral fijo más 3 pestañas: Movimientos (ventas, anulaciones, ingresos, egresos,
+ * arqueos y cobranzas — #101 —, por hora), Productos y Medios de pago (ventas y cobranzas).
  */
 export function CashSummaryScreen() {
   const filterRef = useFocusOnMount<HTMLInputElement>();
@@ -682,7 +767,7 @@ export function CashSummaryScreen() {
   const movementQuery = movementFilterSignal.value;
   const productQuery = productFilterSignal.value;
   const filteredEntries = useMemo(
-    () => filterEntries(view?.entries ?? [], movementQuery),
+    () => filterEntries(view?.entries ?? [], movementQuery, view?.customerNames ?? new Map()),
     [view, movementQuery],
   );
   const entriesNav = useTicketListNavigation(selectedEntryIndexSignal, filteredEntries.length);
@@ -915,6 +1000,7 @@ export function CashSummaryScreen() {
           {tab === 'payments' && (
             <PaymentsTab
               totalsByMethod={view.summary.totalsByMethod}
+              collectionsByMethod={view.summary.collectionsByMethod}
               query={paymentFilterSignal.value}
               onSelect={selectPayment}
             />

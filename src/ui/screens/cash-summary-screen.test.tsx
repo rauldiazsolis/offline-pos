@@ -518,3 +518,92 @@ describe('navegación de teclado conectada a la pantalla real (regresión)', () 
     expect(selectedEntryIndexSignal.value).toBe(0);
   });
 });
+
+describe('cobranzas (#101)', () => {
+  function withCollections(): void {
+    const view = dayViewSignal.value;
+    if (view === undefined) throw new Error('setup falló');
+    const collections = [
+      {
+        id: 'cp1',
+        customerId: 'c9',
+        payments: [
+          { method: 'cash' as const, amount: 500 },
+          { method: 'transfer' as const, amount: 200 },
+        ],
+        total: 700,
+        createdAt: '2026-01-01T12:00:00.000Z',
+        receipt: { date: today, number: 3 },
+      },
+      {
+        id: 'cp2',
+        customerId: 'c9',
+        payments: [{ method: 'debit' as const, amount: 100 }],
+        total: 100,
+        createdAt: '2026-01-01T13:00:00.000Z',
+        receipt: { date: today, number: 4 },
+      },
+    ];
+    dayViewSignal.value = {
+      ...view,
+      collections,
+      customerNames: new Map([['c9', 'Ana Gómez']]),
+      entries: buildDayEntries({ sales: view.sales, movements: [], counts: [], collections }),
+      summary: {
+        ...view.summary,
+        cash: { ...view.summary.cash, collections: 500 },
+        collections: { total: 800, count: 2 },
+        collectionsByMethod: { cash: 500, debit: 100, credit: 0, transfer: 200, qr: 0, account: 0 },
+      },
+    };
+  }
+
+  it('el panel suma las cobranzas aparte y su efectivo', () => {
+    withCollections();
+    render(<CashSummaryScreen />);
+    const sidebar = within(screen.getByTestId('cash-summary-sidebar'));
+
+    expect(sidebar.getByText('Cobranzas', { selector: 'p' })).not.toBeNull();
+    expect(sidebar.getByText('800,00')).not.toBeNull();
+    expect(sidebar.getByText('(2 recibos)')).not.toBeNull();
+    expect(within(screen.getByTestId('cash-collections-row')).getByText('500,00')).not.toBeNull();
+    expect(sidebar.getByText('350,00')).not.toBeNull(); // Total vendido sin las cobranzas
+  });
+
+  it('Movimientos muestra cada recibo con su cliente y sus medios', () => {
+    withCollections();
+    render(<CashSummaryScreen />);
+
+    expect(hasText('Recibo #3 · Ana Gómez')).toBe(true);
+    expect(screen.getByText('Efectivo $500,00 · Transferencia $200,00')).not.toBeNull();
+    expect(screen.getByText('700,00')).not.toBeNull();
+  });
+
+  it.each(['3', '#3', 'ana'])('buscar "%s" encuentra el recibo', (query) => {
+    withCollections();
+    render(<CashSummaryScreen />);
+
+    fireEvent.input(screen.getByLabelText('Buscar'), { target: { value: query } });
+
+    expect(hasText('Recibo #3 · Ana Gómez')).toBe(true);
+    expect(screen.queryByText('200,00', { selector: '.ticket__total' })).toBeNull();
+  });
+
+  it('Medios de pago separa ventas y cobranzas', () => {
+    withCollections();
+    cashSummaryTabSignal.value = 'payments';
+    render(<CashSummaryScreen />);
+    const tabContent = within(screen.getByTestId('cash-summary-tab-content'));
+
+    expect(tabContent.getByText('Ventas')).not.toBeNull();
+    expect(tabContent.getByText('Cobranzas')).not.toBeNull();
+    expect(tabContent.getByText('Total')).not.toBeNull();
+    const cashRow = tabContent.getByText('Efectivo').closest('tr');
+    if (cashRow === null) throw new Error('sin fila');
+    expect(
+      within(cashRow)
+        .getAllByRole('cell')
+        .map((cell) => cell.textContent),
+    ).toEqual(['Efectivo', '300,00', '500,00', '800,00']);
+  });
+});
