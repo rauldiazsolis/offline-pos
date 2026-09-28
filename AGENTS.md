@@ -466,7 +466,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #66 | Conectores: Google Sheets, registro cerrado, conexión verificada, comandos por conector, crédito ilimitado | #67, #68, #76, #77, #80, #69 |
 | #87 | Sync por lotes (`pushBatch`/`pullBatch`) y `/DIAGNOSTICO` | PR #89 |
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
-| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN` | PR #136, PR #N |
+| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN` | PR #136, PR #141 |
 
 **Siguiente**: la Etapa 7 de #94 (#102, comandos de consulta). Fase 5 (hardware) pospuesta a v2:
 depende de dispositivos reales y nada depende de ella (§11 del diseño).
