@@ -202,7 +202,7 @@ describe('pestaña Movimientos', () => {
     const input = screen.getByLabelText('Buscar');
     input.blur();
 
-    fireEvent.click(screen.getByText('Regalo'));
+    fireEvent.click(screen.getByText('Arroz 1kg'));
 
     expect(selectedEntryIndexSignal.value).toBe(1);
     expect(document.activeElement).toBe(input);

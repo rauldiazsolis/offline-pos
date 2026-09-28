@@ -131,7 +131,7 @@ describe('calculateDaySummary', () => {
 });
 
 describe('buildDayEntries', () => {
-  it('mezcla ventas, movimientos y arqueos por hora ascendente', () => {
+  it('mezcla ventas, movimientos y arqueos con lo más nuevo primero (#124)', () => {
     const count: CashCount = {
       id: 'c1',
       expected: 0,
@@ -145,8 +145,8 @@ describe('buildDayEntries', () => {
       collections: [],
     });
 
-    expect(entries.map((entry) => entry.kind)).toEqual(['count', 'movement', 'sale']);
-    expect(entries[0]?.at).toBe(count.createdAt);
+    expect(entries.map((entry) => entry.kind)).toEqual(['sale', 'movement', 'count']);
+    expect(entries[2]?.at).toBe(count.createdAt);
   });
 });
 
@@ -192,7 +192,7 @@ describe('cobranzas en el resumen del día (#101)', () => {
     expect(summary.cash).toMatchObject({ sales: 1000, collections: 500 });
   });
 
-  it('Movimientos intercala las cobranzas por hora', () => {
+  it('Movimientos intercala las cobranzas por hora, lo más nuevo primero', () => {
     const entries = buildDayEntries({
       sales: [sale({ createdAt: '2026-09-24T10:00:00.000Z' })],
       movements: [],
@@ -202,6 +202,6 @@ describe('cobranzas en el resumen del día (#101)', () => {
 
     expect(entries.map((entry) => entry.kind)).toEqual(['collection', 'sale', 'collection']);
     const first = entries[0];
-    expect(first?.kind === 'collection' ? first.payment.id : undefined).toBe('cp2');
+    expect(first?.kind === 'collection' ? first.payment.id : undefined).toBe('cp1');
   });
 });
