@@ -268,6 +268,8 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         '',
         '',
         '',
+        '',
+        '',
       ],
       [
         's1',
@@ -286,6 +288,8 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         'Cerrada',
         '',
         'dev-1',
+        '',
+        '',
         '',
         '',
         '',
@@ -927,7 +931,7 @@ describe('instalación', () => {
   });
 });
 
-describe('contrato 4.0.0 (#99)', () => {
+describe('contrato 4.x (#99, #120)', () => {
   function rawCall(spreadsheetCall: ReturnType<typeof loadBridge>, body: Record<string, unknown>) {
     return spreadsheetCall.raw(body);
   }
@@ -935,14 +939,14 @@ describe('contrato 4.0.0 (#99)', () => {
   it('la acción info devuelve la versión y el estado, sin tocar la planilla', () => {
     const bridge = loadBridge();
 
-    const response = rawCall(bridge, { action: 'info', contractVersion: '4.0.0' });
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.1.0' });
 
     expect(response).toEqual({
       ok: true,
       data: {
-        contractVersion: '4.0.0',
+        contractVersion: '4.1.0',
         status: 'ok',
-        backend: { name: 'pos-sheets-bridge', version: '4.0.0' },
+        backend: { name: 'pos-sheets-bridge', version: '4.1.0' },
       },
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
@@ -961,7 +965,7 @@ describe('contrato 4.0.0 (#99)', () => {
     expect(response).toMatchObject({
       ok: false,
       code: 'incompatible-contract',
-      contractVersion: '4.0.0',
+      contractVersion: '4.1.0',
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
   });
@@ -1004,7 +1008,7 @@ describe('contrato 4.0.0 (#99)', () => {
       'Anulada',
     ]);
     const voidRows = ventas.filter((row) => row[0] === 'v1');
-    expect(voidRows.map((row) => [row[13], row[14], row.at(-1)])).toEqual([
+    expect(voidRows.map((row) => [row[13], row[14], row.at(-3)])).toEqual([
       ['Cerrada', 'error de carga', 's1'],
       ['Cerrada', 'error de carga', 's1'],
     ]);
@@ -1028,5 +1032,63 @@ describe('contrato 4.0.0 (#99)', () => {
     const pull = pullBatch(call, {}, ['lot-1']);
 
     expect((pull.data as { lots: unknown }).lots).toEqual({ 'lot-1': { status: 'ok' } });
+  });
+});
+
+describe('número de ticket (4.1.0, #120)', () => {
+  const VENTAS_4_0_LABELS = [
+    'Id de venta',
+    'Fecha',
+    'Id de cliente',
+    'Línea',
+    'Tipo',
+    'Id de producto',
+    'Descripción',
+    'Cantidad',
+    'Precio unitario',
+    'Tipo de descuento',
+    'Valor del descuento',
+    'Total de la venta',
+    'Ajuste global %',
+    'Estado',
+    'Motivo de anulación',
+    'Dispositivo',
+    'Sucursal',
+    'Punto de venta',
+    'Anula a',
+  ];
+
+  it('escribe la fecha y el número del ticket en cada fila de la venta', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [saleEvent('e1', { ...SALE, ticket: { date: '2026-09-24', number: 12 } })],
+      },
+      'lot-1',
+    );
+
+    const header = spreadsheet.getSheetByName('Ventas')?.values()[0] ?? [];
+    expect(header).toContain('Fecha del ticket');
+    expect(header).toContain('N° de ticket');
+    expect(table(spreadsheet, 'Ventas').map((row) => row.slice(-2))).toEqual([
+      ['2026-09-24', 12],
+      ['2026-09-24', 12],
+    ]);
+  });
+
+  it('una pestaña Ventas de 4.0.0 gana las dos columnas al final sin tocar lo que había', () => {
+    const { spreadsheet, call } = loadBridge();
+    const old = spreadsheet.addSheet('Ventas', [VENTAS_4_0_LABELS]);
+
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
+
+    expect(old.values()[0]?.slice(0, 21)).toEqual([
+      ...VENTAS_4_0_LABELS,
+      'Fecha del ticket',
+      'N° de ticket',
+    ]);
   });
 });

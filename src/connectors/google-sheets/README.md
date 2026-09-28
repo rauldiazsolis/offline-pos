@@ -7,9 +7,10 @@ Script** (`bridge.gs`) desplegado como Web App.
 > Estado: conectado al POS desde la Etapa 2 del epic #68 — se elige en `/CONFIG` con el tipo de
 > conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
 > contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
-> Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, y desde la
-> Etapa 4 (#99) el **contrato 4.0.0**: ver "Actualizar el puente a la v3 del contrato" y "Contrato
-> 4.0.0" más abajo si ya tenías una planilla andando.
+> Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, desde la
+> Etapa 4 (#99) el **contrato 4.0.0** y desde la Etapa 5 (#120) el **4.1.0**: ver "Actualizar el
+> puente a la v3 del contrato", "Contrato 4.0.0" y "Contrato 4.1.0" más abajo si ya tenías una
+> planilla andando.
 
 ## Setup (comerciante)
 
@@ -123,6 +124,18 @@ contractVersion: '<la del puente>', error }` **sin procesar nada**: el POS no re
 Para actualizar: mismos pasos que "Actualizar el puente a la v3 del contrato" (reemplazar
 `bridge.gs` y `columnas.gs`, nueva versión de la misma implementación). La columna Anula a aparece
 sola al final de Ventas.
+
+## Contrato 4.1.0 (#120)
+
+- **Número de ticket**: cada venta (y cada anulación, que es otro ticket) llega con
+  `ticket: { date, number }` — el número del ticket en su día local de la terminal. Se escribe en
+  dos columnas nuevas de Ventas, **Fecha del ticket** (texto `AAAA-MM-DD`, a propósito: es una fecha
+  de calendario, no un instante) y **N° de ticket**, en todas las filas de la venta. Una venta de un
+  POS anterior llega sin número y las dos quedan vacías.
+- **Hay que redesplegar el puente**: un POS 4.1.0 considera incompatible a un puente 4.0.0 (podría
+  no guardar el número) y deja de sincronizar hasta que se actualice — la venta nunca se bloquea y
+  nada se pierde, los lotes esperan en el outbox. Mismos pasos que la actualización anterior; las
+  dos columnas aparecen solas al final de Ventas (`ensureColumns`).
 
 ## Qué hace cada operación
 
@@ -281,4 +294,8 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     `contractVersion: '3.0.0'` responde `code: 'incompatible-contract'` sin escribir nada; anular una
     venta desde el POS escribe sus filas con Anula a y deja las del original en Anulada.
 
-Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99).
+20. Contrato 4.1.0: `info` responde `4.1.0`; vender desde el POS escribe Fecha del ticket y N° de
+    ticket en las filas de la venta; anularla escribe el número siguiente del día.
+
+Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99;
+para el 20, en #120).
