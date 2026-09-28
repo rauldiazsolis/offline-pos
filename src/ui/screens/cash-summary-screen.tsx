@@ -1,37 +1,51 @@
 import { Index } from 'flexsearch';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useMemo } from 'preact/hooks';
-import { calculateProductQuantities, type ProductQuantity } from '../../domain/sales-summary.ts';
-import type { Sale, SaleLine } from '../../domain/sale.ts';
-import type { PaymentMethod } from '../../domain/sale.ts';
+import type { CashCount } from '../../domain/cash-count.ts';
+import type { CashMovement } from '../../domain/cash-movement.ts';
+import type { DayEntry } from '../../domain/day-summary.ts';
+import type { PaymentMethod, Sale, SaleLine } from '../../domain/sale.ts';
 import { isVoided } from '../../domain/sale-lifecycle.ts';
+import { calculateProductQuantities, type ProductQuantity } from '../../domain/sales-summary.ts';
+import { localDateKey } from '../../domain/ticket-number.ts';
+import type { DayView } from '../../storage/cash-summary-repository.ts';
 import { formatMoney, formatQuantity, formatTime } from '../format.ts';
+import { formatDayHeading } from '../format-day.ts';
+import { ticketLabel, voidOfLabel } from '../format-ticket.ts';
+import { highlightMatches } from '../highlight.tsx';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useIndexListNavigation } from '../hooks/use-index-list-navigation.ts';
+import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useTicketListNavigation } from '../hooks/use-ticket-list-navigation.ts';
-import { highlightMatches } from '../highlight.tsx';
+import {
+  countDifference,
+  describeDifference,
+  formatCashAmount,
+} from '../keyboard/cash-form-model.ts';
 import {
   exitCashSummaryScreen,
   setCashSummaryTab,
+  showNextDay,
+  showPreviousDay,
+  updateMovementFilter,
   updatePaymentFilter,
   updateProductFilter,
-  updateTicketFilter,
 } from '../keyboard/cash-summary-controller.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import {
-  cashSummaryContextSignal,
   cashSummaryTabSignal,
+  dayViewSignal,
+  movementFilterSignal,
   paymentFilterSignal,
   productFilterSignal,
+  selectedEntryIndexSignal,
   selectedPaymentIndexSignal,
   selectedProductIndexSignal,
-  selectedTicketIndexSignal,
-  ticketFilterSignal,
+  type CashSummaryTab,
 } from '../state/cash-summary.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
-import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 
 const sidebarCardStyle = {
   border: '1px solid var(--color-border)',
@@ -46,6 +60,12 @@ const sectionLabelStyle = {
   color: 'var(--color-text-muted)',
   margin: '0 0 var(--space-1)',
 };
+const sidebarRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 'var(--font-size-sm)',
+};
 const tabButtonStyle = (active: boolean) => ({
   background: active ? 'var(--color-accent)' : 'transparent',
   color: active ? 'var(--color-chrome-bg)' : 'var(--color-chrome-text)',
@@ -54,19 +74,27 @@ const tabButtonStyle = (active: boolean) => ({
   padding: 'var(--space-1) var(--space-2)',
   cursor: 'pointer',
 });
+const dayButtonStyle = {
+  background: 'transparent',
+  color: 'var(--color-chrome-text)',
+  border: '1px solid var(--color-chrome-border)',
+  borderRadius: 'var(--radius-md)',
+  padding: 'var(--space-1) var(--space-2)',
+  cursor: 'pointer',
+};
 const rowStyle = (selected: boolean) => ({
   background: selected ? 'var(--color-surface)' : undefined,
   cursor: 'pointer',
 });
 
-const TAB_ORDER: ('tickets' | 'products' | 'payments')[] = ['tickets', 'products', 'payments'];
-const TAB_LABELS: Record<(typeof TAB_ORDER)[number], string> = {
-  tickets: 'Tickets',
+const TAB_ORDER: CashSummaryTab[] = ['movements', 'products', 'payments'];
+const TAB_LABELS: Record<CashSummaryTab, string> = {
+  movements: 'Movimientos',
   products: 'Productos',
   payments: 'Medios de pago',
 };
-const TAB_HOTKEYS: Record<(typeof TAB_ORDER)[number], string> = {
-  tickets: 'Alt+1',
+const TAB_HOTKEYS: Record<CashSummaryTab, string> = {
+  movements: 'Alt+1',
   products: 'Alt+2',
   payments: 'Alt+3',
 };
@@ -77,75 +105,128 @@ function lineLabel(line: SaleLine): string {
     : line.description;
 }
 
-function filterSales(sales: Sale[], query: string): Sale[] {
-  if (query.trim() === '') return sales;
+function movementTitle(movement: CashMovement): string {
+  return `${movement.direction === 'in' ? 'Ingreso' : 'Egreso'} · ${movement.concept}`;
+}
+
+function countText(count: CashCount): string {
+  const difference = countDifference(count.expected, count.counted) ?? {
+    kind: 'even' as const,
+    amount: 0,
+  };
+  const detail = describeDifference(difference);
+  return (
+    `Arqueo · contado ${formatCashAmount(count.counted)} · esperado ` +
+    `${formatCashAmount(count.expected)} · ${detail.charAt(0).toLocaleLowerCase()}${detail.slice(1)}`
+  );
+}
+
+/** Texto en el que busca el filtro de Movimientos, por tipo de fila. */
+function entrySearchText(entry: DayEntry): string {
+  switch (entry.kind) {
+    case 'sale': {
+      const { sale } = entry;
+      const customerName =
+        sale.customerId !== undefined
+          ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '')
+          : '';
+      const lineNames = sale.lines.map(lineLabel).join(' ');
+      const lineCodes = sale.lines
+        .map((line) =>
+          line.kind === 'product' ? getCatalogRepository().getProduct(line.productId) : undefined,
+        )
+        .filter((p): p is NonNullable<typeof p> => p !== undefined)
+        .map((p) => `${p.sku} ${p.barcodes.join(' ')}`)
+        .join(' ');
+      const number = sale.ticket !== undefined ? String(sale.ticket.number) : '';
+      return `${number} ${customerName} ${lineNames} ${lineCodes}`;
+    }
+    case 'movement':
+      return `${entry.movement.direction === 'in' ? 'ingreso' : 'egreso'} ${entry.movement.concept} ${
+        entry.movement.description ?? ''
+      }`;
+    case 'count':
+      return 'arqueo';
+  }
+}
+
+function entryKey(entry: DayEntry): string {
+  switch (entry.kind) {
+    case 'sale':
+      return `s:${entry.sale.id}`;
+    case 'movement':
+      return `m:${entry.movement.id}`;
+    case 'count':
+      return `c:${entry.count.id}`;
+  }
+}
+
+/** El buscador encuentra también por número de ticket ("12" o "#12"). */
+function filterEntries(entries: DayEntry[], query: string): DayEntry[] {
+  const cleaned = query.trim().replace(/^#/, '');
+  if (cleaned === '') return entries;
   const index = new Index({ tokenize: 'forward' });
-  for (const sale of sales) {
-    const customerName =
-      sale.customerId !== undefined
-        ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '')
-        : '';
-    const lineNames = sale.lines.map(lineLabel).join(' ');
-    const lineCodes = sale.lines
-      .map((line) =>
-        line.kind === 'product' ? getCatalogRepository().getProduct(line.productId) : undefined,
-      )
-      .filter((p): p is NonNullable<typeof p> => p !== undefined)
-      .map((p) => `${p.sku} ${p.barcodes.join(' ')}`)
-      .join(' ');
-    index.add(sale.id, `${customerName} ${lineNames} ${lineCodes}`);
-  }
-  const ids = new Set(index.search(query).map(String));
-  return sales.filter((sale) => ids.has(sale.id));
+  entries.forEach((entry, position) => {
+    index.add(position, entrySearchText(entry));
+  });
+  const positions = new Set(index.search(cleaned).map(Number));
+  return entries.filter((_, position) => positions.has(position));
 }
 
-/**
- * Fila de ticket como componente propio (no un `.map()` inline en `TicketsTab`) — el ref callback
- * que devuelve `nav.ticketRef(index)` toca `.current` recién cuando React lo invoca (montaje/
- * desmontaje) o dentro de `handleKeyDown` (disparado desde `onKeyDown`, nunca durante el render);
- * como componente separado, esa lectura queda en el nivel superior de SU propio render, que es la
- * forma que el análisis estático de `react-hooks/refs` espera.
- */
-/** Marca de un ticket anulado o de una anulación (#99), con la misma regla que `/ANULAR`. */
-function voidMark(sale: Sale): string | undefined {
-  const context = cashSummaryContextSignal.value;
+/** Marca de un ticket anulado o de una anulación (#99, con el número desde #120). */
+function voidMark(sale: Sale, view: DayView): string | undefined {
   if (sale.voidsSaleId !== undefined) {
-    const original = context?.voidOriginals.get(sale.voidsSaleId);
-    return original !== undefined ? `Anulación de ${formatTime(original.createdAt)}` : 'Anulación';
+    return voidOfLabel(sale, view.voidOriginals.get(sale.voidsSaleId));
   }
-  return context !== undefined && isVoided(sale, context.voidedSaleIds) ? 'Anulada' : undefined;
+  return isVoided(sale, view.voidedSaleIds) ? 'Anulada' : undefined;
 }
 
-function TicketRow({
-  sale,
-  index,
-  query,
-  nav,
-  onSelect,
-}: {
-  sale: Sale;
+type RowProps = {
   index: number;
   query: string;
   nav: ReturnType<typeof useTicketListNavigation>;
   onSelect: (index: number) => void;
-}) {
+};
+
+function rowContainerStyle(index: number) {
+  const isSelected = index === selectedEntryIndexSignal.value;
+  return {
+    isSelected,
+    style: {
+      background: isSelected ? 'var(--color-surface)' : 'transparent',
+      borderTop: index > 0 ? '1px solid var(--color-border)' : undefined,
+      cursor: 'pointer',
+    },
+  };
+}
+
+/**
+ * Fila de venta como componente propio (no un `.map()` inline) — el ref callback que devuelve
+ * `nav.ticketRef(index)` toca `.current` recién cuando Preact lo invoca o dentro de
+ * `handleKeyDown`, nunca durante el render; como componente separado, esa lectura queda en el
+ * nivel superior de SU propio render, que es la forma que espera `react-hooks/refs`.
+ */
+function SaleEntryRow({
+  sale,
+  view,
+  index,
+  query,
+  nav,
+  onSelect,
+}: RowProps & { sale: Sale; view: DayView }) {
   const customer =
     sale.customerId !== undefined
       ? getCustomerRepository().getCustomer(sale.customerId)
       : undefined;
-  const isSelected = index === selectedTicketIndexSignal.value;
-  const mark = voidMark(sale);
+  const { isSelected, style } = rowContainerStyle(index);
+  const mark = voidMark(sale, view);
   return (
     <div
       ref={nav.ticketRef(index)}
       onClick={() => {
         onSelect(index);
       }}
-      style={{
-        background: isSelected ? 'var(--color-surface)' : 'transparent',
-        borderTop: index > 0 ? '1px solid var(--color-border)' : undefined,
-        cursor: 'pointer',
-      }}
+      style={style}
     >
       <div
         class="ticket__header"
@@ -159,7 +240,7 @@ function TicketRow({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontWeight: 600 }}>
-            Ticket #{sale.id}
+            {highlightMatches(ticketLabel(sale), query.replace(/^#/, ''))}
             {mark !== undefined && (
               <span
                 style={{
@@ -168,12 +249,12 @@ function TicketRow({
                   color: 'var(--color-text-muted)',
                 }}
               >
-                {mark}
+                · {mark}
               </span>
             )}
           </span>
           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
-            {new Date(sale.createdAt).toLocaleString()}
+            {formatTime(sale.createdAt)}
           </span>
         </div>
         {customer !== undefined && (
@@ -216,49 +297,132 @@ function TicketRow({
   );
 }
 
+/** Ingreso, egreso o ajuste por arqueo: una sola fila con hora, texto y monto con signo. */
+function MovementEntryRow({
+  movement,
+  index,
+  query,
+  nav,
+  onSelect,
+}: RowProps & { movement: CashMovement }) {
+  const { isSelected, style } = rowContainerStyle(index);
+  const sign = movement.direction === 'in' ? '+' : '−';
+  return (
+    <div
+      ref={nav.ticketRef(index)}
+      onClick={() => {
+        onSelect(index);
+      }}
+      style={{
+        ...style,
+        padding: 'var(--space-2) var(--space-3)',
+        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+        <span style={{ fontWeight: 600 }}>{highlightMatches(movementTitle(movement), query)}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+          {formatTime(movement.createdAt)}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          {movement.description !== undefined ? highlightMatches(movement.description, query) : ''}
+        </span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+          {sign}
+          {formatMoney(movement.amount)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CountEntryRow({ count, index, nav, onSelect }: RowProps & { count: CashCount }) {
+  const { isSelected, style } = rowContainerStyle(index);
+  return (
+    <div
+      ref={nav.ticketRef(index)}
+      onClick={() => {
+        onSelect(index);
+      }}
+      style={{
+        ...style,
+        padding: 'var(--space-2) var(--space-3)',
+        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 'var(--space-2)',
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>{countText(count)}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
+        {formatTime(count.createdAt)}
+      </span>
+    </div>
+  );
+}
+
 /**
- * Presentacional: `filtered`/`nav` los arma `CashSummaryScreen` (no acá) — el `onKeyDown` real
- * vive en el contenedor raíz de la pantalla (único input enfocado más el resto de los elementos
- * clickeables), así que `nav.handleKeyDown` tiene que ser alcanzable desde ahí. Tenerlos como
- * hook/estado local de este componente (como en una versión anterior) los dejaba inalcanzables
- * desde ese `onKeyDown` — un bug real encontrado en revisión de código: las flechas nunca llegaban
- * a mover la selección en la pantalla real, solo en el test aislado del hook (que dispara
- * `keydown` directo sobre su propio contenedor de prueba).
+ * Presentacional: `filtered`/`nav` los arma `CashSummaryScreen` — el `onKeyDown` real vive en el
+ * contenedor raíz de la pantalla, así que `nav.handleKeyDown` tiene que ser alcanzable desde ahí
+ * (bug real de una versión anterior: las flechas nunca llegaban a mover la selección).
  */
-function TicketsTab({
+function MovementsTab({
+  view,
   filtered,
   query,
   nav,
   onSelect,
 }: {
-  filtered: Sale[];
+  view: DayView;
+  filtered: DayEntry[];
   query: string;
   nav: ReturnType<typeof useTicketListNavigation>;
   onSelect: (index: number) => void;
 }) {
-  const rows = filtered.map((sale, index) => (
-    <TicketRow
-      key={sale.id}
-      sale={sale}
-      index={index}
-      query={query}
-      nav={nav}
-      onSelect={onSelect}
-    />
-  ));
+  const rows = filtered.map((entry, index) => {
+    const props = { index, query, nav, onSelect };
+    switch (entry.kind) {
+      case 'sale':
+        return <SaleEntryRow key={entryKey(entry)} sale={entry.sale} view={view} {...props} />;
+      case 'movement':
+        return <MovementEntryRow key={entryKey(entry)} movement={entry.movement} {...props} />;
+      case 'count':
+        return <CountEntryRow key={entryKey(entry)} count={entry.count} {...props} />;
+    }
+  });
+  const isOldest = view.date === view.oldestDate && !view.isToday;
 
-  // `nav.containerRef` solo toca `.current` cuando React lo invoca (montaje/desmontaje) o dentro
-  // de `handleKeyDown` (vía `onKeyDown`, nunca durante el render) — el análisis estático del
-  // plugin no distingue eso al ver que otro miembro del mismo hook comparte esa ref.
   return (
+    // `nav.containerRef` solo toca `.current` cuando Preact lo invoca o dentro de `handleKeyDown`
+    // (vía `onKeyDown`, nunca durante el render) — el análisis estático del plugin no distingue
+    // eso al ver que otro miembro del mismo hook comparte esa ref.
     // eslint-disable-next-line react-hooks/refs
     <div ref={nav.containerRef} style={{ height: '100%', overflowY: 'auto', outline: 'none' }}>
-      {filtered.length === 0 && (
+      {view.entries.length === 0 ? (
         <p style={{ padding: 'var(--space-3)', color: 'var(--color-text-muted)' }}>
-          Ningún ticket coincide con la búsqueda.
+          Sin movimientos este día
         </p>
+      ) : (
+        filtered.length === 0 && (
+          <p style={{ padding: 'var(--space-3)', color: 'var(--color-text-muted)' }}>
+            Ningún movimiento coincide con la búsqueda.
+          </p>
+        )
       )}
       {rows}
+      {isOldest && (
+        <p
+          style={{
+            padding: 'var(--space-3)',
+            color: 'var(--color-text-muted)',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          Los datos de más de 7 días se limpian de esta terminal
+        </p>
+      )}
     </div>
   );
 }
@@ -296,7 +460,6 @@ function ProductsTab({
   onSelect: (index: number) => void;
 }) {
   const rowRef = useScrollSelectedIntoView(selectedProductIndexSignal);
-
   return (
     <div style={{ height: '100%', overflowY: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -361,7 +524,6 @@ function PaymentsTab({
   onSelect: (index: number) => void;
 }) {
   const rowRef = useScrollSelectedIntoView(selectedPaymentIndexSignal);
-
   return (
     <div style={{ height: '100%', overflowY: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -403,82 +565,165 @@ function PaymentsTab({
   );
 }
 
+function Sidebar({ view }: { view: DayView }) {
+  const { summary, balance } = view;
+  return (
+    <div
+      data-testid="cash-summary-sidebar"
+      style={{
+        borderLeft: '1px solid var(--color-border)',
+        padding: 'var(--space-3)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-3)',
+        overflowY: 'auto',
+      }}
+    >
+      <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Total vendido</p>
+        <p
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--font-size-lg)',
+            fontWeight: 700,
+          }}
+        >
+          {formatMoney(summary.totalSold)}
+        </p>
+      </div>
+      <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Tickets emitidos</p>
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
+          {summary.ticketCount}
+          {summary.voidedCount > 0 && (
+            <span style={{ color: 'var(--color-text-muted)' }}>
+              {' '}
+              ({summary.voidedCount} anuladas)
+            </span>
+          )}
+        </p>
+      </div>
+      <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Desc/Recargos</p>
+        <p
+          style={{
+            margin: 0,
+            fontFamily: 'var(--font-mono)',
+            color: summary.adjustmentTotal < 0 ? 'var(--color-danger)' : 'var(--color-text)',
+          }}
+        >
+          {formatMoney(summary.adjustmentTotal)}
+        </p>
+      </div>
+      <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Otros pagos</p>
+        <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
+          {formatMoney(summary.otherPayments)}
+        </p>
+      </div>
+      <div style={sidebarCardStyle}>
+        <p style={sectionLabelStyle}>Efectivo</p>
+        <div style={sidebarRowStyle}>
+          <span>Cobros</span>
+          <span>{formatMoney(summary.cash.sales)}</span>
+        </div>
+        <div style={sidebarRowStyle}>
+          <span>Ingresos</span>
+          <span>{formatMoney(summary.cash.income)}</span>
+        </div>
+        <div style={sidebarRowStyle}>
+          <span>Egresos</span>
+          <span>{formatMoney(summary.cash.expense)}</span>
+        </div>
+        <div style={sidebarRowStyle}>
+          <span>Ajustes por arqueo</span>
+          <span>{formatMoney(summary.cash.countAdjustments)}</span>
+        </div>
+      </div>
+      {balance !== undefined && (
+        <div style={sidebarCardStyle}>
+          <p style={sectionLabelStyle}>Saldo de efectivo actual</p>
+          <p style={{ margin: 0, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+            {formatMoney(balance.balance)}
+          </p>
+          <p
+            style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}
+          >
+            {balance.lastCountAt !== undefined
+              ? `desde el arqueo de ${formatTime(balance.lastCountAt)}`
+              : 'sin arqueo previo'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
- * `/RESUMEN`: panel lateral fijo + 3 pestañas (Tickets/Productos/Medios de pago).
+ * `/RESUMEN` por día calendario (Etapa 5 de #94, #100): arranca en hoy y navega de a un día con
+ * "‹ Anterior (Alt+←)" / "Siguiente (Alt+→) ›", acotado entre el día más viejo con datos locales y
+ * hoy. Panel lateral fijo más 3 pestañas: Movimientos (ventas, anulaciones, ingresos, egresos y
+ * arqueos, por hora), Productos y Medios de pago.
  */
 export function CashSummaryScreen() {
   const filterRef = useFocusOnMount<HTMLInputElement>();
-  const context = cashSummaryContextSignal.value;
+  const view = dayViewSignal.value;
   const tab = cashSummaryTabSignal.value;
-
   // Se arman siempre, antes de cualquier `return` condicional — las Rules of Hooks exigen el mismo
-  // orden de hooks en cada render, así que ninguno de los hooks de más abajo puede vivir después
-  // del `if (context === undefined) return null` de más abajo (bug real encontrado en revisión de
-  // código: los hooks quedaban condicionales). Con `sales: []` de fallback, esto no hace ningún
-  // trabajo real mientras no haya contexto todavía.
-  const sales = context?.sales ?? [];
-  // El plugin no sabe que leer `signal.value` en el render ya hace que el componente se
-  // re-renderice cuando cambia (así integra @preact/signals) — desde su perspectiva genérica de
-  // React, los signals de filtro son "valores externos" y sugiere sacarlos de las deps, pero eso
-  // rompería la memoización (se recalcularía siempre con el texto del filtro desactualizado).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const filteredTickets = useMemo(
-    () => filterSales(sales, ticketFilterSignal.value),
-    [sales, ticketFilterSignal.value],
+  // orden de hooks en cada render. Con listas vacías de fallback, no hacen trabajo real mientras
+  // no haya un día cargado.
+  const movementQuery = movementFilterSignal.value;
+  const productQuery = productFilterSignal.value;
+  const filteredEntries = useMemo(
+    () => filterEntries(view?.entries ?? [], movementQuery),
+    [view, movementQuery],
   );
-  const ticketsNav = useTicketListNavigation(selectedTicketIndexSignal, filteredTickets.length);
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- ver comentario arriba.
+  const entriesNav = useTicketListNavigation(selectedEntryIndexSignal, filteredEntries.length);
   const products = useMemo(
-    () => sortedProducts(sales, productFilterSignal.value),
-    [sales, productFilterSignal.value],
+    () => sortedProducts(view?.sales ?? [], productQuery),
+    [view, productQuery],
   );
   const productsNav = useIndexListNavigation(selectedProductIndexSignal, products.length);
   const paymentsNav = useIndexListNavigation(selectedPaymentIndexSignal, ALL_METHODS.length);
 
-  if (context === undefined) {
-    return null; // invariante: no se entra a esta pantalla sin contexto (ver triggerCashSummary)
+  if (view === undefined) {
+    return null; // invariante: no se entra a esta pantalla sin un día cargado (triggerCashSummary)
   }
-
-  const { summary } = context;
+  const today = localDateKey(new Date().toISOString());
+  const canGoBack = view.date > view.oldestDate;
+  const canGoForward = !view.isToday;
 
   const filterValue =
     tab === 'products'
       ? productFilterSignal.value
       : tab === 'payments'
         ? paymentFilterSignal.value
-        : ticketFilterSignal.value;
+        : movementFilterSignal.value;
   const updateFilter =
     tab === 'products'
       ? updateProductFilter
       : tab === 'payments'
         ? updatePaymentFilter
-        : updateTicketFilter;
-
+        : updateMovementFilter;
   const focusFilter = () => {
     filterRef.current?.focus();
   };
-
   const handleFilterInput = (event: TargetedEvent<HTMLInputElement>) => {
     updateFilter(event.currentTarget.value);
   };
-
-  const selectTicket = (index: number) => {
-    ticketsNav.select(index);
+  const selectEntry = (index: number) => {
+    entriesNav.select(index);
     focusFilter();
   };
   const selectProduct = (index: number) => {
-    // `Signal.value =` es la forma correcta de actualizar un signal reactivo (no una mutación de
-    // prop) — la regla react-hooks/immutability no distingue signals de props comunes.
-    // eslint-disable-next-line react-hooks/immutability
     selectedProductIndexSignal.value = index;
     focusFilter();
   };
   const selectPayment = (index: number) => {
-    // eslint-disable-next-line react-hooks/immutability
     selectedPaymentIndexSignal.value = index;
     focusFilter();
   };
-
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -492,6 +737,11 @@ export function CashSummaryScreen() {
       focusFilter();
       return;
     }
+    if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+      event.preventDefault();
+      void (event.key === 'ArrowLeft' ? showPreviousDay() : showNextDay());
+      return;
+    }
     if (event.key === 'Tab') {
       event.preventDefault();
       const currentIdx = TAB_ORDER.indexOf(tab);
@@ -501,21 +751,15 @@ export function CashSummaryScreen() {
       if (nextTab !== undefined) setCashSummaryTab(nextTab);
       return;
     }
-
     const navHandled =
-      tab === 'tickets'
-        ? ticketsNav.handleKeyDown(event)
+      tab === 'movements'
+        ? entriesNav.handleKeyDown(event)
         : tab === 'products'
           ? productsNav.handleKeyDown(event)
           : paymentsNav.handleKeyDown(event);
     if (navHandled) return;
-
-    // Cualquier otro elemento clickeable de la pantalla (botón de pestaña, "Cerrar", una fila) es
-    // ahora un `<button>`/fila enfocable de verdad (issue post-PR #65: antes solo funcionaban con
-    // mouse los botones de pestaña) — así que una tecla imprimible puede llegar acá con el foco en
-    // cualquiera de ellos, no solo en el buscador. En vez de perderse, vuelve el foco al buscador y
-    // continúa el texto ya tipeado en esta pestaña, en vez de arrancar de cero. Espacio/Enter
-    // quedan afuera para no romper la activación nativa de un botón enfocado.
+    // Una tecla imprimible con el foco en un botón vuelve al buscador y continúa el texto ya
+    // tipeado en esta pestaña. Espacio/Enter quedan afuera para no romper la activación nativa.
     if (
       event.key.length === 1 &&
       event.key !== ' ' &&
@@ -556,6 +800,31 @@ export function CashSummaryScreen() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
             <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Resumen del día</h1>
+            <span data-testid="day-heading" style={{ color: 'var(--color-chrome-text-muted)' }}>
+              {formatDayHeading(view.date, today)}
+            </span>
+            <button
+              type="button"
+              disabled={!canGoBack}
+              onClick={() => {
+                void showPreviousDay();
+                focusFilter();
+              }}
+              style={{ ...dayButtonStyle, opacity: canGoBack ? 1 : 0.4 }}
+            >
+              ‹ Anterior (Alt+←)
+            </button>
+            <button
+              type="button"
+              disabled={!canGoForward}
+              onClick={() => {
+                void showNextDay();
+                focusFilter();
+              }}
+              style={{ ...dayButtonStyle, opacity: canGoForward ? 1 : 0.4 }}
+            >
+              Siguiente (Alt+→) ›
+            </button>
           </div>
           <button
             type="button"
@@ -571,7 +840,6 @@ export function CashSummaryScreen() {
             Cerrar (Esc)
           </button>
         </div>
-
         <div
           style={{
             padding: '0 var(--space-4) var(--space-3)',
@@ -589,7 +857,7 @@ export function CashSummaryScreen() {
                 ? 'Buscar producto'
                 : tab === 'payments'
                   ? 'Buscar medio de pago'
-                  : 'Buscar ticket, cliente o producto'
+                  : 'Buscar ticket (#12), cliente, producto o concepto'
             }
             value={filterValue}
             onInput={handleFilterInput}
@@ -617,7 +885,6 @@ export function CashSummaryScreen() {
           ))}
         </div>
       </div>
-
       <div
         style={{
           flex: 1,
@@ -627,82 +894,27 @@ export function CashSummaryScreen() {
         }}
       >
         <div data-testid="cash-summary-tab-content" style={{ minHeight: 0, overflow: 'hidden' }}>
-          {tab === 'tickets' && (
-            <TicketsTab
-              filtered={filteredTickets}
-              query={ticketFilterSignal.value}
-              nav={ticketsNav}
-              onSelect={selectTicket}
+          {tab === 'movements' && (
+            <MovementsTab
+              view={view}
+              filtered={filteredEntries}
+              query={movementQuery}
+              nav={entriesNav}
+              onSelect={selectEntry}
             />
           )}
           {tab === 'products' && (
-            <ProductsTab
-              products={products}
-              query={productFilterSignal.value}
-              onSelect={selectProduct}
-            />
+            <ProductsTab products={products} query={productQuery} onSelect={selectProduct} />
           )}
           {tab === 'payments' && (
             <PaymentsTab
-              totalsByMethod={summary.totalsByMethod}
+              totalsByMethod={view.summary.totalsByMethod}
               query={paymentFilterSignal.value}
               onSelect={selectPayment}
             />
           )}
         </div>
-        <div
-          data-testid="cash-summary-sidebar"
-          style={{
-            borderLeft: '1px solid var(--color-border)',
-            padding: 'var(--space-3)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 'var(--space-3)',
-            overflowY: 'auto',
-          }}
-        >
-          <div style={sidebarCardStyle}>
-            <p style={sectionLabelStyle}>Total recaudado</p>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: 'var(--font-mono)',
-                fontSize: 'var(--font-size-lg)',
-                fontWeight: 700,
-              }}
-            >
-              {formatMoney(summary.totalSold)}
-            </p>
-          </div>
-          <div style={sidebarCardStyle}>
-            <p style={sectionLabelStyle}>Tickets emitidos</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>{summary.ticketCount}</p>
-          </div>
-          <div style={sidebarCardStyle}>
-            <p style={sectionLabelStyle}>Desc/Recargos</p>
-            <p
-              style={{
-                margin: 0,
-                fontFamily: 'var(--font-mono)',
-                color: summary.adjustmentTotal < 0 ? 'var(--color-danger)' : 'var(--color-text)',
-              }}
-            >
-              {formatMoney(summary.adjustmentTotal)}
-            </p>
-          </div>
-          <div style={sidebarCardStyle}>
-            <p style={sectionLabelStyle}>Efectivo</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
-              {formatMoney(summary.totalsByMethod.cash)}
-            </p>
-          </div>
-          <div style={sidebarCardStyle}>
-            <p style={sectionLabelStyle}>Otros pagos</p>
-            <p style={{ margin: 0, fontFamily: 'var(--font-mono)' }}>
-              {formatMoney(summary.otherPayments)}
-            </p>
-          </div>
-        </div>
+        <Sidebar view={view} />
       </div>
     </div>
   );
