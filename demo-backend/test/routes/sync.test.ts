@@ -411,3 +411,79 @@ describe('número de ticket (4.1.0, #120)', () => {
     });
   });
 });
+
+describe('saldo de cualquier cliente y recibo (4.2.0, #101)', () => {
+  function seedCustomer(id: string): void {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      id,
+      JSON.stringify({ id, name: 'Sin cuenta', createdAt: '2026-01-01T00:00:00.000Z' }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+  }
+
+  function collection(id: string, customerId: string, total: number) {
+    return {
+      type: 'customer-payment',
+      id,
+      payment: {
+        id,
+        customerId,
+        payments: [{ method: 'cash', amount: total }],
+        total,
+        createdAt: '2026-09-27T10:00:00.000Z',
+        receipt: { date: '2026-09-27', number: 3 },
+      },
+    };
+  }
+
+  async function pulledCustomer(id: string): Promise<Record<string, unknown> | undefined> {
+    const response = await pull({ cursors: {}, pendingLotIds: [] });
+    const body = (await response.json()) as { customers: { items: Record<string, unknown>[] } };
+    return body.customers.items.find((item) => item.id === id);
+  }
+
+  it('una cobranza de un cliente sin cuenta le deja saldo a favor, y repetida no lo mueve', async () => {
+    seedCustomer('c-1');
+
+    await push('lot-1', [collection('cp1', 'c-1', 300)]);
+    await push('lot-2', [collection('cp1', 'c-1', 300)]);
+
+    const customer = await pulledCustomer('c-1');
+    expect(customer?.balance).toBe(-300);
+    expect(customer?.creditLimit).toBeUndefined();
+  });
+
+  it('una acreditación (pago a cuenta negativo) de un cliente sin cuenta deja saldo negativo', async () => {
+    seedCustomer('c-1');
+
+    await push('lot-1', [
+      {
+        type: 'sale',
+        id: 's1',
+        sale: {
+          id: 's1',
+          customerId: 'c-1',
+          total: -150,
+          payments: [{ method: 'account', amount: -150 }],
+        },
+      },
+    ]);
+
+    expect((await pulledCustomer('c-1'))?.balance).toBe(-150);
+  });
+
+  it('la cobranza se guarda con su recibo', async () => {
+    seedCustomer('c-1');
+
+    await push('lot-1', [collection('cp1', 'c-1', 300)]);
+
+    const row = db.prepare('SELECT payload FROM customer_payments WHERE id = ?').get('cp1') as {
+      payload: string;
+    };
+    expect((JSON.parse(row.payload) as { receipt: unknown }).receipt).toEqual({
+      date: '2026-09-27',
+      number: 3,
+    });
+  });
+});

@@ -30,7 +30,11 @@ function stampOf(deviceId: string, event: BatchEvent): Stamp {
   };
 }
 
-/** Mueve el saldo de un cliente con cuenta corriente; sin cuenta, no hay saldo que mover. */
+/**
+ * Mueve el saldo de cualquier cliente, tenga o no cuenta corriente (4.2.0, #101): uno sin saldo
+ * arranca en 0 y desde su primer movimiento viaja con `balance` en el pull (el `updated_at` nuevo
+ * lo mete en el próximo delta).
+ */
 function adjustBalance(db: DatabaseSync, customerId: string, delta: number, now: string): void {
   const row = db.prepare('SELECT payload FROM customers WHERE id = ?').get(customerId) as
     { payload: string } | undefined;
@@ -38,11 +42,9 @@ function adjustBalance(db: DatabaseSync, customerId: string, delta: number, now:
     return;
   }
   const customer = JSON.parse(row.payload) as CustomerPayload;
-  if (customer.balance === undefined) {
-    return;
-  }
+  const current = customer.balance ?? 0;
   db.prepare('UPDATE customers SET payload = ?, updated_at = ? WHERE id = ?').run(
-    JSON.stringify({ ...customer, balance: Math.round((customer.balance + delta) * 100) / 100 }),
+    JSON.stringify({ ...customer, balance: Math.round((current + delta) * 100) / 100 }),
     now,
     customerId,
   );

@@ -1,7 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-/** Versión del Connector API que habla este minibackend (4.1.0 desde #120; 4.0.0, #99). */
-export const CONTRACT_VERSION = '4.1.0';
+/**
+ * Versión del Connector API que habla este minibackend (4.2.0 desde #101: recibo de cobranza y
+ * saldo de cualquier cliente; 4.1.0, #120; 4.0.0, #99).
+ */
+export const CONTRACT_VERSION = '4.2.0';
 /** Lo que informa con "Simular contrato 3.0.0" prendido en el panel. */
 export const SIMULATED_OLD_CONTRACT = '3.0.0';
 

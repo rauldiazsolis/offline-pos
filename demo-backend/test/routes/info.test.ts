@@ -48,7 +48,7 @@ function headers(version?: string): Record<string, string> {
 }
 
 async function info(): Promise<unknown> {
-  const response = await fetch(`${baseUrl}/info`, { headers: headers('4.1.0') });
+  const response = await fetch(`${baseUrl}/info`, { headers: headers('4.2.0') });
   expect(response.status).toBe(200);
   return response.json();
 }
@@ -65,11 +65,11 @@ async function push(version: string | undefined, id = 'lot-1'): Promise<Response
 }
 
 describe('GET /info (#99)', () => {
-  it('informa el contrato 4.1.0 y el estado ok', async () => {
+  it('informa el contrato 4.2.0 y el estado ok', async () => {
     expect(await info()).toEqual({
-      contractVersion: '4.1.0',
+      contractVersion: '4.2.0',
       status: 'ok',
-      backend: { name: 'offline-pos-demo-backend', version: '4.1.0' },
+      backend: { name: 'offline-pos-demo-backend', version: '4.2.0' },
     });
   });
 
@@ -89,7 +89,7 @@ describe('versión del contrato en cada request (#99)', () => {
     setDemoSettings(db, { simulateContract3: true });
 
     expect(await info()).toMatchObject({ contractVersion: '3.0.0' });
-    const response = await push('4.1.0');
+    const response = await push('4.2.0');
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
@@ -105,8 +105,14 @@ describe('versión del contrato en cada request (#99)', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       code: 'incompatible-contract',
-      contractVersion: '4.1.0',
+      contractVersion: '4.2.0',
     });
+  });
+
+  it('un POS 4.1 (mismo major, minor anterior) se procesa: el backend 4.2 lo entiende (#101)', async () => {
+    const response = await push('4.1.0');
+
+    expect(response.status).toBe(200);
   });
 
   it('sin el header se procesa (criterio del backend)', async () => {
@@ -119,7 +125,7 @@ describe('versión del contrato en cada request (#99)', () => {
     setDemoSettings(db, { simulateContract3: true });
     const response = await fetch(`${baseUrl}/sync/pull`, {
       method: 'POST',
-      headers: headers('4.1.0'),
+      headers: headers('4.2.0'),
       body: JSON.stringify({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] }),
     });
 
