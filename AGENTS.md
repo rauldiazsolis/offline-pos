@@ -21,10 +21,10 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 |---|---|
 | Outbox: identidad de eventos y del dispositivo, push y pull por lotes, reaplicación, limpieza a 7 días, cadencias, foto completa, log de sync y `/DIAGNOSTICO` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) (también rige su código en `domain/` y `storage/`) |
 | Cuenta corriente: la reserva de crédito síncrona | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
-| Contrato: qué trajo cada versión (v3, 4.0.0, 4.1.0, 4.2.0), estado del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Contrato: qué trajo cada versión (v3, 4.0.0, 4.1.0, 4.2.0, 4.3.0), estado del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns`), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
-| Venta: cantidades y redondeo, tickets en 0 o negativos, anulación | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Venta: cantidades y redondeo, tickets en 0 o negativos, anulación de ventas y de cobranzas | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/CAJA`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Cobranza y saldo del cliente | Persistencia en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); pantalla, comprobante, saldo en la venta y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
@@ -235,7 +235,8 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.2.0** desde la Etapa 6 del epic #94 —
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.3.0** desde #125 (spec
+`docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`); la 4.2.0 es de la Etapa 6 del epic #94 —
 #101, spec `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`; la 4.1.0 es de
 la Etapa 5, #120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
 Etapa 4, #99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
@@ -253,7 +254,7 @@ contrato), dejar de aceptar lotes de una terminal — el POS nunca hace cumplir 
 se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arriba).
 
 Compatible = mismo major y minor igual o mayor (`domain/contract-version.ts`). Qué trajo cada versión
-(v3, 4.0.0, 4.1.0, 4.2.0) y cómo el POS sigue el estado del backend está en `src/sync/AGENTS.md`; las
+(v3, 4.0.0, 4.1.0, 4.2.0, 4.3.0) y cómo el POS sigue el estado del backend está en `src/sync/AGENTS.md`; las
 implementaciones y el registro de conectores, en `src/connectors/AGENTS.md`.
 
 **Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
@@ -264,7 +265,8 @@ hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso 
 frena y se consulta (adaptarlo o sacarlo del registro). La red de seguridad ya existe: el puente
 informa su versión (`bridge.gs::CONTRACT_VERSION`), así que con un POS posterior la terminal lo ve
 incompatible, no sincroniza y sigue vendiendo sin perder nada. Cada cambio de contrato suma en #127
-lo que haría falta para retomarlo; `/CONFIG` lo muestra como "Sin mantenimiento".
+lo que haría falta para retomarlo; `/CONFIG` lo muestra como "Sin mantenimiento". El camino decidido
+para retomarlo es #138 (el conector en el POS, con la API del puente especificada).
 
 **Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
 (el puente de Sheets usa `@OnlyCurrentDoc`). Si una función más linda necesita un scope más amplio, se
@@ -345,7 +347,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/COBRAR` | Cobro (con líneas) o cobranza sin venta (sin líneas y con cliente). También Ctrl+Enter, o Enter con la barra vacía |
 | `/CAJA` | Arqueo, ingreso o egreso de caja (ver "Caja sin turnos") |
 | `/RESUMEN` | Un día calendario: movimientos, productos y medios de pago |
-| `/ANULAR` | Anula un ticket de las últimas 24 h con otro ticket |
+| `/ANULAR` | Anula un ticket o una cobranza de las últimas 24 h con otro documento |
 | `/DESCARTAR` | Vacía la venta en curso (líneas, cliente y ajuste global) con `domain/cart.ts::discardCart`, sin confirmación |
 | `/CONFIG` | Wizard de la terminal y su conexión (ver "Ciclo de vida de la conexión"); config en `localStorage`, no hay variables de entorno |
 | `/SINCRONIZAR` | Push y pull ya (RF-12); no cambia de pantalla, el feedback es la barra de estado |
@@ -370,8 +372,8 @@ comprar nada, y el POS lleva el saldo de cada cliente, siempre informativo (nunc
 La pantalla, el comprobante, el saldo en la venta y `/RESUMEN` están en `src/ui/AGENTS.md`; la
 persistencia, en `src/storage/AGENTS.md`.
 
-**Fuera de alcance**: anular o corregir una cobranza desde el POS (#125); hasta entonces se corrige
-del lado del backend.
+Una cobranza se anula desde `/ANULAR` con otra cobranza negativa (#125): detalle en
+`src/domain/AGENTS.md` y `src/ui/AGENTS.md`.
 
 Otros principios no negociables: todo alcanzable en ≤2 pasos sin mouse (RNF-04), foco siempre
 visible (nunca depender de `:hover`), locale configurable por terminal para `Intl.NumberFormat`
@@ -464,6 +466,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #66 | Conectores: Google Sheets, registro cerrado, conexión verificada, comandos por conector, crédito ilimitado | #67, #68, #76, #77, #80, #69 |
 | #87 | Sync por lotes (`pushBatch`/`pullBatch`) y `/DIAGNOSTICO` | PR #89 |
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
+| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN` | PR #136, PR #N |
 
 **Siguiente**: la Etapa 7 de #94 (#102, comandos de consulta). Fase 5 (hardware) pospuesta a v2:
 depende de dispositivos reales y nada depende de ella (§11 del diseño).
@@ -473,8 +476,8 @@ etiqueta antes de tomar un issue.
 
 - Venta y barra de comandos: #119 (revisión de cantidades, precios y búsquedas), #23 (scanner por
   velocidad de tecleo), #24 (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
-- Anulación: #110 y #58 (juntos), #125 (anular cobranzas).
-- Caja: #57 (usabilidad del modal de `/CAJA`), #124 (`/RESUMEN` con lo más nuevo primero).
+- Anulación: #137 (comprobante de la anulación).
+- Caja: #57 (usabilidad del modal de `/CAJA`).
 - Clientes y cuenta corriente: #37 (documento y teléfono), #102 (comandos de consulta), #104
   (`backlog`).
 - Sync: #115 (foto completa con stock vacío y movimientos pendientes); `backlog`: #113, #103, #13.
@@ -482,6 +485,6 @@ etiqueta antes de tomar un issue.
   #41 (resize en DevTools).
 - Pantallas y publicación: #49 (tracking de modales), #52 (Historial), #54 (PWA, docs y lanzamiento),
   #128 (onboarding).
-- Conectores (`backlog`): #127 (Sheets congelado), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
+- Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
   POS: #122.
