@@ -1,7 +1,7 @@
 import { Index } from 'flexsearch';
 import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useMemo } from 'preact/hooks';
-import { calculateProductQuantities, type ProductQuantity } from '../../domain/cash-session.ts';
+import { calculateProductQuantities, type ProductQuantity } from '../../domain/sales-summary.ts';
 import type { Sale, SaleLine } from '../../domain/sale.ts';
 import type { PaymentMethod } from '../../domain/sale.ts';
 import { isVoided } from '../../domain/sale-lifecycle.ts';
