@@ -17,7 +17,7 @@ import {
   EMPTY_CASH_FIELDS,
   lastCashCountAtSignal,
 } from '../state/cash.ts';
-import { commandBarNoticeSignal } from '../state/command-bar.ts';
+import { commandBarNoticeSignal, overlayDismissedSignal } from '../state/command-bar.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
   countDifference,
@@ -130,6 +130,9 @@ export function chooseConceptSuggestion(index: number): void {
 function finish(notice: string): void {
   resetCashForm();
   commandBarNoticeSignal.value = notice;
+  // Si `/CAJA` se abrió con un click (el aviso de la barra de estado), ese click cerró el overlay
+  // de la barra de comandos (#28): sin esto el aviso quedaba oculto — lo encontró el e2e.
+  overlayDismissedSignal.value = false;
   activeScreenSignal.value = 'sale';
 }
 

@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = { id: string; status: string; total: number };
@@ -22,9 +22,6 @@ test('vender offline: buscar, agregar al carrito, cobrar y persistir', async ({
   // necesita conexión.
   await context.setOffline(true);
 
-  // Fase 6: /COBRAR exige un turno de caja abierto — abrir uno también es
-  // 100% local, así que funciona igual sin red.
-  await openCashSession(page);
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();

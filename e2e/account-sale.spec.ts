@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore, putIntoStore } from './indexed-db.ts';
 
 type StoredCustomer = { id: string; name: string };
@@ -15,7 +15,6 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
   await seedCatalog(page);
 
   await context.setOffline(true);
-  await openCashSession(page);
 
   // Alta de cliente local (RF-16) — sin match existente, "@<nombre>" + Enter lo crea.
   await commandBar.fill('@Cliente Prueba');
@@ -74,7 +73,6 @@ test('cuenta corriente offline sin cuenta cacheada: rechaza el cobro', async ({
   await seedCatalog(page);
 
   await context.setOffline(true);
-  await openCashSession(page);
 
   await commandBar.fill('@Sin Credito');
   await commandBar.press('Enter');

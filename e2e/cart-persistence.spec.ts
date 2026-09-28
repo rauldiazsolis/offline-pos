@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 /**
@@ -49,7 +49,6 @@ test('cerrar la venta limpia el draft — el siguiente refresh arranca con el ca
   // a mano (ver `helpers.ts::seedCatalog`).
   await seedCatalog(page);
 
-  await openCashSession(page);
 
   await commandBar.fill('arroz');
   await commandBar.press('Enter');

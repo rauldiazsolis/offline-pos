@@ -248,37 +248,39 @@ export function CashScreen() {
     conceptSuggestionsSignal.value.length > 0;
 
   const renderInput = (field: CashField) => (
-    <label key={field} style={{ ...fieldRowStyle, position: 'relative' }}>
-      <span>
-        {FIELD_LABELS[field]}
-        {field === 'description' && (
-          <span style={{ color: 'var(--color-text-muted)' }}> (opcional)</span>
-        )}
-      </span>
-      <input
-        ref={(element) => {
-          if (element === null) {
-            fieldRefs.current.delete(field);
-          } else {
-            fieldRefs.current.set(field, element);
-          }
-        }}
-        type="text"
-        autocomplete="off"
-        inputMode={field === 'counted' || field === 'amount' ? 'decimal' : undefined}
-        aria-label={FIELD_LABELS[field]}
-        value={fields[field]}
-        onInput={handleInput(field)}
-        onKeyDown={handleFieldKeyDown(field)}
-        onFocus={field === 'concept' ? openConceptSuggestions : undefined}
-        style={{
-          ...(field === 'counted' || field === 'amount' ? amountInputStyle : inputStyle),
-          borderColor: error?.field === field ? 'var(--color-danger)' : 'var(--color-border)',
-        }}
-      />
+    <div key={field} style={{ position: 'relative' }}>
+      <label style={fieldRowStyle}>
+        <span>
+          {FIELD_LABELS[field]}
+          {field === 'description' && (
+            <span style={{ color: 'var(--color-text-muted)' }}> (opcional)</span>
+          )}
+        </span>
+        <input
+          ref={(element) => {
+            if (element === null) {
+              fieldRefs.current.delete(field);
+            } else {
+              fieldRefs.current.set(field, element);
+            }
+          }}
+          type="text"
+          autocomplete="off"
+          inputMode={field === 'counted' || field === 'amount' ? 'decimal' : undefined}
+          aria-label={FIELD_LABELS[field]}
+          value={fields[field]}
+          onInput={handleInput(field)}
+          onKeyDown={handleFieldKeyDown(field)}
+          onFocus={field === 'concept' ? openConceptSuggestions : undefined}
+          style={{
+            ...(field === 'counted' || field === 'amount' ? amountInputStyle : inputStyle),
+            borderColor: error?.field === field ? 'var(--color-danger)' : 'var(--color-border)',
+          }}
+        />
+      </label>
       {field === 'concept' && showSuggestions && (
         <ul
-          aria-label="Conceptos sugeridos"
+          aria-label="Sugerencias"
           style={{
             position: 'absolute',
             top: '100%',
@@ -319,7 +321,7 @@ export function CashScreen() {
           ))}
         </ul>
       )}
-    </label>
+    </div>
   );
 
   return (

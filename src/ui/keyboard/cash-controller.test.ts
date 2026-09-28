@@ -19,7 +19,7 @@ import {
   EMPTY_CASH_FIELDS,
   lastCashCountAtSignal,
 } from '../state/cash.ts';
-import { commandBarNoticeSignal } from '../state/command-bar.ts';
+import { commandBarNoticeSignal, overlayDismissedSignal } from '../state/command-bar.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
   cancelCash,
@@ -185,6 +185,18 @@ describe('cash-controller', () => {
 
     expect(cashFieldsSignal.value.concept).toBe('Flete');
     expect(conceptSuggestionsOpenSignal.value).toBe(false);
+  });
+
+  it('el aviso reabre el overlay de la barra aunque un click lo haya cerrado', async () => {
+    vi.mocked(recordCashMovement).mockResolvedValue({ ok: true, value: movement });
+    overlayDismissedSignal.value = true;
+    enterCashScreen('out');
+    updateCashField('concept', 'Flete');
+    updateCashField('amount', '50');
+    await submitCash();
+
+    expect(commandBarNoticeSignal.value).toBe('Egreso registrado');
+    expect(overlayDismissedSignal.value).toBe(false);
   });
 
   it('cancelCash vuelve a la venta', () => {
