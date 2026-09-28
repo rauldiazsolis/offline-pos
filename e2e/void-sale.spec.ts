@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures.ts';
-import { confirmCheckout, fillPayment, openCashSession, seedCatalog } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = {
@@ -15,7 +15,6 @@ type StoredStockMovement = { saleId?: string; reason: string; delta: number };
 type StoredOutboxEvent = { id: string; type: string; status: string; saleId?: string };
 
 async function closeOneSale(page: import('@playwright/test').Page): Promise<void> {
-  await openCashSession(page);
   const commandBar = page.getByLabel('Barra de comandos');
   await commandBar.fill('arroz');
   await commandBar.press('Enter');

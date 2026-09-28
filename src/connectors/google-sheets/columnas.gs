@@ -54,6 +54,8 @@ var COLUMN_LABELS = {
     branch: 'Sucursal',
     pointOfSale: 'Punto de venta',
     anulaA: 'Anula a',
+    fechaTicket: 'Fecha del ticket',
+    numeroTicket: 'N° de ticket',
   },
   Pagos: {
     saleId: 'Id de venta',

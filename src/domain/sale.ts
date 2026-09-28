@@ -1,3 +1,5 @@
+import type { TicketNumber } from './ticket-number.ts';
+
 /** Descuento aplicado a una línea de venta, por monto fijo o por porcentaje. */
 export type Discount = { type: 'amount' | 'percentage'; value: number };
 
@@ -60,6 +62,11 @@ export type Sale = {
    */
   status: 'closed' | 'voided';
   createdAt: string; // ISO 8601
+  /**
+   * Número del ticket en su día (#120). Una venta anterior a la Etapa 5 no lo tiene y nunca se
+   * le inventa uno.
+   */
+  ticket?: TicketNumber;
   syncedAt?: string;
   /** Solo en un ticket de anulación: el motivo que tipeó el cajero. */
   voidReason?: string;

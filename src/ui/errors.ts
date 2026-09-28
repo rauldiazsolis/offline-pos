@@ -1,4 +1,4 @@
-import { contractMajor } from '../domain/contract-version.ts';
+import { contractRequirement } from '../domain/contract-version.ts';
 import type { Failure } from '../domain/result.ts';
 import { formatMoney } from './format.ts';
 
@@ -75,7 +75,7 @@ export function describeError(failure: Failure): string {
     case 'sync/timeout':
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
     case 'sync/incompatible-contract':
-      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractMajor(failure.meta.pos)}.x.`;
+      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractRequirement(failure.meta.pos)}.`;
     case 'sync/backend-maintenance':
       return failure.meta.message !== undefined
         ? `El backend está en mantenimiento: ${failure.meta.message}`
@@ -112,18 +112,12 @@ export function describeError(failure: Failure): string {
       return 'El fixture de clientes de ejemplo tiene datos inválidos.';
     case 'customer/seed-failed':
       return `No se pudieron sembrar los clientes de ejemplo (${failure.meta.message}).`;
-    case 'cash-session/invalid-amount':
-      return `Monto inválido (${String(failure.meta.amount)}).`;
-    case 'cash-session/already-open':
-      return 'Ya hay un turno de caja abierto.';
-    case 'cash-session/none-open':
-      return 'No hay un turno de caja abierto. Abrí uno con /CAJA antes de cobrar.';
-    case 'cash-session/already-closed':
-      return 'Ese turno ya estaba cerrado.';
-    case 'cash-session/persist-failed':
-      return `No se pudo guardar el turno de caja (${failure.meta.message}).`;
-    case 'cash-session/none-ever':
-      return 'No hay ningún turno de caja para consultar.';
+    case 'cash/invalid-amount':
+      return 'Monto inválido.';
+    case 'cash/concept-required':
+      return 'Falta el concepto.';
+    case 'cash/persist-failed':
+      return `No se pudo guardar el movimiento de caja (${failure.meta.message}).`;
     case 'customer-payment/invalid':
       if (failure.meta.reason === 'account-method') {
         return 'La cobranza no admite cuenta corriente.';

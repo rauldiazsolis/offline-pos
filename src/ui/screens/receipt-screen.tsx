@@ -8,6 +8,7 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { ticketLabel } from '../format-ticket.ts';
 import './receipt-screen.css';
 
 function lineLabel(line: SaleLine): string {
@@ -102,7 +103,7 @@ export function ReceiptScreen() {
         }}
       >
         <h1 style={{ fontSize: 'var(--font-size-lg)', margin: 0 }}>Comprobante</h1>
-        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Venta {sale.id}</p>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{ticketLabel(sale)}</p>
         <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
           {new Date(sale.createdAt).toLocaleString()}
         </p>

@@ -51,7 +51,12 @@ describe('GET /_demo/api/sales', () => {
   it('trae las ventas guardadas, sin exigir Authorization', async () => {
     db.prepare('INSERT INTO sales (id, payload, created_at) VALUES (?, ?, ?)').run(
       's1',
-      JSON.stringify({ id: 's1', total: 1200, status: 'closed' }),
+      JSON.stringify({
+        id: 's1',
+        total: 1200,
+        status: 'closed',
+        ticket: { date: '2026-09-24', number: 12 },
+      }),
       '2026-01-01T00:00:00.000Z',
     );
 
@@ -63,6 +68,7 @@ describe('GET /_demo/api/sales', () => {
         id: 's1',
         total: 1200,
         status: 'closed',
+        ticket: { date: '2026-09-24', number: 12 },
         deviceId: null,
         branch: null,
         pointOfSale: null,

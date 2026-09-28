@@ -69,7 +69,8 @@ describe('Configuración Automática vía URL (Onboarding & WhatsApp)', () => {
     products: 0,
     customers: 0,
     sales: 0,
-    cashSessions: 0,
+    cashMovements: 0,
+    cashCounts: 0,
     pendingOutbox: 0,
     pendingSales: 0,
     draftCartLines: 0,
@@ -78,7 +79,8 @@ describe('Configuración Automática vía URL (Onboarding & WhatsApp)', () => {
   const withSalesSummary: LocalDataSummary = {
     ...emptySummary,
     sales: 5,
-    cashSessions: 1,
+    cashMovements: 0,
+    cashCounts: 1,
   };
 
   beforeEach(() => {

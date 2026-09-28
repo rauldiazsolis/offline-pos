@@ -168,7 +168,7 @@ describe('pull con eventos reaplicados (#98)', () => {
   it('status() incluye la última limpieza y el ancla', () => {
     expect(createPosConsole(fakeDeps()).status().limpieza).toEqual({
       ultima: 'Todavía no corrió',
-      ancla: 'Sin turnos cerrados',
+      ancla: 'Sin arqueos',
     });
   });
 });

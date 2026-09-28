@@ -62,32 +62,6 @@ export async function seedCatalog(page: Page): Promise<void> {
 }
 
 /**
- * Fase 6: `/COBRAR` (y `Ctrl+Enter`) exige un turno de caja abierto — todo
- * spec que llegue al cobro necesita abrir uno primero. Maneja la pantalla
- * real de `/CAJA` (no escribe directo en IndexedDB, a diferencia de
- * `indexed-db.ts::putIntoStore`) porque abrir un turno es justamente lo que
- * este helper existe para ejercitar de punta a punta, no solo para dar por
- * sentado que ya está abierto.
- */
-export async function openCashSession(page: Page, openingAmount = 0): Promise<void> {
-  const commandBar = page.getByLabel('Barra de comandos');
-  await commandBar.fill('/CAJA');
-  await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
-
-  const amountInput = page.getByLabel('Monto de apertura del turno');
-  await amountInput.fill(String(openingAmount));
-  await amountInput.press('Enter');
-  // El paso 'open' ya no muestra ningún resumen (ver CLAUDE.md, /CAJA
-  // simplificado) — la única señal visible de que el turno abrió es que el
-  // input pasa a pedir el efectivo de cierre.
-  await expect(page.getByLabel('Efectivo contado para cerrar el turno')).toBeVisible();
-
-  await page.keyboard.press('Escape');
-  await expect(commandBar).toBeVisible();
-}
-
-/**
  * Tipea un monto en el campo de un medio de pago de la pantalla de Cobro ya
  * abierta — `label` es el texto exacto de `ui/payment-labels.ts`
  * (`PAYMENT_METHOD_LABELS`), ej. 'Efectivo', 'Cuenta corriente'.

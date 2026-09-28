@@ -2,6 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/preact';
 import { activeScreenSignal } from '../state/screen.ts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
+import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
+import { isDemoModeSignal } from '../state/demo-mode.ts';
 import {
   backendStatusSignal,
   lastPullApplicationSignal,
@@ -21,6 +23,41 @@ beforeEach(() => {
   localCatalogCountsSignal.value = null;
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
+  // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
+  nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
+  lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
+});
+
+describe('aviso "Sin arqueo en 24 h" (#100)', () => {
+  it('sin arqueo reciente se ve un botón que abre el arqueo sin abrir /DIAGNOSTICO', () => {
+    lastCashCountAtSignal.value = undefined;
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    const button = screen.getByRole('button', { name: 'Sin arqueo en 24 h' });
+    expect(button.tabIndex).toBe(-1);
+    fireEvent.click(button);
+
+    expect(activeScreenSignal.value).toBe('cash');
+    expect(cashKindSignal.value).toBe('count');
+  });
+
+  it('con un arqueo reciente no aparece', () => {
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
+  });
+
+  it('convive con el botón de modo demo', () => {
+    lastCashCountAtSignal.value = undefined;
+    isDemoModeSignal.value = true;
+    try {
+      render(<StatusBar />);
+      expect(screen.getByRole('button', { name: 'Sin arqueo en 24 h' })).not.toBeNull();
+      expect(screen.getByText('Conectar Mini-ERP')).not.toBeNull();
+    } finally {
+      isDemoModeSignal.value = false;
+    }
+  });
 });
 
 describe('StatusBar', () => {
@@ -149,7 +186,7 @@ describe('StatusBar — estado del backend (#99)', () => {
     const { container } = render(<StatusBar />);
 
     expect(
-      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.x)'),
+      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.1 o posterior)'),
     ).not.toBeNull();
     const dot = container.querySelector<HTMLElement>('[aria-hidden="true"]');
     expect(dot?.style.background).toBe('var(--color-danger)');

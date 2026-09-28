@@ -30,6 +30,13 @@ export const commandBarErrorSignal = signal<string | null>(null);
  */
 export const commandBarWarningSignal = signal<string | null>(null);
 
+/**
+ * Aviso informativo en el mismo slot (Etapa 5 de #94, #100): lo que acaba de pasar fuera de la
+ * venta, como "Ingreso registrado" al volver de `/CAJA`. Mismo ciclo de vida que la advertencia
+ * (se borra con la próxima tecla), sin su estilo; un error o una advertencia tienen precedencia.
+ */
+export const commandBarNoticeSignal = signal<string | null>(null);
+
 /** Preview en vivo del buffer actual (`finalizing: false`) — se recalcula solo. */
 export const parsedSignal = computed<ParsedCommand>(() =>
   parseCommandBar(commandBarBufferSignal.value, { finalizing: false }),

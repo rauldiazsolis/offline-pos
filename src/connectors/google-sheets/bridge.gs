@@ -9,12 +9,12 @@
  */
 
 /**
- * Versión del Connector API que habla este puente (4.0.0, #99). Un request
+ * Versión del Connector API que habla este puente (4.1.0 desde #120; 4.0.0, #99). Un request
  * con otra versión mayor se responde `incompatible-contract` sin procesar
  * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
  * redespliegue el puente.
  */
-var CONTRACT_VERSION = '4.0.0';
+var CONTRACT_VERSION = '4.1.0';
 
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
@@ -94,6 +94,10 @@ var SCHEMA = {
     ['pointOfSale', 'text', true],
     // 4.0.0 (#99): una anulación es una venta más que apunta a la que anula.
     ['anulaA', 'text', true],
+    // 4.1.0 (#120): número del ticket en su día. Texto a propósito: es una fecha de calendario
+    // local, no un instante (una columna 'datetime' la movería de zona horaria).
+    ['fechaTicket', 'text', true],
+    ['numeroTicket', 'integer', true],
   ]),
   Pagos: columns([
     ['saleId', 'text'],
@@ -946,6 +950,8 @@ function pushSale(sale, stamp) {
         estado: 'cerrada',
         motivoAnulacion: sale.voidReason,
         anulaA: sale.voidsSaleId,
+        fechaTicket: sale.ticket ? sale.ticket.date : undefined,
+        numeroTicket: sale.ticket ? sale.ticket.number : undefined,
       },
       stamp,
     );

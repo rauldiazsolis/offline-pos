@@ -62,7 +62,7 @@ async function seedOldWorld(): Promise<void> {
   await db.products.put({ ...product, id: 'viejo', name: 'Del backend viejo' });
   await db.sales.put(makeSale('s-vieja'));
   await db.outbox.put(buildOutboxEventForSale(makeSale('s-vieja'), { now, origin: {} }));
-  await db.cashSessions.put({ id: 'cs1', openedAt: now, openingAmount: 0, sales: [] });
+  await db.cashCounts.put({ id: 'cc1', expected: 0, counted: 0, createdAt: now });
   await db.draftCart.put({
     id: 'current',
     cart: { lines: [{ kind: 'freeform', description: 'a', qty: 1, unitPrice: 1 }] },
@@ -130,7 +130,7 @@ describe('applyConnection', () => {
     await expect(db.products.toArray()).resolves.toEqual([product]);
     await expect(db.sales.count()).resolves.toBe(0);
     await expect(db.outbox.count()).resolves.toBe(0);
-    await expect(db.cashSessions.count()).resolves.toBe(0);
+    await expect(db.cashCounts.count()).resolves.toBe(0);
     await expect(db.draftCart.count()).resolves.toBe(0);
   });
 
@@ -236,7 +236,7 @@ describe('applyConnection — keep', () => {
     expect(await db.products.toCollection().primaryKeys()).toEqual(['nuevo']);
     await expect(db.sales.count()).resolves.toBe(1);
     await expect(db.outbox.count()).resolves.toBe(1);
-    await expect(db.cashSessions.count()).resolves.toBe(1);
+    await expect(db.cashCounts.count()).resolves.toBe(1);
     await expect(db.draftCart.count()).resolves.toBe(1);
   });
 

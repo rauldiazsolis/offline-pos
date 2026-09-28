@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { ACTIVE_CONFIG, CONFIG_STORAGE_KEY, expect, test } from './fixtures.ts';
-import { openCashSession, seedCatalog } from './helpers.ts';
+import { seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 type StoredSale = {
@@ -29,7 +29,6 @@ test.beforeEach(async ({ page, context }) => {
   await expect(page.getByLabel('Barra de comandos')).toBeVisible();
   await seedCatalog(page);
   await context.setOffline(true);
-  await openCashSession(page);
 });
 
 async function backToSale(page: Page): Promise<void> {
@@ -121,5 +120,5 @@ test('anular genera un ticket propio y /ANULAR marca la original y la anulación
   await commandBar.fill('/anular');
   await commandBar.press('Enter');
   await expect(page.getByText('Anulada', { exact: true })).toBeVisible();
-  await expect(page.getByText(/^Anulación de \d\d:\d\d · 900,00$/)).toBeVisible();
+  await expect(page.getByText(/^Anulación del #2 · 900,00$/)).toBeVisible();
 });

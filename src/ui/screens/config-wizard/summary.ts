@@ -102,7 +102,7 @@ export function stepSummary(id: WizardStepId, model: WizardModel): string {
     case 'local-data':
       if (step?.status === 'skipped') {
         return step.skipReason === 'no-user-data'
-          ? 'No hace falta: no hay ventas ni pendientes'
+          ? 'No hace falta: no hay ventas, caja ni pendientes'
           : 'No hace falta: la conexión no cambió';
       }
       return localChoiceSignal.value === 'keep' ? 'Mantener' : 'Borrar';
@@ -115,8 +115,9 @@ export function stepSummary(id: WizardStepId, model: WizardModel): string {
 export function describeLocalDataLoss(summary: LocalDataSummary): string {
   const parts: string[] = [];
   if (summary.sales > 0) parts.push(plural(summary.sales, 'venta', 'ventas'));
-  if (summary.cashSessions > 0) {
-    parts.push(plural(summary.cashSessions, 'turno de caja', 'turnos de caja'));
+  if (summary.cashCounts > 0) parts.push(plural(summary.cashCounts, 'arqueo', 'arqueos'));
+  if (summary.cashMovements > 0) {
+    parts.push(plural(summary.cashMovements, 'movimiento de caja', 'movimientos de caja'));
   }
   if (summary.draftCartLines > 0) parts.push('la venta en curso');
   if (summary.products > 0) parts.push(plural(summary.products, 'producto', 'productos'));

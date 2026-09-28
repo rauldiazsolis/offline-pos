@@ -36,17 +36,24 @@ describe('formatCleanup', () => {
   it('sin registro dice que todavía no corrió', () => {
     expect(formatCleanup(undefined)).toEqual({
       last: 'Todavía no corrió',
-      anchor: 'Sin turnos cerrados',
+      anchor: 'Sin arqueos',
     });
   });
 
   it('resume lo borrado y el ancla', () => {
     const text = formatCleanup({
       at: '2026-09-24T12:00:00.000Z',
-      counts: { sales: 3, stockMovements: 4, accountMovements: 1, outbox: 9, cashSessions: 2 },
-      anchorClosedAt: '2026-09-20T18:00:00.000Z',
+      counts: {
+        sales: 3,
+        stockMovements: 4,
+        accountMovements: 1,
+        outbox: 9,
+        cashMovements: 2,
+        cashCounts: 1,
+      },
+      anchorAt: '2026-09-20T18:00:00.000Z',
     });
-    expect(text.last).toMatch(/3 ventas, 5 movimientos, 9 eventos, 2 turnos/);
-    expect(text.anchor).toMatch(/^Último turno cerrado: /);
+    expect(text.last).toMatch(/3 ventas, 5 movimientos, 9 eventos, 2 movimientos de caja, 1 arqueos/);
+    expect(text.anchor).toMatch(/^Último arqueo: /);
   });
 });

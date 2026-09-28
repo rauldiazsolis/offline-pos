@@ -1,5 +1,8 @@
-/** Versión del Connector API que habla este POS (epic #94, Etapa 4 — #99). */
-export const POS_CONTRACT_VERSION = '4.0.0';
+/**
+ * Versión del Connector API que habla este POS: 4.0.0 desde la Etapa 4 de #94 (#99), 4.1.0 desde
+ * la Etapa 5 (#120: `Sale.ticket`).
+ */
+export const POS_CONTRACT_VERSION = '4.1.0';
 
 function parseVersion(version: string): [number, number, number] | undefined {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
@@ -23,7 +26,8 @@ export function isCompatibleContract(
   return backend[0] === pos[0] && backend[1] >= pos[1];
 }
 
-/** Major de una versión (`'4.0.0'` → `'4'`), para los mensajes. */
-export function contractMajor(version: string): string {
-  return version.split('.')[0] ?? version;
+/** Lo que el POS necesita, para los mensajes (`'4.1.0'` → `'4.1 o posterior'`). */
+export function contractRequirement(version: string): string {
+  const [major, minor] = version.split('.');
+  return `${major ?? version}.${minor ?? '0'} o posterior`;
 }

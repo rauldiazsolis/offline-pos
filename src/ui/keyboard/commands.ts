@@ -41,8 +41,11 @@ export const CORE_COMMANDS: CommandInfo[] = [
     description: 'Cobrar y cerrar la venta (o Ctrl+Enter)',
     availability: checkoutAvailability,
   },
-  { name: 'CAJA', description: 'Abrir o cerrar el turno de caja' },
-  { name: 'RESUMEN', description: 'Consultar tickets, productos y medios de pago del turno' },
+  { name: 'CAJA', description: 'Arqueo, ingreso o egreso de caja' },
+  {
+    name: 'RESUMEN',
+    description: 'Consultar tickets, productos, medios de pago y caja de un día',
+  },
   { name: 'ANULAR', description: 'Anular una venta ya cerrada' },
   { name: 'DESCARTAR', description: 'Vaciar la venta en curso (líneas, cliente y ajuste)' },
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },

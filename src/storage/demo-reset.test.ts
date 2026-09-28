@@ -7,7 +7,6 @@ import {
   setProductsCursor,
 } from '../sync/cursor.ts';
 import { loadSyncConfig, saveSyncConfig } from '../sync/config.ts';
-import { openCashSessionAndPersist } from './cash-session-repository.ts';
 import { createCustomerLocally } from './customer-repository.ts';
 import { db } from './db.ts';
 import { demoReset } from './demo-reset.ts';
@@ -59,13 +58,11 @@ describe('demoReset', () => {
   it('sin /CONFIG: borra todo lo local y no re-siembra (queda vacía)', async () => {
     const created = await createCustomerLocally('Cliente de prueba');
     if (!created.ok) throw new Error('setup falló');
-    await openCashSessionAndPersist({ openingAmount: 100 });
 
     const result = await demoReset();
 
     expect(result.ok).toBe(true);
     await expect(db.customers.get(created.value.id)).resolves.toBeUndefined();
-    await expect(db.cashSessions.count()).resolves.toBe(0);
     await expect(db.products.count()).resolves.toBe(0);
     await expect(db.customers.count()).resolves.toBe(0);
   });

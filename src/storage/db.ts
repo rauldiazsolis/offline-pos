@@ -1,6 +1,8 @@
-import Dexie, { type EntityTable } from 'dexie';
+import Dexie, { type EntityTable, type Table } from 'dexie';
 import type { Cart } from '../domain/cart.ts';
-import type { CashSession } from '../domain/cash-session.ts';
+import type { CashCount } from '../domain/cash-count.ts';
+import type { CashMovement } from '../domain/cash-movement.ts';
+import type { CashConcept } from '../domain/concept-ranking.ts';
 import type { AccountMovement, Customer, CustomerAccount } from '../domain/customer.ts';
 import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
@@ -33,7 +35,9 @@ class PosDatabase extends Dexie {
   customerAccounts!: EntityTable<CustomerAccount, 'customerId'>;
   accountMovements!: EntityTable<AccountMovement, 'id'>;
   draftCart!: EntityTable<DraftCart, 'id'>;
-  cashSessions!: EntityTable<CashSession, 'id'>;
+  cashMovements!: EntityTable<CashMovement, 'id'>;
+  cashCounts!: EntityTable<CashCount, 'id'>;
+  cashConcepts!: Table<CashConcept, [CashConcept['direction'], string]>;
 
   constructor() {
     super('offline-pos');
@@ -54,10 +58,7 @@ class PosDatabase extends Dexie {
     this.version(4).stores({
       draftCart: 'id',
     });
-    // Fase 6: nunca va a haber más que un puñado de turnos guardados (uno
-    // por turno de caja, no por venta) — sin índice de "abierto/cerrado",
-    // getCurrentOpenCashSession() hace toArray() + find() sobre esta tabla
-    // sin que eso sea un problema de performance real.
+    // Fase 6: turnos de caja. La versión 7 elimina la tabla (Etapa 5 de #94).
     this.version(5).stores({
       cashSessions: 'id, openedAt',
     });
@@ -65,6 +66,17 @@ class PosDatabase extends Dexie {
     // responde "¿esta venta ya tiene anulación?" sin recorrer la tabla.
     this.version(6).stores({
       sales: 'id, status, createdAt, voidsSaleId',
+    });
+    // Etapa 5 de #94 (#100): caja sin turnos. `cashMovements` son los del contrato (todos con su
+    // evento en el outbox); `cashCounts` guarda cada arqueo, aunque no tenga diferencia (base del
+    // saldo); `cashConcepts` es la estadística de conceptos, nunca se limpia a los 7 días.
+    // Se elimina la tabla de turnos: un turno abierto al actualizar se pierde sin migración (no
+    // hay terminales en producción; el primer arqueo después arranca desde base 0).
+    this.version(7).stores({
+      cashMovements: 'id, createdAt',
+      cashCounts: 'id, createdAt',
+      cashConcepts: '[direction+concept], direction',
+      cashSessions: null,
     });
   }
 }

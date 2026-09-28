@@ -1,7 +1,8 @@
+import { err, ok, type Result } from './result.ts';
 import { roundAmount } from './rounding.ts';
 
 /**
- * Ingreso/egreso de caja (contrato v3, #96 — lo genera la Etapa 5). El arqueo
+ * Ingreso/egreso de caja (contrato v3, #96 — lo genera `/CAJA` desde la Etapa 5, #100). El arqueo
  * viaja solo como ajuste (`source: 'count-adjustment'`) cuando la diferencia
  * no es 0, con lo esperado y lo contado para auditoría. No se anula: un
  * movimiento mal cargado se compensa con otro (RNF-07).
@@ -39,4 +40,37 @@ export function buildCountAdjustment(params: {
     count: { expected: params.expected, counted: params.counted },
     createdAt: params.now,
   };
+}
+
+/**
+ * Ingreso o egreso manual (`/CAJA`, spec de #100, §1). El monto se redondea a 2 decimales y tiene
+ * que quedar mayor que 0; el concepto se recorta y no puede quedar vacío; una descripción vacía se
+ * omite.
+ */
+export function buildManualCashMovement(params: {
+  id: string;
+  direction: 'in' | 'out';
+  amount: number;
+  concept: string;
+  description?: string;
+  now: string;
+}): Result<CashMovement> {
+  const amount = roundAmount(params.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return err('cash/invalid-amount', { amount: params.amount });
+  }
+  const concept = params.concept.trim();
+  if (concept === '') {
+    return err('cash/concept-required', undefined);
+  }
+  const description = params.description?.trim() ?? '';
+  return ok({
+    id: params.id,
+    direction: params.direction,
+    amount,
+    concept,
+    ...(description !== '' ? { description } : {}),
+    source: 'manual',
+    createdAt: params.now,
+  });
 }

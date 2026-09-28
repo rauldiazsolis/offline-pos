@@ -6,7 +6,7 @@ import {
 import { err, ok, type Result } from '../domain/result.ts';
 import { db } from './db.ts';
 
-export type CleanupReport = { counts: CleanupCounts; anchorClosedAt?: string };
+export type CleanupReport = { counts: CleanupCounts; anchorAt?: string };
 
 /**
  * Borra lo sincronizado con más de 7 días (spec de #98, §4) en una sola
@@ -22,17 +22,34 @@ export async function runLocalCleanup(params: {
     return ok(
       await db.transaction(
         'rw',
-        [db.sales, db.stockMovements, db.accountMovements, db.outbox, db.cashSessions],
+        [
+          db.sales,
+          db.stockMovements,
+          db.accountMovements,
+          db.outbox,
+          db.cashMovements,
+          db.cashCounts,
+        ],
         async () => {
-          const [pendingEvents, sales, stockMovements, accountMovements, oldEvents, cashSessions] =
-            await Promise.all([
-              db.outbox.where('status').equals('pending').toArray(),
-              db.sales.where('createdAt').below(cutoff).toArray(),
-              db.stockMovements.where('createdAt').below(cutoff).toArray(),
-              db.accountMovements.where('createdAt').below(cutoff).toArray(),
-              db.outbox.where('createdAt').below(cutoff).toArray(),
-              db.cashSessions.toArray(),
-            ]);
+          const [
+            pendingEvents,
+            sales,
+            stockMovements,
+            accountMovements,
+            oldEvents,
+            cashMovements,
+            cashCounts,
+            lastCount,
+          ] = await Promise.all([
+            db.outbox.where('status').equals('pending').toArray(),
+            db.sales.where('createdAt').below(cutoff).toArray(),
+            db.stockMovements.where('createdAt').below(cutoff).toArray(),
+            db.accountMovements.where('createdAt').below(cutoff).toArray(),
+            db.outbox.where('createdAt').below(cutoff).toArray(),
+            db.cashMovements.where('createdAt').below(cutoff).toArray(),
+            db.cashCounts.where('createdAt').below(cutoff).toArray(),
+            db.cashCounts.orderBy('createdAt').last(),
+          ]);
           const plan = planLocalCleanup({
             now: params.now,
             pendingEvents,
@@ -41,24 +58,26 @@ export async function runLocalCleanup(params: {
             stockMovements,
             accountMovements,
             syncedEvents: oldEvents.filter((event) => event.status === 'synced'),
-            cashSessions,
+            cashMovements,
+            cashCounts,
+            lastCount,
           });
           await db.sales.bulkDelete(plan.sales);
           await db.stockMovements.bulkDelete(plan.stockMovements);
           await db.accountMovements.bulkDelete(plan.accountMovements);
           await db.outbox.bulkDelete(plan.outbox);
-          await db.cashSessions.bulkDelete(plan.cashSessions);
+          await db.cashMovements.bulkDelete(plan.cashMovements);
+          await db.cashCounts.bulkDelete(plan.cashCounts);
           return {
             counts: {
               sales: plan.sales.length,
               stockMovements: plan.stockMovements.length,
               accountMovements: plan.accountMovements.length,
               outbox: plan.outbox.length,
-              cashSessions: plan.cashSessions.length,
+              cashMovements: plan.cashMovements.length,
+              cashCounts: plan.cashCounts.length,
             },
-            ...(plan.anchor?.closedAt !== undefined
-              ? { anchorClosedAt: plan.anchor.closedAt }
-              : {}),
+            ...(plan.anchorAt !== undefined ? { anchorAt: plan.anchorAt } : {}),
           };
         },
       ),

@@ -2,10 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { describeError } from './errors.ts';
 
 describe('describeError', () => {
-  it('cash-session/none-ever', () => {
-    const message = describeError({ ok: false, error: 'cash-session/none-ever', meta: undefined });
+  it('sync/incompatible-contract dice qué versión hace falta', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'sync/incompatible-contract',
+        meta: { backend: '4.0.0', pos: '4.1.0' },
+      }),
+    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.1 o posterior.');
+  });
 
-    expect(message).toBe('No hay ningún turno de caja para consultar.');
+  it('códigos de caja (#100)', () => {
+    expect(describeError({ ok: false, error: 'cash/invalid-amount', meta: { amount: -1 } })).toBe(
+      'Monto inválido.',
+    );
+    expect(describeError({ ok: false, error: 'cash/concept-required', meta: undefined })).toBe(
+      'Falta el concepto.',
+    );
+    expect(
+      describeError({ ok: false, error: 'cash/persist-failed', meta: { message: 'boom' } }),
+    ).toBe('No se pudo guardar el movimiento de caja (boom).');
   });
 
   it('demo/unavailable-for-connector', () => {

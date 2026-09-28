@@ -2,7 +2,8 @@ import { useSignalEffect } from '@preact/signals';
 import { useLayoutEffect } from 'preact/hooks';
 import type { TargetedKeyboardEvent } from 'preact';
 import type { VoidCandidate } from '../../storage/sale-repository.ts';
-import { formatMoney, formatTime } from '../format.ts';
+import { formatMoney } from '../format.ts';
+import { ticketLabel, voidOfLabel } from '../format-ticket.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import {
@@ -29,9 +30,8 @@ function candidateLabel(candidate: VoidCandidate): string | undefined {
   }
   if (candidate.state === 'void-ticket') {
     const { original } = candidate;
-    return original !== undefined
-      ? `Anulación de ${formatTime(original.createdAt)} · ${formatMoney(original.total)}`
-      : 'Anulación';
+    const label = voidOfLabel(candidate.sale, original);
+    return original !== undefined ? `${label} · ${formatMoney(original.total)}` : label;
   }
   return undefined;
 }
@@ -180,7 +180,7 @@ export function VoidSaleScreen() {
                 }}
               >
                 <span>
-                  {new Date(sale.createdAt).toLocaleString()}
+                  {ticketLabel(sale)} · {new Date(sale.createdAt).toLocaleString()}
                   {label !== undefined && (
                     <span
                       style={{ marginLeft: 'var(--space-2)', color: 'var(--color-text-muted)' }}

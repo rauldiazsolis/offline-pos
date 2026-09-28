@@ -10,7 +10,8 @@ export type LocalDataSummary = {
   products: number;
   customers: number;
   sales: number;
-  cashSessions: number;
+  cashMovements: number;
+  cashCounts: number;
   pendingOutbox: number;
   pendingSales: number;
   draftCartLines: number;
@@ -24,7 +25,8 @@ export type LocalDataSummary = {
 export function hasUserData(summary: LocalDataSummary): boolean {
   return (
     summary.sales > 0 ||
-    summary.cashSessions > 0 ||
+    summary.cashCounts > 0 ||
+    summary.cashMovements > 0 ||
     summary.pendingOutbox > 0 ||
     summary.draftCartLines > 0
   );
@@ -36,17 +38,19 @@ export async function countLocalCatalog(): Promise<{ products: number; customers
 }
 
 export async function summarizeLocalData(): Promise<LocalDataSummary> {
-  const [catalog, sales, cashSessions, pending, draft] = await Promise.all([
+  const [catalog, sales, cashMovements, cashCounts, pending, draft] = await Promise.all([
     countLocalCatalog(),
     db.sales.count(),
-    db.cashSessions.count(),
+    db.cashMovements.count(),
+    db.cashCounts.count(),
     db.outbox.where('status').equals('pending').toArray(),
     db.draftCart.get('current'),
   ]);
   return {
     ...catalog,
     sales,
-    cashSessions,
+    cashMovements,
+    cashCounts,
     pendingOutbox: pending.length,
     pendingSales: pending.filter((event) => event.type === 'sale').length,
     draftCartLines: draft?.cart.lines.length ?? 0,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '4.0.0'
+  version: '4.1.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
@@ -10,7 +10,16 @@ info:
     (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87;
     `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`,
     issue #96; `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`,
-    issue #99).
+    issue #99; `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`,
+    issues #100 y #120).
+
+    **4.1.0 respecto de 4.0.0** (aditivo, Etapa 5 del epic #94):
+      - `Sale.ticket` opcional (`{ date, number }`): el número del ticket en
+        su día local de la terminal. Lo comparten ventas y anulaciones. Una
+        venta anterior a 4.1.0 no lo trae.
+      - Por la regla de compatibilidad (mismo major, minor igual o mayor), un
+        POS 4.1.0 considera incompatible a un backend 4.0.0: podría no guardar
+        el número. Un backend 4.1.0 acepta ventas con y sin `ticket`.
 
     **4.0.0 reemplaza a la v3** (cambio incompatible, Etapa 4 del epic #94):
       - La anulación es un **ticket propio**: viaja como un `SaleEvent` más,
@@ -54,7 +63,7 @@ info:
     o se informa como `issues` en un pull posterior, nunca como un
     "rechazo" síncrono.
 
-    **Compatibilidad (4.0.0)**: el POS manda `X-POS-Contract-Version` en
+    **Compatibilidad (desde 4.0.0)**: el POS manda `X-POS-Contract-Version` en
     todos los requests. Si el major no es uno que el backend soporta, el
     backend responde `409` con `{ code: "incompatible-contract",
     contractVersion: "<la del backend>" }` **sin procesar nada y sin ack**.
@@ -67,7 +76,7 @@ info:
     mayor.
 
     Cada operación está marcada con una extensión `x-pos-status`:
-      - `implemented-v4`: el POS ya la consume con la forma de 4.0.0 (#99).
+      - `implemented-v4`: el POS ya la consume con la forma de 4.x (4.0.0, #99; 4.1.0, #120).
       - `implemented-v3`: el POS ya la consume con la forma de v3 (#96).
       - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
@@ -281,9 +290,9 @@ components:
       required: false
       schema:
         type: string
-        example: '4.0.0'
+        example: '4.1.0'
       description: |
-        Versión del contrato que habla el POS (4.0.0). El POS la manda en
+        Versión del contrato que habla el POS (4.1.0). El POS la manda en
         todos los requests. Un backend que no soporta ese major responde 409
         `IncompatibleContract` sin procesar nada (salvo `/info`, que nunca
         responde 409). Sin el header (un POS anterior a 4.0.0) queda a
@@ -315,7 +324,7 @@ components:
       type: object
       required: [contractVersion, status]
       properties:
-        contractVersion: { type: string, example: '4.0.0' }
+        contractVersion: { type: string, example: '4.1.0' }
         status: { type: string, enum: [ok, maintenance] }
         message:
           {
@@ -447,6 +456,17 @@ components:
         total: { type: number, description: 'Puede ser 0 o negativo (devolución).' }
         status: { type: string, enum: [closed] }
         createdAt: { type: string, format: date-time }
+        ticket:
+          type: object
+          description: >-
+            Número del ticket en su día (4.1.0, #120). `date` es la fecha local
+            de la terminal con la que se numeró; el número arranca en 1 cada
+            día y lo comparten ventas y anulaciones. Una venta anterior a 4.1.0
+            no lo trae.
+          required: [date, number]
+          properties:
+            date: { type: string, format: date, example: '2026-09-24' }
+            number: { type: integer, minimum: 1, example: 12 }
         voidsSaleId:
           type: string
           description: |

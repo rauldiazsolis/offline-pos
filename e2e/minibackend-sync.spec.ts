@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { completeWizardRest, confirmCheckout, fillPayment, openCashSession } from './helpers.ts';
+import { completeWizardRest, confirmCheckout, fillPayment } from './helpers.ts';
 
 const BACKEND_URL = 'http://localhost:4000';
 
@@ -42,7 +42,6 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
   await commandBar.fill('/SINCRONIZAR');
   await commandBar.press('Enter');
 
-  await openCashSession(page, 500);
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
@@ -59,8 +58,12 @@ test('vender con el minibackend real configurado: la venta llega al backend', as
     .poll(
       async () => {
         const response = await page.request.get(`${BACKEND_URL}/_demo/api/sales`);
-        const sales = (await response.json()) as { total: number }[];
-        return sales.some((sale) => sale.total === 1200);
+        const sales = (await response.json()) as {
+          total: number;
+          ticket?: { date: string; number: number };
+        }[];
+        // #120: la venta llega con su número de ticket.
+        return sales.some((sale) => sale.total === 1200 && sale.ticket?.number === 1);
       },
       { timeout: 20_000 },
     )

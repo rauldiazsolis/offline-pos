@@ -1,15 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Cart } from '../domain/cart.ts';
-import {
-  closeCashSessionAndPersist,
-  getCurrentOpenCashSession,
-  openCashSessionAndPersist,
-} from './cash-session-repository.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { db } from './db.ts';
 import type { Sale } from '../domain/sale.ts';
 import { closeSaleAndPersist, listVoidCandidates, voidSaleAndPersist } from './sale-repository.ts';
+import { localDateKey } from '../domain/ticket-number.ts';
+import { getTicketCounter, setTicketCounter, TICKET_COUNTER_KEY } from '../sync/ticket-counter.ts';
 
 beforeEach(async () => {
   await db.open();
@@ -24,10 +21,6 @@ beforeEach(async () => {
     tracksStock: true,
   });
   await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
-  // Fase 6: closeSaleAndPersist exige un turno de caja abierto — se abre uno
-  // acá para no repetirlo en cada test; el test de "sin turno abierto" lo
-  // cierra explícitamente antes de ejercitar el caso que le interesa.
-  await openCashSessionAndPersist({ openingAmount: 0 });
 });
 
 afterEach(async () => {
@@ -157,22 +150,6 @@ describe('closeSaleAndPersist', () => {
     expect(confirmEvent).toMatchObject({ holdId: 'hold-1', saleId: result.value.id });
   });
 
-  it('rechaza cerrar la venta sin un turno de caja abierto', async () => {
-    await closeCashSessionAndPersist({ closingAmount: 0 }); // cierra el turno que abrió el beforeEach
-
-    const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-
-    expect(result).toEqual({ ok: false, error: 'cash-session/none-open', meta: undefined });
-  });
-
-  it('agrega el id de la venta al turno de caja abierto', async () => {
-    const result = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 200 }] });
-    if (!result.ok) throw new Error('setup falló');
-
-    const session = await getCurrentOpenCashSession();
-    expect(session?.sales).toContain(result.value.id);
-  });
-
   it('no genera movimientos de stock para productos que no lo trackean', async () => {
     await db.products.add({
       id: 'p2',
@@ -277,24 +254,6 @@ describe('voidSaleAndPersist (anulación como ticket propio, #99)', () => {
     expect(movementEvents).toHaveLength(1);
   });
 
-  it('con un turno abierto, lo registra en él', async () => {
-    const original = await closeOnAccount();
-
-    const result = await voidSaleAndPersist(original.id);
-
-    if (!result.ok) throw new Error('esperaba ok');
-    expect((await getCurrentOpenCashSession())?.sales).toContain(result.value.id);
-  });
-
-  it('sin turno abierto también anula', async () => {
-    const original = await closeOnAccount();
-    await closeCashSessionAndPersist({ closingAmount: 100 });
-
-    const result = await voidSaleAndPersist(original.id);
-
-    expect(result.ok).toBe(true);
-  });
-
   it('rechaza anular una venta inexistente', async () => {
     const result = await voidSaleAndPersist('no-existe');
 
@@ -363,5 +322,63 @@ describe('listVoidCandidates (#99)', () => {
 
     expect(candidates).toHaveLength(20);
     expect(candidates[0]?.sale.id).toBe('s24');
+  });
+});
+
+describe('número de ticket (#120)', () => {
+  const pay = [{ method: 'cash' as const, amount: 200 }];
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  async function closeOne(): Promise<Sale> {
+    const result = await closeSaleAndPersist({ cart, payments: pay });
+    if (!result.ok) throw new Error('setup falló');
+    return result.value;
+  }
+
+  it('numera las ventas del día en orden y guarda el contador', async () => {
+    const first = await closeOne();
+    const second = await closeOne();
+
+    expect(first.ticket).toEqual({ date: localDateKey(first.createdAt), number: 1 });
+    expect(second.ticket?.number).toBe(2);
+    expect(getTicketCounter()).toEqual({ date: localDateKey(second.createdAt), last: 2 });
+    await expect(db.sales.get(second.id)).resolves.toMatchObject({ ticket: second.ticket });
+  });
+
+  it('el evento sale del outbox lleva el número', async () => {
+    const sale = await closeOne();
+    const event = await db.outbox.get(sale.id);
+    expect(event?.type === 'sale' ? event.sale.ticket : undefined).toEqual(sale.ticket);
+  });
+
+  it('la anulación es un ticket propio y consume número', async () => {
+    await closeOne();
+    const second = await closeOne();
+    const result = await voidSaleAndPersist(second.id);
+    expect(result.ok && result.value.ticket?.number).toBe(3);
+  });
+
+  it('contador perdido: retoma desde las ventas locales', async () => {
+    await closeOne();
+    localStorage.removeItem(TICKET_COUNTER_KEY);
+    const next = await closeOne();
+    expect(next.ticket?.number).toBe(2);
+  });
+
+  it('datos locales borrados: el contador evita repetir', async () => {
+    await closeOne();
+    await closeOne();
+    await db.sales.clear();
+    const next = await closeOne();
+    expect(next.ticket?.number).toBe(3);
+  });
+
+  it('día nuevo: un contador de otra fecha no cuenta', async () => {
+    setTicketCounter({ date: '2000-01-01', last: 99 });
+    const sale = await closeOne();
+    expect(sale.ticket?.number).toBe(1);
   });
 });

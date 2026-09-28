@@ -1,4 +1,3 @@
-import type { CashSession } from './cash-session.ts';
 import type { OutboxEvent } from './outbox.ts';
 
 /** Lo sincronizado se conserva 7 días (epic #94, Etapa 3 — #98). */
@@ -9,7 +8,8 @@ export type CleanupCounts = {
   stockMovements: number;
   accountMovements: number;
   outbox: number;
-  cashSessions: number;
+  cashMovements: number;
+  cashCounts: number;
 };
 
 type Dated = { id: string; createdAt: string };
@@ -25,7 +25,10 @@ export type CleanupInput = {
   stockMovements: readonly SaleLinked[];
   accountMovements: readonly SaleLinked[];
   syncedEvents: readonly Dated[];
-  cashSessions: readonly CashSession[];
+  cashMovements: readonly Dated[];
+  cashCounts: readonly (Dated & { adjustmentId?: string })[];
+  /** El último arqueo de la terminal, sea cual sea su edad: el ancla. */
+  lastCount: Dated | undefined;
 };
 
 export type CleanupPlan = {
@@ -33,55 +36,43 @@ export type CleanupPlan = {
   stockMovements: string[];
   accountMovements: string[];
   outbox: string[];
-  cashSessions: string[];
-  anchor: CashSession | undefined;
+  cashMovements: string[];
+  cashCounts: string[];
+  anchorAt: string | undefined;
 };
 
 /**
- * Qué borrar de la base local (spec de #98, §4). Pura. Se borra lo que tiene
- * más de 7 días y está sincronizado; nunca lo pendiente, los eventos de lotes
- * sin resolver, ni el ancla del arqueo — mientras existan turnos (hasta la
- * Etapa 5, #100): el último turno cerrado, el abierto y sus ventas. Un evento
- * `sale` ausente del outbox cuenta como sincronizado: lo pendiente nunca se
- * borra, así que solo pudo irse por una limpieza anterior. Cada venta se mide
- * por su propia edad y su propio evento: una anulación es otra venta (#99), no
- * retiene a la que anula.
+ * Qué borrar de la base local (spec de #98, §4, con el ancla de la Etapa 5 — #100, §7). Pura. Se
+ * borra lo que tiene más de 7 días y está sincronizado; nunca lo pendiente, los eventos de lotes
+ * sin resolver, ni lo que sostiene el saldo de efectivo:
  *
- * Los movimientos de stock y de cuenta son registros **independientes** de su
- * venta: el `saleId` es solo auditoría. Se borran por su propia edad, nunca
- * "junto con" la venta — si no, el movimiento de una anulación reciente de una
- * venta vieja quedaba huérfano para siempre (la venta ya no está para
- * arrastrarlo). Solo se conservan mientras su venta sea parte del ancla.
+ * - **Ancla = el último arqueo.** Todo lo creado desde su `createdAt` en adelante se conserva
+ *   (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo), aunque tenga más de
+ *   7 días: es lo que suma al saldo.
+ * - **Sin ningún arqueo**, las ventas y los movimientos de caja son la base 0 del saldo: no se
+ *   borran. Los movimientos de stock y de cuenta siguen su regla de edad.
+ *
+ * Un evento `sale` ausente del outbox cuenta como sincronizado: lo pendiente nunca se borra, así
+ * que solo pudo irse por una limpieza anterior. Cada venta se mide por su propia edad y su propio
+ * evento: una anulación es otra venta (#99), no retiene a la que anula. Los movimientos de stock y
+ * de cuenta son registros **independientes** de su venta (el `saleId` es solo auditoría): se
+ * borran por su propia edad, nunca "junto con" la venta. Un arqueo no tiene evento propio, pero si
+ * tuvo ajuste espera a que ese evento no esté pendiente.
  */
 export function planLocalCleanup(input: CleanupInput): CleanupPlan {
   const cutoff = new Date(input.now).getTime() - CLEANUP_RETENTION_MS;
   const isOld = (iso: string): boolean => new Date(iso).getTime() < cutoff;
 
   const pendingIds = new Set(input.pendingEvents.map((event) => event.id));
+  const anchorAt = input.lastCount?.createdAt;
+  const keptByAnchor = (iso: string): boolean => anchorAt !== undefined && iso >= anchorAt;
+  const removable = (item: Dated): boolean =>
+    isOld(item.createdAt) && !pendingIds.has(item.id) && !keptByAnchor(item.createdAt);
 
-  const open = input.cashSessions.find((session) => session.closedAt === undefined);
-  const anchor = input.cashSessions
-    .filter((session) => session.closedAt !== undefined)
-    .sort((a, b) => (b.closedAt ?? '').localeCompare(a.closedAt ?? ''))[0];
-  const kept = [open, anchor].filter((session): session is CashSession => session !== undefined);
-  const keptSessionIds = new Set(kept.map((session) => session.id));
-  const keptSaleIds = new Set(kept.flatMap((session) => session.sales));
-
-  const sales = input.sales
-    .filter(
-      (sale) => isOld(sale.createdAt) && !pendingIds.has(sale.id) && !keptSaleIds.has(sale.id),
-    )
-    .map((sale) => sale.id);
-  const inAnchor = (movement: SaleLinked): boolean =>
-    movement.saleId !== undefined && keptSaleIds.has(movement.saleId);
+  const sales = anchorAt === undefined ? [] : input.sales.filter(removable).map((sale) => sale.id);
 
   // Viajan como su propio evento `stock-movement`.
-  const stockMovements = input.stockMovements
-    .filter(
-      (movement) =>
-        isOld(movement.createdAt) && !pendingIds.has(movement.id) && !inAnchor(movement),
-    )
-    .map((movement) => movement.id);
+  const stockMovements = input.stockMovements.filter(removable).map((movement) => movement.id);
 
   // Sin evento propio: viajan dentro del evento `sale` de su venta, así que esperan a que ese no
   // esté pendiente. Sin venta se conservan (la Etapa 6 define su regla cuando genere cobranzas).
@@ -91,7 +82,7 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
         movement.saleId !== undefined &&
         isOld(movement.createdAt) &&
         !pendingIds.has(movement.saleId) &&
-        !inAnchor(movement),
+        !keptByAnchor(movement.createdAt),
     )
     .map((movement) => movement.id);
 
@@ -104,14 +95,28 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
     )
     .map((event) => event.id);
 
-  const cashSessions = input.cashSessions
-    .filter(
-      (session) =>
-        session.closedAt !== undefined &&
-        isOld(session.closedAt) &&
-        !keptSessionIds.has(session.id),
-    )
-    .map((session) => session.id);
+  // Viajan como su propio evento `cash-movement`.
+  const cashMovements =
+    anchorAt === undefined
+      ? []
+      : input.cashMovements.filter(removable).map((movement) => movement.id);
 
-  return { sales, stockMovements, accountMovements, outbox, cashSessions, anchor };
+  const cashCounts = input.cashCounts
+    .filter(
+      (count) =>
+        isOld(count.createdAt) &&
+        !keptByAnchor(count.createdAt) &&
+        (count.adjustmentId === undefined || !pendingIds.has(count.adjustmentId)),
+    )
+    .map((count) => count.id);
+
+  return {
+    sales,
+    stockMovements,
+    accountMovements,
+    outbox,
+    cashMovements,
+    cashCounts,
+    anchorAt,
+  };
 }
