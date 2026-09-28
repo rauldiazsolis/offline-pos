@@ -111,8 +111,10 @@ siempre — así una venta existe y es identificable aunque nunca haya habido re
 
 Entidades: `Product`, `StockItem`, `Sale`/`SaleLine`, `Payment`, `CashSession`, `StockMovement`,
 `Customer` (pura identificación), `CustomerAccount` (crédito, módulo aparte y opcional — un
-`Customer` puede no tener una asociada), `AccountHold`, `AccountMovement`. Detalle completo de
-campos en §4 del documento de diseño.
+`Customer` puede no tener una asociada), `CustomerBalance` (el saldo, aparte del crédito desde la
+Etapa 6 — #101: cualquier cliente puede tener saldo, tenga o no cuenta corriente, así un saldo a
+favor nunca se confunde con crédito), `CustomerPayment` (cobranza sin venta), `AccountHold`,
+`AccountMovement`. Detalle completo de campos en §4 del documento de diseño.
 
 Dos categorías de dato, porque cambian la estrategia de sync:
 
@@ -189,7 +191,10 @@ previo: un pull pisaba el descuento local de ventas todavía sin enviar. Con ret
 locales, el cursor de clientes **no avanza** (el saldo viaja dentro del cliente: el próximo delta lo
 vuelve a traer) y una foto completa no cuenta como hecha (se vuelve a intentar). El stock se ajusta en
 todas las filas (un producto con efectos y sin fila parte de 0); el saldo, solo en los clientes que
-vinieron con saldo (nunca se inventa una cuenta). Un pull que retiene **no es un fallo**
+vinieron con saldo (nunca se inventa una cuenta). Desde #101 el saldo vive en su propia tabla
+(`customerBalances`, Dexie v8, que migró el `balance` de cada cuenta): un cliente que vino con
+`balance` (tenga o no crédito) toma el del backend más los efectos; uno que vino sin `balance`
+conserva el local; la foto completa borra el saldo de un cliente que ya no existe. Un pull que retiene **no es un fallo**
 (`sync/pending-lot` se eliminó): devuelve `PullApplication` (`applied` / `reapplied` / `retained`,
 `lastPullApplicationSignal` en `ui/state/sync.ts`). El último estado en curso informado se guarda en
 el lote en espera (`AwaitingLot.lastStatus`, `sync/push-lot.ts::updateAwaitingLots`) y `/DIAGNOSTICO`
@@ -208,8 +213,11 @@ evento** (desde #99 una anulación es otra venta, no retiene a la que anula); mo
 cuenta por **su propia edad** — son registros independientes de su venta, el `saleId` es solo
 auditoría (con "se borran con su venta" quedaba huérfano el movimiento de la anulación reciente de
 una venta vieja);
-un `accountMovement` sin venta se conserva (la Etapa 6 define su regla); movimientos de caja y
-arqueos. Nunca se borra lo pendiente, el catálogo/stock/clientes/cuentas, la venta en curso ni la
+los movimientos de cuenta con una regla unificada (Etapa 6, #101): esperan a que el evento que los
+lleva — el de su venta (`saleId`) o el de su cobranza (`paymentId`) — no esté pendiente, y respetan
+el ancla; las cobranzas (`customerPayments`) con la misma regla que las ventas (su propia edad y su
+propio evento, y sin ningún arqueo no se borran: suman al saldo de efectivo); movimientos de caja y
+arqueos. Los saldos (`customerBalances`) nunca se borran: son estado, como las cuentas. Nunca se borra lo pendiente, el catálogo/stock/clientes/cuentas, la venta en curso ni la
 estadística de conceptos (`cashConcepts`), ni lo que sostiene el saldo de efectivo (Etapa 5, #100):
 **el ancla es el último arqueo** y todo lo creado desde su `createdAt` se conserva aunque tenga más
 de 7 días (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo); **sin ningún
@@ -264,9 +272,11 @@ directo — la **única** operación del `Connector` que no pasa por el outbox n
 backoff, porque necesita una respuesta ya para decidir el flujo (§5). Si se aprueba, el `holdId`
 viaja como `Payment.reference` y se confirma con un evento `'account-hold-confirm'` propio, encolado
 en la **misma transacción** que la venta (`storage/sale-repository.ts`) — así sobrevive a que la red
-se corte justo después de aprobado (RF-19). Sin red, se evalúa `balance` cacheado + `creditLimit` +
-`margin` (dato del backend por cliente, no config local — `domain/customer.ts::canChargeOffline`);
-si no hay `CustomerAccount` cacheada todavía, se rechaza sin inventar una con crédito en cero. Un
+se corte justo después de aprobado (RF-19). Sin red, se evalúa el saldo (`customerBalances`, sin
+saldo conocido cuenta 0) + `creditLimit` + `margin` (dato del backend por cliente, no config local —
+`domain/customer.ts::canChargeOffline(account, balance, amount)`, desde #101 con el saldo aparte); si
+no hay `CustomerAccount` cacheada todavía, se rechaza sin inventar una con crédito en cero — **un
+saldo a favor no habilita fiado**. Un
 hold aprobado que termina sin usarse (cobro cancelado) se libera con `'account-hold-release'` —
 antes de #87 se trataba aparte como "best-effort"; con push por lote deja de necesitar ese trato
 especial, es un evento más del lote, igual que documenta §6 para el vencimiento del lado del backend.
@@ -280,15 +290,15 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.1.0** desde la Etapa 5 del epic #94 —
-#120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.2.0** desde la Etapa 6 del epic #94 —
+#101, spec `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`; la 4.1.0 es de
+la Etapa 5, #120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
 Etapa 4, #99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
 la Etapa 1, #96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`). **Desde la Etapa 1 del rediseño de sync (#87,
 "el backend nunca rechaza") el contrato pasó de 10 endpoints por recurso/evento a dos operaciones
-batch** (`POST /sync/push`, `POST /sync/pull`) más dos excepciones síncronas: la reserva de crédito
-existente (`POST /account-holds`, sin cambios) y una futura consulta de saldo
-(`GET /account-balance/{customerId}`, documentada pero `x-pos-status: documented-not-implemented`
-— backlog #51/#59), más `GET /info` desde 4.0.0. `sync/connector.ts::Connector` tiene, en
+batch** (`POST /sync/push`, `POST /sync/pull`) más una excepción síncrona, la reserva de crédito
+(`POST /account-holds`, sin cambios), y `GET /info` desde 4.0.0 (4.2.0 eliminó
+`GET /account-balance/{customerId}`, que nunca se implementó: el saldo viaja en el pull). `sync/connector.ts::Connector` tiene, en
 consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. Principio central del contrato: **el backend nunca
 evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
 movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
@@ -305,6 +315,17 @@ forma de avisarle al backend —; `account-hold-confirm` — §5 decía que "via
 contrato nunca había definido ese endpoint) viajan hoy como eventos del lote de `/sync/push`
 (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya no son endpoints HTTP
 propios.
+
+**Contrato 4.2.0 (#101)** — aditivo: `CustomerPayment.receipt?: { date, number }` (el número de
+recibo en su día local, con contador propio) y `ConnectorCustomer.balance` pasa a ser **el saldo de
+cualquier cliente, tenga o no crédito** (un `balance` sin `creditLimit`/`margin` es "saldo sin cuenta
+corriente"; un backend que no lleva saldo lo omite y el POS conserva el local). Un POS 4.2.0 ve
+incompatible a un backend 4.1 ("se necesita 4.2 o posterior"). El minibackend lleva el saldo de
+cualquier cliente (arranca en 0 con su primer movimiento) y muestra recibos y saldos en `/_demo`; el
+puente de Sheets (hay que redesplegar `bridge.gs` y `columnas.gs`) escribe "Fecha del recibo" y "N° de
+recibo" en Cobranzas y calcula el saldo de cada cliente sumando el libro `CuentaCorriente` (entra en
+el fingerprint, así viaja en el delta); el mini-erp habla 4.2.0 y guarda el recibo en el payload (la
+validación Zod de `customer-payment` queda en #122).
 
 **Contrato 4.1.0 (#120)** — aditivo: `Sale.ticket?: { date, number }`, el número del ticket en su
 día local (ver "Caja sin turnos y numeración de tickets" en "UX keyboard-first"). Por la regla de
@@ -337,8 +358,8 @@ al volver `ok`. Un error de red no cambia el estado; con `unknown` los ciclos co
 (`domain/cash-movement.ts`: ingreso/egreso de caja; el arqueo viaja solo como ajuste
 `count-adjustment` con lo esperado y lo contado, y solo si la diferencia no es 0) y
 `customer-payment` (`domain/customer-payment.ts`: cobranza sin venta, sin cuenta corriente como medio
-y sin vuelto). `cash-movement` lo genera `/CAJA` desde la Etapa 5 (#100); `customer-payment` todavía
-no tiene UI (Etapa 6), pero el dominio, el outbox, los conectores y el minibackend ya lo soportan.
+y sin vuelto). `cash-movement` lo genera `/CAJA` desde la Etapa 5 (#100); `customer-payment`, la
+cobranza sin venta desde la Etapa 6 (#101).
 Ninguno se anula (se corrigen con otro registro, RNF-07). `cash-session` se eliminó, y desde la Etapa
 5 tampoco existe el turno local. Cantidades con signo y hasta 3 decimales, `Sale.total`/`Payment.amount` pueden
 ser negativos (el POS los genera recién en la Etapa 4, los conectores ya los aceptan); un pago
@@ -529,8 +550,8 @@ completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras)
    (ver detalle abajo).
 
 `Ctrl+Enter` = `/COBRAR` desde cualquier estado. **Enter con la barra vacía (#99)**: con líneas abre
-Cobro igual que Ctrl+Enter (aunque haya una línea seleccionada), sin líneas y con cliente avisa
-"Cobranza sin venta: llega en una próxima versión." (Etapa 6), sin nada no hace nada
+Cobro igual que Ctrl+Enter (aunque haya una línea seleccionada), sin líneas y con cliente abre la
+**cobranza sin venta** (#101, igual que `/COBRAR` y Ctrl+Enter en ese estado), sin nada no hace nada
 (`command-bar-controller.ts::submitEmptyCommandBar`). Con la barra vacía, `↑/↓` navegan el carrito; con
 texto, navegan resultados (producto, cliente o el menú de comandos filtrado). Errores de parseo van
 en un slot de altura fija reservado (nunca corren el layout) y seleccionan todo el input (`.select()`)
@@ -721,8 +742,8 @@ errores se eliminaron: un turno abierto al actualizar se pierde, no hay terminal
   Dexie versión 7 (que además borra `cashSessions`). `storage/cash-repository.ts` hace cada operación
   en una transacción.
 - **Saldo de efectivo** (`calculateCashBalance`, pura): lo contado en el último arqueo + los pagos
-  `cash` con signo de las ventas posteriores + ingresos − egresos manuales posteriores ("posterior" es
-  estricto). Los `count-adjustment` nunca suman (el `counted` ya los incluye); sin arqueo, base 0.
+  `cash` con signo de las ventas posteriores + ingresos − egresos manuales posteriores + el efectivo de
+  las cobranzas posteriores (#101) ("posterior" es estricto). Los `count-adjustment` nunca suman (el `counted` ya los incluye); sin arqueo, base 0.
   Anulaciones y devoluciones restan solas. El esperado que vale al arquear es el recalculado dentro
   de la transacción (`recordCashCount`), no el que vio la pantalla.
 - **`/CAJA` como modal** (`ui/screens/cash-screen.tsx`, `ui/keyboard/cash-controller.ts`, reglas en
@@ -757,6 +778,43 @@ errores se eliminaron: un turno abierto al actualizar se pierde, no hay terminal
   "12", "#12", conceptos y descripciones), Productos y Medios de pago. Panel lateral: total vendido,
   tickets con "(N anuladas)", desc/recargos, otros pagos, efectivo del día (cobros, ingresos, egresos,
   ajustes) y, solo hoy, el saldo actual. Las ventas se agrupan por `ticket.date` si lo tienen.
+
+**Cobranza sin venta y saldo del cliente (Etapa 6 de #94, #101)** — un cliente paga a cuenta sin
+comprar nada, y el POS lleva el saldo de cada cliente, siempre informativo (nunca bloquea nada).
+
+- **Cómo se entra**: con la barra vacía, **sin líneas y con cliente adjunto**, Enter, `/COBRAR` o
+  Ctrl+Enter abren la cobranza (`triggerCheckout`); con líneas, Cobro como siempre.
+- **Pantalla** (`ui/screens/collection-screen.tsx`, `ui/keyboard/collection-controller.ts`, estado en
+  `ui/state/collection.ts`): el mismo diálogo que Cobro — los campos de medio de pago son un
+  componente compartido (`ui/components/PaymentFields.tsx`) y los estilos del diálogo viven en
+  `ui/screens/dialog-styles.ts` —, "Cobranza a <cliente>", **cinco medios sin Cuenta corriente**,
+  todos vacíos, sin vuelto ni tope (pagar de más deja saldo a favor; la suma tiene que ser > 0,
+  `domain/customer-payment.ts::resolveCollection`, si no "Ingresá al menos un monto."). Total y
+  "Saldo actual → Después" en vivo; un cliente bloqueado se advierte en ámbar. Mismas teclas que
+  Cobro; Esc vuelve a la venta con el cliente todavía adjunto.
+- **Persistencia** (`storage/customer-payment-repository.ts::collectAndPersist`): en **una**
+  transacción el número de recibo, la cobranza (`customerPayments`, Dexie v8), su `AccountMovement`
+  (`type: 'payment'`, `paymentId`), el saldo (crea la fila si no existía) y el evento
+  `customer-payment` (armado adentro, viaja con el número). Recibos numerados por día como los
+  tickets (`domain/ticket-number.ts::nextDailyNumber`, `DailyNumber`), con su propio contador
+  best-effort (`offline-pos:receipt-counter`, `sync/receipt-counter.ts`; `sync/daily-counter.ts` es el
+  lector/escritor compartido con el de tickets).
+- **Comprobante**: la misma pantalla (`ReceiptFrame` compartido), "Recibo de cobranza", "Recibo #3",
+  cliente, pagos por medio, total y "Saldo anterior / Saldo nuevo"; lo pone
+  `receiptCollectionSignal` (junto a `receiptSaleSignal`, `ui/state/receipt.ts`). Al cerrarlo, el
+  cliente queda desadjuntado, como después de cobrar una venta.
+- **Saldo en la venta**: `customerBalancesSignal` (`ui/state/customer-balance.ts`) tiene la tabla
+  entera en memoria, como el stock, y se recarga en los mismos puntos más después de una cobranza. La
+  tarjeta de Cliente suma una quinta fila fija, "Saldo: Debe $X / A favor $X / Sin saldo"
+  (`ui/format-balance.ts`; en blanco con "Consumidor Final"). En Cobro, con monto en Cuenta corriente,
+  "Saldo del cliente: antes → después" (`checkout-controller.ts::accountBalancePreview`). La lista de
+  `@` no muestra saldo, a propósito.
+- **`/RESUMEN`**: las cobranzas no son ventas — no suman al total vendido ni a los tickets. Panel
+  "Cobranzas $X (N recibos)" y la fila "Cobranzas" en el efectivo del día; en Movimientos, "Recibo #3 ·
+  Ana" con los medios (el buscador encuentra "3", "#3" y el nombre); Medios de pago con columnas
+  Ventas | Cobranzas | Total. Se agrupan por `receipt.date` si lo tienen.
+- **Fuera de alcance**: anular o corregir una cobranza desde el POS (#125); hasta entonces se corrige
+  del lado del backend.
 
 **`/DESCARTAR` (Ciclo 8)**: vacía la venta en curso completa — líneas, cliente adjunto y el % de
 recargo/descuento — vía `domain/cart.ts::discardCart`. A propósito distinto de `/ANULAR`: esa anula
@@ -816,7 +874,7 @@ propósito no interactiva; esa decisión se reabrió a propósito en la prueba m
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
 (`backendStatusSignal`), detrás de "sin configurar" y de offline y delante del resto: "Backend
-incompatible (contrato X, se necesita 4.1 o posterior)" con estilo de error, y "Backend en mantenimiento:
+incompatible (contrato X, se necesita 4.2 o posterior)" con estilo de error, y "Backend en mantenimiento:
 <mensaje>", informativo. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
@@ -871,7 +929,8 @@ Final" y "+ Crear cliente", artículos incluidas las líneas libres) es lo mismo
 (`command-bar-controller.ts::activateCommandBarRow`, mismo camino que `submitCommandBar`); click fuera
 del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`); click en una fila del
 carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). **Cobro** (#99): click
-en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
+en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobranza** (#101): lo
+mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
@@ -1502,6 +1561,20 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   mensaje de incompatibilidad pasó a "4.1 o posterior"; se sumó `cash/persist-failed`. El e2e
   encontró un bug, corregido: el aviso de la barra de comandos quedaba oculto al arquear desde la
   barra de estado (ese click cerraba el overlay).
+
+- Cobranza sin venta y saldo del cliente (Etapa 6 del epic #94, issue #101; cierra #51 y #59; spec
+  `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`, plan
+  `docs/superpowers/plans/2026-09-27-cobranza-y-saldo-del-cliente.md`): ver "Cobranza sin venta y
+  saldo del cliente" en "UX keyboard-first", "Contrato 4.2.0" en "Connector API" y la limpieza en
+  "Patrón outbox". Incluye al mini-erp (misma excepción puntual a su `AGENTS.md` que en la Etapa 5).
+  Desvíos del plan respecto de la spec, aprobados con el plan: pantalla de cobranza propia que
+  comparte los campos con Cobro (no un tercer modo de Cobro); comprobante con un signal propio (no
+  una unión); saldos en memoria como el stock (no un signal del cliente adjunto); mini-erp sin Zod
+  para `customer-payment` (#122). Desvíos al ejecutarlo: los importes del saldo usan el formato de
+  `/CAJA` (`$1.500,00`); el minibackend acepta un POS 4.1 (mismo major, el backend es el de minor
+  mayor: es la regla de compatibilidad) en vez del 409 que pedía el plan; el panel `/_demo` suma una
+  tabla "Saldos de clientes" (`/_demo/api/customer-balances`). Siguiente paso: #125 (anular
+  cobranzas desde `/ANULAR`).
 
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas

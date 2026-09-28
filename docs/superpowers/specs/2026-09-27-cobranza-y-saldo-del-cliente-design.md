@@ -1,7 +1,8 @@
 # Cobranza sin venta y saldo del cliente
 
 Fecha: 2026-09-27
-Estado: diseño aprobado, sin plan todavía.
+Estado: implementado (plan `docs/superpowers/plans/2026-09-27-cobranza-y-saldo-del-cliente.md`;
+desvíos al final).
 Issues: #101 (Etapa 6 del epic #94; cierra #51 y #59, ya cerrados como duplicados). Depende de las
 Etapas 1 a 5 (#96–#100, #120). Siguiente paso previsto, fuera de esta etapa: #125 (anular
 cobranzas con el mismo criterio que las ventas, desde `/ANULAR`).
@@ -294,3 +295,27 @@ de recibos.
   con su ajuste de saldo).
 - Saldo en la lista de `@`.
 - Margen de cuenta corriente sin hold (#104), usabilidad de `/CAJA` (#57) y de `/ANULAR` (#58, #110).
+
+## Desvíos de la implementación
+
+Aprobados con el plan:
+
+1. **Pantalla de cobranza propia** en vez de un tercer modo de Cobro (§1): `checkout-screen.tsx` ya
+   ramificaba por `charge`/`refund` en casi todo lo que la cobranza no comparte. Los campos de medio
+   de pago son un componente compartido (`ui/components/PaymentFields.tsx`) y los estilos del diálogo
+   viven en `ui/screens/dialog-styles.ts`; para el usuario es el mismo diálogo.
+2. **Comprobante con un signal propio** (`receiptCollectionSignal`) en vez de una unión (§1); la
+   pantalla comparte el marco (`ReceiptFrame`) y muestra el que esté puesto.
+3. **Saldos en memoria como el stock** (`customerBalancesSignal`, la tabla entera) en vez de
+   `attachedCustomerBalanceSignal` (§1): cubre sin código extra el cliente restaurado con la venta en
+   curso y el que cambia de saldo por un pull con el cliente adjunto.
+4. **Mini-erp sin Zod para `customer-payment`** (§4): la cobranza se guarda entera en el payload, así
+   que `receipt` ya llega; la validación queda en #122.
+
+Al ejecutarlo:
+
+5. Los importes del saldo usan el formato de `/CAJA` (`Debe $1.500,00`), no `$ 1.500,00`.
+6. El minibackend **acepta** un POS 4.1 (mismo major; el backend es el del minor mayor, que es lo que
+   pide la regla de compatibilidad) — el plan pedía un 409, que la contradecía.
+7. El panel `/_demo` suma una tabla "Saldos de clientes" (`GET /_demo/api/customer-balances`) en vez
+   de cambiar la lista de clientes creados desde el POS.
