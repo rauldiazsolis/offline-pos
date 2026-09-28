@@ -53,6 +53,7 @@ describe('runLocalCleanup', () => {
           outbox: 1,
           cashMovements: 0,
           cashCounts: 0,
+          customerPayments: 0,
         },
         anchorAt: recent,
       },
@@ -61,6 +62,34 @@ describe('runLocalCleanup', () => {
     expect(await db.sales.get('s-pend')).not.toBeUndefined();
     expect(await db.stockMovements.get('m1')).toBeUndefined();
     expect(await db.outbox.get('s-pend')).not.toBeUndefined();
+  });
+
+  it('borra la cobranza vieja sincronizada y su movimiento de cuenta, y lo informa (#101)', async () => {
+    await db.cashCounts.add({ id: 'c1', expected: 0, counted: 0, createdAt: recent });
+    await db.customerPayments.add({
+      id: 'cp1',
+      customerId: 'x',
+      payments: [{ method: 'cash', amount: 10 }],
+      total: 10,
+      createdAt: old,
+    });
+    await db.accountMovements.add({
+      id: 'a1',
+      customerId: 'x',
+      type: 'payment',
+      amount: -10,
+      paymentId: 'cp1',
+      createdAt: old,
+    });
+
+    const report = await runLocalCleanup({ now, protectedEventIds: new Set() });
+
+    expect(report.ok && report.value.counts).toMatchObject({
+      customerPayments: 1,
+      accountMovements: 1,
+    });
+    expect(await db.customerPayments.count()).toBe(0);
+    expect(await db.accountMovements.count()).toBe(0);
   });
 
   it('borra movimientos de caja y arqueos anteriores al último arqueo, y lo informa', async () => {

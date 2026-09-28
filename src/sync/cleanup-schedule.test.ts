@@ -37,6 +37,7 @@ describe('isCleanupDue', () => {
         outbox: 0,
         cashMovements: 0,
         cashCounts: 0,
+        customerPayments: 0,
       },
     };
     expect(
@@ -49,6 +50,25 @@ describe('isCleanupDue', () => {
 });
 
 describe('getLastCleanup', () => {
+  it('un registro de antes de la Etapa 6 (sin cobranzas) se lee con 0 (#101)', () => {
+    localStorage.setItem(
+      'offline-pos:cleanup:last-run',
+      JSON.stringify({
+        at: now,
+        counts: {
+          sales: 1,
+          stockMovements: 0,
+          accountMovements: 0,
+          outbox: 0,
+          cashMovements: 0,
+          cashCounts: 0,
+        },
+      }),
+    );
+    expect(getLastCleanup()?.counts.customerPayments).toBe(0);
+    expect(isCleanupDue(getLastCleanup(), now)).toBe(false);
+  });
+
   it('un registro con la forma anterior (turnos) se ignora y la limpieza vuelve a tocar', () => {
     localStorage.setItem(
       'offline-pos:cleanup:last-run',

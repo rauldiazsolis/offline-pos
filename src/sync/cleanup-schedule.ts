@@ -27,6 +27,9 @@ const cleanupRecordSchema = z.object({
     outbox: z.number(),
     cashMovements: z.number(),
     cashCounts: z.number(),
+    // Un registro de antes de la Etapa 6 (#101) no lo tiene: se lee con 0 — a diferencia del de
+    // la Etapa 5, no hay nada que invalidar.
+    customerPayments: z.number().default(0),
   }),
   anchorAt: z.string().optional(),
 });

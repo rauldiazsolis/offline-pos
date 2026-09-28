@@ -53,7 +53,8 @@ export function formatCleanup(record: CleanupRecord | undefined): { last: string
     last:
       `${new Date(record.at).toLocaleString()} — ${String(counts.sales)} ventas, ` +
       `${String(movements)} movimientos, ${String(counts.outbox)} eventos, ` +
-      `${String(counts.cashMovements)} movimientos de caja, ${String(counts.cashCounts)} arqueos`,
+      `${String(counts.cashMovements)} movimientos de caja, ${String(counts.cashCounts)} arqueos, ` +
+      `${String(counts.customerPayments)} cobranzas`,
     anchor:
       record.anchorAt !== undefined
         ? `Último arqueo: ${new Date(record.anchorAt).toLocaleString()}`

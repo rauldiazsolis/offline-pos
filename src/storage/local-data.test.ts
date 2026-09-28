@@ -66,6 +66,7 @@ describe('summarizeLocalData', () => {
       sales: 0,
       cashMovements: 0,
       cashCounts: 0,
+      customerPayments: 0,
       pendingOutbox: 0,
       pendingSales: 0,
       draftCartLines: 0,
@@ -82,6 +83,7 @@ describe('summarizeLocalData', () => {
       sales: 2,
       cashMovements: 0,
       cashCounts: 1,
+      customerPayments: 0,
       pendingOutbox: 1,
       pendingSales: 1,
       draftCartLines: 2,
@@ -96,6 +98,7 @@ describe('hasUserData', () => {
     sales: 0,
     cashMovements: 0,
     cashCounts: 0,
+    customerPayments: 0,
     pendingOutbox: 0,
     pendingSales: 0,
     draftCartLines: 0,
@@ -105,12 +108,16 @@ describe('hasUserData', () => {
     expect(hasUserData(empty)).toBe(false);
   });
 
-  it.each(['sales', 'cashCounts', 'cashMovements', 'pendingOutbox', 'draftCartLines'] as const)(
-    '%s > 0 sí lo son',
-    (field) => {
-      expect(hasUserData({ ...empty, [field]: 1 })).toBe(true);
-    },
-  );
+  it.each([
+    'sales',
+    'cashCounts',
+    'cashMovements',
+    'customerPayments',
+    'pendingOutbox',
+    'draftCartLines',
+  ] as const)('%s > 0 sí lo son', (field) => {
+    expect(hasUserData({ ...empty, [field]: 1 })).toBe(true);
+  });
 });
 
 describe('countLocalCatalog', () => {

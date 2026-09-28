@@ -50,10 +50,13 @@ describe('formatCleanup', () => {
         outbox: 9,
         cashMovements: 2,
         cashCounts: 1,
+        customerPayments: 4,
       },
       anchorAt: '2026-09-20T18:00:00.000Z',
     });
-    expect(text.last).toMatch(/3 ventas, 5 movimientos, 9 eventos, 2 movimientos de caja, 1 arqueos/);
+    expect(text.last).toMatch(
+      /3 ventas, 5 movimientos, 9 eventos, 2 movimientos de caja, 1 arqueos, 4 cobranzas/,
+    );
     expect(text.anchor).toMatch(/^Último arqueo: /);
   });
 });
