@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadCustomerRepository } from '../../storage/customer-repository.ts';
 import { db } from '../../storage/db.ts';
+import { setCustomerRepository } from '../state/customer-repository.ts';
 import {
   commandBarBufferSignal,
   commandBarErrorSignal,
@@ -276,6 +278,17 @@ describe('Enter con la barra vacía (#99)', () => {
 
     activeScreenSignal.value = 'sale';
     await triggerCheckout();
+    expect(activeScreenSignal.value).toBe('collection');
+  });
+
+  it('justo después de crear un cliente con @ espera a que se adjunte (#101)', async () => {
+    setCustomerRepository(await loadCustomerRepository());
+    updateCommandBarBuffer('@Cliente Nuevo');
+    submitCommandBar(); // crea el cliente en segundo plano (pendingBarOperation)
+
+    await submitEmptyCommandBar();
+
+    expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
     expect(activeScreenSignal.value).toBe('collection');
   });
 

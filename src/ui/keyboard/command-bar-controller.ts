@@ -321,13 +321,15 @@ export async function triggerCheckout(): Promise<void> {
  * línea seleccionada — cambiar su cantidad necesita un número en la barra).
  * Sin líneas y con cliente abre la cobranza sin venta (#101), igual que
  * `/COBRAR` y Ctrl+Enter; sin nada, no hace nada: Enter sobre la barra vacía
- * es un gesto reflejo y un error molestaría.
+ * es un gesto reflejo y un error molestaría. Decide **después** de esperar
+ * `pendingBarOperation`, como `triggerCheckout`: si el cliente de un
+ * `@<nombre nuevo>` todavía se está creando, la decisión espera a que se adjunte.
  */
-export function submitEmptyCommandBar(): Promise<void> {
+export async function submitEmptyCommandBar(): Promise<void> {
+  await pendingBarOperation;
   if (cartSignal.value.lines.length > 0 || attachedCustomerSignal.value !== undefined) {
-    return triggerCheckout();
+    await triggerCheckout();
   }
-  return Promise.resolve();
 }
 
 /** Click en una fila del carrito (#99): lo mismo que llegar con ↑/↓. */

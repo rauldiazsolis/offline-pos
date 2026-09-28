@@ -153,6 +153,8 @@ test('cliente → cobranza → Recibo → Esc → la barra de comandos recupera 
 
   await commandBar.fill('@Cliente Teclado');
   await commandBar.press('Enter');
+  // El alta es async: la barra se vacía recién con el cliente adjunto.
+  await expect(commandBar).toHaveValue('');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Cobranza a Cliente Teclado' })).toBeVisible();
   await expect(page.getByLabel('Efectivo')).toBeFocused();

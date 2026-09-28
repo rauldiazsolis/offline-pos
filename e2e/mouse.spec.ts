@@ -98,6 +98,8 @@ test.describe('pantalla de venta', () => {
     const commandBar = page.getByLabel('Barra de comandos');
     await commandBar.fill('@Cliente Mouse');
     await commandBar.press('Enter');
+    // El alta es async: la barra se vacía recién con el cliente adjunto.
+    await expect(commandBar).toHaveValue('');
     await commandBar.press('Enter');
     await expect(page.getByRole('heading', { name: 'Cobranza a Cliente Mouse' })).toBeVisible();
 
