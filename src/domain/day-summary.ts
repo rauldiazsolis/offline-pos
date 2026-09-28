@@ -120,7 +120,10 @@ export function calculateDaySummary(params: {
   };
 }
 
-/** La pestaña Movimientos: ventas, movimientos de caja, arqueos y cobranzas del día, por hora. */
+/**
+ * La pestaña Movimientos: ventas, movimientos de caja, arqueos y cobranzas del día, con lo más nuevo
+ * primero (#124): lo recién hecho queda a la vista sin scrollear, igual que en `/ANULAR`.
+ */
 export function buildDayEntries(params: {
   sales: readonly Sale[];
   movements: readonly CashMovement[];
@@ -140,5 +143,5 @@ export function buildDayEntries(params: {
       at: payment.createdAt,
       payment,
     })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+  ].sort((a, b) => b.at.localeCompare(a.at));
 }

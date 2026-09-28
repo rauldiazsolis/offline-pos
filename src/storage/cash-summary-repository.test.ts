@@ -48,7 +48,7 @@ describe('getDaySummary (#100)', () => {
 
     expect(view.isToday).toBe(true);
     expect(view.sales.map((s) => s.id)).toEqual(['hoy']);
-    expect(view.entries.map((entry) => entry.kind)).toEqual(['count', 'movement', 'sale']);
+    expect(view.entries.map((entry) => entry.kind)).toEqual(['sale', 'movement', 'count']);
     expect(view.balance).toEqual({ balance: 150, lastCountAt: at(24, 8) });
     expect(view.oldestDate).toBe(yesterday);
     expect(view.summary.cash.income).toBe(50);

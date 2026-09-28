@@ -17,6 +17,8 @@ export default defineConfig([
       'eslint.config.js',
       'dev-orchestrator.mjs',
       'mini-erp/**',
+      // Worktrees de otras sesiones (copias enteras del repo).
+      '.claude/**',
     ],
   },
   js.configs.recommended,

@@ -154,7 +154,8 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 - **`/RESUMEN` por fecha** (`storage/cash-summary-repository.ts::getDaySummary`,
   `domain/day-summary.ts`): arranca en hoy y navega de a un día con Alt+←/Alt+→ (o los botones),
   entre el día más viejo con datos locales y hoy, conservando pestaña y filtros. Pestaña
-  **Movimientos** (ventas, anulaciones, ingresos, egresos y arqueos por hora; el buscador encuentra
+  **Movimientos** (ventas, anulaciones, ingresos, egresos y arqueos, lo más nuevo primero — #124 —
+  como en `/ANULAR`, y la selección arranca en la más nueva; el buscador encuentra
   "12", "#12", conceptos y descripciones), Productos y Medios de pago. Panel lateral: total vendido,
   tickets con "(N anuladas)", desc/recargos, otros pagos, efectivo del día (cobros, ingresos, egresos,
   ajustes) y, solo hoy, el saldo actual. Las ventas se agrupan por `ticket.date` si lo tienen.
