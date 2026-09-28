@@ -208,12 +208,16 @@ evento** (desde #99 una anulación es otra venta, no retiene a la que anula); mo
 cuenta por **su propia edad** — son registros independientes de su venta, el `saleId` es solo
 auditoría (con "se borran con su venta" quedaba huérfano el movimiento de la anulación reciente de
 una venta vieja);
-un `accountMovement` sin venta se conserva (la Etapa 6 define su regla); turnos cerrados. Nunca se
-borra lo pendiente, el catálogo/stock/clientes/cuentas ni la venta en curso, ni **el ancla del
-arqueo** mientras existan turnos (hasta la Etapa 5, #100): el último turno cerrado, el abierto y sus
-ventas con sus movimientos. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
-exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, que guarda también los conteos y la
-fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
+un `accountMovement` sin venta se conserva (la Etapa 6 define su regla); movimientos de caja y
+arqueos. Nunca se borra lo pendiente, el catálogo/stock/clientes/cuentas, la venta en curso ni la
+estadística de conceptos (`cashConcepts`), ni lo que sostiene el saldo de efectivo (Etapa 5, #100):
+**el ancla es el último arqueo** y todo lo creado desde su `createdAt` se conserva aunque tenga más
+de 7 días (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo); **sin ningún
+arqueo** no se borran ventas ni movimientos de caja (son la base 0 del saldo). Un arqueo viejo con
+ajuste espera a que el evento de ese ajuste no esté pendiente. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
+exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, validado con Zod al leerse — un
+registro de la forma anterior, con turnos, se ignora y la limpieza vuelve a correr —, que guarda
+también los conteos y la fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
 `/CONFIG` abierto. `/ANULAR` solo ofrece las últimas 24 h (#99), así que nunca se anula algo que la
 limpieza ya borró.
 
@@ -250,7 +254,7 @@ recién al escribir los tests de esta etapa.
 
 **Foto completa y bajas**: sin cambios de fondo respecto de antes de #87 — un pull sin cursor de un
 recurso es la fuente de verdad de ese recurso (`storage/reconcile.ts::applySnapshotReconciled`
-dentro de la transacción de `storage/apply-pull.ts`, todo o nada, nunca toca ventas/turnos/movimientos/outbox/venta en curso), cada conector declara su
+dentro de la transacción de `storage/apply-pull.ts`, todo o nada, nunca toca ventas/caja/movimientos/outbox/venta en curso), cada conector declara su
 `pullMode` (`connector-registry.ts`), la foto completa de un conector `delta` se repite cada 2 h
 (`sync/full-refresh.ts::FULL_REFRESH_INTERVAL_MS`, antes 1 h) además de al arrancar y a pedido.
 
@@ -276,8 +280,9 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.0.0** desde la Etapa 4 del epic #94 —
-#99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.1.0** desde la Etapa 5 del epic #94 —
+#120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
+Etapa 4, #99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
 la Etapa 1, #96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`). **Desde la Etapa 1 del rediseño de sync (#87,
 "el backend nunca rechaza") el contrato pasó de 10 endpoints por recurso/evento a dos operaciones
 batch** (`POST /sync/push`, `POST /sync/pull`) más dos excepciones síncronas: la reserva de crédito
@@ -301,6 +306,15 @@ contrato nunca había definido ese endpoint) viajan hoy como eventos del lote de
 (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya no son endpoints HTTP
 propios.
 
+**Contrato 4.1.0 (#120)** — aditivo: `Sale.ticket?: { date, number }`, el número del ticket en su
+día local (ver "Caja sin turnos y numeración de tickets" en "UX keyboard-first"). Por la regla de
+compatibilidad, un POS 4.1.0 ve **incompatible** a un backend 4.0.0 (podría no guardar el número): el
+minibackend, el puente de Sheets (hay que redesplegar `bridge.gs`: dos columnas opcionales nuevas en
+Ventas, "Fecha del ticket" y "N° de ticket") y el mini-erp (`mini-erp/`, que valida la venta con Zod,
+#122 para el resto de los eventos) hablan 4.1.0. El mensaje dice "se necesita 4.1 o posterior"
+(`domain/contract-version.ts::contractRequirement`). `sync/connector.ts` no tiene schema de venta (las
+ventas solo se empujan), así que del lado del POS no hubo nada que aceptar.
+
 **Contrato 4.0.0 (#99)** — la anulación es un **ticket propio**: viaja como un evento `sale` más, con
 líneas y pagos invertidos y `voidsSaleId` apuntando al original (sale `sale-void`: 7 tipos de evento;
 `Sale.status` solo `closed`, sin `voidedAt`). `GET /info` informa `contractVersion` y `status`
@@ -323,10 +337,10 @@ al volver `ok`. Un error de red no cambia el estado; con `unknown` los ciclos co
 (`domain/cash-movement.ts`: ingreso/egreso de caja; el arqueo viaja solo como ajuste
 `count-adjustment` con lo esperado y lo contado, y solo si la diferencia no es 0) y
 `customer-payment` (`domain/customer-payment.ts`: cobranza sin venta, sin cuenta corriente como medio
-y sin vuelto). Ninguno de los dos tiene UI todavía — los generan las Etapas 5 y 6 de #94 — pero el
-dominio, el outbox, los conectores y el minibackend ya los soportan. Ninguno se anula (se corrigen
-con otro registro, RNF-07). `cash-session` se eliminó: el turno local de `/CAJA` sigue hasta la Etapa
-5, pero ya no viaja. Cantidades con signo y hasta 3 decimales, `Sale.total`/`Payment.amount` pueden
+y sin vuelto). `cash-movement` lo genera `/CAJA` desde la Etapa 5 (#100); `customer-payment` todavía
+no tiene UI (Etapa 6), pero el dominio, el outbox, los conectores y el minibackend ya lo soportan.
+Ninguno se anula (se corrigen con otro registro, RNF-07). `cash-session` se eliminó, y desde la Etapa
+5 tampoco existe el turno local. Cantidades con signo y hasta 3 decimales, `Sale.total`/`Payment.amount` pueden
 ser negativos (el POS los genera recién en la Etapa 4, los conectores ya los aceptan); un pago
 `account` sin `reference` es fiado offline (positivo) o acreditación (negativo). El pull trae
 `createdAt` **obligatorio** (fecha de alta real — `splitConnectorCustomer` la usa en vez de la hora
@@ -422,8 +436,8 @@ campo del conector difiere de la config guardada **y verificada**), `originChang
 endpoint normalizado, `originKey` — el `type` no cuenta; cambiar solo la API key, el secreto o el
 locale es el mismo origen), `probeValid` (hay una prueba exitosa hecha con **exactamente** la conexión
 cargada), pasos alcanzables (hasta el primero incompleto) y `applyAction`. Probar se saltea si la
-conexión no cambió; Datos locales, si no cambió o si no hay **datos del usuario** (ventas, turnos,
-pendientes del outbox o venta en curso — `storage/local-data.ts::hasUserData`; catálogo/clientes solos
+conexión no cambió; Datos locales, si no cambió o si no hay **datos del usuario** (ventas, arqueos,
+movimientos de caja, pendientes del outbox o venta en curso — `storage/local-data.ts::hasUserData`; catálogo/clientes solos
 no cuentan). `ui/keyboard/config-controller.ts` solo orquesta lo async; `ui/state/sync-config.ts`
 tiene el paso actual (`wizardStepSignal`), el estado async (`wizardAsyncSignal`: `idle`/`probing`/
 `flushing`/`confirming-wipe`/`applying`) y `wizardModelSignal`. Navegación: Enter valida y avanza,
@@ -438,7 +452,7 @@ primer paso incompleto en modo requerido, y en Terminal tras perder la identidad
   De `incomplete` pasa a `active`. Los eventos ya encolados conservan su `origin`.
 - **Conexión cambiada, Mantener** (`applyConnection` con `local: 'keep'`): en la transacción de
   siempre, la foto se reconcilia (`storage/reconcile.ts::applySnapshotReconciled`, sin transacción
-  propia — la misma que usa el pull, `storage/apply-pull.ts`) — ventas, turnos, movimientos, venta en curso y outbox
+  propia — la misma que usa el pull, `storage/apply-pull.ts`) — ventas, caja, movimientos, venta en curso y outbox
   quedan intactos. Con **otro origen** se descarta el estado de lotes del backend viejo (los
   pendientes salen en un lote nuevo al nuevo) y una tabla que llega vacía sí borra lo local (un backend
   nuevo vacío es legítimo). Con el **mismo origen** el estado de lotes se **conserva** — un lote
@@ -684,8 +698,8 @@ al ver la complejidad real de lo otro (manejar mousedown/mousemove sin romper el
 selección, ocultar la scrollbar entre navegadores con propiedades distintas, mantener wheel/
 middle-click-drag, diseñar el fade).
 
-Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (Fase 6 — abre o cierra el
-turno de caja, ver más abajo), `/ANULAR`, `/DESCARTAR` (Ciclo 8 — vacía la venta en curso, ver más
+Comandos disponibles (`ui/keyboard/commands.ts`): `/COBRAR`, `/CAJA` (arqueo, ingreso o egreso de
+caja, ver más abajo), `/RESUMEN` (un día calendario, ver más abajo), `/ANULAR`, `/DESCARTAR` (Ciclo 8 — vacía la venta en curso, ver más
 abajo), `/CONFIG` (la terminal y su conexión con el sistema externo, runtime vía `localStorage` — no
 hay variables de entorno; desde la Etapa 2 de #94 es un **wizard de 6 pasos** con resumen visible,
 ver "Ciclo de vida de la conexión"), `/SINCRONIZAR` (fuerza push y pull ya, RF-12 "bajo demanda" — ver "Patrón outbox"
@@ -697,22 +711,52 @@ ver "Patrón outbox" más arriba para el detalle del log). `/CUENTA` (Fase 3) es
 dentro de la pantalla de cobro, no en la barra de comandos principal — por eso no está en
 `commands.ts`. Cobra el saldo restante a cuenta corriente contra el cliente adjunto con `@`.
 
-**Turno de caja obligatorio para cobrar (Fase 6)**: `/CAJA` abre (pide el monto de apertura) o
-cierra (pide el efectivo contado) el turno — con uno ya abierto, entra directo al resumen en vez de
-volver a pedir la apertura. `command-bar-controller.ts::triggerCheckout` (único punto de entrada al
-cobro, `/COBRAR` y `Ctrl+Enter`) rechaza cobrar sin un turno abierto — decisión explícita del
-usuario, es el comportamiento típico de un POS de mostrador y le da sentido real al arqueo (todas
-las ventas del turno quedan agrupadas). `storage/sale-repository.ts::closeSaleAndPersist` repite el
-mismo chequeo de fondo (la verificación real; `triggerCheckout` es solo para fallar rápido) y, si
-hay un turno abierto, agrega el id de la venta a su `sales[]` en la misma transacción que la cierra.
-El arqueo al cerrar es **solo de efectivo** (apertura + ventas en efectivo del turno vs. lo
-contado) — tarjeta/cuenta corriente no tienen equivalente físico para "contar", aunque el reporte
-básico sí desglosa el total por cada medio de pago. Anular **no** exige un turno abierto; si hay uno,
-el ticket de anulación queda registrado en él (#99), así el arqueo descuenta el efectivo devuelto
-hasta que la Etapa 5 saque los turnos. Un turno **abierto** nunca se sincroniza (mismo
-criterio que una venta: nace ya cerrada). Hasta el contrato v2 se
-encolaba en el outbox al cerrarse; desde v3 (#96) **no viaja nunca** — el turno local sigue hasta la
-Etapa 5 de #94, que lo reemplaza por movimientos de caja (ver "Connector API" más abajo).
+**Caja sin turnos y numeración de tickets (Etapa 5 de #94, #100 y #120)** — se vende sin apertura
+ni cierre (`triggerCheckout` y `closeSaleAndPersist` ya no piden turno; los turnos, su tabla y sus
+errores se eliminaron: un turno abierto al actualizar se pierde, no hay terminales en producción).
+
+- **Modelo local**: `cashMovements` (los `CashMovement` del contrato, cada uno con su evento
+  `cash-movement`), `cashCounts` (`domain/cash-count.ts::CashCount`: cada arqueo, **aunque no tenga
+  diferencia**, que no viaja pero es la base del saldo) y `cashConcepts` (estadística de conceptos),
+  Dexie versión 7 (que además borra `cashSessions`). `storage/cash-repository.ts` hace cada operación
+  en una transacción.
+- **Saldo de efectivo** (`calculateCashBalance`, pura): lo contado en el último arqueo + los pagos
+  `cash` con signo de las ventas posteriores + ingresos − egresos manuales posteriores ("posterior" es
+  estricto). Los `count-adjustment` nunca suman (el `counted` ya los incluye); sin arqueo, base 0.
+  Anulaciones y devoluciones restan solas. El esperado que vale al arquear es el recalculado dentro
+  de la transacción (`recordCashCount`), no el que vio la pantalla.
+- **`/CAJA` como modal** (`ui/screens/cash-screen.tsx`, `ui/keyboard/cash-controller.ts`, reglas en
+  `ui/keyboard/cash-form-model.ts`, pura): selector Arqueo / Ingreso / Egreso con comportamiento de
+  radio (Alt+1/2/3, click, ↑/↓ en el selector). El arqueo **no es ciego**: esperado, último arqueo
+  ("hoy 09:12" / "ayer 18:40" / "23/09 18:40") y "Sobran/Faltan $X" en vivo. Ingreso/Egreso: Concepto
+  (con sugerencias), Descripción opcional y Monto; Enter y ↓ avanzan, ↑ retrocede, Ctrl+Enter
+  confirma, Esc cierra las sugerencias o cancela. Un egreso mayor que el saldo se advierte en ámbar,
+  sin bloquear. Al confirmar vuelve a la venta con un aviso informativo en el slot de la barra
+  (`commandBarNoticeSignal`: mismo ciclo de vida que la advertencia, sin su estilo; reabre el overlay
+  aunque un click lo haya cerrado — bug real que encontró el e2e al arquear desde la barra de estado).
+- **Conceptos sugeridos**: una fila por `[direction+concept]` con la grafía de la primera vez; la
+  comparación ignora mayúsculas y espacios. Puntaje = usos con vida media de 14 días, tope de 8, sin
+  preselección (`domain/concept-ranking.ts`); con texto, primero filtra FlexSearch detrás del puerto
+  `domain/concept-search.ts`. Nunca se limpia a los 7 días.
+- **Aviso "Sin arqueo en 24 h"** en la barra de estado (`cashCountOverdueSignal`, con un reloj por
+  minuto que arranca `bootstrap`): un botón ámbar, independiente del estado de sync, que abre `/CAJA`
+  en Arqueo sin abrir `/DIAGNOSTICO` ni sacarle el foco a la barra de comandos.
+- **Numeración** (`domain/ticket-number.ts`): `Sale.ticket = { date, number }` con la fecha **local**
+  de la terminal; se asigna **dentro de la transacción** de la venta y de la anulación (que consume
+  número) como `max(contador de la misma fecha, último local de esa fecha) + 1`. El contador vive en
+  `localStorage` (`offline-pos:ticket-counter`, `sync/ticket-counter.ts`, best-effort) y se escribe
+  después del commit: cubre los datos locales borrados ("Borrar" en `/CONFIG`, `/DEMO_RESET`, pérdida
+  del id), y las ventas locales cubren un contador perdido; `pos.reset()` lo borra. Una venta
+  anterior no tiene número y nunca se le inventa. Se ve como "Ticket #12" en el comprobante,
+  `/ANULAR` y `/RESUMEN`; una anulación dice "Anulación del #12" (o "del #12 del 23/09" si el original
+  es de otra fecha; "Anulación de HH:MM" si el original no tiene número) — `ui/format-ticket.ts`.
+- **`/RESUMEN` por fecha** (`storage/cash-summary-repository.ts::getDaySummary`,
+  `domain/day-summary.ts`): arranca en hoy y navega de a un día con Alt+←/Alt+→ (o los botones),
+  entre el día más viejo con datos locales y hoy, conservando pestaña y filtros. Pestaña
+  **Movimientos** (ventas, anulaciones, ingresos, egresos y arqueos por hora; el buscador encuentra
+  "12", "#12", conceptos y descripciones), Productos y Medios de pago. Panel lateral: total vendido,
+  tickets con "(N anuladas)", desc/recargos, otros pagos, efectivo del día (cobros, ingresos, egresos,
+  ajustes) y, solo hoy, el saldo actual. Las ventas se agrupan por `ticket.date` si lo tienen.
 
 **`/DESCARTAR` (Ciclo 8)**: vacía la venta en curso completa — líneas, cliente adjunto y el % de
 recargo/descuento — vía `domain/cart.ts::discardCart`. A propósito distinto de `/ANULAR`: esa anula
@@ -729,7 +773,7 @@ viven en un fixture local sino en el minibackend, así que `storage/demo-reset.t
 **no** siembra nada por su cuenta — el orden pasa a ser: si hay `/CONFIG` configurado, primero
 `POST /_demo/reset` contra el backend (si falla, se corta ahí sin tocar nada local — dejar la
 terminal vacía sin poder repoblarla sería peor que no resetear nada); recién después borra todo lo
-local (catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, turnos de
+local (catálogo, stock, clientes, cuentas corrientes, ventas, movimientos de stock/cuenta, movimientos y arqueos de
 caja, la venta en curso `draftCart` y el outbox pendiente) y limpia los cursores de pull
 (`sync/cursor.ts::clearSyncCursors`) y el estado de lotes de push (`sync/push-lot.ts::clearPushLotState`);
 si había `/CONFIG`, recién ahí dispara un push y un pull completo (`sync/engine.ts::runPushCycle`/
@@ -772,7 +816,7 @@ propósito no interactiva; esa decisión se reabrió a propósito en la prueba m
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
 (`backendStatusSignal`), detrás de "sin configurar" y de offline y delante del resto: "Backend
-incompatible (contrato X, se necesita 4.x)" con estilo de error, y "Backend en mantenimiento:
+incompatible (contrato X, se necesita 4.1 o posterior)" con estilo de error, y "Backend en mantenimiento:
 <mensaje>", informativo. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
@@ -829,8 +873,9 @@ del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`); 
 carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). **Cobro** (#99): click
 en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
-**`/DEMO_RESET`**, **`/RESUMEN`** y la **barra de estado** (click = `/DIAGNOSTICO`). Fuera por ahora:
-`/CAJA` (Etapa 5).
+**`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
+sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
+abre `/CAJA`).
 
 ## Diseño visual
 
@@ -1051,8 +1096,8 @@ explícitamente que la barra de comandos recupera el foco al volver — no una r
 rastro.
 
 `e2e/helpers.ts` (Fase 6) reúne acciones de setup que varios specs repiten y que tienen que pasar
-por la UI real, no por IndexedDB directo (`openCashSession`: sin turno abierto no se puede cobrar,
-así que todo spec que llegue a `/COBRAR` lo necesita) — distinto de `indexed-db.ts`, que es
+por la UI real, no por IndexedDB directo (`completeWizardRest`, `fillPayment`; `openCashSession` se
+eliminó en la Etapa 5: ya no hace falta un turno para cobrar) — distinto de `indexed-db.ts`, que es
 lectura/escritura cruda para datos que en producción vendrían de un pull (`CustomerAccount`) y que
 no tiene sentido ejercitar por UI en cada test.
 
@@ -1320,7 +1365,8 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   `storage/cash-summary-repository.ts`): panel lateral fijo (total recaudado, tickets, desc/recargos,
   efectivo, otros pagos) + 3 pestañas — Tickets (lista con cabecera sticky y navegación por ticket,
   `useTicketListNavigation`), Productos (cantidades vendidas, `calculateProductQuantities`) y Medios
-  de pago. Funciona con turno abierto o, si no hay, con el último cerrado; sin ninguno, error. El
+  de pago. Funcionaba con turno abierto o, si no había, con el último cerrado (desde la Etapa 5 de
+  #94 muestra un día calendario, sin turnos). El
   filtro es independiente por pestaña, busca también por SKU/código de barras y resalta
   coincidencias (`ui/highlight.tsx`). Atajos: Alt+1/2/3 y Tab/Shift+Tab cambian de pestaña; una
   tecla imprimible con el foco en un botón vuelve al buscador y continúa el texto. Esta pantalla es
@@ -1444,6 +1490,19 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   siguiente código de barras se tomaba como su cantidad) y la hora de "Anulación de HH:MM" salía en
   12 h con `es-AR`. #110 conserva la búsqueda en `/ANULAR` y el ticket completo en la confirmación.
 
+- Caja sin turnos, `/RESUMEN` por fecha y numeración de tickets (Etapa 5 del epic #94, issues #100 y
+  #120; reemplaza a #57; spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`,
+  plan `docs/superpowers/plans/2026-09-24-caja-sin-turnos-y-numeracion.md`): ver "Caja sin turnos y
+  numeración de tickets" en "UX keyboard-first", "Contrato 4.1.0" en "Connector API" y la limpieza a
+  7 días en "Patrón outbox". Incluye al mini-erp (excepción puntual a su `AGENTS.md`, acordada con el
+  usuario: se modificó y commiteó desde el branch de la etapa); su alineación de estrictez quedó en
+  #122. Desvíos del plan (anotados en la spec): el minibackend y el mini-erp no suman columnas (la
+  venta ya se guarda entera como JSON); no existe un comprobante de la anulación (anular vuelve a la
+  venta); la fecha del último arqueo no se recalcula tras una limpieza (el ancla nunca se borra); el
+  mensaje de incompatibilidad pasó a "4.1 o posterior"; se sumó `cash/persist-failed`. El e2e
+  encontró un bug, corregido: el aviso de la barra de comandos quedaba oculto al arquear desde la
+  barra de estado (ese click cerraba el overlay).
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear
@@ -1473,7 +1532,7 @@ de que esté hecha. Se avanza directo a Fase 6. Detalle completo de la decisión
 **Fase 6 completa (multi-terminal y caja)**: la reconciliación de catálogo/saldo entre terminales
 ya estaba resuelta desde Fase 2/3 (cada pull sobrescribe con el dato del backend, que siempre
 manda) — confirmado con el usuario antes de arrancar, no se agregó nada nuevo ahí. El trabajo real
-fue turnos de caja: `domain/cash-session.ts` (`CashSession`, `openCashSession`/`closeCashSession`/
+fue turnos de caja (eliminados en la Etapa 5 de #94, #100): `domain/cash-session.ts` (`CashSession`, `openCashSession`/`closeCashSession`/
 `calculateCashSessionSummary`), `storage/cash-session-repository.ts` (persistencia; hasta el
 contrato v3 también el outbox al cerrar), comando `/CAJA` y pantalla nueva (`ui/screens/cash-session-screen.tsx`) para abrir/cerrar
 con arqueo de efectivo, y el gate de `/COBRAR` sin turno abierto — ver "UX keyboard-first" y

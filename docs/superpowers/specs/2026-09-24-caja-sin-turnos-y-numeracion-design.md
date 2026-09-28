@@ -1,7 +1,7 @@
 # Caja sin turnos: arqueo, ingresos/egresos, `/RESUMEN` por fecha y numeración de tickets
 
 Fecha: 2026-09-24
-Estado: aprobado en brainstorming, pendiente de plan.
+Estado: implementado (plan `docs/superpowers/plans/2026-09-24-caja-sin-turnos-y-numeracion.md`).
 Issues: #100 (Etapa 5 del epic #94, reemplaza a #57) y #120 (numeración de tickets). Depende de las
 Etapas 1 a 4 (#96–#99).
 
@@ -305,3 +305,19 @@ numérico sale de una función pura (`domain/day-summary.ts::calculateDaySummary
 
 Cobranzas sin venta (Etapa 6, el saldo deja el hueco previsto), restricciones del arqueo (ciego,
 permisos), reimpresión de tickets, saldo de efectivo al cierre de un día pasado.
+
+## Desvíos al implementar
+
+- **Minibackend y mini-erp sin columnas nuevas** (§8): los dos guardan la venta entera como JSON, así
+  que `ticket` llega sin tocar el schema (`SCHEMA_VERSION` sigue igual). El panel `/_demo` suma la
+  columna "ticket". El mini-erp se sumó a esta etapa (no estaba en la spec) y valida la venta con Zod;
+  el resto de su alineación de estrictez quedó en #122.
+- **Comprobante de la anulación** (§3): no existe — anular vuelve a la venta sin comprobante. La regla
+  "Anulación del #12" se aplica en `/ANULAR` y `/RESUMEN`.
+- **`lastCashCountAtSignal` después de una limpieza** (§6): no se actualiza, porque la limpieza nunca
+  borra el último arqueo (es el ancla).
+- **Mensaje de backend incompatible**: "se necesita 4.1 o posterior" en vez de "4.x".
+- **`cash/persist-failed`**: código nuevo para el `try/catch` de `storage/cash-repository.ts`.
+- **Aviso en la barra de comandos**: además de lo previsto, reabre el overlay aunque un click lo haya
+  cerrado (bug que encontró el e2e al arquear desde la barra de estado).
+
