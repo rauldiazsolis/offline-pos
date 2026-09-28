@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../storage/db.ts';
 import { closeSaleAndPersist, voidSaleAndPersist } from '../../storage/sale-repository.ts';
-import { formatMoney, formatTime } from '../format.ts';
+import { formatMoney } from '../format.ts';
 import type { Cart } from '../../domain/cart.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
@@ -16,6 +16,8 @@ import { VoidSaleScreen } from './void-sale-screen.tsx';
 const cart: Cart = { lines: [{ kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 }] };
 
 beforeEach(async () => {
+  // El contador de tickets vive en localStorage: sin esto, la numeración sigue de un test a otro.
+  localStorage.clear();
   await db.open();
   await db.products.add({
     id: 'p1',
@@ -28,7 +30,6 @@ beforeEach(async () => {
     tracksStock: true,
   });
   await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
-  // Fase 6: closeSaleAndPersist exige un turno de caja abierto.
   voidableSalesSignal.value = [];
   voidSelectionIndexSignal.value = null;
   voidConfirmingSignal.value = false;
@@ -142,7 +143,7 @@ describe('VoidSaleScreen — mouse (Etapa 2 de #94)', () => {
 });
 
 describe('VoidSaleScreen — marcas de anulado (#99)', () => {
-  it('la original anulada dice "Anulada" y la anulación "Anulación de HH:MM · $X", atenuadas', async () => {
+  it('cada fila con su número; la original dice "Anulada" y la anulación "Anulación del #N · $X"', async () => {
     const closed = await closeSaleAndPersist({ cart, payments: [{ method: 'cash', amount: 100 }] });
     if (!closed.ok) throw new Error('setup falló');
     await voidSaleAndPersist(closed.value.id);
@@ -152,7 +153,10 @@ describe('VoidSaleScreen — marcas de anulado (#99)', () => {
 
     const voided = await screen.findByText('Anulada');
     expect(voided.closest('li')?.style.opacity).toBe('0.5');
-    const expected = `Anulación de ${formatTime(closed.value.createdAt)} · ${formatMoney(100)}`;
+    const expected = `Anulación del #1 · ${formatMoney(100)}`;
     expect(screen.getByText(expected).closest('li')?.style.opacity).toBe('0.5');
+    expect(screen.getByText(/Ticket #1 ·/)).not.toBeNull();
+    expect(screen.getByText(/Ticket #2 ·/)).not.toBeNull();
+    expect(screen.getByText(/Ticket #3 ·/)).not.toBeNull();
   });
 });

@@ -80,7 +80,6 @@ beforeEach(async () => {
   cartSignal.value = { lines: [] };
   attachedCustomerSignal.value = undefined;
   activeScreenSignal.value = 'sale';
-  // Fase 6: /COBRAR exige un turno de caja abierto.
   setCatalogRepository({
     search: (query) => {
       if (query === 'multi') return [arrozResult, fideosResult];

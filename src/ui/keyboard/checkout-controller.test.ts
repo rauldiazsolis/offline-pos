@@ -51,7 +51,6 @@ beforeEach(async () => {
     tracksStock: true,
   });
   await db.stock.add({ productId: 'p1', quantity: 10, updatedAt: '2026-01-01T00:00:00.000Z' });
-  // Fase 6: closeSaleAndPersist exige un turno de caja abierto.
 
   cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: 2, unitPrice: 100 }] };
   checkoutBuffersSignal.value = emptyBuffers();

@@ -34,6 +34,16 @@ beforeEach(() => {
 });
 
 describe('ReceiptScreen', () => {
+  it('muestra el número de ticket, no el id (#120)', () => {
+    const sale = receiptSaleSignal.value;
+    if (sale === null) throw new Error('setup');
+    receiptSaleSignal.value = { ...sale, ticket: { date: '2026-01-01', number: 12 } };
+    render(<ReceiptScreen />);
+
+    expect(screen.getByText('Ticket #12')).not.toBeNull();
+    expect(screen.queryByText(/sale-1/)).toBeNull();
+  });
+
   it('muestra las líneas, el total y el medio de pago sin la palabra "Pago" ni paréntesis', () => {
     render(<ReceiptScreen />);
 
