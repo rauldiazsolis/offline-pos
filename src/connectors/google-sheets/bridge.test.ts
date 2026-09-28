@@ -205,7 +205,7 @@ describe('lectura por encabezado (Etapa 2d)', () => {
 
     const response = pullBatch(call);
     expect((response.data as { customers: { items: unknown[] } }).customers.items).toEqual([
-      { id: 'c-1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'c-1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z', balance: 0 },
     ]);
   });
 });
@@ -838,9 +838,10 @@ describe('contrato v3 (#96)', () => {
       'lot-1',
     );
 
+    // Sin recibo (anterior a 4.2.0): las dos columnas del recibo quedan vacías.
     expect(table(spreadsheet, 'Cobranzas')).toEqual([
-      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', ''],
-      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', ''],
+      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', '', '', ''],
+      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', '', '', ''],
     ]);
     expect(table(spreadsheet, 'CuentaCorriente')[0]).toEqual(
       expect.arrayContaining(['c-1', -500, 'cp1']),
@@ -939,14 +940,14 @@ describe('contrato 4.x (#99, #120)', () => {
   it('la acción info devuelve la versión y el estado, sin tocar la planilla', () => {
     const bridge = loadBridge();
 
-    const response = rawCall(bridge, { action: 'info', contractVersion: '4.1.0' });
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.2.0' });
 
     expect(response).toEqual({
       ok: true,
       data: {
-        contractVersion: '4.1.0',
+        contractVersion: '4.2.0',
         status: 'ok',
-        backend: { name: 'pos-sheets-bridge', version: '4.1.0' },
+        backend: { name: 'pos-sheets-bridge', version: '4.2.0' },
       },
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
@@ -965,7 +966,7 @@ describe('contrato 4.x (#99, #120)', () => {
     expect(response).toMatchObject({
       ok: false,
       code: 'incompatible-contract',
-      contractVersion: '4.1.0',
+      contractVersion: '4.2.0',
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
   });
@@ -1089,6 +1090,126 @@ describe('número de ticket (4.1.0, #120)', () => {
       ...VENTAS_4_0_LABELS,
       'Fecha del ticket',
       'N° de ticket',
+    ]);
+  });
+});
+
+describe('recibo de cobranza y saldo por cliente (4.2.0, #101)', () => {
+  const COBRANZAS_4_1_LABELS = [
+    'Id de cobranza',
+    'Fecha',
+    'Id de cliente',
+    'Medio de pago',
+    'Monto',
+    'Total de la cobranza',
+    'Dispositivo',
+    'Sucursal',
+    'Punto de venta',
+  ];
+
+  function paymentEvent(id: string, customerId: string, total: number, receiptNumber?: number) {
+    return {
+      type: 'customer-payment',
+      id,
+      createdAt: NOW,
+      origin: {},
+      payment: {
+        id,
+        customerId,
+        payments: [{ method: 'cash', amount: total }],
+        total,
+        createdAt: NOW,
+        ...(receiptNumber !== undefined
+          ? { receipt: { date: '2026-09-27', number: receiptNumber } }
+          : {}),
+      },
+    };
+  }
+
+  function customersOf(response: { data?: unknown }) {
+    return (response.data as { customers: { items: { id: string; balance?: number }[] } }).customers
+      .items;
+  }
+
+  it('escribe la fecha y el número del recibo en cada fila de la cobranza', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 'c-1', 300, 3)] }, 'lot-1');
+
+    const header = spreadsheet.getSheetByName('Cobranzas')?.values()[0] ?? [];
+    expect(header).toContain('Fecha del recibo');
+    expect(header).toContain('N° de recibo');
+    expect(table(spreadsheet, 'Cobranzas').map((row) => row.slice(-2))).toEqual([
+      ['2026-09-27', 3],
+    ]);
+  });
+
+  it('una pestaña Cobranzas de 4.1.0 gana las dos columnas al final sin tocar lo que había', () => {
+    const { spreadsheet, call } = loadBridge();
+    const old = spreadsheet.addSheet('Cobranzas', [COBRANZAS_4_1_LABELS]);
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 'c-1', 300, 1)] }, 'lot-1');
+
+    expect(old.values()[0]?.slice(0, 11)).toEqual([
+      ...COBRANZAS_4_1_LABELS,
+      'Fecha del recibo',
+      'N° de recibo',
+    ]);
+  });
+
+  it('el pull informa el saldo de cada cliente desde el libro CuentaCorriente', () => {
+    const { call } = loadBridge();
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
+          { type: 'customer', id: 'e2', customer: { id: 'c-8', name: 'Yago', createdAt: NOW } },
+          {
+            type: 'sale',
+            id: 's-9',
+            createdAt: NOW,
+            origin: {},
+            sale: {
+              ...SALE,
+              id: 's-9',
+              customerId: 'c-9',
+              payments: [{ method: 'account', amount: 1000 }],
+              total: 1000,
+            },
+          },
+          paymentEvent('cp1', 'c-9', 300, 1),
+        ],
+      },
+      'lot-1',
+    );
+
+    const customers = customersOf(pullBatch(call));
+
+    expect(customers.find((customer) => customer.id === 'c-9')?.balance).toBe(700);
+    expect(customers.find((customer) => customer.id === 'c-8')?.balance).toBe(0);
+  });
+
+  it('después de una cobranza el cliente vuelve a venir en el delta', () => {
+    const { call } = loadBridge();
+    call(
+      'pushBatch',
+      {
+        deviceId: 'dev-1',
+        events: [
+          { type: 'customer', id: 'e1', customer: { id: 'c-9', name: 'Zoe', createdAt: NOW } },
+        ],
+      },
+      'lot-1',
+    );
+    const first = pullBatch(call);
+    const cursor = (first.data as { customers: { nextCursor: string } }).customers.nextCursor;
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 'c-9', 250, 1)] }, 'lot-2');
+
+    expect(customersOf(pullBatch(call, { customers: cursor }))).toEqual([
+      expect.objectContaining({ id: 'c-9', balance: -250 }),
     ]);
   });
 });

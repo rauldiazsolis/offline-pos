@@ -9,12 +9,12 @@
  */
 
 /**
- * Versión del Connector API que habla este puente (4.1.0 desde #120; 4.0.0, #99). Un request
+ * Versión del Connector API que habla este puente (4.2.0 desde #101; 4.1.0, #120; 4.0.0, #99). Un request
  * con otra versión mayor se responde `incompatible-contract` sin procesar
  * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
  * redespliegue el puente.
  */
-var CONTRACT_VERSION = '4.1.0';
+var CONTRACT_VERSION = '4.2.0';
 
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
@@ -147,6 +147,9 @@ var SCHEMA = {
     ['deviceId', 'text', true],
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
+    // 4.2.0 (#101): número del recibo en su día. Texto a propósito, como la fecha del ticket.
+    ['fechaRecibo', 'text', true],
+    ['numeroRecibo', 'integer', true],
   ]),
   // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
   // Idempotencia + estado consultable por LOTE de push (antes por evento, #87).
@@ -856,8 +859,25 @@ function pullProducts() {
     });
 }
 
+/**
+ * Saldo por cliente (4.2.0, #101): la suma del libro CuentaCorriente (ventas a cuenta, holds
+ * confirmados, acreditaciones y cobranzas en negativo), tenga o no crédito. Una lectura por pull.
+ */
+function customerBalances() {
+  var totals = {};
+  readRows('CuentaCorriente').forEach(function (row) {
+    if (row.customerId === '') {
+      return;
+    }
+    var id = String(row.customerId);
+    totals[id] = (totals[id] || 0) + Number(row.monto || 0);
+  });
+  return totals;
+}
+
 function pullCustomers() {
   var now = nowToTheSecond();
+  var balances = customerBalances();
   return readRows('Clientes')
     .filter(function (row) {
       return row.id !== '' && row.name !== '';
@@ -870,6 +890,8 @@ function pullCustomers() {
         phone: String(row.phone),
         createdAt: createdAtOf('Clientes', row, now),
         blocked: blockedOf(row),
+        // `compact` conserva el 0: un cliente sin movimientos informa saldo 0, no "ausente".
+        balance: Math.round((balances[String(row.id)] || 0) * 100) / 100,
       });
     });
 }
@@ -1091,6 +1113,8 @@ function pushCustomerPayment(payment, stamp) {
           medio: line.method,
           monto: line.amount,
           totalCobranza: payment.total,
+          fechaRecibo: payment.receipt ? payment.receipt.date : undefined,
+          numeroRecibo: payment.receipt ? payment.receipt.number : undefined,
         },
         stamp,
       );

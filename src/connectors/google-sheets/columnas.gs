@@ -103,6 +103,8 @@ var COLUMN_LABELS = {
     deviceId: 'Dispositivo',
     branch: 'Sucursal',
     pointOfSale: 'Punto de venta',
+    fechaRecibo: 'Fecha del recibo',
+    numeroRecibo: 'N° de recibo',
   },
   _PushLots: {
     id: 'Id',
