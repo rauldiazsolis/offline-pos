@@ -383,3 +383,60 @@ describe('panel — estado del backend (#99)', () => {
     expect(await getJson('/_demo/api/sales')).toMatchObject([{ id: 'v1', voidsSaleId: 's1' }]);
   });
 });
+
+describe('cobranzas y saldos en el panel (#101)', () => {
+  it('la lista de cobranzas trae el recibo y la de saldos a todos los clientes con saldo', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'c-1',
+      JSON.stringify({ id: 'c-1', name: 'Ana' }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'c-2',
+      JSON.stringify({ id: 'c-2', name: 'Beto' }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    await fetch(`${baseUrl}/sync/push`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer demo-token',
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'lot-1',
+      },
+      body: JSON.stringify({
+        deviceId: 'dev-1',
+        events: [
+          {
+            type: 'customer-payment',
+            id: 'cp1',
+            payment: {
+              id: 'cp1',
+              customerId: 'c-1',
+              payments: [{ method: 'cash', amount: 300 }],
+              total: 300,
+              createdAt: '2026-09-27T10:00:00.000Z',
+              receipt: { date: '2026-09-27', number: 3 },
+            },
+          },
+        ],
+      }),
+    });
+
+    const payments = (await (await fetch(`${baseUrl}/_demo/api/customer-payments`)).json()) as {
+      id: string;
+      receipt?: unknown;
+    }[];
+    expect(payments).toEqual([
+      expect.objectContaining({ id: 'cp1', receipt: { date: '2026-09-27', number: 3 } }),
+    ]);
+
+    const balances = (await (await fetch(`${baseUrl}/_demo/api/customer-balances`)).json()) as {
+      id: string;
+      name: string;
+      balance: number;
+    }[];
+    expect(balances).toEqual([{ id: 'c-1', name: 'Ana', balance: -300 }]);
+  });
+});

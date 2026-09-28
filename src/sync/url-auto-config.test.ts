@@ -71,6 +71,7 @@ describe('Configuración Automática vía URL (Onboarding & WhatsApp)', () => {
     sales: 0,
     cashMovements: 0,
     cashCounts: 0,
+    customerPayments: 0,
     pendingOutbox: 0,
     pendingSales: 0,
     draftCartLines: 0,
@@ -81,6 +82,7 @@ describe('Configuración Automática vía URL (Onboarding & WhatsApp)', () => {
     sales: 5,
     cashMovements: 0,
     cashCounts: 1,
+    customerPayments: 0,
   };
 
   beforeEach(() => {

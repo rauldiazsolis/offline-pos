@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectionDateKey,
+  lastDailyNumberOn,
   lastTicketNumberOn,
   localDateKey,
   localDayRange,
+  nextDailyNumber,
   nextTicketNumber,
   saleDateKey,
   shiftDateKey,
@@ -81,5 +84,30 @@ describe('ticket-number', () => {
     expect(
       nextTicketNumber({ date: '2026-09-22', stored: { date: '2026-09-24', last: 30 }, lastLocal: 4 }),
     ).toBe(5);
+  });
+
+  it('lastDailyNumberOn ignora los sin número y las otras fechas', () => {
+    const numbers = [
+      { date: '2026-09-27', number: 2 },
+      undefined,
+      { date: '2026-09-27', number: 5 },
+      { date: '2026-09-26', number: 9 },
+    ];
+    expect(lastDailyNumberOn(numbers, '2026-09-27')).toBe(5);
+    expect(lastDailyNumberOn([], '2026-09-27')).toBeUndefined();
+  });
+
+  it('nextDailyNumber es la misma regla que la de tickets', () => {
+    expect(
+      nextDailyNumber({ date: '2026-09-27', stored: { date: '2026-09-27', last: 4 }, lastLocal: 2 }),
+    ).toBe(5);
+    expect(nextDailyNumber({ date: '2026-09-27', stored: undefined, lastLocal: undefined })).toBe(1);
+  });
+
+  it('collectionDateKey usa receipt.date si lo tiene', () => {
+    expect(
+      collectionDateKey({ createdAt: at(2026, 9, 27), receipt: { date: '2026-09-26', number: 1 } }),
+    ).toBe('2026-09-26');
+    expect(collectionDateKey({ createdAt: at(2026, 9, 27) })).toBe('2026-09-27');
   });
 });

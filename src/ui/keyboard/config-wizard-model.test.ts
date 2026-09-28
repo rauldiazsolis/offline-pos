@@ -17,6 +17,7 @@ const NO_DATA: LocalDataSummary = {
   sales: 0,
   cashMovements: 0,
   cashCounts: 0,
+  customerPayments: 0,
   pendingOutbox: 0,
   pendingSales: 0,
   draftCartLines: 0,

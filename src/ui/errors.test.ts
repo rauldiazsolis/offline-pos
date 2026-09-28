@@ -7,9 +7,9 @@ describe('describeError', () => {
       describeError({
         ok: false,
         error: 'sync/incompatible-contract',
-        meta: { backend: '4.0.0', pos: '4.1.0' },
+        meta: { backend: '4.0.0', pos: '4.2.0' },
       }),
-    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.1 o posterior.');
+    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.2 o posterior.');
   });
 
   it('códigos de caja (#100)', () => {
@@ -22,6 +22,19 @@ describe('describeError', () => {
     expect(
       describeError({ ok: false, error: 'cash/persist-failed', meta: { message: 'boom' } }),
     ).toBe('No se pudo guardar el movimiento de caja (boom).');
+  });
+
+  it('códigos de cobranza (#101)', () => {
+    expect(
+      describeError({
+        ok: false,
+        error: 'customer-payment/persist-failed',
+        meta: { message: 'boom' },
+      }),
+    ).toBe('No se pudo guardar la cobranza (boom).');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/invalid', meta: { reason: 'empty' } }),
+    ).toBe('Ingresá al menos un monto.');
   });
 
   it('demo/unavailable-for-connector', () => {

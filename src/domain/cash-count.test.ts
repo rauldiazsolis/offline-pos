@@ -22,6 +22,7 @@ describe('calculateCashBalance', () => {
         lastCount: undefined,
         sales: [sale('2026-09-24T10:00:00.000Z', 500)],
         movements: [manual('2026-09-24T09:00:00.000Z', 'in', 1000)],
+        collections: [],
       }),
     ).toBe(1500);
   });
@@ -35,6 +36,7 @@ describe('calculateCashBalance', () => {
           manual('2026-09-24T11:30:00.000Z', 'in', 50),
           manual('2026-09-24T14:00:00.000Z', 'out', 200),
         ],
+        collections: [],
       }),
     ).toBe(2100);
   });
@@ -45,6 +47,7 @@ describe('calculateCashBalance', () => {
         lastCount: { counted: 100, createdAt: '2026-09-24T12:00:00.000Z' },
         sales: [sale('2026-09-24T12:00:00.000Z', 999)],
         movements: [],
+        collections: [],
       }),
     ).toBe(100);
   });
@@ -55,6 +58,7 @@ describe('calculateCashBalance', () => {
         lastCount: undefined,
         sales: [sale('2026-09-24T10:00:00.000Z', 500), sale('2026-09-24T10:05:00.000Z', -500)],
         movements: [],
+        collections: [],
       }),
     ).toBe(0);
   });
@@ -72,8 +76,32 @@ describe('calculateCashBalance', () => {
             source: 'count-adjustment',
           },
         ],
+        collections: [],
       }),
     ).toBe(300);
+  });
+});
+
+describe('calculateCashBalance con cobranzas (#101)', () => {
+  it('suma el efectivo de las cobranzas posteriores al arqueo', () => {
+    expect(
+      calculateCashBalance({
+        lastCount: { counted: 1000, createdAt: '2026-09-27T10:00:00.000Z' },
+        sales: [],
+        movements: [],
+        collections: [
+          { createdAt: '2026-09-27T09:00:00.000Z', payments: [{ method: 'cash', amount: 999 }] },
+          { createdAt: '2026-09-27T10:00:00.000Z', payments: [{ method: 'cash', amount: 1 }] },
+          {
+            createdAt: '2026-09-27T11:00:00.000Z',
+            payments: [
+              { method: 'cash', amount: 300 },
+              { method: 'transfer', amount: 200 },
+            ],
+          },
+        ],
+      }),
+    ).toBe(1300);
   });
 });
 

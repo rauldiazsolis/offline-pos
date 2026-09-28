@@ -10,10 +10,13 @@ export type CleanupCounts = {
   outbox: number;
   cashMovements: number;
   cashCounts: number;
+  customerPayments: number;
 };
 
 type Dated = { id: string; createdAt: string };
 type SaleLinked = Dated & { saleId?: string };
+/** Un movimiento de cuenta viaja dentro del evento de su venta o de su cobranza (#101). */
+type AccountLinked = Dated & { saleId?: string; paymentId?: string };
 
 export type CleanupInput = {
   now: string;
@@ -23,10 +26,11 @@ export type CleanupInput = {
   protectedEventIds: ReadonlySet<string>;
   sales: readonly Dated[];
   stockMovements: readonly SaleLinked[];
-  accountMovements: readonly SaleLinked[];
+  accountMovements: readonly AccountLinked[];
   syncedEvents: readonly Dated[];
   cashMovements: readonly Dated[];
   cashCounts: readonly (Dated & { adjustmentId?: string })[];
+  customerPayments: readonly Dated[];
   /** El último arqueo de la terminal, sea cual sea su edad: el ancla. */
   lastCount: Dated | undefined;
 };
@@ -38,6 +42,7 @@ export type CleanupPlan = {
   outbox: string[];
   cashMovements: string[];
   cashCounts: string[];
+  customerPayments: string[];
   anchorAt: string | undefined;
 };
 
@@ -47,16 +52,16 @@ export type CleanupPlan = {
  * sin resolver, ni lo que sostiene el saldo de efectivo:
  *
  * - **Ancla = el último arqueo.** Todo lo creado desde su `createdAt` en adelante se conserva
- *   (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo), aunque tenga más de
- *   7 días: es lo que suma al saldo.
- * - **Sin ningún arqueo**, las ventas y los movimientos de caja son la base 0 del saldo: no se
- *   borran. Los movimientos de stock y de cuenta siguen su regla de edad.
+ *   (ventas, cobranzas, movimientos de stock, de cuenta y de caja, y el propio arqueo), aunque
+ *   tenga más de 7 días: es lo que suma al saldo.
+ * - **Sin ningún arqueo**, las ventas, las cobranzas (#101) y los movimientos de caja son la base 0
+ *   del saldo: no se borran. Los movimientos de stock y de cuenta siguen su regla de edad.
  *
  * Un evento `sale` ausente del outbox cuenta como sincronizado: lo pendiente nunca se borra, así
  * que solo pudo irse por una limpieza anterior. Cada venta se mide por su propia edad y su propio
  * evento: una anulación es otra venta (#99), no retiene a la que anula. Los movimientos de stock y
- * de cuenta son registros **independientes** de su venta (el `saleId` es solo auditoría): se
- * borran por su propia edad, nunca "junto con" la venta. Un arqueo no tiene evento propio, pero si
+ * de cuenta son registros **independientes** de su venta o cobranza (el `saleId`/`paymentId` es
+ * solo auditoría): se borran por su propia edad, nunca "junto con" su documento. Un arqueo no tiene evento propio, pero si
  * tuvo ajuste espera a que ese evento no esté pendiente.
  */
 export function planLocalCleanup(input: CleanupInput): CleanupPlan {
@@ -74,17 +79,25 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
   // Viajan como su propio evento `stock-movement`.
   const stockMovements = input.stockMovements.filter(removable).map((movement) => movement.id);
 
-  // Sin evento propio: viajan dentro del evento `sale` de su venta, así que esperan a que ese no
-  // esté pendiente. Sin venta se conservan (la Etapa 6 define su regla cuando genere cobranzas).
+  // Sin evento propio: viajan dentro del evento de su venta o de su cobranza (#101), así que
+  // esperan a que ese no esté pendiente. Uno sin ninguno de los dos (no existe hoy) se borra por
+  // su edad.
   const accountMovements = input.accountMovements
-    .filter(
-      (movement) =>
-        movement.saleId !== undefined &&
+    .filter((movement) => {
+      const eventId = movement.saleId ?? movement.paymentId;
+      return (
         isOld(movement.createdAt) &&
-        !pendingIds.has(movement.saleId) &&
-        !keptByAnchor(movement.createdAt),
-    )
+        (eventId === undefined || !pendingIds.has(eventId)) &&
+        !keptByAnchor(movement.createdAt)
+      );
+    })
     .map((movement) => movement.id);
+
+  // Como las ventas: suman al saldo de efectivo, así que sin ningún arqueo no se borran.
+  const customerPayments =
+    anchorAt === undefined
+      ? []
+      : input.customerPayments.filter(removable).map((payment) => payment.id);
 
   const outbox = input.syncedEvents
     .filter(
@@ -117,6 +130,7 @@ export function planLocalCleanup(input: CleanupInput): CleanupPlan {
     outbox,
     cashMovements,
     cashCounts,
+    customerPayments,
     anchorAt,
   };
 }

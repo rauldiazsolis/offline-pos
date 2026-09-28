@@ -98,6 +98,11 @@ describe('applyConnection', () => {
     await expect(db.stock.count()).resolves.toBe(1);
     await expect(db.customers.count()).resolves.toBe(2);
     await expect(db.customerAccounts.count()).resolves.toBe(1);
+    expect(await db.customerBalances.get('c2')).toEqual({
+      customerId: 'c2',
+      balance: 5,
+      updatedAt: now,
+    });
     expect(loadSyncConfig()).toEqual({ ok: true, value: { ...candidate, verifiedAt: now } });
     expect(connectionStateSignal.value).toBe('active');
     expect(syncStatusSignal.value).toBe('online-idle');

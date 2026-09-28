@@ -29,6 +29,7 @@ export async function runLocalCleanup(params: {
           db.outbox,
           db.cashMovements,
           db.cashCounts,
+          db.customerPayments,
         ],
         async () => {
           const [
@@ -39,6 +40,7 @@ export async function runLocalCleanup(params: {
             oldEvents,
             cashMovements,
             cashCounts,
+            customerPayments,
             lastCount,
           ] = await Promise.all([
             db.outbox.where('status').equals('pending').toArray(),
@@ -48,6 +50,7 @@ export async function runLocalCleanup(params: {
             db.outbox.where('createdAt').below(cutoff).toArray(),
             db.cashMovements.where('createdAt').below(cutoff).toArray(),
             db.cashCounts.where('createdAt').below(cutoff).toArray(),
+            db.customerPayments.where('createdAt').below(cutoff).toArray(),
             db.cashCounts.orderBy('createdAt').last(),
           ]);
           const plan = planLocalCleanup({
@@ -60,6 +63,7 @@ export async function runLocalCleanup(params: {
             syncedEvents: oldEvents.filter((event) => event.status === 'synced'),
             cashMovements,
             cashCounts,
+            customerPayments,
             lastCount,
           });
           await db.sales.bulkDelete(plan.sales);
@@ -68,6 +72,7 @@ export async function runLocalCleanup(params: {
           await db.outbox.bulkDelete(plan.outbox);
           await db.cashMovements.bulkDelete(plan.cashMovements);
           await db.cashCounts.bulkDelete(plan.cashCounts);
+          await db.customerPayments.bulkDelete(plan.customerPayments);
           return {
             counts: {
               sales: plan.sales.length,
@@ -76,6 +81,7 @@ export async function runLocalCleanup(params: {
               outbox: plan.outbox.length,
               cashMovements: plan.cashMovements.length,
               cashCounts: plan.cashCounts.length,
+              customerPayments: plan.customerPayments.length,
             },
             ...(plan.anchorAt !== undefined ? { anchorAt: plan.anchorAt } : {}),
           };

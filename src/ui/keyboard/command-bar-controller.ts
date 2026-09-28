@@ -45,6 +45,7 @@ import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal } from '../state/sync.ts';
 import { enterCashScreen } from './cash-controller.ts';
 import { enterCheckout } from './checkout-controller.ts';
+import { enterCollection } from './collection-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
@@ -303,6 +304,13 @@ export async function triggerCheckout(): Promise<void> {
     commandBarErrorSignal.value = disabledCommandMessage('COBRAR', availability.reason);
     return;
   }
+  // Sin artículos y con cliente (#101): cobranza sin venta.
+  if (cartSignal.value.lines.length === 0 && attachedCustomerSignal.value !== undefined) {
+    enterCollection();
+    activeScreenSignal.value = 'collection';
+    clearBuffer();
+    return;
+  }
   enterCheckout();
   activeScreenSignal.value = 'checkout';
   clearBuffer();
@@ -311,18 +319,17 @@ export async function triggerCheckout(): Promise<void> {
 /**
  * Enter con la barra vacía (#99): con líneas abre Cobro (aunque haya una
  * línea seleccionada — cambiar su cantidad necesita un número en la barra).
- * Sin líneas y con cliente, la cobranza sin venta llega en la Etapa 6
- * (#101); sin nada, no hace nada: Enter sobre la barra vacía es un gesto
- * reflejo y un error molestaría.
+ * Sin líneas y con cliente abre la cobranza sin venta (#101), igual que
+ * `/COBRAR` y Ctrl+Enter; sin nada, no hace nada: Enter sobre la barra vacía
+ * es un gesto reflejo y un error molestaría. Decide **después** de esperar
+ * `pendingBarOperation`, como `triggerCheckout`: si el cliente de un
+ * `@<nombre nuevo>` todavía se está creando, la decisión espera a que se adjunte.
  */
-export function submitEmptyCommandBar(): Promise<void> {
-  if (cartSignal.value.lines.length > 0) {
-    return triggerCheckout();
+export async function submitEmptyCommandBar(): Promise<void> {
+  await pendingBarOperation;
+  if (cartSignal.value.lines.length > 0 || attachedCustomerSignal.value !== undefined) {
+    await triggerCheckout();
   }
-  if (attachedCustomerSignal.value !== undefined) {
-    commandBarErrorSignal.value = 'Cobranza sin venta: llega en una próxima versión.';
-  }
-  return Promise.resolve();
 }
 
 /** Click en una fila del carrito (#99): lo mismo que llegar con ↑/↓. */

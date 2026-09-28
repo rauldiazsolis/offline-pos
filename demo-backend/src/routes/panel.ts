@@ -259,6 +259,25 @@ export const panelRoutes: RouteDef[] = [
     },
   },
   {
+    // Saldo de todos los clientes que lo tienen, con o sin cuenta corriente (4.2.0, #101).
+    method: 'GET',
+    pattern: /^\/_demo\/api\/customer-balances$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      const rows = ctx.db.prepare('SELECT payload FROM customers ORDER BY id').all() as {
+        payload: string;
+      }[];
+      sendJson(
+        res,
+        200,
+        rows
+          .map((row) => JSON.parse(row.payload) as { id: string; name: string; balance?: number })
+          .filter((customer) => customer.balance !== undefined)
+          .map((customer) => ({ id: customer.id, name: customer.name, balance: customer.balance })),
+      );
+    },
+  },
+  {
     method: 'GET',
     pattern: /^\/_demo\/api\/customer-accounts$/,
     requiresAuth: false,

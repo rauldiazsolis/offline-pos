@@ -49,7 +49,6 @@ test('venta → cobrar → Comprobante → Esc → la barra de comandos recupera
   // a mano (ver `helpers.ts::seedCatalog`).
   await seedCatalog(page);
 
-
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
   await commandBar.press('Enter');
@@ -141,6 +140,30 @@ test('venta → /ANULAR → click en "Volver a la venta (Esc)" → la barra de c
   await expect(page.getByRole('heading', { name: 'Anular venta' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Volver a la venta (Esc)' }).click();
+
+  await expect(commandBar).toBeFocused();
+});
+
+test('cliente → cobranza → Recibo → Esc → la barra de comandos recupera el foco (#101)', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeFocused();
+
+  await commandBar.fill('@Cliente Teclado');
+  await commandBar.press('Enter');
+  // El alta es async: la barra se vacía recién con el cliente adjunto.
+  await expect(commandBar).toHaveValue('');
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Cobranza a Cliente Teclado' })).toBeVisible();
+  await expect(page.getByLabel('Efectivo')).toBeFocused();
+
+  await page.keyboard.type('150');
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByRole('heading', { name: 'Recibo de cobranza' })).toBeVisible();
+
+  await page.keyboard.press('Escape');
 
   await expect(commandBar).toBeFocused();
 });

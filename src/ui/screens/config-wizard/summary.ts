@@ -119,6 +119,9 @@ export function describeLocalDataLoss(summary: LocalDataSummary): string {
   if (summary.cashMovements > 0) {
     parts.push(plural(summary.cashMovements, 'movimiento de caja', 'movimientos de caja'));
   }
+  if (summary.customerPayments > 0) {
+    parts.push(plural(summary.customerPayments, 'cobranza', 'cobranzas'));
+  }
   if (summary.draftCartLines > 0) parts.push('la venta en curso');
   if (summary.products > 0) parts.push(plural(summary.products, 'producto', 'productos'));
   if (summary.customers > 0) parts.push(plural(summary.customers, 'cliente', 'clientes'));

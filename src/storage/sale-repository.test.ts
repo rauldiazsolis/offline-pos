@@ -94,12 +94,16 @@ describe('closeSaleAndPersist', () => {
     }
   });
 
-  it('con un pago account, registra el movimiento y descuenta el balance cacheado', async () => {
+  it('con un pago account, registra el movimiento y suma al saldo del cliente', async () => {
     await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
     await db.customerAccounts.add({
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    await db.customerBalances.add({
+      customerId: 'c1',
       balance: 100,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -116,12 +120,18 @@ describe('closeSaleAndPersist', () => {
       expect(movements).toHaveLength(1);
       expect(movements[0]).toMatchObject({ customerId: 'c1', amount: 200, holdId: 'hold-1' });
 
-      const account = await db.customerAccounts.get('c1');
-      expect(account?.balance).toBe(300);
+      expect((await db.customerBalances.get('c1'))?.balance).toBe(300);
+      // La cuenta (crédito) no se toca: el saldo vive aparte (#101).
+      expect(await db.customerAccounts.get('c1')).toEqual({
+        customerId: 'c1',
+        creditLimit: 1000,
+        margin: 0,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
     }
   });
 
-  it('con un pago account sin CustomerAccount cacheada, no la inventa', async () => {
+  it('con un pago account sin CustomerAccount cacheada, no la inventa pero sí lleva el saldo (#101)', async () => {
     await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
 
     await closeSaleAndPersist({
@@ -131,6 +141,20 @@ describe('closeSaleAndPersist', () => {
     });
 
     expect(await db.customerAccounts.get('c1')).toBeUndefined();
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(200);
+  });
+
+  it('una devolución a cuenta de un cliente sin cuenta deja saldo a favor (#101)', async () => {
+    await db.customers.add({ id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-01T00:00:00.000Z' });
+
+    const result = await closeSaleAndPersist({
+      cart: { lines: [{ kind: 'product', productId: 'p1', qty: -1, unitPrice: 125 }] },
+      payments: [{ method: 'account', amount: -125 }],
+      customerId: 'c1',
+    });
+
+    expect(result.ok).toBe(true);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(-125);
   });
 
   it('con pendingHold, encola también un evento account-hold-confirm', async () => {
@@ -184,7 +208,6 @@ describe('voidSaleAndPersist (anulación como ticket propio, #99)', () => {
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
     const closed = await closeSaleAndPersist({
@@ -226,12 +249,12 @@ describe('voidSaleAndPersist (anulación como ticket propio, #99)', () => {
 
   it('acredita el saldo de cuenta corriente', async () => {
     const original = await closeOnAccount();
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(150);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(150);
 
     const result = await voidSaleAndPersist(original.id);
 
     if (!result.ok) throw new Error('esperaba ok');
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(0);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(0);
     const accountMovements = await db.accountMovements
       .where('saleId')
       .equals(result.value.id)

@@ -12,6 +12,7 @@ import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
+import { refreshCustomerBalances } from './state/customer-balance.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
 import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
@@ -47,6 +48,7 @@ export async function bootstrap(): Promise<void> {
   setCatalogRepository(catalogRepository);
   setCustomerRepository(await loadCustomerRepository());
   await refreshStockSnapshot();
+  await refreshCustomerBalances();
   // Etapa 5 de #94 (#100): el aviso "Sin arqueo en 24 h" de la barra de estado.
   lastCashCountAtSignal.value = (await getCashBalance()).lastCountAt;
   startCashClock();

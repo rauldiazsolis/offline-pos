@@ -11,9 +11,11 @@ import {
 } from '../state/checkout.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
+  accountBalancePreview,
   amountTendered,
   cancelCheckout,
   enterCheckout,
@@ -25,12 +27,13 @@ function setOnline(online: boolean): void {
   Object.defineProperty(navigator, 'onLine', { value: online, configurable: true });
 }
 
-function fakeCustomerRepository(account: CustomerAccount | undefined): void {
+function fakeCustomerRepository(account: CustomerAccount | undefined, balance?: number): void {
   setCustomerRepository({
     search: () => [],
     listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(account),
+    getCustomerBalance: () => Promise.resolve(balance),
   });
 }
 
@@ -208,7 +211,6 @@ describe('cuenta corriente', () => {
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
 
@@ -225,9 +227,35 @@ describe('cuenta corriente', () => {
       customerId: 'c1',
       creditLimit: 100,
       margin: 0,
-      balance: 0,
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
+
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).not.toBeNull();
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('sin red, evalúa el margen con el saldo de customerBalances (#101)', async () => {
+    attachedCustomerSignal.value = customer;
+    setOnline(false);
+    fakeCustomerRepository(
+      { customerId: 'c1', creditLimit: 1000, margin: 0, updatedAt: '2026-01-01T00:00:00.000Z' },
+      900,
+    );
+
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+    await submitCheckout();
+
+    expect(checkoutErrorSignal.value).toContain('100');
+    expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('sin red y sin cuenta, un saldo a favor no habilita fiado (#101)', async () => {
+    attachedCustomerSignal.value = customer;
+    setOnline(false);
+    fakeCustomerRepository(undefined, -5000);
 
     checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
@@ -341,5 +369,51 @@ describe('modo devolución (#99)', () => {
 
     expect(checkoutErrorSignal.value).not.toBeNull();
     expect(receiptSaleSignal.value).toBeNull();
+  });
+});
+
+describe('accountBalancePreview (#101)', () => {
+  const ana = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+
+  it('cobro: suma lo tipeado en Cuenta corriente al saldo', () => {
+    attachedCustomerSignal.value = ana;
+    customerBalancesSignal.value = new Map([['c1', 1000]]);
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '300' };
+
+    expect(accountBalancePreview()).toEqual({ before: 1000, after: 1300 });
+  });
+
+  it('devolución: lo tipeado en Cuenta corriente acredita', () => {
+    attachedCustomerSignal.value = ana;
+    customerBalancesSignal.value = new Map([['c1', 1000]]);
+    cartSignal.value = { lines: [{ kind: 'product', productId: 'p1', qty: -3, unitPrice: 100 }] };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '300' };
+
+    expect(accountBalancePreview()).toEqual({ before: 1000, after: 700 });
+  });
+
+  it('sin cliente o sin monto en Cuenta corriente no hay vista previa', () => {
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '300' };
+    expect(accountBalancePreview()).toBeUndefined();
+    attachedCustomerSignal.value = ana;
+    checkoutBuffersSignal.value = emptyBuffers();
+    expect(accountBalancePreview()).toBeUndefined();
+  });
+
+  it('después de cobrar a cuenta, el saldo en memoria ya está actualizado', async () => {
+    attachedCustomerSignal.value = ana;
+    setOnline(false);
+    fakeCustomerRepository({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    customerBalancesSignal.value = new Map();
+    checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+
+    await submitCheckout();
+
+    expect(customerBalancesSignal.value.get('c1')).toBe(200);
   });
 });

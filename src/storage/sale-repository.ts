@@ -1,5 +1,6 @@
 import type { Cart } from '../domain/cart.ts';
 import { buildAccountMovementForSale } from '../domain/customer.ts';
+import { applyBalanceDelta } from '../domain/customer-balance.ts';
 import {
   buildOutboxEventForHoldConfirm,
   buildOutboxEventForSale,
@@ -56,13 +57,13 @@ async function applyStockMovements(movements: StockMovement[], now: string): Pro
 
 /**
  * Escribe el rastro de `AccountMovement` de una venta a cuenta corriente y
- * descuenta el `balance` cacheado — se asume ya dentro de una transacción,
- * mismo criterio que `applyStockMovements` para `stock`.
+ * mueve el saldo del cliente (`customerBalances`) — se asume ya dentro de una
+ * transacción, mismo criterio que `applyStockMovements` para `stock`.
  *
- * Si no hay `CustomerAccount` cacheada todavía para ese cliente (pudo
- * aprobarse el hold con red sin que este dispositivo haya pulleado nunca su
- * cuenta), no se inventa una fila con `creditLimit`/`margin` en 0 — se deja
- * que el próximo pull traiga los datos reales del backend.
+ * El saldo se crea en 0 si no existía (#101): es informativo, así una
+ * devolución a cuenta de un cliente sin cuenta corriente deja saldo a favor.
+ * La cuenta (`CustomerAccount`, el crédito) no se toca ni se inventa: si no
+ * está cacheada, el próximo pull trae los datos reales del backend.
  */
 async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
   const accountPayments = sale.payments.filter((payment) => payment.method === 'account');
@@ -86,14 +87,12 @@ async function applyAccountMovements(sale: Sale, now: string): Promise<void> {
     });
     await db.accountMovements.add(movement);
 
-    const current = await db.customerAccounts.get(customerId);
-    if (current !== undefined) {
-      await db.customerAccounts.put({
-        ...current,
-        balance: current.balance + movement.amount,
-        updatedAt: now,
-      });
-    }
+    const current = await db.customerBalances.get(customerId);
+    await db.customerBalances.put({
+      customerId,
+      balance: applyBalanceDelta(current?.balance, movement.amount),
+      updatedAt: now,
+    });
   }
 }
 
@@ -134,14 +133,7 @@ async function persistSaleDocument(
   try {
     numbered = await db.transaction(
       'rw',
-      [
-        db.sales,
-        db.stock,
-        db.stockMovements,
-        db.outbox,
-        db.accountMovements,
-        db.customerAccounts,
-      ],
+      [db.sales, db.stock, db.stockMovements, db.outbox, db.accountMovements, db.customerBalances],
       async () => {
         const date = localDateKey(sale.createdAt);
         // Un día más ancho a cada lado por si una venta de hoy se numeró con

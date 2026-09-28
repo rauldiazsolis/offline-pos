@@ -2,6 +2,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildOutboxEventForCustomerPayment,
   buildOutboxEventForSale,
   buildOutboxEventsForStockMovements,
   markSynced,
@@ -94,13 +95,7 @@ describe('applyPull — delta sin retener', () => {
 
   it('suma al saldo del backend solo en los clientes que vinieron', async () => {
     await db.outbox.bulkAdd(saleEvents('s1', 'p1', 1, 'c1'));
-    await db.customerAccounts.put({
-      customerId: 'c2',
-      creditLimit: 0,
-      margin: 0,
-      balance: 77,
-      updatedAt: now,
-    });
+    await db.customerBalances.put({ customerId: 'c2', balance: 77, updatedAt: now });
 
     await applyPull({
       full: false,
@@ -116,12 +111,47 @@ describe('applyPull — delta sin retener', () => {
       now,
     });
 
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(300);
-    expect((await db.customerAccounts.get('c2'))?.balance).toBe(77);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(300);
+    expect((await db.customerBalances.get('c2'))?.balance).toBe(77);
+    expect(await db.customerAccounts.get('c1')).toEqual({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      updatedAt: now,
+    });
   });
 
-  it('un cliente sin cuenta no recibe una inventada', async () => {
+  it('un saldo sin crédito descuenta una cobranza pendiente y no arma cuenta (#101)', async () => {
+    await db.outbox.add(
+      buildOutboxEventForCustomerPayment(
+        {
+          id: 'cp1',
+          customerId: 'c1',
+          payments: [{ method: 'cash', amount: 500 }],
+          total: 500,
+          createdAt: now,
+        },
+        { now, origin },
+      ),
+    );
+
+    await applyPull({
+      full: false,
+      result: pull({
+        customers: { items: [{ id: 'c1', name: 'Ana', createdAt: now, balance: 1500 }] },
+      }),
+      retain: false,
+      queuedEventIds: [],
+      now,
+    });
+
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(1000);
+    expect(await db.customerAccounts.get('c1')).toBeUndefined();
+  });
+
+  it('un cliente que viene sin saldo conserva el local y no recibe una cuenta inventada', async () => {
     await db.outbox.bulkAdd(saleEvents('s1', 'p1', 1, 'c1'));
+    await db.customerBalances.put({ customerId: 'c1', balance: 100, updatedAt: now });
     await applyPull({
       full: false,
       result: pull({ customers: { items: [{ id: 'c1', name: 'Ana', createdAt: now }] } }),
@@ -130,6 +160,7 @@ describe('applyPull — delta sin retener', () => {
       now,
     });
     expect(await db.customerAccounts.get('c1')).toBeUndefined();
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(100);
   });
 });
 
@@ -141,9 +172,9 @@ describe('applyPull — reteniendo', () => {
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 50,
       updatedAt: now,
     });
+    await db.customerBalances.put({ customerId: 'c1', balance: 50, updatedAt: now });
     await db.outbox.bulkAdd(saleEvents('s1', 'p1', 1, 'c1'));
 
     const report = await applyPull({
@@ -169,9 +200,8 @@ describe('applyPull — reteniendo', () => {
     expect(saved?.name).toBe('Nuevo');
     expect(saved?.blocked).toEqual({ reason: 'revisar' });
     expect((await db.stock.get('p1'))?.quantity).toBe(4);
-    const account = await db.customerAccounts.get('c1');
-    expect(account?.balance).toBe(50);
-    expect(account?.creditLimit).toBe(2000);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(50);
+    expect((await db.customerAccounts.get('c1'))?.creditLimit).toBe(2000);
   });
 
   it('una foto completa reteniendo reconcilia productos pero no borra stock local', async () => {

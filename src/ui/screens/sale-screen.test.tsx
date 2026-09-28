@@ -27,6 +27,7 @@ beforeEach(async () => {
     listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
+    getCustomerBalance: () => Promise.resolve(undefined),
   });
 });
 

@@ -517,7 +517,7 @@ describe('runPullCycle — delta', () => {
     expect(lastSyncedAtSignal.value).toBeNull();
   });
 
-  it('guarda customer y customerAccount, y avanza el cursor de clientes', async () => {
+  it('guarda customer, customerAccount y su saldo, y avanza el cursor de clientes', async () => {
     const rawCustomer = {
       id: 'c1',
       name: 'Juan Pérez',
@@ -537,7 +537,8 @@ describe('runPullCycle — delta', () => {
     await runPullCycle(fakeConnector({ pullBatch }), now);
 
     expect((await db.customers.get('c1'))?.name).toBe('Juan Pérez');
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(100);
+    expect((await db.customerAccounts.get('c1'))?.creditLimit).toBe(1000);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(100);
     expect(getCustomersCursor()).toBe('cur-c');
   });
 
@@ -619,9 +620,9 @@ describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
       customerId: 'c1',
       creditLimit: 1000,
       margin: 0,
-      balance: 50,
       updatedAt: now,
     });
+    await db.customerBalances.put({ customerId: 'c1', balance: 50, updatedAt: now });
   }
 
   it('processing: aplica datos maestros, retiene stock y saldo y no avanza el cursor de clientes', async () => {
@@ -638,7 +639,7 @@ describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
     expect(report.ok).toBe(true);
     expect((await db.products.get('p1'))?.name).toBe('Nuevo');
     expect((await db.stock.get('p1'))?.quantity).toBe(4);
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(50);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(50);
     expect(getProductsCursor()).toBe('pc-2');
     expect(getCustomersCursor()).toBeUndefined();
     expect(lastPullApplicationSignal.value).toEqual({ kind: 'retained', lotIds: ['lot-1'] });
@@ -677,7 +678,7 @@ describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
     );
 
     expect((await db.stock.get('p1'))?.quantity).toBe(7);
-    expect((await db.customerAccounts.get('c1'))?.balance).toBe(500);
+    expect((await db.customerBalances.get('c1'))?.balance).toBe(500);
     expect(getCustomersCursor()).toBe('cc-2');
     expect(lastPullApplicationSignal.value).toEqual({ kind: 'reapplied', events: 1 });
   });
@@ -1212,7 +1213,7 @@ function stubRestFetch(failures = 0): string[] {
         path === '/sync/pull'
           ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
           : path === '/info'
-            ? { contractVersion: '4.1.0', status: 'ok' }
+            ? { contractVersion: '4.2.0', status: 'ok' }
             : {};
       return Promise.resolve({
         ok: !fail,
@@ -1571,7 +1572,7 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
             return Promise.reject(new Error('Failed to fetch'));
           }
           return Promise.resolve(
-            jsonResponse(current.info ?? { contractVersion: '4.1.0', status: 'ok' }),
+            jsonResponse(current.info ?? { contractVersion: '4.2.0', status: 'ok' }),
           );
         }
         if (path === '/sync/push' && current.push === 'incompatible') {
@@ -1616,7 +1617,7 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
 
   it('en mantenimiento no corre push ni pull, y cuando vuelve ok se retoma solo', async () => {
     const backend = stubBackend({
-      info: { contractVersion: '4.1.0', status: 'maintenance', message: 'Cierre de mes' },
+      info: { contractVersion: '4.2.0', status: 'maintenance', message: 'Cierre de mes' },
     });
 
     await runPushThenPull();

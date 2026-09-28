@@ -90,6 +90,8 @@ export type ErrorMeta = {
 
   // customer-payment.ts (cobranza sin venta, contrato v3)
   'customer-payment/invalid': { reason: 'empty' | 'account-method' | 'non-positive-amount' };
+  // storage/customer-payment-repository.ts (#101)
+  'customer-payment/persist-failed': { message: string };
 
   // storage/demo-reset.ts
   'demo/reset-failed': { message: string };

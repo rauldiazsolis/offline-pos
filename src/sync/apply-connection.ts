@@ -8,6 +8,7 @@ import { applySnapshotReconciled } from '../storage/reconcile.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import { setCustomerRepository } from '../ui/state/customer-repository.ts';
 import { refreshStockSnapshot } from '../ui/state/stock.ts';
+import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   setActiveConnectorType,
   setConnectionState,
@@ -100,14 +101,18 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     try {
       await db.transaction('rw', db.tables, async () => {
         if (params.local === 'wipe') {
-          const { customers, accounts } = splitConnectorCustomers(params.snapshot.customers, {
-            now: params.now,
-          });
+          const { customers, accounts, balances } = splitConnectorCustomers(
+            params.snapshot.customers,
+            {
+              now: params.now,
+            },
+          );
           await clearAllTables();
           await db.products.bulkPut(params.snapshot.products);
           await db.stock.bulkPut(params.snapshot.stock);
           await db.customers.bulkPut(customers);
           await db.customerAccounts.bulkPut(accounts);
+          await db.customerBalances.bulkPut(balances);
           return;
         }
         // Mantener: la foto es la fuente de verdad del catálogo y los clientes
@@ -152,6 +157,7 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setLastSyncFailure(null);
     setLocalCatalogCounts(await countLocalCatalog());
     await refreshStockSnapshot();
+    await refreshCustomerBalances();
     // Otra conexión (#99): su estado se pregunta antes del próximo ciclo.
     setBackendStatus({ kind: 'unknown' });
     setBackendCheckDue(true);

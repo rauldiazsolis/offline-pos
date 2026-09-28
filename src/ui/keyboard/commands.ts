@@ -18,7 +18,7 @@ export type CommandInfo = {
 
 const ENABLED: CommandAvailability = { enabled: true };
 
-/** `/COBRAR` sin nada que cobrar: ni artículos ni cliente (con cliente queda para la Etapa 6). */
+/** `/COBRAR` sin nada que cobrar: ni artículos ni cliente (con cliente y sin artículos, cobranza — #101). */
 function checkoutAvailability(): CommandAvailability {
   return cartSignal.value.lines.length > 0 || attachedCustomerSignal.value !== undefined
     ? ENABLED
@@ -38,7 +38,7 @@ export function disabledCommandMessage(name: string, reason: string): string {
 export const CORE_COMMANDS: CommandInfo[] = [
   {
     name: 'COBRAR',
-    description: 'Cobrar y cerrar la venta (o Ctrl+Enter)',
+    description: 'Cobrar la venta, o una cobranza al cliente sin artículos (o Ctrl+Enter)',
     availability: checkoutAvailability,
   },
   { name: 'CAJA', description: 'Arqueo, ingreso o egreso de caja' },

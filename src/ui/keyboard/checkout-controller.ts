@@ -1,4 +1,5 @@
 import { availableCredit, canChargeOffline } from '../../domain/customer.ts';
+import { applyBalanceDelta } from '../../domain/customer-balance.ts';
 import { err, ok, type Result } from '../../domain/result.ts';
 import type { Payment, PaymentMethod } from '../../domain/sale.ts';
 import { resolveTender, tenderMode, type TenderedAmounts } from '../../domain/tender.ts';
@@ -22,6 +23,7 @@ import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer
 import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
+import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
 
 /**
  * Al abrir el cobro (#99): Efectivo arranca con |total| precargado (la
@@ -77,6 +79,22 @@ export function changePreview(): number {
     return 0;
   }
   return Math.max(0, amountTendered() - total);
+}
+
+/**
+ * Cómo queda el saldo del cliente con lo tipeado en Cuenta corriente (#101): en un cobro suma
+ * (fiado), en una devolución acredita. Sin cliente o sin monto en Cuenta corriente, `undefined`.
+ */
+export function accountBalancePreview(): { before: number | undefined; after: number } | undefined {
+  const customer = attachedCustomerSignal.value;
+  const account = parsedTenderSafe().account;
+  if (customer === undefined || account === 0) {
+    return undefined;
+  }
+  const before = customerBalancesSignal.value.get(customer.id);
+  const { total } = calculateTotals(cartSignal.value);
+  const delta = tenderMode(total) === 'refund' ? -account : account;
+  return { before, after: applyBalanceDelta(before, delta) };
 }
 
 function parsedTenderOrError(): Result<TenderedAmounts> {
@@ -146,9 +164,12 @@ async function resolveAccountReference(amount: number): Promise<Result<string | 
     return ok(holdResult.value.holdId);
   }
 
-  const account = await getCustomerRepository().getCustomerAccount(customer.id);
-  if (account === undefined || !canChargeOffline(account, amount)) {
-    const missing = account === undefined ? amount : amount - availableCredit(account);
+  // El saldo vive aparte del crédito (#101): sin cuenta se rechaza igual, aunque haya saldo a favor.
+  const repository = getCustomerRepository();
+  const account = await repository.getCustomerAccount(customer.id);
+  const balance = (await repository.getCustomerBalance(customer.id)) ?? 0;
+  if (account === undefined || !canChargeOffline(account, balance, amount)) {
+    const missing = account === undefined ? amount : amount - availableCredit(account, balance);
     return err('account/offline-limit-exceeded', { missing });
   }
   return ok(undefined);
@@ -222,6 +243,7 @@ export async function submitCheckout(): Promise<void> {
   }
 
   await refreshStockSnapshot();
+  await refreshCustomerBalances();
   receiptSaleSignal.value = result.value;
   cartSignal.value = { lines: [] };
   // Sin esto la selección seguía apuntando a una línea que ya no existe, y el

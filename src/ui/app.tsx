@@ -2,6 +2,7 @@ import './tokens.css';
 import { CashScreen } from './screens/cash-screen.tsx';
 import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
 import { CheckoutScreen } from './screens/checkout-screen.tsx';
+import { CollectionScreen } from './screens/collection-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
 import { DemoResetScreen } from './screens/demo-reset-screen.tsx';
 import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
@@ -23,6 +24,8 @@ function ActiveScreen() {
   switch (activeScreenSignal.value) {
     case 'checkout':
       return <CheckoutScreen />;
+    case 'collection':
+      return <CollectionScreen />;
     case 'receipt':
       return <ReceiptScreen />;
     case 'void':

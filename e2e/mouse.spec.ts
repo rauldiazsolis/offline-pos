@@ -21,7 +21,7 @@ async function routeRestBackend(page: Page): Promise<void> {
       path === '/sync/pull'
         ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
         : path === '/info'
-          ? { contractVersion: '4.1.0', status: 'ok' }
+          ? { contractVersion: '4.2.0', status: 'ok' }
           : {};
     await route.fulfill({
       status: 200,
@@ -92,6 +92,27 @@ test.describe('pantalla de venta', () => {
     await expect(page.getByText('/CAJA')).toHaveCount(0);
     await expect(commandBar).toHaveValue('/');
     await expect(commandBar).toBeFocused();
+  });
+
+  test('cobranza a puros clicks: campo, confirmar y cancelar (#101)', async ({ page }) => {
+    const commandBar = page.getByLabel('Barra de comandos');
+    await commandBar.fill('@Cliente Mouse');
+    await commandBar.press('Enter');
+    // El alta es async: la barra se vacía recién con el cliente adjunto.
+    await expect(commandBar).toHaveValue('');
+    await commandBar.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Cobranza a Cliente Mouse' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cancelar (Esc)' }).click();
+    await expect(commandBar).toBeFocused();
+
+    await commandBar.press('Enter');
+    await page.getByLabel('Transferencia').click();
+    await expect(page.getByLabel('Transferencia')).toBeFocused();
+    await page.keyboard.type('80');
+    await page.getByRole('button', { name: 'Confirmar cobranza (Ctrl+Enter)' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Recibo de cobranza' })).toBeVisible();
   });
 
   test('click en la barra de estado abre /DIAGNOSTICO', async ({ page }) => {

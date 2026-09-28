@@ -2,6 +2,7 @@ import { listVoidCandidates, voidSaleAndPersist } from '../../storage/sale-repos
 import { describeError } from '../errors.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
+import { refreshCustomerBalances } from '../state/customer-balance.ts';
 import {
   voidConfirmingSignal,
   voidErrorSignal,
@@ -98,5 +99,6 @@ export async function confirmVoid(): Promise<void> {
     return;
   }
   await refreshStockSnapshot();
+  await refreshCustomerBalances();
   exitVoidScreen();
 }

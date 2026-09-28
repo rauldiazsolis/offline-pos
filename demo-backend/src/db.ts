@@ -18,7 +18,8 @@ import { DatabaseSync } from 'node:sqlite';
  * como JSON crudo (`payload TEXT`) en vez de columnas por campo — este es un
  * backend de demostración, no necesita un mapeo relacional completo para
  * cumplir el contrato. Por eso el número de ticket de 4.1.0 (`Sale.ticket`, #120) llega entero
- * dentro del payload de la venta sin tocar el schema.
+ * dentro del payload de la venta, y el recibo de 4.2.0 (`CustomerPayment.receipt`, #101) dentro
+ * del de la cobranza, sin tocar el schema.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS products (

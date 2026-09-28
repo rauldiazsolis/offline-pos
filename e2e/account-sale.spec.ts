@@ -36,6 +36,11 @@ test('cuenta corriente offline dentro del margen: cierra la venta', async ({ pag
     customerId,
     creditLimit: 2000,
     margin: 0,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  });
+  // El saldo vive aparte del crédito desde #101.
+  await putIntoStore(page, 'customerBalances', {
+    customerId,
     balance: 0,
     updatedAt: '2026-01-01T00:00:00.000Z',
   });

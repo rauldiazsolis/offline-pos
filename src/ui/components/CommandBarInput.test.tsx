@@ -98,6 +98,7 @@ beforeEach(async () => {
     listRecent: () => [],
     getCustomer: () => undefined,
     getCustomerAccount: () => Promise.resolve(undefined),
+    getCustomerBalance: () => Promise.resolve(undefined),
   });
 });
 
@@ -177,6 +178,7 @@ describe('CommandBarInput', () => {
       listRecent: () => [anaResult],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -195,6 +197,7 @@ describe('CommandBarInput', () => {
       listRecent: () => [],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -210,6 +213,7 @@ describe('CommandBarInput', () => {
       listRecent: () => [],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -287,6 +291,7 @@ describe('CommandBarInput', () => {
       listRecent: () => [anaResult],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     attachedCustomerSignal.value = { id: 'c1', name: 'Ana García', createdAt: '' };
     render(<CommandBarInput />);
@@ -313,6 +318,7 @@ describe('CommandBarInput', () => {
       listRecent: () => [anaResult],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     render(<CommandBarInput />);
     const input = screen.getByLabelText('Barra de comandos');
@@ -910,6 +916,7 @@ describe('CommandBarInput', () => {
         listRecent: () => [],
         getCustomer: () => undefined,
         getCustomerAccount: () => Promise.resolve(undefined),
+        getCustomerBalance: () => Promise.resolve(undefined),
       });
       render(<CommandBarInput />);
       const input = screen.getByLabelText('Barra de comandos');
@@ -1099,6 +1106,7 @@ describe('advertencias (#99)', () => {
       listRecent: () => [],
       getCustomer: () => undefined,
       getCustomerAccount: () => Promise.resolve(undefined),
+      getCustomerBalance: () => Promise.resolve(undefined),
     });
     render(<CommandBarInput />);
 

@@ -20,6 +20,7 @@ function input(overrides: Partial<CleanupInput> = {}): CleanupInput {
     syncedEvents: [],
     cashMovements: [],
     cashCounts: [],
+    customerPayments: [],
     // Por defecto hay un arqueo reciente: lo anterior sigue la regla de edad.
     lastCount: { id: 'c-anchor', createdAt: recent },
     ...overrides,
@@ -46,7 +47,8 @@ describe('planLocalCleanup', () => {
     );
     expect(plan.sales).toEqual(['s-old']);
     expect(plan.stockMovements).toEqual(['m-old']);
-    expect(plan.accountMovements).toEqual(['a-old']);
+    // Sin venta ni cobranza (no existe hoy): se borra por su edad (#101).
+    expect(plan.accountMovements).toEqual(['a-old', 'a-free']);
   });
 
   it('nunca borra una venta con su evento pendiente', () => {
@@ -200,5 +202,59 @@ describe('planLocalCleanup', () => {
       input({ pendingEvents, accountMovements: [{ id: 'a1', saleId: 's1', createdAt: old }] }),
     );
     expect(plan.accountMovements).toEqual([]);
+  });
+
+  describe('cobranzas (#101)', () => {
+    it('una cobranza vieja sincronizada, anterior al último arqueo, se borra', () => {
+      const plan = planLocalCleanup(input({ customerPayments: [{ id: 'cp1', createdAt: old }] }));
+      expect(plan.customerPayments).toEqual(['cp1']);
+    });
+
+    it('posterior al último arqueo se conserva (ancla)', () => {
+      const plan = planLocalCleanup(
+        input({
+          customerPayments: [{ id: 'cp1', createdAt: nineDays }],
+          lastCount: { id: 'c1', createdAt: twelveDays },
+        }),
+      );
+      expect(plan.customerPayments).toEqual([]);
+    });
+
+    it('sin ningún arqueo se conserva (base del saldo de efectivo)', () => {
+      const plan = planLocalCleanup(
+        input({ customerPayments: [{ id: 'cp1', createdAt: old }], lastCount: undefined }),
+      );
+      expect(plan.customerPayments).toEqual([]);
+    });
+
+    it('pendiente se conserva', () => {
+      const pendingEvents = [
+        { id: 'cp1', type: 'customer-payment', status: 'pending', createdAt: old },
+      ] as OutboxEvent[];
+      const plan = planLocalCleanup(
+        input({ pendingEvents, customerPayments: [{ id: 'cp1', createdAt: old }] }),
+      );
+      expect(plan.customerPayments).toEqual([]);
+    });
+
+    it('el movimiento de cuenta de una cobranza espera a que su evento no esté pendiente', () => {
+      const pendingEvents = [
+        { id: 'cp1', type: 'customer-payment', status: 'pending', createdAt: old },
+      ] as OutboxEvent[];
+      const movements = [
+        { id: 'a1', paymentId: 'cp1', createdAt: old },
+        { id: 'a2', paymentId: 'cp2', createdAt: old },
+        { id: 'a3', paymentId: 'cp3', createdAt: eightDays },
+      ];
+      const plan = planLocalCleanup(
+        input({
+          pendingEvents,
+          accountMovements: movements,
+          lastCount: { id: 'c1', createdAt: nineDays },
+        }),
+      );
+      // a1: cobranza pendiente; a2: se borra; a3: posterior al ancla.
+      expect(plan.accountMovements).toEqual(['a2']);
+    });
   });
 });

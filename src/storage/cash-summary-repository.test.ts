@@ -69,6 +69,64 @@ describe('getDaySummary (#100)', () => {
     expect((await getDaySummary(today, now)).sales).toEqual([]);
   });
 
+  it('trae las cobranzas del día con el nombre de sus clientes (#101)', async () => {
+    await db.customers.add({ id: 'c1', name: 'Ana', createdAt: at(1, 10) });
+    await db.customerPayments.bulkAdd([
+      {
+        id: 'cp-hoy',
+        customerId: 'c1',
+        payments: [{ method: 'cash', amount: 300 }],
+        total: 300,
+        createdAt: at(24, 12),
+        receipt: { date: today, number: 1 },
+      },
+      {
+        id: 'cp-ayer',
+        customerId: 'c1',
+        payments: [{ method: 'cash', amount: 50 }],
+        total: 50,
+        createdAt: at(23, 12),
+      },
+    ]);
+
+    const view = await getDaySummary(today, now);
+
+    expect(view.collections.map((item) => item.id)).toEqual(['cp-hoy']);
+    expect(view.entries.map((entry) => entry.kind)).toEqual(['collection']);
+    expect(view.customerNames.get('c1')).toBe('Ana');
+    expect(view.summary.collections).toEqual({ total: 300, count: 1 });
+  });
+
+  it('una cobranza cuenta para el día de su recibo aunque su hora sea del día siguiente', async () => {
+    await db.customerPayments.add({
+      id: 'cp1',
+      customerId: 'c1',
+      payments: [{ method: 'cash', amount: 10 }],
+      total: 10,
+      createdAt: at(24, 0),
+      receipt: { date: yesterday, number: 4 },
+    });
+
+    expect((await getDaySummary(yesterday, now)).collections.map((item) => item.id)).toEqual([
+      'cp1',
+    ]);
+    expect((await getDaySummary(today, now)).collections).toEqual([]);
+  });
+
+  it('con solo una cobranza vieja, el día más viejo es el de esa cobranza', async () => {
+    await db.customerPayments.add({
+      id: 'cp1',
+      customerId: 'c1',
+      payments: [{ method: 'cash', amount: 10 }],
+      total: 10,
+      createdAt: at(20, 12),
+    });
+
+    const view = await getDaySummary(today, now);
+
+    expect(view.oldestDate).toBe(localDateKey(at(20, 12)));
+  });
+
   it('sin ningún dato, el día más viejo es hoy', async () => {
     const view = await getDaySummary(today, now);
     expect(view.oldestDate).toBe(today);

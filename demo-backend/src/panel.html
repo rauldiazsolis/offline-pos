@@ -49,11 +49,16 @@
     </section>
     <section>
       <h2>Cobranzas</h2>
-      <table id="customer-payments-table"><thead><tr><th>id</th><th>cliente</th><th>total</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+      <table id="customer-payments-table"><thead><tr><th>id</th><th>recibo</th><th>cliente</th><th>total</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Clientes creados desde el POS</h2>
       <table id="customers-table"><thead><tr><th>id</th><th>name</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Saldos de clientes</h2>
+      <p>Todos los clientes con saldo, tengan o no cuenta corriente (positivo debe, negativo a favor).</p>
+      <table id="customer-balances-table"><thead><tr><th>id</th><th>nombre</th><th>saldo</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Cuentas corrientes</h2>
@@ -143,7 +148,8 @@
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));
         loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.ticket ? `#${s.ticket.number} · ${s.ticket.date.slice(8, 10)}/${s.ticket.date.slice(5, 7)}` : ''}</td><td>${s.total}</td><td>${s.status ?? ''}</td><td>${s.voidsSaleId ?? ''}</td>${identity(s)}</tr>`);
         loadTable('/_demo/api/cash-movements', 'cash-movements-table', (m) => `<tr><td>${m.id}</td><td>${m.direction}</td><td>${m.amount}</td><td>${escapeHtml(m.concept)}</td><td>${m.source}</td>${identity(m)}</tr>`);
-        loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.customerId}</td><td>${p.total}</td>${identity(p)}</tr>`);
+        loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.receipt ? `#${p.receipt.number} · ${p.receipt.date.slice(8, 10)}/${p.receipt.date.slice(5, 7)}` : ''}</td><td>${p.customerId}</td><td>${p.total}</td>${identity(p)}</tr>`);
+        loadTable('/_demo/api/customer-balances', 'customer-balances-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td><td>${c.balance}</td></tr>`);
         loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td></tr>`);
         loadTable('/_demo/api/customer-accounts', 'customer-accounts-table', (a) => `<tr><td>${a.id}</td><td>${escapeHtml(a.name)}</td><td>${a.creditLimit}</td><td>${a.margin}</td><td>${a.balance}</td><td>${a.available}</td></tr>`);
         loadTable('/_demo/api/account-holds', 'account-holds-table', (h) => `<tr><td>${h.id}</td><td>${escapeHtml(h.customerName)}</td><td>${h.amount}</td><td>${h.status}</td><td>${h.createdAt}</td><td>${h.status === 'pending' ? `<button onclick="releaseHold('${h.id}')">Liberar</button>` : ''}</td></tr>`);

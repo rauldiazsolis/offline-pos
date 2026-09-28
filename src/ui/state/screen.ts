@@ -8,6 +8,7 @@ import { signal } from '@preact/signals';
 export type ActiveScreen =
   | 'sale'
   | 'checkout'
+  | 'collection'
   | 'receipt'
   | 'void'
   | 'config'

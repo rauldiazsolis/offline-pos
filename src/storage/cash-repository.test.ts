@@ -36,6 +36,25 @@ describe('getCashBalance', () => {
   it('sin nada, saldo 0 y sin arqueo', async () => {
     await expect(getCashBalance()).resolves.toEqual({ balance: 0 });
   });
+
+  it('suma el efectivo de las cobranzas posteriores al arqueo (#101)', async () => {
+    const counted = await recordCashCount(1000);
+    if (!counted.ok) throw new Error('falló');
+    await db.customerPayments.add({
+      id: 'cp1',
+      customerId: 'c1',
+      payments: [
+        { method: 'cash', amount: 300 },
+        { method: 'debit', amount: 50 },
+      ],
+      total: 350,
+      createdAt: new Date(Date.parse(counted.value.count.createdAt) + 1000).toISOString(),
+    });
+
+    await expect(getCashBalance()).resolves.toMatchObject({ balance: 1300 });
+    const again = await recordCashCount(1300);
+    expect(again.ok && again.value.adjustment).toBeUndefined();
+  });
 });
 
 describe('recordCashCount', () => {

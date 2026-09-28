@@ -1,4 +1,5 @@
 import { buildCountAdjustment, type CashMovement } from './cash-movement.ts';
+import type { CustomerPayment } from './customer-payment.ts';
 import { err, ok, type Result } from './result.ts';
 import { roundAmount } from './rounding.ts';
 import type { Sale } from './sale.ts';
@@ -23,7 +24,8 @@ export const CASH_COUNT_OVERDUE_MS = 24 * 60 * 60 * 1000;
 /**
  * Saldo de efectivo (spec de #100, §1): lo contado en el último arqueo, más los pagos en efectivo
  * de las ventas posteriores (con su signo: anulaciones y devoluciones restan solas), más los
- * ingresos menos los egresos manuales posteriores. Los ajustes por arqueo nunca suman: el `counted`
+ * ingresos menos los egresos manuales posteriores, más el efectivo de las cobranzas posteriores
+ * (#101). Los ajustes por arqueo nunca suman: el `counted`
  * de su arqueo ya los incluye. Sin arqueo, base 0 desde el inicio de la terminal. "Posterior" es
  * estricto (`createdAt > lastCount.createdAt`); los ISO de la app son todos UTC con `Z`, así que se
  * comparan como texto.
@@ -32,6 +34,7 @@ export function calculateCashBalance(params: {
   lastCount: Pick<CashCount, 'counted' | 'createdAt'> | undefined;
   sales: readonly Pick<Sale, 'createdAt' | 'payments'>[];
   movements: readonly Pick<CashMovement, 'createdAt' | 'direction' | 'amount' | 'source'>[];
+  collections: readonly Pick<CustomerPayment, 'createdAt' | 'payments'>[];
 }): number {
   const since = params.lastCount?.createdAt;
   const isAfter = (iso: string): boolean => since === undefined || iso > since;
@@ -39,6 +42,12 @@ export function calculateCashBalance(params: {
   for (const sale of params.sales) {
     if (!isAfter(sale.createdAt)) continue;
     for (const payment of sale.payments) {
+      if (payment.method === 'cash') balance += payment.amount;
+    }
+  }
+  for (const collection of params.collections) {
+    if (!isAfter(collection.createdAt)) continue;
+    for (const payment of collection.payments) {
       if (payment.method === 'cash') balance += payment.amount;
     }
   }

@@ -6,6 +6,7 @@ import { cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { checkoutBuffersSignal, checkoutErrorSignal } from '../state/checkout.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
+import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 function emptyBuffers() {
@@ -44,6 +45,7 @@ beforeEach(() => {
   checkoutBuffersSignal.value = emptyBuffers();
   checkoutErrorSignal.value = null;
   attachedCustomerSignal.value = undefined;
+  customerBalancesSignal.value = new Map();
   activeScreenSignal.value = 'checkout';
 });
 
@@ -166,6 +168,21 @@ describe('CheckoutScreen', () => {
     fireEvent.keyDown(input, { key: '.' });
 
     expect(input.value).toBe('1.5');
+  });
+});
+
+describe('CheckoutScreen — saldo del cliente con cuenta corriente (#101)', () => {
+  it('con monto en Cuenta corriente muestra el saldo antes y después; sin monto, no', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'http://x', locale: 'es-AR' });
+    attachedCustomerSignal.value = { id: 'c1', name: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' };
+    customerBalancesSignal.value = new Map([['c1', 1000]]);
+    render(<CheckoutScreen />);
+    expect(screen.queryByText('Saldo del cliente')).toBeNull();
+
+    fireEvent.input(getInput('Cuenta corriente'), { target: { value: '300' } });
+
+    expect(screen.getByText('Saldo del cliente')).not.toBeNull();
+    expect(screen.getByText('Debe $1.000,00 → Debe $1.300,00')).not.toBeNull();
   });
 });
 

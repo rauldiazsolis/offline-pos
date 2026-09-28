@@ -8,9 +8,9 @@ Script** (`bridge.gs`) desplegado como Web App.
 > conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
 > contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
 > Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, desde la
-> Etapa 4 (#99) el **contrato 4.0.0** y desde la Etapa 5 (#120) el **4.1.0**: ver "Actualizar el
-> puente a la v3 del contrato", "Contrato 4.0.0" y "Contrato 4.1.0" más abajo si ya tenías una
-> planilla andando.
+> Etapa 4 (#99) el **contrato 4.0.0**, desde la Etapa 5 (#120) el **4.1.0** y desde la Etapa 6
+> (#101) el **4.2.0**: ver "Actualizar el puente a la v3 del contrato", "Contrato 4.0.0",
+> "Contrato 4.1.0" y "Contrato 4.2.0" más abajo si ya tenías una planilla andando.
 
 ## Setup (comerciante)
 
@@ -136,6 +136,22 @@ sola al final de Ventas.
   no guardar el número) y deja de sincronizar hasta que se actualice — la venta nunca se bloquea y
   nada se pierde, los lotes esperan en el outbox. Mismos pasos que la actualización anterior; las
   dos columnas aparecen solas al final de Ventas (`ensureColumns`).
+
+## Contrato 4.2.0 (#101)
+
+- **Número de recibo**: cada cobranza sin venta llega con `receipt: { date, number }` — el número
+  del recibo en su día local de la terminal, con un contador propio (independiente del de
+  tickets). Se escribe en dos columnas nuevas de Cobranzas, **Fecha del recibo** (texto
+  `AAAA-MM-DD`) y **N° de recibo**, en todas las filas de la cobranza. Una cobranza de un POS
+  anterior llega sin número y las dos quedan vacías.
+- **Saldo de cada cliente**: `pullBatch` informa el `balance` de cada cliente, tenga o no crédito,
+  como la suma de sus filas en el libro **CuentaCorriente** (ventas y holds a cuenta, acreditaciones
+  y cobranzas en negativo); 0 si no tiene movimientos. Como entra en la fila del cliente, cambia su
+  fingerprint de `_Snapshot`: un cliente con un movimiento nuevo vuelve a viajar en el delta.
+- **Hay que redesplegar el puente** (`bridge.gs` y `columnas.gs`): un POS 4.2.0 considera
+  incompatible a un puente 4.1.0 y deja de sincronizar hasta que se actualice — la venta nunca se
+  bloquea y nada se pierde. Las dos columnas aparecen solas al final de Cobranzas
+  (`ensureColumns`).
 
 ## Qué hace cada operación
 
@@ -294,8 +310,12 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     `contractVersion: '3.0.0'` responde `code: 'incompatible-contract'` sin escribir nada; anular una
     venta desde el POS escribe sus filas con Anula a y deja las del original en Anulada.
 
-20. Contrato 4.1.0: `info` responde `4.1.0`; vender desde el POS escribe Fecha del ticket y N° de
-    ticket en las filas de la venta; anularla escribe el número siguiente del día.
+20. Contrato 4.1.0: vender desde el POS escribe Fecha del ticket y N° de ticket en las filas de la
+    venta; anularla escribe el número siguiente del día.
+
+21. Contrato 4.2.0: `info` responde `4.2.0`; una cobranza desde el POS escribe Fecha del recibo y
+    N° de recibo en Cobranzas y su total en negativo en CuentaCorriente; en el siguiente pull el
+    cliente viaja con su saldo (también uno sin crédito).
 
 Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99;
-para el 20, en #120).
+para el 20, en #120; para el 21, en #101).
