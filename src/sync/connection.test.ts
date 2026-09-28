@@ -123,7 +123,7 @@ describe('probeConnection', () => {
         json: () =>
           Promise.resolve(
             new URL(url).pathname === '/info'
-              ? { contractVersion: '4.1.0', status: 'ok' }
+              ? { contractVersion: '4.2.0', status: 'ok' }
               : { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} },
           ),
       } as Response),
@@ -280,7 +280,7 @@ describe('probeConnection — estado del backend (#99)', () => {
     const connector = fakeConnector({
       getInfo: () => {
         calls.push('info');
-        return Promise.resolve(ok({ contractVersion: '4.1.0', status: 'ok' as const }));
+        return Promise.resolve(ok({ contractVersion: '4.2.0', status: 'ok' as const }));
       },
       pullBatch: () => {
         calls.push('pull');
@@ -308,7 +308,7 @@ describe('probeConnection — estado del backend (#99)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'sync/incompatible-contract',
-      meta: { backend: '3.0.0', pos: '4.1.0' },
+      meta: { backend: '3.0.0', pos: '4.2.0' },
     });
     expect(pullBatch).not.toHaveBeenCalled();
   });
@@ -318,7 +318,7 @@ describe('probeConnection — estado del backend (#99)', () => {
       getInfo: () =>
         Promise.resolve(
           ok({
-            contractVersion: '4.1.0',
+            contractVersion: '4.2.0',
             status: 'maintenance' as const,
             message: 'Cierre de mes',
           }),

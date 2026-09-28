@@ -21,7 +21,7 @@ async function routeRestBackend(page: Page): Promise<void> {
       path === '/sync/pull'
         ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
         : path === '/info'
-          ? { contractVersion: '4.1.0', status: 'ok' }
+          ? { contractVersion: '4.2.0', status: 'ok' }
           : {};
     await route.fulfill({
       status: 200,

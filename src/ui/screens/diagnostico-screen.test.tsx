@@ -35,9 +35,9 @@ const diagnostics: SyncDiagnostics = {
   backendStatus: {
     kind: 'ok',
     info: {
-      contractVersion: '4.1.0',
+      contractVersion: '4.2.0',
       status: 'ok',
-      backend: { name: 'offline-pos-demo-backend', version: '4.1.0' },
+      backend: { name: 'offline-pos-demo-backend', version: '4.2.0' },
     },
   },
   deviceId: 'dev-1',
@@ -101,8 +101,8 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
   it('muestra el contrato, el estado y el nombre del backend', () => {
     render(<DiagnosticoScreen />);
 
-    expect(screen.getByText('Backend: contrato 4.1.0 · ok')).not.toBeNull();
-    expect(screen.getByText('offline-pos-demo-backend 4.1.0')).not.toBeNull();
+    expect(screen.getByText('Backend: contrato 4.2.0 · ok')).not.toBeNull();
+    expect(screen.getByText('offline-pos-demo-backend 4.2.0')).not.toBeNull();
   });
 });
 

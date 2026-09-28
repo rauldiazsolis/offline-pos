@@ -1213,7 +1213,7 @@ function stubRestFetch(failures = 0): string[] {
         path === '/sync/pull'
           ? { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} }
           : path === '/info'
-            ? { contractVersion: '4.1.0', status: 'ok' }
+            ? { contractVersion: '4.2.0', status: 'ok' }
             : {};
       return Promise.resolve({
         ok: !fail,
@@ -1572,7 +1572,7 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
             return Promise.reject(new Error('Failed to fetch'));
           }
           return Promise.resolve(
-            jsonResponse(current.info ?? { contractVersion: '4.1.0', status: 'ok' }),
+            jsonResponse(current.info ?? { contractVersion: '4.2.0', status: 'ok' }),
           );
         }
         if (path === '/sync/push' && current.push === 'incompatible') {
@@ -1617,7 +1617,7 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
 
   it('en mantenimiento no corre push ni pull, y cuando vuelve ok se retoma solo', async () => {
     const backend = stubBackend({
-      info: { contractVersion: '4.1.0', status: 'maintenance', message: 'Cierre de mes' },
+      info: { contractVersion: '4.2.0', status: 'maintenance', message: 'Cierre de mes' },
     });
 
     await runPushThenPull();

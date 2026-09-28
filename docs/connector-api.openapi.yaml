@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '4.1.0'
+  version: '4.2.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) debe implementar para conectarse al POS — ver §6 del doc de
@@ -11,7 +11,24 @@ info:
     `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`,
     issue #96; `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`,
     issue #99; `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`,
-    issues #100 y #120).
+    issues #100 y #120; `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`,
+    issue #101).
+
+    **4.2.0 respecto de 4.1.0** (aditivo, Etapa 6 del epic #94):
+      - `CustomerPayment.receipt` opcional (`{ date, number }`): el número de
+        recibo en su día local de la terminal, con la misma forma que
+        `Sale.ticket` y un contador propio. Una cobranza anterior a 4.2.0 no
+        lo trae.
+      - `balance` de un cliente en el pull es **su saldo, tenga o no cuenta
+        corriente** (positivo debe, negativo a favor). Un `balance` sin
+        `creditLimit`/`margin` es válido: saldo sin crédito. El backend mueve
+        el saldo de cualquier cliente con cobranzas, ventas a cuenta y
+        acreditaciones. Un backend que no lleva saldo lo omite y el POS
+        conserva el local.
+      - Se elimina `GET /account-balance/{customerId}` (nunca implementado):
+        el saldo viaja en el pull.
+      - Un POS 4.2.0 considera incompatible a un backend 4.1: podría no llevar
+        el saldo de los clientes sin crédito ni guardar el recibo.
 
     **4.1.0 respecto de 4.0.0** (aditivo, Etapa 5 del epic #94):
       - `Sale.ticket` opcional (`{ date, number }`): el número del ticket en
@@ -76,7 +93,7 @@ info:
     mayor.
 
     Cada operación está marcada con una extensión `x-pos-status`:
-      - `implemented-v4`: el POS ya la consume con la forma de 4.x (4.0.0, #99; 4.1.0, #120).
+      - `implemented-v4`: el POS ya la consume con la forma de 4.x (4.0.0, #99; 4.1.0, #120; 4.2.0, #101).
       - `implemented-v3`: el POS ya la consume con la forma de v3 (#96).
       - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
@@ -240,35 +257,6 @@ paths:
         '409':
           $ref: '#/components/responses/IncompatibleContract'
 
-  /account-balance/{customerId}:
-    get:
-      operationId: getAccountBalance
-      summary: Consulta síncrona del saldo cacheado de un cliente (futura cobranza de cuenta corriente)
-      x-pos-status: documented-not-implemented
-      description: |
-        Todavía no implementada del lado del POS (backlog #51/#59) — se deja
-        documentada para que agregar cobranza de cuenta corriente más
-        adelante sea sumar un consumidor a un endpoint ya definido, no
-        rediseñar el contrato. Síncrona por el mismo motivo que
-        `/account-holds`: la pantalla de cobranza necesita el saldo ya para
-        decidir cuánto ofrecer cobrar.
-      parameters:
-        - name: customerId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Saldo actual cacheado del backend para ese cliente.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [balance]
-                properties:
-                  balance: { type: number }
-
 components:
   securitySchemes:
     bearerAuth:
@@ -290,9 +278,9 @@ components:
       required: false
       schema:
         type: string
-        example: '4.1.0'
+        example: '4.2.0'
       description: |
-        Versión del contrato que habla el POS (4.1.0). El POS la manda en
+        Versión del contrato que habla el POS (4.2.0). El POS la manda en
         todos los requests. Un backend que no soporta ese major responde 409
         `IncompatibleContract` sin procesar nada (salvo `/info`, que nunca
         responde 409). Sin el header (un POS anterior a 4.0.0) queda a
@@ -324,7 +312,7 @@ components:
       type: object
       required: [contractVersion, status]
       properties:
-        contractVersion: { type: string, example: '4.1.0' }
+        contractVersion: { type: string, example: '4.2.0' }
         status: { type: string, enum: [ok, maintenance] }
         message:
           {
@@ -387,9 +375,19 @@ components:
             `customer` es la fecha en que se creó en el POS.
         blocked: { $ref: '#/components/schemas/Blocked' }
         creditLimit:
-          { type: number, description: Cuenta corriente, opcional — ver §6 del doc de diseño. }
+          type: number
+          description: |
+            Cuenta corriente, opcional — ver §6 del doc de diseño. La cuenta
+            corriente necesita `creditLimit`, `margin` y `balance`, o
+            `unrestricted`.
         margin: { type: number }
-        balance: { type: number }
+        balance:
+          type: number
+          description: |
+            Saldo del cliente, tenga o no cuenta corriente (4.2.0): positivo
+            debe, negativo a favor. Sin `creditLimit`/`margin` es un saldo sin
+            crédito. Un backend que no lleva saldo lo omite y el POS conserva
+            el local.
         updatedAt: { type: string, format: date-time }
         unrestricted:
           type: boolean
@@ -535,6 +533,17 @@ components:
           description: method != account, amount > 0.
         total: { type: number, description: Suma de payments. }
         createdAt: { type: string, format: date-time }
+        receipt:
+          type: object
+          description: >-
+            Número de recibo en su día (4.2.0, #101). `date` es la fecha local de
+            la terminal con la que se numeró; el número arranca en 1 cada día,
+            independiente del de tickets. Una cobranza anterior a 4.2.0 no lo
+            trae.
+          required: [date, number]
+          properties:
+            date: { type: string, format: date, example: '2026-09-27' }
+            number: { type: integer, minimum: 1, example: 3 }
 
     EventOrigin:
       type: object

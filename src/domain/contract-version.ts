@@ -1,8 +1,9 @@
 /**
  * Versión del Connector API que habla este POS: 4.0.0 desde la Etapa 4 de #94 (#99), 4.1.0 desde
- * la Etapa 5 (#120: `Sale.ticket`).
+ * la Etapa 5 (#120: `Sale.ticket`), 4.2.0 desde la Etapa 6 (#101: `CustomerPayment.receipt` y
+ * saldo sin cuenta corriente).
  */
-export const POS_CONTRACT_VERSION = '4.1.0';
+export const POS_CONTRACT_VERSION = '4.2.0';
 
 function parseVersion(version: string): [number, number, number] | undefined {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
@@ -26,7 +27,7 @@ export function isCompatibleContract(
   return backend[0] === pos[0] && backend[1] >= pos[1];
 }
 
-/** Lo que el POS necesita, para los mensajes (`'4.1.0'` → `'4.1 o posterior'`). */
+/** Lo que el POS necesita, para los mensajes (`'4.2.0'` → `'4.2 o posterior'`). */
 export function contractRequirement(version: string): string {
   const [major, minor] = version.split('.');
   return `${major ?? version}.${minor ?? '0'} o posterior`;
