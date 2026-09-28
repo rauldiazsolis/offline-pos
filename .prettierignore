@@ -4,6 +4,9 @@ playwright-report
 test-results
 pnpm-lock.yaml
 
+# Worktrees de otras sesiones (copias enteras del repo).
+.claude/
+
 # Documentos de prosa, formateados a mano — no tocar tablas/wrapping.
 CLAUDE.md
 /AGENTS.md
