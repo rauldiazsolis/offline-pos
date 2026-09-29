@@ -26,7 +26,7 @@ SQLite, sin dependencias externas.
 2. Levantá el demo-backend (queda en `http://localhost:4000`):
 
    ```sh
-   pnpm --filter demo-backend run start
+   pnpm backend
    ```
 
    Usá el demo-backend del mismo tag que la versión del POS que vas a probar (`git checkout v0.1.0`

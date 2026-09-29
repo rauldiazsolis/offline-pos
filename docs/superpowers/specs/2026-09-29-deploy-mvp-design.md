@@ -361,3 +361,12 @@ guía; la verificación de Local Network Access se hace ahí.
   porque `site/` todavía no estaba en ningún proyecto de TypeScript. La parte de configuración del
   Step 1 de la Task 6 (`tsconfig.site.json` y su referencia, `.gitignore`, ignores de ESLint y
   exclude de Vitest) se hizo en la Task 5, sin cambios de contenido.
+- **Task 7 — lockfile a mano**: `pnpm add -D -w marked` (hace falta `-w` en este workspace)
+  reescribía la resolución de peers opcionales del lockfile, y `pnpm install` borraba entradas viejas
+  de mini-erp (#153). Se sumaron a mano solo las entradas de `marked`, validadas con
+  `pnpm install --frozen-lockfile`.
+- **Entre la Task 10 y la 11 — bug de la barra (#152)**: el flake de `e2e/account-sale.spec.ts` era
+  un bug real (el alta de `@<nombre>` borraba lo tipeado mientras tanto). Se arregló en su propia rama
+  (PR #154), mergeada a `main` y traída a esta.
+- **Task 12 — `pnpm backend`**: script en la raíz para levantar el demo-backend, pedido en la prueba
+  manual; la guía, `docs/publicacion.md` y la nota de `site/backends.json` lo usan.

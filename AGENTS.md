@@ -29,6 +29,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/CAJA`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Cobranza y saldo del cliente | Persistencia en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); pantalla, comprobante, saldo en la venta y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
+| Almacenamiento por carpeta: base de Dexie y claves de `localStorage` según la ruta (#148) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 
@@ -130,10 +131,11 @@ src/
     console/       # utilidades `pos.*` de DevTools
   workers/         # vacío: el service worker llega con la PWA (#54)
   test/            # helpers compartidos de tests (connector falso, planilla falsa, setup)
-demo-backend/      # minibackend de demo (Node + SQLite): la referencia ejecutable del contrato
+demo-backend/      # minibackend de demo (Node + SQLite): la referencia ejecutable del contrato (`pnpm backend`)
 mini-erp/          # backend propio, desarrollo separado (ver "POS y mini-erp")
+site/              # publicación (#148): carpeta por versión, /versions, docs; no es parte de la app
 e2e/               # Playwright
-docs/              # connector-api.openapi.yaml, specs y planes (superpowers/), historia.md
+docs/              # connector-api.openapi.yaml, integradores/ (guía y llms.txt), publicacion.md, specs y planes (superpowers/), historia.md
 ```
 
 `domain/` no importa nada de `ui/`, `storage/` ni `sync/` — es lógica pura, testeable sin DOM ni
@@ -316,8 +318,9 @@ de fondo con `/CONFIG` abierto, en `src/sync/AGENTS.md`.
 
 ## Onboarding de demo (#128)
 
-El POS es **estático y genérico**: no conoce ningún backend (nada fijo en el código; tiene que poder
-embeberse en el deploy de un backend, sin cambiar `base` de Vite para el MVP). Spec:
+El POS es **estático y genérico**: no conoce ningún backend (nada fijo en el código; el build usa
+`base: './'` desde #148, así el mismo `dist/` anda en cualquier carpeta, incluido el deploy de un
+backend). Spec:
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`.
 
 1. **Link de demo**: `<pos>/?demo=true&backend=<base URL>&template=<opcional>` (`backend` `https:`, o
@@ -336,6 +339,33 @@ Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de
 Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
 sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
 sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.
+
+## Publicación (#148)
+
+Spec: `docs/superpowers/specs/2026-09-29-deploy-mvp-design.md`; guía del mantenedor (tag, Cloudflare,
+qué hacer si falla) en `docs/publicacion.md`.
+
+- **Carpetas inmutables** `/<x.y.z>/` en Cloudflare Pages, que sirve la rama huérfana `publish`. La
+  escribe solo la Action `publish.yml`: con un tag `vX.Y.Z` (que tiene que coincidir con
+  `package.json`) arma la carpeta, su `version.json` (hechos del POS: versión, contrato y piso), sus
+  docs y un zip; una carpeta ya publicada nunca se pisa. Primera versión: `0.1.0` (el `1.0.0` queda
+  para el primer comercio real).
+- **Almacenamiento por carpeta** (`storage/storage-namespace.ts`): cada carpeta tiene su base de
+  IndexedDB y su prefijo de `localStorage`; en `/` sigue siendo `offline-pos` (detalle en
+  `src/storage/AGENTS.md`). Cambiar de carpeta, de versión o de dominio es una instalación nueva (un
+  canal estable llega con #54). `/DIAGNOSTICO` muestra la versión y el almacenamiento.
+- **`/versions`** cruza todas las carpetas publicadas con `site/backends.json`, que es un dato del
+  **sitio** (la app nunca lo lee) y cambia por PR. El contrato y las capacidades de cada backend se
+  consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de contrato; `/info` público
+  quedó en #151), así que la lista solo admite backends con demo. Se regenera con el tag, con un push
+  a `main` que toca `site/`, todos los días y a mano; si un backend no contesta, no se publica nada.
+- **`site/`** es tooling de publicación en TypeScript que Node 24 corre sin compilar; puede importar
+  módulos puros de `src/`, nunca al revés. Sus errores se lanzan (una publicación con datos malos
+  corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
+  arman y sirven el sitio en local (`4174`).
+- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
+  cada `/<versión>/docs/`. El OpenAPI no lleva referencias internas (issues, specs, `AGENTS.md`): lo
+  vigila `site/docs.test.ts`.
 
 ## UX keyboard-first
 
@@ -496,14 +526,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #66 | Conectores: Google Sheets, registro cerrado, conexión verificada, comandos por conector, crédito ilimitado | #67, #68, #76, #77, #80, #69 |
 | #87 | Sync por lotes (`pushBatch`/`pullBatch`) y `/DIAGNOSTICO` | PR #89 |
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
-| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos) | PR #136, PR #141, PR #145 |
+| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos); #148: publicación del MVP (carpetas por versión, almacenamiento por ruta, `/versions`, docs, Cloudflare Pages) | PR #136, PR #141, PR #145, PR de #148 |
+| #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
 
-**Siguiente**: el MVP del epic #134 — #148 (deploy: Cloudflare Pages, carpetas inmutables por versión
-con almacenamiento aislado, `/versions` y docs para integradores; decisiones en el issue). El
-lanzamiento es para developers con el demo-backend en `localhost:4000`: la demo pública, con el
-mini-erp, queda para después (#147, `backlog`). Después del MVP: #112 + #111 y #102 (comandos de
-consulta, antes la Etapa 7 de #94); antes del primer comercio real: service worker (#54) y dominio
-propio (#150). Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada depende de
+**Siguiente**: la primera publicación (`v0.1.0`, siguiendo `docs/publicacion.md`) y su verificación
+con Local Network Access; con eso se cierra #148 y el MVP del epic #134. El lanzamiento es para
+developers con el demo-backend en `localhost:4000`: la demo pública, con el mini-erp, queda para
+después (#147, `backlog`). Después del MVP: #112 + #111 y #102 (comandos de consulta, antes la
+Etapa 7 de #94); antes del primer comercio real: service worker (#54) y dominio propio (#150). Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada depende de
 ella (§11 del diseño).
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -515,14 +545,16 @@ etiqueta antes de tomar un issue.
 - Caja: #57 (usabilidad del modal de `/CAJA`).
 - Clientes y cuenta corriente: #102 (comandos de consulta); `backlog`: #37 (documento y teléfono),
   #104.
-- Sync: `backlog`: #113, #103, #13 (los dos últimos, sobre `notices` de 4.4.0).
+- Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
+  dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #112 (prioritario: foco y selección del wizard), #111 (tipografía con zoom),
   #41 (resize en DevTools).
-- Pantallas y publicación: #148 (deploy del MVP), #49 (tracking de modales), #54 (service worker,
-  PWA y lanzamiento); `backlog`: #147 (backend para la demo pública), #150 (dominio propio), #52
-  (Historial), #143 (pasar de demo a producción sin repetir el onboarding).
+- Pantallas y publicación: #148 (deploy del MVP: falta la primera publicación), #49 (tracking de
+  modales), #54 (service worker, PWA y lanzamiento); `backlog`: #147 (backend para la demo pública),
+  #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143 (pasar de demo a
+  producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #135 (fines de línea:
-  `.gitattributes` con `eol=lf`).
+  `.gitattributes` con `eol=lf`), #153 (lockfile de la raíz con entradas viejas de mini-erp).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
   POS: #122, #144 (contrato 4.4.0 y el onboarding nuevo).

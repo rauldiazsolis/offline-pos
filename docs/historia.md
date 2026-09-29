@@ -295,6 +295,28 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   `bootstrap` vuelve a leer el último arqueo. Pasar de demo a producción sin repetir el onboarding
   quedó en #143.
 
+- Publicación del MVP (epic #134, issue #148; spec
+  `docs/superpowers/specs/2026-09-29-deploy-mvp-design.md`, plan
+  `docs/superpowers/plans/2026-09-29-deploy-mvp.md`, guía del mantenedor `docs/publicacion.md`): ver
+  "Publicación" en el `AGENTS.md` de la raíz y "Almacenamiento por carpeta" en `src/storage/AGENTS.md`.
+  Carpetas inmutables `/<x.y.z>/` en Cloudflare Pages (rama `publish`, deploy por tag con una
+  GitHub Action), almacenamiento aislado por ruta (en `/` sigue siendo `offline-pos`), `base: './'`,
+  `/versions` generada en vivo, docs para integradores (guía, `llms.txt`, OpenAPI sin referencias
+  internas), zip por versión, versión y almacenamiento en `/DIAGNOSTICO`, y el demo-backend contesta
+  el preflight de red privada. Decisiones del brainstorming: primera versión `0.1.0` (el `1.0.0`, para
+  el primer comercio real); la lista de backends es un dato del sitio (`site/backends.json`), no de
+  una versión, y `/versions` se regenera entera cruzando todas las carpetas con la lista actual; el
+  contrato y las capacidades se consultan vía `POST /demo-sessions` → `GET /info`, sin cambio de
+  contrato (`/info` público quedó en #151); la compatibilidad se calcula al generar la página, nunca
+  desde el navegador. Desvíos al ejecutarlo (anotados en la spec): el setup de Vitest aplica sus stubs
+  de jsdom solo si hay `window`, para que `site/` corra en entorno `node`; la configuración de `site/`
+  (tsconfig, ignores) se adelantó a la Task 5; el lockfile sumó `marked` a mano, porque `pnpm add`
+  reescribía los peers y `pnpm install` borraba entradas viejas de mini-erp (#153); `pnpm backend`
+  levanta el demo-backend. En el camino apareció un bug real de la barra que el e2e mostraba como
+  flake (#152): el alta de `@<nombre>` borraba lo tipeado mientras tanto; se arregló aparte (PR #154)
+  y se mergeó antes que esta etapa. Otro flake visto, sin investigar: #155. #148 se cierra a mano
+  después de la primera publicación y de verificar el permiso de red local de Chrome.
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear

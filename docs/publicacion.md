@@ -88,7 +88,7 @@ Con `https://<proyecto>.pages.dev`:
 
    tiene que mostrar `cache-control: public, max-age=31536000, immutable`.
 
-5. Con el demo-backend levantado en tu máquina (`pnpm --filter demo-backend run start`, del mismo
+5. Con el demo-backend levantado en tu máquina (`pnpm backend`, del mismo
    tag), el link **Abrir demo** abre el POS. Chrome pide permiso de **acceso a la red local**
    (la página es `https` y el backend `http://localhost`): aceptalo. El POS tiene que entrar a la venta
    en modo DEMO.
