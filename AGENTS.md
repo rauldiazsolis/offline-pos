@@ -525,7 +525,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
 | Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos); #148: publicación del MVP (carpetas por versión, almacenamiento por ruta, `/versions`, docs, Cloudflare Pages) | PR #136, PR #141, PR #145, PR #156 |
 | #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
-| Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #<N> |
+| Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 
 **Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
 publica con `docs/publicacion.md`). El lanzamiento es para developers con el demo-backend en
