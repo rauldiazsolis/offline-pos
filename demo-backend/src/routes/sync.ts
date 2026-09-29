@@ -10,6 +10,7 @@ import {
   type LotIssue,
 } from '../lots.ts';
 import type { RouteDef } from '../router.ts';
+import { getDemoSettings } from '../settings.ts';
 
 type ResourceRow = { payload: string; updated_at: string };
 
@@ -95,6 +96,8 @@ export const syncRoutes: RouteDef[] = [
         }
       }
 
+      // 4.4.0 (#128): el aviso de prueba del panel, como la lista vigente (sin él, no va la clave).
+      const { notice } = getDemoSettings(ctx.db);
       sendJson(res, 200, {
         products,
         customers,
@@ -104,6 +107,11 @@ export const syncRoutes: RouteDef[] = [
           updatedAt: row.updated_at,
         })),
         lots,
+        ...(notice.enabled
+          ? {
+              notices: [{ id: 'demo-notice', severity: notice.severity, message: notice.message }],
+            }
+          : {}),
       });
     },
   },

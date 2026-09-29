@@ -6,6 +6,7 @@ import { registerRoutes } from '../../src/router.ts';
 import { accountHoldRoutes } from '../../src/routes/account-holds.ts';
 import { setDelayEnabled } from '../../src/lots.ts';
 import { syncRoutes } from '../../src/routes/sync.ts';
+import { setDemoSettings } from '../../src/settings.ts';
 
 beforeAll(() => {
   registerRoutes(syncRoutes);
@@ -507,5 +508,43 @@ describe('saldo de cualquier cliente y recibo (4.2.0, #101)', () => {
       date: '2026-09-27',
       number: 3,
     });
+  });
+});
+
+describe('contrato 4.4.0 (#128)', () => {
+  it('con el aviso de prueba prendido, el pull trae notices; apagado no trae la clave', async () => {
+    setDemoSettings(db, { notice: { enabled: true, severity: 'warning', message: 'Aviso' } });
+    const withNotice = (await (await pull({ cursors: {}, pendingLotIds: [] })).json()) as Record<
+      string,
+      unknown
+    >;
+    expect(withNotice.notices).toEqual([
+      { id: 'demo-notice', severity: 'warning', message: 'Aviso' },
+    ]);
+
+    setDemoSettings(db, { notice: { enabled: false, severity: 'warning', message: 'Aviso' } });
+    const without = (await (await pull({ cursors: {}, pendingLotIds: [] })).json()) as Record<
+      string,
+      unknown
+    >;
+    expect('notices' in without).toBe(false);
+  });
+
+  it('un medio de pago desconocido se guarda tal cual, sin rechazar el lote', async () => {
+    const response = await push('lot-cripto', [
+      {
+        type: 'sale',
+        id: 's-cripto',
+        sale: { id: 's-cripto', total: 10, payments: [{ method: 'cripto', amount: 10 }] },
+      },
+    ]);
+
+    expect(response.status).toBe(200);
+    const row = db.prepare('SELECT payload FROM sales WHERE id = ?').get('s-cripto') as {
+      payload: string;
+    };
+    expect(
+      (JSON.parse(row.payload) as { payments: { method: string }[] }).payments[0]?.method,
+    ).toBe('cripto');
   });
 });

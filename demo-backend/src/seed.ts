@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import productsFixture from './fixtures/products.json' with { type: 'json' };
 import customersFixture from './fixtures/customers.json' with { type: 'json' };
+import almacenCustomers from './fixtures/almacen-customers.json' with { type: 'json' };
+import almacenProducts from './fixtures/almacen-products.json' with { type: 'json' };
 
 type ProductFixtureEntry = {
   id: string;
@@ -28,14 +30,27 @@ type CustomerFixtureEntry = {
   blocked?: { reason: string };
 };
 
-function insertSeedRows(db: DatabaseSync, now: string): void {
+/** Templates de `POST /demo-sessions` (4.4.0, #128): cada uno es un juego de fixtures. */
+export const TEMPLATES = {
+  kiosco: { products: productsFixture, customers: customersFixture },
+  almacen: { products: almacenProducts, customers: almacenCustomers },
+} as const;
+export type TemplateName = keyof typeof TEMPLATES;
+export const DEFAULT_TEMPLATE: TemplateName = 'kiosco';
+
+export function isTemplateName(value: string): value is TemplateName {
+  return Object.hasOwn(TEMPLATES, value);
+}
+
+function insertSeedRows(db: DatabaseSync, now: string, template: TemplateName): void {
+  const fixtures = TEMPLATES[template];
   const insertProduct = db.prepare(
     'INSERT INTO products (id, payload, updated_at) VALUES (?, ?, ?)',
   );
   const insertStock = db.prepare(
     'INSERT INTO stock (product_id, quantity, updated_at) VALUES (?, ?, ?)',
   );
-  for (const entry of productsFixture as ProductFixtureEntry[]) {
+  for (const entry of fixtures.products as ProductFixtureEntry[]) {
     const { initialStock, ...product } = entry;
     insertProduct.run(entry.id, JSON.stringify(product), now);
     insertStock.run(entry.id, initialStock, now);
@@ -44,7 +59,7 @@ function insertSeedRows(db: DatabaseSync, now: string): void {
   const insertCustomer = db.prepare(
     'INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)',
   );
-  for (const entry of customersFixture as CustomerFixtureEntry[]) {
+  for (const entry of fixtures.customers as CustomerFixtureEntry[]) {
     insertCustomer.run(entry.id, JSON.stringify(entry), 'seed', now);
   }
 }
@@ -55,11 +70,18 @@ export function seedIfEmpty(db: DatabaseSync, now: string): void {
   if (row.count > 0) {
     return;
   }
-  insertSeedRows(db, now);
+  insertSeedRows(db, now, DEFAULT_TEMPLATE);
 }
 
-/** Vacía todas las tablas de datos (nunca `idempotency_keys` a medias — se borra también) y vuelve a sembrar. Usado por `POST /_demo/reset`. */
-export function resetToSeed(db: DatabaseSync, now: string): void {
+/**
+ * Vacía todas las tablas de datos (nunca `idempotency_keys` a medias — se borra también) y vuelve a
+ * sembrar con el template pedido. Usado por `POST /_demo/reset` y `POST /demo-sessions` (#128).
+ */
+export function resetToSeed(
+  db: DatabaseSync,
+  now: string,
+  template: TemplateName = DEFAULT_TEMPLATE,
+): void {
   db.exec(`
     DELETE FROM products;
     DELETE FROM stock;
@@ -74,5 +96,5 @@ export function resetToSeed(db: DatabaseSync, now: string): void {
     DELETE FROM push_lots;
     DELETE FROM demo_settings;
   `);
-  insertSeedRows(db, now);
+  insertSeedRows(db, now, template);
 }

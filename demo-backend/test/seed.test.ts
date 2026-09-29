@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../src/db.ts';
-import { resetToSeed, seedIfEmpty } from '../src/seed.ts';
+import { isTemplateName, resetToSeed, seedIfEmpty } from '../src/seed.ts';
 
 const NOW = '2026-01-01T00:00:00.000Z';
 
@@ -78,5 +78,37 @@ describe('resetToSeed', () => {
     expect(customerCount).toBe(22);
 
     db.close();
+  });
+});
+
+describe('templates (4.4.0, #128)', () => {
+  it('resetToSeed con otro template siembra su catálogo y sus clientes', () => {
+    const db = openDb(':memory:');
+    seedIfEmpty(db, NOW);
+
+    resetToSeed(db, NOW, 'almacen');
+
+    const products = db.prepare('SELECT id FROM products ORDER BY id').all() as { id: string }[];
+    expect(products.map((row) => row.id)).toEqual([
+      'alm-p1',
+      'alm-p2',
+      'alm-p3',
+      'alm-p4',
+      'alm-p5',
+      'alm-p6',
+    ]);
+    const stock = db.prepare('SELECT COUNT(*) as count FROM stock').get() as { count: number };
+    expect(stock.count).toBe(6);
+    const customers = db.prepare('SELECT id FROM customers ORDER BY id').all() as { id: string }[];
+    expect(customers.map((row) => row.id)).toEqual(['alm-c1', 'alm-c2']);
+
+    db.close();
+  });
+
+  it('isTemplateName solo reconoce los templates propios', () => {
+    expect(isTemplateName('kiosco')).toBe(true);
+    expect(isTemplateName('almacen')).toBe(true);
+    expect(isTemplateName('nope')).toBe(false);
+    expect(isTemplateName('toString')).toBe(false);
   });
 });
