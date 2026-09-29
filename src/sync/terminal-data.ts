@@ -2,17 +2,10 @@ import { z } from 'zod';
 import { err, ok, type Result } from '../domain/result.ts';
 import { db } from '../storage/db.ts';
 import { clearAllTables } from '../storage/local-data.ts';
+import { LOCAL_STORAGE_PREFIX } from '../storage/storage-namespace.ts';
 import { setSyncPaused } from '../ui/state/sync.ts';
 import { secretConfigKeys } from './connector-registry.ts';
 import { acquireSyncLockWaiting } from './engine.ts';
-
-/**
- * Todo lo que la app guarda en `localStorage` lleva este prefijo
- * (`sync/config.ts`, `sync/cursor.ts`, `sync/push-lot.ts`). Borrar/volcar por
- * prefijo, no por una lista de claves escrita a mano — mismo criterio que
- * `clearAllTables` con `db.tables`: una clave futura queda incluida sola.
- */
-export const LOCAL_STORAGE_PREFIX = 'offline-pos:';
 
 /** Tiempo máximo que `resetTerminal` espera a que termine un ciclo de sync en curso. */
 export const RESET_LOCK_WAIT_MS = 15_000;
@@ -90,8 +83,8 @@ export async function exportLocalData(
 
 /**
  * `pos.reset()` (Etapa 0 de #94): deja la terminal como recién instalada —
- * todas las tablas de IndexedDB y todas las claves `offline-pos:*` de
- * `localStorage`, **incluida la config de `/CONFIG`** (a diferencia de
+ * todas las tablas de IndexedDB y todas las claves de esta carpeta
+ * (`LOCAL_STORAGE_PREFIX`) de `localStorage`, **incluida la config de `/CONFIG`** (a diferencia de
  * `/DEMO_RESET`, que a propósito la conserva): equivale a perder el id de
  * dispositivo, y sin él la terminal arranca de cero (decisión del epic).
  *

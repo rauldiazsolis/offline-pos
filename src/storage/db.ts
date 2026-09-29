@@ -10,6 +10,7 @@ import type { OutboxEvent } from '../domain/outbox.ts';
 import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
+import { STORAGE_NAMESPACE } from './storage-namespace.ts';
 
 /**
  * Fila única con la venta en curso (Fase de mejoras post-Fase 4, issue #17)
@@ -21,7 +22,8 @@ export type DraftCart = { id: 'current'; cart: Cart; customer?: Customer };
 /**
  * Schema de IndexedDB. `outbox` (Fase 2, motor de sync) se agrega en su
  * propia versión — nunca se toca el `.stores()` de una versión ya publicada,
- * Dexie migra automáticamente las instalaciones existentes a la última.
+ * Dexie migra automáticamente las instalaciones existentes a la última. El
+ * nombre de la base depende de la carpeta (#148, `storage-namespace.ts`).
  */
 class PosDatabase extends Dexie {
   products!: EntityTable<Product, 'id'>;
@@ -44,7 +46,7 @@ class PosDatabase extends Dexie {
   cashConcepts!: Table<CashConcept, [CashConcept['direction'], string]>;
 
   constructor() {
-    super('offline-pos');
+    super(STORAGE_NAMESPACE);
     this.version(1).stores({
       products: 'id, sku, *barcodes, category',
       stock: 'productId',

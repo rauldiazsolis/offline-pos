@@ -1,4 +1,5 @@
 import type { PushLot } from '../domain/push-lot.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /**
  * Persistencia del lote de push en curso y de los lotes ya enviados que
@@ -8,8 +9,8 @@ import type { PushLot } from '../domain/push-lot.ts';
  * lote con un id nuevo — el backend "se arregla como puede" (ver spec), no
  * es un error de negocio que valga la pena modelar con Result.
  */
-const CURRENT_LOT_KEY = 'offline-pos:sync:push-lot';
-const AWAITING_LOTS_KEY = 'offline-pos:sync:push-lot-awaiting';
+const CURRENT_LOT_KEY = storageKey('sync:push-lot');
+const AWAITING_LOTS_KEY = storageKey('sync:push-lot-awaiting');
 
 export function getCurrentPushLot(): PushLot | undefined {
   try {

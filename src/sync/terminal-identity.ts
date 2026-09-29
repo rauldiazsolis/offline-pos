@@ -4,8 +4,9 @@ import { clearAllTables } from '../storage/local-data.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { clearSyncCursors } from './cursor.ts';
 import { clearPushLotState } from './push-lot.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
-export const DEVICE_ID_KEY = 'offline-pos:device-id';
+export const DEVICE_ID_KEY = storageKey('device-id');
 
 /** Id resuelto al arrancar (`resolveDeviceIdentity`); nunca se crea después. */
 let cachedDeviceId: string | undefined;
