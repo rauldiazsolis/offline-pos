@@ -1,6 +1,6 @@
 import { describeError } from '../errors.ts';
 import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
-import { contractRequirement, POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
+import { contractRequirement, MIN_BACKEND_CONTRACT } from '../../domain/contract-version.ts';
 import {
   backendStatusSignal,
   lastPullApplicationSignal,
@@ -65,7 +65,7 @@ function statusText(): string {
   // 4.0.0 (#99): detrás de "sin configurar" y de offline, delante del resto. La venta sigue.
   const backend = backendStatusSignal.value;
   if (backend.kind === 'incompatible') {
-    return `Backend incompatible (contrato ${backend.backendVersion}, se necesita ${contractRequirement(POS_CONTRACT_VERSION)})`;
+    return `Backend incompatible (contrato ${backend.backendVersion}, se necesita ${contractRequirement(MIN_BACKEND_CONTRACT)})`;
   }
   if (backend.kind === 'maintenance') {
     return backend.info.message !== undefined

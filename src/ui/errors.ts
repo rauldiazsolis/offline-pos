@@ -1,4 +1,4 @@
-import { contractRequirement } from '../domain/contract-version.ts';
+import { contractRequirement, MIN_BACKEND_CONTRACT } from '../domain/contract-version.ts';
 import type { Failure } from '../domain/result.ts';
 import { formatMoney } from './format.ts';
 
@@ -75,7 +75,7 @@ export function describeError(failure: Failure): string {
     case 'sync/timeout':
       return `El servidor no respondió en ${String(failure.meta.seconds)} segundos.`;
     case 'sync/incompatible-contract':
-      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractRequirement(failure.meta.pos)}.`;
+      return `El backend usa el contrato ${failure.meta.backend}; esta versión del POS necesita ${contractRequirement(MIN_BACKEND_CONTRACT)}.`;
     case 'sync/backend-maintenance':
       return failure.meta.message !== undefined
         ? `El backend está en mantenimiento: ${failure.meta.message}`

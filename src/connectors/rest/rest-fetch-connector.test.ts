@@ -345,7 +345,7 @@ describe('contrato 4.0.0 (#99)', () => {
     expect(init.method).toBe('GET');
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer secret-key',
-      'X-POS-Contract-Version': '4.3.0',
+      'X-POS-Contract-Version': '4.4.0',
     });
   });
 
@@ -367,7 +367,7 @@ describe('contrato 4.0.0 (#99)', () => {
     await connector.requestAccountHold({ customerId: 'c1', amount: 10 }, 'k');
 
     for (const call of fetchMock.mock.calls as [string, RequestInit][]) {
-      expect(call[1].headers).toMatchObject({ 'X-POS-Contract-Version': '4.3.0' });
+      expect(call[1].headers).toMatchObject({ 'X-POS-Contract-Version': '4.4.0' });
     }
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
@@ -393,7 +393,7 @@ describe('contrato 4.0.0 (#99)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'sync/incompatible-contract',
-      meta: { backend: '3.0.0', pos: '4.3.0' },
+      meta: { backend: '3.0.0', pos: '4.4.0' },
     });
   });
 

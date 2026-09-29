@@ -92,7 +92,7 @@ describe('refreshBackendStatus', () => {
     await refreshBackendStatus(
       fakeConnector({
         getInfo: () =>
-          Promise.resolve(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.3.0' })),
+          Promise.resolve(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.4.0' })),
       }),
       now,
     );
@@ -127,7 +127,7 @@ describe('noteSyncFailure', () => {
     noteSyncFailure(failure(err('sync/remote-error', { message: 'x' })));
     expect(backendCheckDueSignal.value).toBe(true);
 
-    noteSyncFailure(failure(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.3.0' })));
+    noteSyncFailure(failure(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.4.0' })));
     expect(backendStatusSignal.value).toMatchObject({
       kind: 'incompatible',
       backendVersion: '3.0.0',
