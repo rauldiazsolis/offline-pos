@@ -357,3 +357,7 @@ guía; la verificación de Local Network Access se hace ahí.
 - **Task 1 — `daily-counter`** (aclaración, no desvío): la lista de claves de la sección 2 lo nombra,
   pero `sync/daily-counter.ts` no tiene clave propia; recibe la de `ticket-counter.ts` y
   `receipt-counter.ts`, que ya pasan por `storageKey`.
+- **Task 5 — configuración de `site/` adelantada**: `site/docs.test.ts` (Task 5) rompía `pnpm lint`
+  porque `site/` todavía no estaba en ningún proyecto de TypeScript. La parte de configuración del
+  Step 1 de la Task 6 (`tsconfig.site.json` y su referencia, `.gitignore`, ignores de ESLint y
+  exclude de Vitest) se hizo en la Task 5, sin cambios de contenido.
