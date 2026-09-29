@@ -141,6 +141,15 @@ export function describeError(failure: Failure): string {
       return `No se pudo reiniciar el minibackend de demo (${failure.meta.message}). ¿Está corriendo?`;
     case 'demo/unavailable-for-connector':
       return `/DEMO_RESET no está disponible con ${failure.meta.connectorLabel}: solo funciona con el backend REST de demo.`;
+    case 'demo/invalid-link':
+      if (failure.meta.reason === 'backend-missing') {
+        return 'el link no trae la dirección del backend';
+      }
+      return failure.meta.reason === 'backend-invalid'
+        ? 'la dirección del backend no es válida'
+        : 'el backend tiene que ser https (o http a localhost)';
+    case 'demo/invalid-return':
+      return 'los datos de conexión que devolvió el alta no son válidos';
     case 'terminal/reset-failed':
       return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
     default: {
