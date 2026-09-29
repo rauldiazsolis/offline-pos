@@ -21,7 +21,8 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 |---|---|
 | Outbox: identidad de eventos y del dispositivo, push y pull por lotes, reaplicación, limpieza a 7 días, cadencias, foto completa, log de sync y `/DIAGNOSTICO` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) (también rige su código en `domain/` y `storage/`) |
 | Cuenta corriente: la reserva de crédito síncrona | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
-| Contrato: qué trajo cada versión (v3, 4.0.0, 4.1.0, 4.2.0, 4.3.0), estado del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Contrato: qué trajo cada versión (v3, 4.0.0 a 4.4.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA` y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns`), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
 | Venta: cantidades y redondeo, tickets en 0 o negativos, anulación de ventas y de cobranzas | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
@@ -235,8 +236,9 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.3.0** desde #125 (spec
-`docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`); la 4.2.0 es de la Etapa 6 del epic #94 —
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.4.0** desde #128, la última antes
+del MVP (spec `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`); la 4.3.0
+es de #125 (spec `docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`); la 4.2.0 es de la Etapa 6 del epic #94 —
 #101, spec `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`; la 4.1.0 es de
 la Etapa 5, #120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
 Etapa 4, #99, spec `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`; la v3 es de
@@ -245,26 +247,37 @@ la Etapa 1, #96, spec `docs/superpowers/specs/2026-09-23-contrato-connector-api-
 batch** (`POST /sync/push`, `POST /sync/pull`) más una excepción síncrona, la reserva de crédito
 (`POST /account-holds`, sin cambios), y `GET /info` desde 4.0.0 (4.2.0 eliminó
 `GET /account-balance/{customerId}`, que nunca se implementó: el saldo viaja en el pull). `sync/connector.ts::Connector` tiene, en
-consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. Principio central del contrato: **el backend nunca
+consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. 4.4.0 suma
+`POST /demo-sessions`, opcional y sin autenticación, que a propósito no pasa por el puerto (no es
+sync y solo existe en backends REST: `sync/demo-session.ts`). Principio central del contrato: **el backend nunca
 evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
 movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
-y audita, y cualquier inconsistencia se resuelve de su lado o a mano (la notificación asíncrona de
-una discrepancia, la otra mitad de #13, sigue sin diseñar). El backend sí puede, por motivos propios (cuota,
+y audita, y cualquier inconsistencia se resuelve de su lado o a mano. Para avisarle al humano de una
+discrepancia, una cuota o el contrato, desde 4.4.0 el pull trae `notices`, la lista vigente de avisos
+(informativos, nunca bloquean): #13 y #103 pasan a ser trabajo solo del POS. El backend sí puede, por motivos propios (cuota,
 contrato), dejar de aceptar lotes de una terminal — el POS nunca hace cumplir eso por su cuenta, solo
 se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arriba).
 
-Compatible = mismo major y minor igual o mayor (`domain/contract-version.ts`). Qué trajo cada versión
-(v3, 4.0.0, 4.1.0, 4.2.0, 4.3.0) y cómo el POS sigue el estado del backend está en `src/sync/AGENTS.md`; las
-implementaciones y el registro de conectores, en `src/connectors/AGENTS.md`.
+**Compatibilidad por piso y capacidades (4.4.0, #128)**: compatible = mismo major que el POS y minor
+≥ el del **piso 4.0.0** (`domain/contract-version.ts::MIN_BACKEND_CONTRACT`), ya no el minor del POS:
+un agregado nuevo no obliga a todos los backends a actualizarse. Lo que un backend hace más allá del
+piso lo declara como **capacidad** en `GET /info` (`demo-sessions`, `customer-payment-void`); el POS
+nunca la deduce de la versión e ignora un nombre que no conoce. Un backend 4.2 (Sheets, el mini-erp)
+vuelve a ser compatible sin tocarlo: simplemente no anula cobranzas. Las **reglas de evolución**
+(campos y enums desconocidos, foto completa nunca truncada, numeración con huecos) están en el
+OpenAPI. Qué trajo cada versión (v3, 4.0.0 a 4.4.0), cómo el POS sigue el estado del backend, las
+capacidades y los avisos (`notices`) están en `src/sync/AGENTS.md`; las implementaciones y el
+registro de conectores, en `src/connectors/AGENTS.md`.
 
 **Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
 mismo trabajo — es la referencia ejecutable del contrato. El mini-erp no (ver "POS y mini-erp:
 desarrollo separado"). El conector de Google Sheets tampoco: **congelado en 4.2.0** desde el
 2026-09-28 (#127) — un cambio de contrato o de la interfaz `Connector` no lo hace evolucionar; solo se
 hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso deja de ser mecánico se
-frena y se consulta (adaptarlo o sacarlo del registro). La red de seguridad ya existe: el puente
-informa su versión (`bridge.gs::CONTRACT_VERSION`), así que con un POS posterior la terminal lo ve
-incompatible, no sincroniza y sigue vendiendo sin perder nada. Cada cambio de contrato suma en #127
+frena y se consulta (adaptarlo o sacarlo del registro). Con el piso 4.0.0 (#128) vuelve a ser
+compatible sin tocarlo: no declara capacidades, así que no anula cobranzas. La red de seguridad ya
+existe: el puente informa su versión (`bridge.gs::CONTRACT_VERSION`), así que con un POS de otro major
+la terminal lo ve incompatible, no sincroniza y sigue vendiendo sin perder nada. Cada cambio de contrato suma en #127
 lo que haría falta para retomarlo; `/CONFIG` lo muestra como "Sin mantenimiento". El camino decidido
 para retomarlo es #138 (el conector en el POS, con la API del puente especificada).
 
@@ -287,26 +300,42 @@ acá; `hasTerminalIdentity`) o `active`. Si no es `active`, `ui/app.tsx` muestra
 **modo requerido** — ni venta ni barra de comandos, sin "Cancelar", Esc no sale — y ningún ciclo de
 sync corre (el wizard pausa el sync). El bloqueo depende únicamente de lo guardado, nunca de la
 conectividad: una terminal `active` abre y opera offline como siempre; solo el primer arranque y el
-cambio de conexión necesitan red, porque probar es hacer un pull. No hay valores por omisión: los
+cambio de conexión necesitan red, porque probar es hacer un pull.
+
+**Cambiar la conexión nunca borra datos locales automáticamente**, con una sola excepción, el
+onboarding de demo (#128): (a) un link de demo en una terminal sin config y sin datos del usuario, o
+que ya está en demo; (b) la vuelta del alta con un `wipe_key` válido emitido por esta terminal, o sin
+datos del usuario. En cualquier otro caso decide el operador en el wizard (Mantener o Borrar).
+
+No hay valores por omisión: los
 campos arrancan vacíos y los ejemplos son `placeholder`s (`ConfigField.placeholder`) con el formato
 "ej. …" y en gris claro (`--color-placeholder`), para que nunca pasen por un dato cargado.
 
 El wizard de `/CONFIG` está en `src/ui/AGENTS.md`; cómo se aplica una conexión y por qué no hay sync
 de fondo con `/CONFIG` abierto, en `src/sync/AGENTS.md`.
 
-## Onboarding y modo demo (primera versión, sin diseño formal — #128)
+## Onboarding de demo (#128)
 
-Existe una primera versión, hecha junto con el mini-erp antes de separar los desarrollos y descripta
-en `docs/url-autoconfig-handshake.md`. `?demo=true` activa el modo demo (`ui/state/demo-mode.ts`,
-solo sin datos del usuario o en dev), que muestra en la barra de estado un botón para ir al onboarding
-de un backend con un `wipe_key` de un solo uso. El backend vuelve con `connector_url`, `api_key`,
-`branch`, `pos_terminal` y el `wipe_key` en la URL, y `sync/url-auto-config.ts::handleUrlAutoConfig`
-(en `bootstrap`) prueba y aplica la conexión: borra lo local solo con el `wipe_key` válido o sin datos
-del usuario (es la única excepción a "cambiar la conexión nunca borra solo"); si no, precarga el
-wizard. Tiene problemas conocidos (backend fijo en el código, API key en la query string, `sync/`
-importando de `ui/`) y la pregunta de quién sirve el POS sigue abierta: todo en #128 (preferencia del
-usuario: POS estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB). No
-extenderlo sin pasar por ese issue.
+El POS es **estático y genérico**: no conoce ningún backend (nada fijo en el código; tiene que poder
+embeberse en el deploy de un backend, sin cambiar `base` de Vite para el MVP). Spec:
+`docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`.
+
+1. **Link de demo**: `<pos>/?demo=true&backend=<base URL>&template=<opcional>` (`backend` `https:`, o
+   `http:` a localhost). En una terminal sin config y sin datos del usuario, o ya en demo, el POS pide
+   `POST /demo-sessions`, prueba y aplica la conexión (`rest` con `SyncConfig.demo`) borrando lo local,
+   y entra a la venta. Con una conexión real o con datos, el link se ignora y lo avisa. Template
+   desconocido: reintenta sin template y avisa cuál usó.
+2. **Terminal en demo**: marca **DEMO** y botón `<onboarding.label> (/ALTA)` en la barra de estado.
+   `/ALTA` lleva a `onboarding.url` con `return_url` (origin + pathname) y un `wipe_key` de un solo uso
+   (vence a las 2 h).
+3. **Vuelta**: `<return_url>#connect=<base64url>` — la config viaja en el **fragmento**, nunca en la
+   query string. Con el `wipe_key` válido o sin datos del usuario, prueba, aplica borrando y guarda la
+   config **sin `demo`**; si no (o si la prueba falla), precarga el wizard de `/CONFIG` sin borrar nada.
+
+Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de vida de la conexión").
+Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
+sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
+sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.
 
 ## UX keyboard-first
 
@@ -352,6 +381,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/CONFIG` | Wizard de la terminal y su conexión (ver "Ciclo de vida de la conexión"); config en `localStorage`, no hay variables de entorno |
 | `/SINCRONIZAR` | Push y pull ya (RF-12); no cambia de pantalla, el feedback es la barra de estado |
 | `/DIAGNOSTICO` | Estado de sincronización, de solo lectura (también con un click en la barra de estado) |
+| `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
 
 `/DESCARTAR` es a propósito distinto de `/ANULAR`, que anula una venta ya cerrada (con auditoría), y
@@ -466,7 +496,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #66 | Conectores: Google Sheets, registro cerrado, conexión verificada, comandos por conector, crédito ilimitado | #67, #68, #76, #77, #80, #69 |
 | #87 | Sync por lotes (`pushBatch`/`pullBatch`) y `/DIAGNOSTICO` | PR #89 |
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
-| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN` | PR #136, PR #141 |
+| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos) | PR #136, PR #141, rama `claude/demo-onboarding-128` |
 
 **Siguiente**: la Etapa 7 de #94 (#102, comandos de consulta). Fase 5 (hardware) pospuesta a v2:
 depende de dispositivos reales y nada depende de ella (§11 del diseño).
@@ -480,11 +510,11 @@ etiqueta antes de tomar un issue.
 - Caja: #57 (usabilidad del modal de `/CAJA`).
 - Clientes y cuenta corriente: #37 (documento y teléfono), #102 (comandos de consulta), #104
   (`backlog`).
-- Sync: #115 (foto completa con stock vacío y movimientos pendientes); `backlog`: #113, #103, #13.
+- Sync: `backlog`: #113, #103, #13 (los dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #112 (prioritario: foco y selección del wizard), #111 (tipografía con zoom),
   #41 (resize en DevTools).
-- Pantallas y publicación: #49 (tracking de modales), #52 (Historial), #54 (PWA, docs y lanzamiento),
-  #128 (onboarding).
+- Pantallas y publicación: #49 (tracking de modales), #52 (Historial), #54 (PWA, docs y lanzamiento);
+  `backlog`: #143 (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
-  POS: #122.
+  POS: #122, #144 (contrato 4.4.0 y el onboarding nuevo).

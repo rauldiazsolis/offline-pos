@@ -8,6 +8,7 @@ import { db } from '../storage/db.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import {
   activeConnectorTypeSignal,
+  backendCapabilitiesSignal,
   connectionStateSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
@@ -106,6 +107,21 @@ describe('applyConnection', () => {
     expect(loadSyncConfig()).toEqual({ ok: true, value: { ...candidate, verifiedAt: now } });
     expect(connectionStateSignal.value).toBe('active');
     expect(syncStatusSignal.value).toBe('online-idle');
+  });
+
+  it('guarda las capacidades de la prueba; una foto sin ellas las borra (4.4.0, #128)', async () => {
+    await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, capabilities: ['customer-payment-void'] },
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(backendCapabilitiesSignal.value).toEqual(['customer-payment-void']);
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+    expect(backendCapabilitiesSignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:backend-capabilities')).toBeNull();
   });
 
   it('fija el tipo del conector activo (de ahí salen los comandos de la barra)', async () => {

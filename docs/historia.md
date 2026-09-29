@@ -278,6 +278,23 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   tabla "Saldos de clientes" (`/_demo/api/customer-balances`). Siguiente paso: #125 (anular
   cobranzas desde `/ANULAR`).
 
+- Onboarding de demo y contrato 4.4.0 (epic #134, issues #128 y #115; spec
+  `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`, plan
+  `docs/superpowers/plans/2026-09-28-onboarding-demo-contrato-4-4.md`): ver "Onboarding de demo" y
+  "Connector API" en el `AGENTS.md` de la raíz y "Contrato 4.4.0" y "Onboarding de demo" en
+  `src/sync/AGENTS.md`. Reemplaza la primera versión del onboarding, hecha junto con el mini-erp antes
+  de separar los desarrollos (`docs/url-autoconfig-handshake.md`, `sync/url-auto-config.ts`,
+  `ui/state/demo-mode.ts`, borrados), que tenía cuatro problemas: el POS conocía un backend puntual
+  (`localhost:4100`, `preset=kiosco`, "Conectar Mini-ERP"), la API key volvía en la query string, el
+  borrado automático era una excepción no escrita y `sync/` importaba de `ui/`. El POS pasa a ser
+  genérico: el backend llega en el link y la conexión vuelve en el fragmento. 4.4.0 es la última
+  versión antes del MVP: el piso 4.0.0 más capacidades evita que cada agregado deje incompatibles a
+  los backends (el mini-erp y Sheets, en 4.2, habían dejado de sincronizar con un POS 4.3). Entró
+  también #115: `stock: []` es "no mandó stock". Desvíos (anotados en la spec): un estado de lote
+  desconocido es terminado con aviso, no `processing`; al borrar lo local en el onboarding,
+  `bootstrap` vuelve a leer el último arqueo. Pasar de demo a producción sin repetir el onboarding
+  quedó en #143.
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear

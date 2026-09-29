@@ -1,0 +1,4 @@
+[
+  { "id": "alm-c1", "name": "Rosa Benítez", "document": "28111222", "phone": "11-3333-1111", "creditLimit": 8000, "margin": 1000, "balance": 0, "createdAt": "2025-03-01T00:00:00.000Z" },
+  { "id": "alm-c2", "name": "Jorge Medina", "document": "31222333", "createdAt": "2025-03-10T00:00:00.000Z" }
+]

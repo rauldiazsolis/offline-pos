@@ -38,6 +38,19 @@ describe('adjustPull — sin retener', () => {
     ]);
   });
 
+  it('con stock vacío no arma filas desde 0: el backend no mandó stock (#115)', () => {
+    const result = adjustPull({
+      customers: [],
+      stock: [],
+      retain: false,
+      effects: { stock: new Map([['p1', -2]]), balance: new Map() },
+      localStock: [],
+      localBalances: new Map(),
+      now,
+    });
+    expect(result.stock).toEqual([]);
+  });
+
   it('suma los efectos al saldo solo de los clientes que vinieron y con saldo', () => {
     const result = adjustPull({
       customers: [customer('c1', 100), customer('c2')],

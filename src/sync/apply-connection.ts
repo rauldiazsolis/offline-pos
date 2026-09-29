@@ -11,6 +11,7 @@ import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   setActiveConnectorType,
+  setDemoSession,
   setConnectionState,
   setLastSyncFailure,
   setLastSyncedAt,
@@ -20,6 +21,8 @@ import {
   setSyncConfigured,
   setSyncStatus,
 } from '../ui/state/sync.ts';
+import { saveBackendCapabilities } from './backend-capabilities.ts';
+import { saveBackendNotices } from './backend-notices.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { connectionState } from './connection-state.ts';
 import { withTimeout, type ProbeSnapshot } from './connection.ts';
@@ -149,9 +152,14 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     if (!saved.ok) {
       return err('connection/apply-failed', { message: 'no se pudo guardar la configuración' });
     }
+    // 4.4.0 (#128): las capacidades son de esta conexión; una foto sin ellas las borra.
+    saveBackendCapabilities(params.snapshot.capabilities);
+    saveBackendNotices(params.snapshot.notices ?? []);
 
     setConnectionState('active');
     setActiveConnectorType(params.candidate.type);
+    // Otra conexión desde `/CONFIG` sale de la demo: el wizard arma el candidato sin `demo`.
+    setDemoSession(params.candidate.demo ?? null);
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);

@@ -27,6 +27,9 @@ if (!container) {
 } else {
   bootstrap()
     .then(() => {
+      // "Preparando…" de `index.html` (#128): se ve mientras `bootstrap` espera (el onboarding de
+      // demo puede tardar lo que tarde el backend).
+      container.replaceChildren();
       render(
         <ErrorBoundary>
           <App />

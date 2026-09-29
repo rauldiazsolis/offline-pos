@@ -13,7 +13,7 @@ import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { activeConnectorTypeSignal } from '../state/sync.ts';
+import { activeConnectorTypeSignal, setDemoSession } from '../state/sync.ts';
 import {
   activateCommandBarRow,
   moveSelection,
@@ -25,12 +25,16 @@ import {
 } from './command-bar-controller.ts';
 import { syncNow } from '../../sync/engine.ts';
 import { availableCommands } from './commands.ts';
+import { startOnboarding } from './onboarding-controller.ts';
 
 // /SINCRONIZAR dispara un ciclo real en background: se neutraliza para no dejarlo corriendo tras cerrar la base.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   syncNow: vi.fn(() => Promise.resolve()),
 }));
+
+// /ALTA navega fuera de la app: se espía en vez de dejar que jsdom intente navegar.
+vi.mock('./onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
 
 beforeEach(async () => {
   await db.open();
@@ -240,6 +244,47 @@ describe('availableCommands (Etapa 2c)', () => {
   });
 });
 
+describe('/ALTA (terminal en demo, #128)', () => {
+  const demo = {
+    template: 'kiosco',
+    onboarding: { url: 'https://b.x/alta', label: 'Crear mi comercio' },
+    startedAt: '2026-09-28T12:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.mocked(startOnboarding).mockClear();
+  });
+
+  afterEach(() => {
+    setDemoSession(null);
+  });
+
+  it('sin demo no está en la lista y da "Comando desconocido"', () => {
+    setDemoSession(null);
+    expect(availableCommands().map((command) => command.name)).not.toContain('ALTA');
+
+    updateCommandBarBuffer('/ALTA');
+    submitCommandBar();
+
+    expect(commandBarErrorSignal.value).toBe('Comando desconocido: /ALTA');
+    expect(startOnboarding).not.toHaveBeenCalled();
+  });
+
+  it('con demo está en la lista con la etiqueta del backend y lleva al alta', () => {
+    setDemoSession(demo);
+    expect(availableCommands().find((command) => command.name === 'ALTA')?.description).toBe(
+      'Darse de alta: Crear mi comercio',
+    );
+
+    updateCommandBarBuffer('/ALTA');
+    submitCommandBar();
+
+    expect(startOnboarding).toHaveBeenCalledTimes(1);
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(commandBarBufferSignal.value).toBe('');
+  });
+});
+
 describe('Enter con la barra vacía (#99)', () => {
   it('con líneas abre Cobro', async () => {
     cartSignal.value = { lines: [freeformLine] };
@@ -290,6 +335,19 @@ describe('Enter con la barra vacía (#99)', () => {
 
     expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
     expect(activeScreenSignal.value).toBe('collection');
+  });
+
+  it('un Enter con el alta de @ todavía en curso no crea el cliente dos veces: abre la cobranza (#146)', async () => {
+    setCustomerRepository(await loadCustomerRepository());
+    updateCommandBarBuffer('@Cliente Nuevo');
+    submitCommandBar(); // crea el cliente en segundo plano (pendingBarOperation)
+    submitCommandBar(); // el segundo Enter llega con la barra todavía llena
+
+    await vi.waitFor(() => {
+      expect(activeScreenSignal.value).toBe('collection');
+    });
+    expect(await db.customers.count()).toBe(1);
+    expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
   });
 
   it('sin líneas ni cliente no hace nada', async () => {

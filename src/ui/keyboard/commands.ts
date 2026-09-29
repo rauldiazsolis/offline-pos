@@ -1,7 +1,7 @@
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
-import { activeConnectorTypeSignal } from '../state/sync.ts';
+import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
 
 export type CommandAvailability = { enabled: true } | { enabled: false; reason: string };
 
@@ -54,12 +54,15 @@ export const CORE_COMMANDS: CommandInfo[] = [
 ];
 
 /**
- * Los del núcleo más los que declara el conector activo (Etapa 2c, #77).
- * Lee `activeConnectorTypeSignal`, así que dentro de un `computed` se
- * recalcula solo cuando cambia el conector.
+ * Los del núcleo, `/ALTA` si la terminal está en demo (#128) y los que declara el conector activo
+ * (Etapa 2c, #77). Lee `activeConnectorTypeSignal` y `demoSessionSignal`, así que dentro de un
+ * `computed` se recalcula solo cuando cambian.
  */
 export function availableCommands(): CommandInfo[] {
-  return [...CORE_COMMANDS, ...connectorCommands(activeConnectorTypeSignal.value)];
+  const demo = demoSessionSignal.value;
+  const alta: CommandInfo[] =
+    demo !== null ? [{ name: 'ALTA', description: `Darse de alta: ${demo.onboarding.label}` }] : [];
+  return [...CORE_COMMANDS, ...alta, ...connectorCommands(activeConnectorTypeSignal.value)];
 }
 
 /** Disponibilidad actual de un comando por nombre (para Ctrl+Enter, que no pasa por el menú). */

@@ -2,6 +2,7 @@ import type { TargetedKeyboardEvent } from 'preact';
 import type { Failure } from '../../domain/result.ts';
 import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
+import type { NoticeSeverity } from '../../sync/connector.ts';
 import { collectDiagnostics } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
 import {
@@ -54,7 +55,10 @@ function backendStatusText(status: BackendStatus): string {
     case 'unknown':
       return 'sin consultar';
     case 'ok':
-      return `contrato ${status.info.contractVersion} · ok`;
+      // 4.4.0 (#128): un estado desconocido se trata como `ok`; su mensaje se sigue viendo.
+      return `contrato ${status.info.contractVersion} · ok${
+        status.info.message !== undefined ? ` (${status.info.message})` : ''
+      }`;
     case 'maintenance':
       return `contrato ${status.info.contractVersion} · en mantenimiento${
         status.info.message !== undefined ? ` (${status.info.message})` : ''
@@ -78,6 +82,20 @@ function backendStatusStyle(status: BackendStatus): { color?: string; fontWeight
 function backendName(status: BackendStatus): string | undefined {
   const info = status.kind === 'unknown' ? undefined : status.info;
   return info?.backend !== undefined ? `${info.backend.name} ${info.backend.version}` : undefined;
+}
+
+const NOTICE_LABEL: Record<NoticeSeverity, string> = {
+  info: 'Info',
+  warning: 'Advertencia',
+  critical: 'Crítico',
+};
+
+/** Capacidades del backend (4.4.0, #128): `undefined` es que nunca se consultaron. */
+function capabilitiesText(capabilities: readonly string[] | undefined): string {
+  if (capabilities === undefined) {
+    return 'sin consultar';
+  }
+  return capabilities.length === 0 ? 'ninguna' : capabilities.join(', ');
 }
 
 export function DiagnosticoScreen() {
@@ -161,6 +179,7 @@ export function DiagnosticoScreen() {
               {backendName(diagnostics.backendStatus)}
             </p>
           )}
+          <p style={{ margin: 0 }}>Capacidades: {capabilitiesText(diagnostics.capabilities)}</p>
         </div>
 
         <div style={cardStyle}>
@@ -226,6 +245,25 @@ export function DiagnosticoScreen() {
               </li>
             ))}
           </ul>
+        )}
+      </div>
+
+      <div style={cardStyle}>
+        <p style={labelStyle}>Avisos del backend</p>
+        {diagnostics.notices.length === 0 ? (
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Sin avisos</p>
+        ) : (
+          diagnostics.notices.map((notice) => (
+            <p key={notice.id} style={{ margin: 0 }}>
+              <strong>{NOTICE_LABEL[notice.severity]}</strong> · {notice.message}
+              {notice.ref !== undefined && (
+                <span style={monoStyle}>
+                  {' '}
+                  ({notice.ref.type} {notice.ref.id})
+                </span>
+              )}
+            </p>
+          ))
         )}
       </div>
 

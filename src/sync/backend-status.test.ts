@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import {
+  backendCapabilitiesSignal,
   backendCheckDueSignal,
   backendStatusSignal,
   setBackendCheckDue,
@@ -30,6 +31,8 @@ beforeEach(() => {
 
 afterEach(() => {
   syncLogSignal.value = [];
+  backendCapabilitiesSignal.value = undefined;
+  localStorage.clear();
 });
 
 describe('classifyBackendInfo (#99)', () => {
@@ -73,6 +76,25 @@ describe('refreshBackendStatus', () => {
     expect(syncLogSignal.value[0]?.kind).toBe('info');
   });
 
+  it('guarda las capacidades que declara el backend; sin la lista, ninguna (4.4.0, #128)', async () => {
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () =>
+          Promise.resolve(
+            ok({ contractVersion: '4.4.0', status: 'ok', capabilities: ['customer-payment-void'] }),
+          ),
+      }),
+      now,
+    );
+    expect(backendCapabilitiesSignal.value).toEqual(['customer-payment-void']);
+    expect(localStorage.getItem('offline-pos:backend-capabilities')).toBe(
+      '["customer-payment-void"]',
+    );
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendCapabilitiesSignal.value).toEqual([]);
+  });
+
   it('un error de red no cambia el estado conocido', async () => {
     setBackendStatus({
       kind: 'maintenance',
@@ -92,7 +114,7 @@ describe('refreshBackendStatus', () => {
     await refreshBackendStatus(
       fakeConnector({
         getInfo: () =>
-          Promise.resolve(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.3.0' })),
+          Promise.resolve(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.4.0' })),
       }),
       now,
     );
@@ -127,7 +149,7 @@ describe('noteSyncFailure', () => {
     noteSyncFailure(failure(err('sync/remote-error', { message: 'x' })));
     expect(backendCheckDueSignal.value).toBe(true);
 
-    noteSyncFailure(failure(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.3.0' })));
+    noteSyncFailure(failure(err('sync/incompatible-contract', { backend: '3.0.0', pos: '4.4.0' })));
     expect(backendStatusSignal.value).toMatchObject({
       kind: 'incompatible',
       backendVersion: '3.0.0',

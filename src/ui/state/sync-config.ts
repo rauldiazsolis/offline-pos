@@ -75,6 +75,12 @@ export const wipeSummarySignal = signal<LocalDataSummary | null>(null);
  */
 export const identityResetSignal = signal(false);
 
+/**
+ * Aviso del onboarding de demo (#128) arriba del wizard: la demo no se pudo iniciar, el link se
+ * ignoró, o la vuelta del alta necesita que el operador revise la conexión. Se limpia al resetear.
+ */
+export const configNoticeSignal = signal<string | null>(null);
+
 /** Lo que el modelo puro necesita, leído de los signals (el controller lo usa para validar). */
 export function currentWizardInput(): WizardInput {
   return {
@@ -121,4 +127,5 @@ export function resetConfigForm(saved?: SyncConfig): void {
   localChoiceSignal.value = 'keep';
   localChoiceConfirmedSignal.value = false;
   wipeSummarySignal.value = null;
+  configNoticeSignal.value = null;
 }

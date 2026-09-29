@@ -1,19 +1,29 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { activeScreenSignal } from '../state/screen.ts';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
-import { isDemoModeSignal } from '../state/demo-mode.ts';
+import { startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
+  backendNoticesSignal,
   backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   localCatalogCountsSignal,
   pendingOutboxCountSignal,
+  setDemoSession,
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
+
+vi.mock('../keyboard/onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
+
+const demo = {
+  template: 'kiosco',
+  onboarding: { url: 'https://b.x/alta', label: 'Crear mi comercio' },
+  startedAt: '2026-09-28T12:00:00.000Z',
+};
 
 beforeEach(() => {
   syncStatusSignal.value = 'offline';
@@ -23,6 +33,7 @@ beforeEach(() => {
   localCatalogCountsSignal.value = null;
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
+  backendNoticesSignal.value = [];
   // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
   nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
   lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
@@ -47,16 +58,43 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
     expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
   });
 
-  it('convive con el botón de modo demo', () => {
+  it('convive con la marca DEMO y el botón de alta', () => {
     lastCashCountAtSignal.value = undefined;
-    isDemoModeSignal.value = true;
+    setDemoSession(demo);
     try {
       render(<StatusBar />);
       expect(screen.getByRole('button', { name: 'Sin arqueo en 24 h' })).not.toBeNull();
-      expect(screen.getByText('Conectar Mini-ERP')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).not.toBeNull();
     } finally {
-      isDemoModeSignal.value = false;
+      setDemoSession(null);
     }
+  });
+});
+
+describe('StatusBar — terminal en demo (#128)', () => {
+  afterEach(() => {
+    setDemoSession(null);
+  });
+
+  it('sin demo no hay marca ni botón de alta', () => {
+    render(<StatusBar />);
+    expect(screen.queryByText('DEMO')).toBeNull();
+    expect(screen.queryByRole('button', { name: /\(\/ALTA\)/ })).toBeNull();
+  });
+
+  it('con demo se ven DEMO y el botón; el click lleva al alta sin abrir /DIAGNOSTICO', () => {
+    vi.mocked(startOnboarding).mockClear();
+    setDemoSession(demo);
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    expect(screen.getByText('DEMO')).not.toBeNull();
+    const button = screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' });
+    expect(button.tabIndex).toBe(-1);
+    fireEvent.click(button);
+
+    expect(startOnboarding).toHaveBeenCalledTimes(1);
+    expect(activeScreenSignal.value).toBe('sale');
   });
 });
 
@@ -149,6 +187,29 @@ describe('StatusBar', () => {
   });
 });
 
+describe('StatusBar — avisos del backend (4.4.0, #128)', () => {
+  it('sin avisos no aparece', () => {
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: /^Avisos/ })).toBeNull();
+  });
+
+  it('con avisos muestra "Avisos (N)" con el color del más grave y el click abre /DIAGNOSTICO', () => {
+    backendNoticesSignal.value = [
+      { id: 'a', severity: 'info', message: 'uno' },
+      { id: 'b', severity: 'critical', message: 'dos' },
+    ];
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    const button = screen.getByRole('button', { name: 'Avisos (2)' });
+    expect(button.tabIndex).toBe(-1);
+    expect(button.style.color).toBe('var(--color-danger)');
+    fireEvent.click(button);
+
+    expect(activeScreenSignal.value).toBe('diagnostico');
+  });
+});
+
 describe('StatusBar — click (Etapa 2 de #94)', () => {
   it('un click abre /DIAGNOSTICO', () => {
     activeScreenSignal.value = 'sale';
@@ -186,7 +247,7 @@ describe('StatusBar — estado del backend (#99)', () => {
     const { container } = render(<StatusBar />);
 
     expect(
-      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.3 o posterior)'),
+      screen.getByText('Backend incompatible (contrato 3.0.0, se necesita 4.0 o posterior)'),
     ).not.toBeNull();
     const dot = container.querySelector<HTMLElement>('[aria-hidden="true"]');
     expect(dot?.style.background).toBe('var(--color-danger)');

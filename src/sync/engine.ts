@@ -40,6 +40,7 @@ import {
   refreshBackendStatus,
 } from './backend-status.ts';
 import { runCleanupIfDue } from './cleanup-schedule.ts';
+import { saveBackendNotices } from './backend-notices.ts';
 import type { Connector, LotIssue, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
@@ -267,6 +268,9 @@ async function pullAndApply(
       request,
     };
   }
+
+  // 4.4.0 (#128): la lista vigente reemplaza a la anterior; sin `notices`, no hay avisos.
+  saveBackendNotices(pullResult.value.notices ?? []);
 
   const { products, customers } = pullResult.value;
   if (products.nextCursor !== undefined) {

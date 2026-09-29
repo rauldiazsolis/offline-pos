@@ -2,6 +2,10 @@ import { roundAmount } from '../../domain/rounding.ts';
 import { voidCollectionAndPersist } from '../../storage/customer-payment-repository.ts';
 import { voidSaleAndPersist } from '../../storage/sale-repository.ts';
 import { listVoidCandidates, type VoidCandidate } from '../../storage/void-repository.ts';
+import {
+  CAPABILITY_CUSTOMER_PAYMENT_VOID,
+  supportsCapability,
+} from '../../sync/backend-capabilities.ts';
 import { describeError } from '../errors.ts';
 import { formatBalance } from '../format-balance.ts';
 import { receiptName, saleName } from '../format-ticket.ts';
@@ -10,6 +14,7 @@ import { customerBalancesSignal, refreshCustomerBalances } from '../state/custom
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
+import { backendCapabilitiesSignal } from '../state/sync.ts';
 import {
   filteredVoidCandidatesSignal,
   voidCandidatesSignal,
@@ -99,6 +104,20 @@ export function selectForVoid(): void {
   if (candidate.state !== 'voidable') {
     voidMessageSignal.value = notVoidableMessage(candidate);
     return;
+  }
+  // 4.4.0 (#128): anular una cobranza necesita que el backend lo declare.
+  if (candidate.kind === 'collection') {
+    const supported = supportsCapability(
+      backendCapabilitiesSignal.value,
+      CAPABILITY_CUSTOMER_PAYMENT_VOID,
+    );
+    if (supported !== true) {
+      voidMessageSignal.value =
+        supported === false
+          ? 'El backend no permite anular cobranzas.'
+          : 'Todavía no se sabe si el backend permite anular cobranzas: probá /SINCRONIZAR.';
+      return;
+    }
   }
   voidMessageSignal.value = null;
   voidErrorSignal.value = null;

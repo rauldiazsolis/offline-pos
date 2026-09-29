@@ -25,6 +25,7 @@ import { connectionStateSignal } from '../state/sync.ts';
 import {
   configErrorFieldSignal,
   configErrorSignal,
+  configNoticeSignal,
   probeOutcomeSignal,
   wizardAsyncSignal,
   wizardModelSignal,
@@ -389,6 +390,21 @@ export function ConfigScreen() {
           {required && (
             <p style={{ margin: 'var(--space-1) 0 0', color: 'var(--color-text-muted)' }}>
               Configurá y probá la conexión para empezar.
+            </p>
+          )}
+          {configNoticeSignal.value !== null && (
+            // Onboarding de demo (#128): por qué el wizard está abierto, o qué pasó con el link.
+            <p
+              role="status"
+              style={{
+                margin: 'var(--space-2) 0 0',
+                padding: 'var(--space-2) var(--space-3)',
+                border: '1px solid var(--color-warning)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--color-warning)',
+              }}
+            >
+              {configNoticeSignal.value}
             </p>
           )}
         </div>

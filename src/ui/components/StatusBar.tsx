@@ -1,8 +1,10 @@
 import { describeError } from '../errors.ts';
 import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
-import { contractRequirement, POS_CONTRACT_VERSION } from '../../domain/contract-version.ts';
+import { contractRequirement, MIN_BACKEND_CONTRACT } from '../../domain/contract-version.ts';
 import {
+  backendNoticesSignal,
   backendStatusSignal,
+  demoSessionSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -11,10 +13,19 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
-import { isDemoModeSignal, startOnboardingHandshake } from '../state/demo-mode.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { enterCashScreen } from '../keyboard/cash-controller.ts';
+import { startOnboarding } from '../keyboard/onboarding-controller.ts';
 import { cashCountOverdueSignal } from '../state/cash.ts';
+import { mostSevere } from '../../sync/backend-notices.ts';
+import type { NoticeSeverity } from '../../sync/connector.ts';
+
+/** Color de "Avisos (N)" según el aviso más grave (4.4.0, #128). */
+const NOTICE_COLOR: Record<NoticeSeverity, string> = {
+  critical: 'var(--color-danger)',
+  warning: 'var(--color-chrome-warning)',
+  info: 'var(--color-chrome-text-muted)',
+};
 
 /**
  * Barra de estado (extremo opuesto a la barra de comandos). Hasta la Etapa 2
@@ -28,7 +39,10 @@ import { cashCountOverdueSignal } from '../state/cash.ts';
  *
  * A la derecha, independiente del estado de sync y de la conectividad, el aviso "Sin arqueo en
  * 24 h" (Etapa 5 de #94, #100): un botón que abre `/CAJA` en Arqueo sin abrir `/DIAGNOSTICO` y
- * sin sacarle el foco a la barra de comandos.
+ * sin sacarle el foco a la barra de comandos. Antes, "Avisos (N)" (4.4.0, #128): los avisos
+ * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
+ * Delante de todo, con la terminal en demo (#128): la marca DEMO y el botón del alta
+ * (`<onboarding.label> (/ALTA)`), que hace lo mismo que `/ALTA` y tampoco abre `/DIAGNOSTICO`.
  */
 /** Color del punto de estado — misma info que el texto, reforzada visualmente (pase de diseño). */
 function statusColor(): string {
@@ -65,7 +79,7 @@ function statusText(): string {
   // 4.0.0 (#99): detrás de "sin configurar" y de offline, delante del resto. La venta sigue.
   const backend = backendStatusSignal.value;
   if (backend.kind === 'incompatible') {
-    return `Backend incompatible (contrato ${backend.backendVersion}, se necesita ${contractRequirement(POS_CONTRACT_VERSION)})`;
+    return `Backend incompatible (contrato ${backend.backendVersion}, se necesita ${contractRequirement(MIN_BACKEND_CONTRACT)})`;
   }
   if (backend.kind === 'maintenance') {
     return backend.info.message !== undefined
@@ -104,6 +118,8 @@ function statusText(): string {
 }
 
 export function StatusBar() {
+  const noticeColor = NOTICE_COLOR[mostSevere(backendNoticesSignal.value) ?? 'info'];
+  const demo = demoSessionSignal.value;
   return (
     <div
       class="status-bar"
@@ -137,6 +153,63 @@ export function StatusBar() {
       <div
         style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
       >
+        {demo !== null && (
+          <>
+            <span
+              style={{
+                fontWeight: 'bold',
+                color: 'var(--color-chrome-warning)',
+                letterSpacing: '0.05em',
+              }}
+            >
+              DEMO
+            </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              class="btn-primary"
+              onMouseDown={keepFocusOnMouseDown}
+              onClick={(event) => {
+                event.stopPropagation();
+                startOnboarding();
+              }}
+              title={`${demo.onboarding.label} (/ALTA)`}
+              // `.btn-primary` pone el color; borde y tamaño, como los otros botones de la barra.
+              style={{
+                border: '1px solid var(--color-accent)',
+                borderRadius: 'var(--radius-sm, 6px)',
+                padding: '2px 8px',
+                fontSize: 'var(--font-size-xs, 12px)',
+                cursor: 'pointer',
+              }}
+            >
+              {demo.onboarding.label} (/ALTA)
+            </button>
+          </>
+        )}
+        {backendNoticesSignal.value.length > 0 && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={keepFocusOnMouseDown}
+            onClick={(event) => {
+              event.stopPropagation();
+              enterDiagnosticoScreen();
+            }}
+            title="Ver los avisos del backend (/DIAGNOSTICO)"
+            style={{
+              background: 'transparent',
+              color: noticeColor,
+              border: `1px solid ${noticeColor}`,
+              borderRadius: 'var(--radius-sm, 6px)',
+              padding: '2px 8px',
+              fontSize: 'var(--font-size-xs, 12px)',
+              cursor: 'pointer',
+            }}
+          >
+            Avisos ({String(backendNoticesSignal.value.length)})
+          </button>
+        )}
         {cashCountOverdueSignal.value && (
           <button
             type="button"
@@ -158,32 +231,6 @@ export function StatusBar() {
             }}
           >
             Sin arqueo en 24 h
-          </button>
-        )}
-        {isDemoModeSignal.value && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              startOnboardingHandshake();
-            }}
-            style={{
-              background: 'var(--color-accent, #6366f1)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 'var(--radius-sm, 6px)',
-              padding: '2px 8px',
-              fontSize: 'var(--font-size-xs, 12px)',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-            title="Conectar a Mini-ERP en la nube para sincronizar tus ventas"
-          >
-            <span>🚀</span>
-            <span>Conectar Mini-ERP</span>
           </button>
         )}
       </div>

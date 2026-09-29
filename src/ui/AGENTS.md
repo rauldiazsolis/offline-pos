@@ -119,7 +119,7 @@ propósito no interactiva; esa decisión se reabrió a propósito en la prueba m
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
 (`backendStatusSignal`), detrás de "sin configurar" y de offline y delante del resto: "Backend
-incompatible (contrato X, se necesita 4.3 o posterior)" con estilo de error, y "Backend en mantenimiento:
+incompatible (contrato X, se necesita 4.0 o posterior)" con estilo de error (el piso, 4.4.0), y "Backend en mantenimiento:
 <mensaje>", informativo. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
@@ -136,6 +136,16 @@ de `ui/state/sync.ts`; no toca `navigator.onLine`
 directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un solo lugar
 (`ui/errors.ts`): conectividad (`Failed to fetch` y equivalentes), 401/403, 404, timeout
 (`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
+
+**Desde 4.4.0 (#128)**, además del estado de sync:
+- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): delante de
+  todo, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
+  que llama a lo mismo que el comando (`ui/keyboard/onboarding-controller.ts::startOnboarding`: emite
+  el `wipe_key` y navega al alta). No abre `/DIAGNOSTICO`. `/ALTA` solo aparece en el menú de "/" con
+  la terminal en demo (`availableCommands`).
+- **"Avisos (N)"** (`backendNoticesSignal`), a la derecha y antes de "Sin arqueo en 24 h": el color es
+  el del aviso más grave (`critical` → error, `warning` → ámbar, `info` → neutro) y el click abre
+  `/DIAGNOSTICO`, donde está el detalle. Sin avisos no se muestra. Nunca bloquea nada.
 
 ## `/CAJA` y `/RESUMEN` (Etapa 5, #100 y #120)
 
@@ -207,6 +217,11 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   fila del resultado (al abrir, la más nueva); Esc lo limpia si tiene texto y, si no, sale a la venta. Sin nada anulable,
   "No hay ventas ni cobranzas de las últimas 24 horas para anular." (arriba de las filas sin acción);
   con un filtro sin coincidencias, "Ningún documento coincide con la búsqueda.".
+- **Cobranzas sin la capacidad `customer-payment-void`** (4.4.0, #128): la cobranza se sigue viendo y
+  navegando, pero Enter o click no abren el modal y el slot dice "El backend no permite anular
+  cobranzas." — o, si nunca se supo (terminal previa a 4.4.0 que arrancó sin red), "Todavía no se sabe
+  si el backend permite anular cobranzas: probá /SINCRONIZAR." (`void-controller.ts::selectForVoid`).
+  Las ventas se anulan igual.
 - **Modal de confirmación** (solo sobre una fila anulable): tarjeta chica sobre la lista, con la pregunta ("¿Anular el Ticket #1?",
   "¿Anular el Recibo #1 de Ana?"; sin número, "el ticket de las 17:20"), el total y, en una cobranza
   con saldo conocido, "Saldo de Ana: A favor $500,00 → Sin saldo". "Volver (Esc)" y "Anular (Enter)";
@@ -253,6 +268,16 @@ donde haga falta el usuario, Esc según el estado (cancela la prueba, vuelve de 
 borrado, o sale si la terminal está `active`). Arranca en Revisar con la terminal `active`, en el
 primer paso incompleto en modo requerido, y en Terminal tras perder la identidad.
 
+**Onboarding de demo (#128)**: `configNoticeSignal` (`ui/state/sync-config.ts`) muestra arriba del
+wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la demo: <motivo>.", "Esta
+terminal tiene datos locales: se ignoró el link de demo."). A la vuelta del alta sin `wipe_key` y con
+datos del usuario, o si la prueba falla, `config-controller.ts::openWizardWithCandidate` precarga la
+conexión que trajo (`rest`, URL, clave, sucursal y punto de venta) y arranca en Probar, sin borrar
+nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión. Con una terminal
+`active`, un link ignorado o fallido se avisa en el slot de la barra de comandos
+(`commandBarWarningSignal`), y "La plantilla X no existe; se usó Y." como aviso informativo
+(`commandBarNoticeSignal`).
+
 ## Utilidades de consola `pos.*` (Etapa 0 de #94, issue #95)
 
 Objeto global `window.pos` para DevTools, instalado en `main.tsx` **antes** de `bootstrap()` (si el
@@ -285,7 +310,7 @@ mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y b
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
-abre `/CAJA`).
+abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta hace `/ALTA`, #128).
 
 ## Diseño visual
 
@@ -349,7 +374,10 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 - **Operaciones async de la barra trackeadas contra la navegación**: `pendingBarOperation`
   (`command-bar-controller.ts`) guarda la promesa en curso de cualquier efecto async disparado desde
   la barra (hoy, crear un cliente con `@<nombre>`) y `triggerCheckout` la espera antes de cambiar de
-  pantalla. Un caso nuevo se suma ahí, no en un tracker paralelo.
+  pantalla. Un Enter que llega con una operación en curso también la espera y decide con la barra como
+  quedó (`submitCommandBar`, #146: el alta vacía la barra recién al terminar, y un segundo Enter rápido
+  creaba el cliente dos veces en vez de abrir la cobranza). Un caso nuevo se suma ahí, no en un
+  tracker paralelo.
 - **Preselección visual real**: cuando el render resalta la fila 0 por defecto sin que el signal de
   selección tenga valor todavía, el primer ↑/↓ parte de esa fila (`moveSelectionOver`,
   `assumeFirstSelected`); si no, el primer toque de flecha no se nota.

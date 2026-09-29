@@ -91,6 +91,46 @@ export type BatchLotStatus =
   | { status: 'ok' }
   | { status: 'issues'; issues: LotIssue[] };
 
+const statusOnlySchema = z.object({ status: z.string() });
+
+/**
+ * 4.4.0 (#128, reglas de evolución): lo que el POS no entiende de un lote se trata como terminado
+ * (`issues`, con un aviso que lo dice), nunca como `processing`. `ok` e `issues` significan "el lote
+ * está aplicado" (los problemas los resuelve el backend con bloqueos) y `queued`/`processing` son de
+ * paso: si un backend informara siempre algo que el POS no conoce y el POS lo esperara, retendría
+ * stock y saldos para siempre. Un estado nuevo que requiera otra cosa llega con una versión del POS
+ * que lo anuncie.
+ */
+const tolerantLotStatusSchema = batchLotStatusSchema.catch((ctx) => {
+  const parsed = statusOnlySchema.safeParse(ctx.value);
+  const message =
+    parsed.success && parsed.data.status === 'issues'
+      ? 'El backend informó problemas con este lote en un formato que el POS no entiende.'
+      : parsed.success
+        ? `El backend informó el estado «${parsed.data.status}», que este POS no conoce.`
+        : 'El backend informó un estado de lote que este POS no entiende.';
+  return { status: 'issues' as const, issues: [{ message }] };
+});
+
+export const NOTICE_SEVERITIES = ['info', 'warning', 'critical'] as const;
+export type NoticeSeverity = (typeof NOTICE_SEVERITIES)[number];
+
+/** Aviso del backend (4.4.0, #128): la lista vigente llega completa en cada pull. */
+export type BackendNotice = {
+  id: string;
+  severity: NoticeSeverity;
+  message: string;
+  ref?: { type: string; id: string };
+};
+
+/** Una severidad desconocida se trata como `info` (reglas de evolución). */
+export const backendNoticeSchema = z.object({
+  id: z.string(),
+  severity: z.enum(NOTICE_SEVERITIES).catch('info'),
+  message: z.string(),
+  ref: z.object({ type: z.string(), id: z.string() }).optional(),
+});
+
 export type PullBatchParams = {
   deviceId: string;
   /** Cursor por recurso — ausente pide la foto completa de ese recurso (todo o nada, sin paginar). */
@@ -106,6 +146,8 @@ export type PullBatchResult = {
   stock: StockItem[];
   /** Solo trae entradas para los ids de `pendingLotIds` que el backend todavía reconoce. */
   lots: Record<string, BatchLotStatus>;
+  /** 4.4.0 (#128): la lista vigente de avisos; ausente = el backend no mandó (se trata como `[]`). */
+  notices?: BackendNotice[];
 };
 
 export const pullResultSchema = <T extends z.ZodType>(itemSchema: T) =>
@@ -116,7 +158,9 @@ export const pullBatchResponseSchema = z.object({
   products: pullResultSchema(connectorProductSchema),
   customers: pullResultSchema(connectorCustomerSchema),
   stock: z.array(stockItemSchema),
-  lots: z.record(z.string(), batchLotStatusSchema),
+  lots: z.record(z.string(), tolerantLotStatusSchema),
+  // Uno mal formado se descarta solo (`null`), sin tirar el pull.
+  notices: z.array(backendNoticeSchema.nullable().catch(null)).optional(),
 });
 
 export function withCursor<T>(result: {
@@ -149,6 +193,21 @@ export function toLots(
   return Object.fromEntries(Object.entries(lots).map(([id, status]) => [id, toLotStatus(status)]));
 }
 
+function toNotices(notices: (z.infer<typeof backendNoticeSchema> | null)[]): BackendNotice[] {
+  return notices.flatMap((notice) =>
+    notice === null
+      ? []
+      : [
+          {
+            id: notice.id,
+            severity: notice.severity,
+            message: notice.message,
+            ...(notice.ref !== undefined ? { ref: notice.ref } : {}),
+          },
+        ],
+  );
+}
+
 /** Reconstruye la respuesta validada sin `undefined` explícitos (`nextCursor`, `eventId`). */
 export function toPullBatchResult(data: z.infer<typeof pullBatchResponseSchema>): PullBatchResult {
   return {
@@ -156,6 +215,7 @@ export function toPullBatchResult(data: z.infer<typeof pullBatchResponseSchema>)
     customers: withCursor(data.customers),
     stock: data.stock,
     lots: toLots(data.lots),
+    ...(data.notices !== undefined ? { notices: toNotices(data.notices) } : {}),
   };
 }
 
@@ -174,12 +234,17 @@ export function toPullBatchResult(data: z.infer<typeof pullBatchResponseSchema>)
 /** Header con la versión del contrato que habla el POS, en todo request REST (4.0.0, #99). */
 export const CONTRACT_VERSION_HEADER = 'X-POS-Contract-Version';
 
-/** Respuesta de `GET /info` (contrato 4.0.0, #99): versión y estado del backend. */
+/**
+ * Respuesta de `GET /info` (contrato 4.0.0, #99): versión y estado del backend. 4.4.0 (#128): un
+ * `status` desconocido se trata como `ok` (reglas de evolución) y `capabilities` declara lo
+ * opcional que el backend implementa (ausente = ninguna).
+ */
 export const backendInfoSchema = z.object({
   contractVersion: z.string(),
-  status: z.enum(['ok', 'maintenance']),
+  status: z.enum(['ok', 'maintenance']).catch('ok'),
   message: z.string().optional(),
   backend: z.object({ name: z.string(), version: z.string() }).optional(),
+  capabilities: z.array(z.string()).optional(),
 });
 
 export type BackendInfo = {
@@ -187,6 +252,7 @@ export type BackendInfo = {
   status: 'ok' | 'maintenance';
   message?: string;
   backend?: { name: string; version: string };
+  capabilities?: string[];
 };
 
 /** Omite los opcionales ausentes (`exactOptionalPropertyTypes`). */
@@ -196,6 +262,7 @@ export function toBackendInfo(data: z.infer<typeof backendInfoSchema>): BackendI
     status: data.status,
     ...(data.message !== undefined ? { message: data.message } : {}),
     ...(data.backend !== undefined ? { backend: data.backend } : {}),
+    ...(data.capabilities !== undefined ? { capabilities: data.capabilities } : {}),
   };
 }
 

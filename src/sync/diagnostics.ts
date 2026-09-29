@@ -1,6 +1,8 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
 import {
+  backendCapabilitiesSignal,
+  backendNoticesSignal,
   backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
@@ -12,7 +14,7 @@ import {
 } from '../ui/state/sync.ts';
 import { getLastCleanup, type CleanupRecord } from './cleanup-schedule.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
-import type { LotIssue } from './connector.ts';
+import type { BackendNotice, LotIssue } from './connector.ts';
 import { isSyncLockHeld } from './engine.ts';
 import type { PullApplication } from './pull-rule.ts';
 import { getAwaitingLots, getCurrentPushLot, type AwaitingLot } from './push-lot.ts';
@@ -37,6 +39,10 @@ export type SyncDiagnostics = {
   pushLotIssues: LotIssue[] | null;
   /** Estado del backend según su último `getInfo` (4.0.0, #99). */
   backendStatus: BackendStatus;
+  /** Capacidades del último `getInfo` exitoso (4.4.0, #128); `undefined` = nunca se supo. */
+  capabilities: readonly string[] | undefined;
+  /** Avisos vigentes del backend según el último pull aplicado (4.4.0, #128). */
+  notices: readonly BackendNotice[];
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
   deviceId: string;
   log: SyncLogEntry[];
@@ -56,6 +62,8 @@ export function collectDiagnostics(): SyncDiagnostics {
     lastPullApplication: lastPullApplicationSignal.value,
     pushLotIssues: pushLotIssuesSignal.value,
     backendStatus: backendStatusSignal.value,
+    capabilities: backendCapabilitiesSignal.value,
+    notices: backendNoticesSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,
     lastCleanup: getLastCleanup(),

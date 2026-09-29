@@ -12,6 +12,7 @@ import { saveSyncConfig } from '../../sync/config.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { backendCapabilitiesSignal } from '../state/sync.ts';
 import {
   voidCandidatesSignal,
   voidConfirmingSignal,
@@ -36,6 +37,8 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   tick();
   saveSyncConfig({ type: 'rest', baseUrl: 'http://x', locale: 'es-AR' });
+  // 4.4.0 (#128): anular cobranzas necesita la capacidad.
+  backendCapabilitiesSignal.value = ['customer-payment-void'];
   await db.open();
   await db.products.add({
     id: 'p1',

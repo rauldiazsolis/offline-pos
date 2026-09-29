@@ -15,8 +15,9 @@ lectura/escritura cruda para datos que en producción vendrían de un pull (`Cus
 no tiene sentido ejercitar por UI en cada test.
 
 `e2e/fixtures.ts` (Etapa 2b) exporta un `test` de Playwright que siembra una conexión `active`
-(`ACTIVE_CONFIG`, con `verifiedAt`, sucursal y punto de venta, apuntando a un backend inalcanzable)
-y un id de dispositivo (`seedDeviceIdentity`, una vez por pestaña) antes de cargar la app: sin
+(`ACTIVE_CONFIG`, con `verifiedAt`, sucursal y punto de venta, apuntando a un backend inalcanzable),
+la capacidad `customer-payment-void` (4.4.0, #128: ese backend nunca la va a informar y sin ella
+`/ANULAR` no anula cobranzas) y un id de dispositivo (`seedDeviceIdentity`, una vez por pestaña) antes de cargar la app: sin
 conexión activa la app solo muestra `/CONFIG`, así que todo spec que ejercite la app ya conectada
 (y offline) importa `test`/`expect` de ahí en vez de `@playwright/test`. Los que prueban el
 arranque y la configuración (`connection-lifecycle`, `minibackend-sync`) usan el de Playwright a
@@ -24,3 +25,10 @@ secas. Para los unit tests, `src/test/fake-connector.ts` da un `Connector` de me
 esta etapa, encontrado por el e2e y no por jsdom: `useSignalEffect` corre diferido y dejaba una
 ventana en la que tipear tras un error agregaba texto en vez de reemplazarlo — se usa
 `useLayoutEffect`.
+
+**Dos demo-backends** (`playwright.config.ts`): el de `4000` (archivo `demo-backend/data/demo.sqlite`)
+para `minibackend-sync.spec.ts`, y otro en `4001`, en memoria (`DEMO_BACKEND_PORT`,
+`DEMO_BACKEND_DB=:memory:`), solo para `e2e/demo-onboarding.spec.ts` (#128): cada
+`POST /demo-sessions` vuelve a cargar la base desde cero, así que con uno solo le pisaría los datos a
+los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 'serial'`) por el mismo
+motivo; el de "conexión real" usa el `test` de `fixtures.ts`, el resto el de Playwright a secas.

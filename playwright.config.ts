@@ -29,5 +29,14 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
+    {
+      // Onboarding de demo (#128): `POST /demo-sessions` re-siembra la base, así que
+      // `e2e/demo-onboarding.spec.ts` usa su propio backend, en memoria.
+      command: 'pnpm --filter demo-backend run start',
+      env: { DEMO_BACKEND_PORT: '4001', DEMO_BACKEND_DB: ':memory:' },
+      url: 'http://localhost:4001/_demo',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
   ],
 });

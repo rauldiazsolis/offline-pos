@@ -1,8 +1,9 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
-import type { BackendInfo, LotIssue } from '../../sync/connector.ts';
+import type { BackendInfo, BackendNotice, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
+import type { DemoSessionInfo } from '../../sync/config.ts';
 import type { PullApplication } from '../../sync/pull-rule.ts';
 
 /**
@@ -47,6 +48,18 @@ export type BackendStatus =
 
 export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
 
+/**
+ * Capacidades del backend según su último `getInfo` exitoso (4.4.0, #128), persistidas por
+ * `sync/backend-capabilities.ts`. `undefined` = nunca se supo.
+ */
+export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(undefined);
+
+/**
+ * Avisos vigentes del backend según el último pull aplicado (4.4.0, #128), persistidos por
+ * `sync/backend-notices.ts`. Nunca bloquean nada.
+ */
+export const backendNoticesSignal = signal<readonly BackendNotice[]>([]);
+
 /** `true` = preguntar `getInfo` antes del próximo ciclo: al arrancar y tras un fallo que no es de red. */
 export const backendCheckDueSignal = signal(true);
 
@@ -86,6 +99,17 @@ export const activeConnectorTypeSignal = signal<ConnectorType | null>(null);
 
 export function setActiveConnectorType(type: ConnectorType | null): void {
   activeConnectorTypeSignal.value = type;
+}
+
+/**
+ * Terminal en demo (#128): la `demo` de la config activa (`null` = no está en demo). De acá salen
+ * la marca DEMO y el botón de la barra de estado y el comando `/ALTA`. Lo fijan `bootstrap` al
+ * arrancar y `applyConnection` al cambiar de conexión.
+ */
+export const demoSessionSignal = signal<DemoSessionInfo | null>(null);
+
+export function setDemoSession(demo: DemoSessionInfo | null): void {
+  demoSessionSignal.value = demo;
 }
 
 /**

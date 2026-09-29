@@ -65,11 +65,12 @@ async function push(version: string | undefined, id = 'lot-1'): Promise<Response
 }
 
 describe('GET /info (#99)', () => {
-  it('informa el contrato 4.3.0 y el estado ok', async () => {
+  it('informa el contrato 4.4.0, el estado ok y sus capacidades (#128)', async () => {
     expect(await info()).toEqual({
-      contractVersion: '4.3.0',
+      contractVersion: '4.4.0',
       status: 'ok',
-      backend: { name: 'offline-pos-demo-backend', version: '4.3.0' },
+      backend: { name: 'offline-pos-demo-backend', version: '4.4.0' },
+      capabilities: ['demo-sessions', 'customer-payment-void'],
     });
   });
 
@@ -105,11 +106,11 @@ describe('versión del contrato en cada request (#99)', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       code: 'incompatible-contract',
-      contractVersion: '4.3.0',
+      contractVersion: '4.4.0',
     });
   });
 
-  it('un POS 4.1 (mismo major, minor anterior) se procesa: el backend 4.3 lo entiende (#101, #125)', async () => {
+  it('un POS 4.1 (mismo major, minor anterior) se procesa: el backend 4.4 lo entiende (#101, #125)', async () => {
     const response = await push('4.1.0');
 
     expect(response.status).toBe(200);

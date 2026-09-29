@@ -1,0 +1,8 @@
+[
+  { "id": "alm-p1", "sku": "ALMC-001", "barcodes": ["7790000000011"], "name": "Leche entera 1L", "price": 1100, "taxRate": 0.105, "category": "lacteos", "tracksStock": true, "createdAt": "2025-02-01T00:00:00.000Z", "initialStock": 30 },
+  { "id": "alm-p2", "sku": "ALMC-002", "barcodes": ["7790000000028"], "name": "Polenta 500g", "price": 800, "taxRate": 0.21, "category": "almacen", "tracksStock": true, "createdAt": "2025-02-03T00:00:00.000Z", "initialStock": 25 },
+  { "id": "alm-p3", "sku": "ALMC-003", "barcodes": ["7790000000035"], "name": "Lentejas 400g", "price": 1300, "taxRate": 0.21, "category": "almacen", "tracksStock": true, "createdAt": "2025-02-05T00:00:00.000Z", "initialStock": 20 },
+  { "id": "alm-p4", "sku": "ALMC-004", "barcodes": ["7790000000042"], "name": "Tomate triturado 520g", "price": 950, "taxRate": 0.21, "category": "almacen", "tracksStock": true, "createdAt": "2025-02-07T00:00:00.000Z", "initialStock": 35 },
+  { "id": "alm-p5", "sku": "ALMC-005", "barcodes": ["7790000000059"], "name": "Galletitas de agua", "price": 700, "taxRate": 0.21, "category": "almacen", "tracksStock": true, "createdAt": "2025-02-09T00:00:00.000Z", "initialStock": 40 },
+  { "id": "alm-p6", "sku": "ALMC-006", "barcodes": ["7790000000066"], "name": "Huevos x12", "price": 2400, "taxRate": 0.21, "category": "frescos", "tracksStock": true, "createdAt": "2025-02-11T00:00:00.000Z", "initialStock": 15 }
+]

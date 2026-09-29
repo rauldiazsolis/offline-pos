@@ -29,6 +29,15 @@
       <p>
         <label><input type="checkbox" id="simulate-contract3" /> Simular contrato 3.0.0 (/info informa 3.0.0 y push/pull responden 409)</label>
       </p>
+      <p>
+        <label><input type="checkbox" id="notice" /> Aviso de prueba en el pull</label>
+        <select id="notice-severity">
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="critical">critical</option>
+        </select>
+        <input type="text" id="notice-message" placeholder="Mensaje del aviso" />
+      </p>
       <table id="lots-table"><thead><tr><th>id</th><th>dispositivo</th><th>eventos</th><th>estado</th><th>avisos</th><th></th></tr></thead><tbody></tbody></table>
     </section>
     <section>
@@ -114,6 +123,14 @@
       maintenanceMessage.addEventListener('change', saveMaintenance);
       const simulateContract3 = document.getElementById('simulate-contract3');
       simulateContract3.addEventListener('change', () => post('/_demo/api/settings', { simulateContract3: simulateContract3.checked }, 'PUT'));
+      const notice = document.getElementById('notice');
+      const noticeSeverity = document.getElementById('notice-severity');
+      const noticeMessage = document.getElementById('notice-message');
+      const saveNotice = () =>
+        post('/_demo/api/settings', { notice: { enabled: notice.checked, severity: noticeSeverity.value, message: noticeMessage.value } }, 'PUT');
+      notice.addEventListener('change', saveNotice);
+      noticeSeverity.addEventListener('change', saveNotice);
+      noticeMessage.addEventListener('change', saveNotice);
 
       function lotActions(l) {
         const finish = `<button onclick="finishLot('${l.id}', false)">Terminar OK</button> <button onclick="finishLot('${l.id}', true)">Terminar con aviso</button>`;
@@ -143,6 +160,9 @@
         maintenance.checked = settings.maintenance.enabled;
         if (document.activeElement !== maintenanceMessage) maintenanceMessage.value = settings.maintenance.message;
         simulateContract3.checked = settings.simulateContract3;
+        notice.checked = settings.notice.enabled;
+        if (document.activeElement !== noticeSeverity) noticeSeverity.value = settings.notice.severity;
+        if (document.activeElement !== noticeMessage) noticeMessage.value = settings.notice.message;
         loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
         loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));

@@ -181,6 +181,7 @@ export const panelRoutes: RouteDef[] = [
         ...(body?.simulateContract3 !== undefined
           ? { simulateContract3: body.simulateContract3 }
           : {}),
+        ...(body?.notice !== undefined ? { notice: body.notice } : {}),
       });
       sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db), ...getDemoSettings(ctx.db) });
     },

@@ -2,35 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   contractRequirement,
   isCompatibleContract,
+  MIN_BACKEND_CONTRACT,
   POS_CONTRACT_VERSION,
 } from './contract-version.ts';
 
-describe('isCompatibleContract (#99)', () => {
-  it('el POS habla 4.3.0 (#125: anular cobranzas)', () => {
-    expect(POS_CONTRACT_VERSION).toBe('4.3.0');
+describe('isCompatibleContract (piso 4.0.0, #128)', () => {
+  it.each(['4.0.0', '4.2.0', '4.3.1', '4.4.0', '4.9.0'])('%s es compatible', (version) => {
+    expect(isCompatibleContract(version)).toBe(true);
   });
-
-  it('mismo major y minor igual o mayor', () => {
-    expect(isCompatibleContract('4.3.0')).toBe(true);
-    expect(isCompatibleContract('4.4.1')).toBe(true);
+  it.each(['3.9.0', '5.0.0', 'x', '4.0'])('%s es incompatible', (version) => {
+    expect(isCompatibleContract(version)).toBe(false);
   });
-
-  it('otro major es incompatible', () => {
-    expect(isCompatibleContract('3.9.0')).toBe(false);
-    expect(isCompatibleContract('5.0.0')).toBe(false);
-  });
-
-  it('un backend en un minor anterior es incompatible', () => {
-    expect(isCompatibleContract('4.2.0')).toBe(false);
-    expect(isCompatibleContract('4.1.0')).toBe(false);
-    expect(isCompatibleContract('4.0.0')).toBe(false);
-  });
-
-  it('un formato inválido es incompatible', () => {
-    expect(isCompatibleContract('abc')).toBe(false);
-  });
-
-  it('contractRequirement', () => {
-    expect(contractRequirement(POS_CONTRACT_VERSION)).toBe('4.3 o posterior');
+  it('el piso es 4.0.0 y el POS habla 4.4.0', () => {
+    expect(MIN_BACKEND_CONTRACT).toBe('4.0.0');
+    expect(POS_CONTRACT_VERSION).toBe('4.4.0');
+    expect(contractRequirement(MIN_BACKEND_CONTRACT)).toBe('4.0 o posterior');
   });
 });
