@@ -517,4 +517,4 @@ etiqueta antes de tomar un issue.
   `backlog`: #143 (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
-  POS: #122.
+  POS: #122, #144 (contrato 4.4.0 y el onboarding nuevo).
