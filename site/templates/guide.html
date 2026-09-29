@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{title}} · offline-pos {{version}}</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fff;
+        --fg: #1a1a1a;
+        --muted: #666;
+        --code: #f3f3f3;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161616;
+          --fg: #e8e8e8;
+          --muted: #999;
+          --code: #262626;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.6 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 64px;
+      }
+      header {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      code,
+      pre {
+        background: var(--code);
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      code {
+        padding: 1px 4px;
+      }
+      pre {
+        padding: 12px;
+        overflow-x: auto;
+      }
+      a {
+        color: inherit;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        offline-pos {{version}} · <a href="guia.md">Markdown</a> ·
+        <a href="connector-api.openapi.yaml">OpenAPI</a> · <a href="llms.txt">llms.txt</a> ·
+        <a href="../../versions/">Todas las versiones</a>
+      </header>
+      {{content}}
+    </main>
+  </body>
+</html>
