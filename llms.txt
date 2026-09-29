@@ -2,6 +2,11 @@
 
 > POS web offline-first y genérico que se conecta a cualquier backend que implemente el Connector API (REST/JSON versionado). Cada versión publicada vive en su carpeta inmutable, con sus propias docs para integradores.
 
+## Docs
+
+- [Guía para integradores (0.1.0)](0.1.0/docs/guia.md): cómo probar el POS y cómo implementar el Connector API.
+- [Connector API 4.4.0 (OpenAPI)](0.1.0/docs/connector-api.openapi.yaml): el contrato completo.
+
 ## Versiones
 
-
+- [0.1.0](0.1.0/docs/llms.txt): contrato 4.4.0
