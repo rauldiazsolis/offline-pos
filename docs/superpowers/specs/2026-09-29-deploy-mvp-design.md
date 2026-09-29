@@ -346,3 +346,14 @@ ese permiso, pero algunos Chromium lo pueden seguir mandando.
 
 La primera publicación (tag, cuenta y proyecto de Cloudflare) va **después del merge**, siguiendo la
 guía; la verificación de Local Network Access se hace ahí.
+
+## Desvíos aprobados durante la implementación
+
+- **Task 1 — setup de Vitest en entorno `node`**: los tests marcados con
+  `// @vitest-environment node` (el guardián de claves y los de `site/`) fallaban al cargar porque
+  `src/test/setup.ts` supone jsdom (`Element`, `ResizeObserver` y un `beforeEach` que arrastra
+  `storage/db.ts`, que ahora lee `window.location`). Se envolvió todo el setup en
+  `if (typeof window !== 'undefined')`: los tests de jsdom no cambian.
+- **Task 1 — `daily-counter`** (aclaración, no desvío): la lista de claves de la sección 2 lo nombra,
+  pero `sync/daily-counter.ts` no tiene clave propia; recibe la de `ticket-counter.ts` y
+  `receipt-counter.ts`, que ya pasan por `storageKey`.
