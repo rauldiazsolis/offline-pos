@@ -95,10 +95,10 @@ gh repo create rauldiazsolis/mini-erp --public \
   --description "Backend multitenant (Express + SQLite) que implementa el Connector API de offline-pos"
 git push https://github.com/rauldiazsolis/mini-erp.git mini-erp-split:main
 git branch -D mini-erp-split
-gh repo view rauldiazsolis/mini-erp --json visibility,defaultBranchRef --jq '.visibility, .defaultBranchRef.name'
+gh repo view rauldiazsolis/mini-erp --json isPrivate,defaultBranchRef --jq '.isPrivate, .defaultBranchRef.name'
 ```
 
-Esperado: `PUBLIC` y `main`.
+Esperado: `false` y `main`.
 
 - [ ] **Paso 4: checkpoint con el usuario** — mostrar el link del repo y el conteo de commits.
 
@@ -874,3 +874,24 @@ gh pr create -R rauldiazsolis/offline-pos --base main --title "docs: spec y plan
 
 Merge con merge commit cuando el usuario lo apruebe. Con eso, la Etapa 2 (#159) arranca en una
 sesión nueva desde `origin/main`.
+
+## Desvíos aprobados durante la implementación
+
+- **Tarea 1**: `gh repo view` no tiene el campo `visibility`; la verificación usa `isPrivate`
+  (corregido arriba). Al revisar la historia apareció `DEV_POS_API_KEY` en `src/server/db/dev-seed.ts`:
+  una key de desarrollo, no un secreto, así que el repo se publicó igual. El problema es que el seed
+  corre en cada arranque; quedó anotado en rauldiazsolis/mini-erp#3 como requisito antes de publicar.
+- **Tarea 2**: la transferencia dio #122 → rauldiazsolis/mini-erp#1, #144 → #2, #160 → #3. GitHub
+  reescribió solo las referencias del epic #161.
+- **Tarea 3**: pnpm guardó los specifiers resueltos (`eslint ^10.11.0`, `typescript-eslint ^8.71.0`).
+  El lockfile solo sumó líneas. Con Node 24 no se rompió nada (173 tests).
+- **Tarea 5**: `ThemeToggle` también se usa en `MerchantOnboardingView.tsx` y, en configuración, en
+  `AppearanceSection.tsx`; `AGENTS.md` lo dice así.
+- **Tarea 6**: el README no dice "el primer usuario que se registra queda como `root`": el seed de
+  desarrollo registra antes un admin con email y contraseña fijos, que queda `root`. El README
+  describe los datos de desarrollo sin copiar las credenciales, y el riesgo (más grave que la key)
+  se sumó a rauldiazsolis/mini-erp#3. El link a #2 va completo porque en un README GitHub no linkea
+  `#N`.
+- **Agregado a pedido del usuario**: `.gitattributes` con `* text=auto eol=lf` como quinto commit del
+  PR. Todo el repo ya estaba con LF, así que no hubo renormalización.
+- **Resultado**: rauldiazsolis/mini-erp#4, mergeado con merge commit (`1350f94`); cerró #158 y #131.
