@@ -191,6 +191,40 @@ describe('pullBatch', () => {
     });
   });
 
+  it('devuelve los notices del pull (4.4.0, #128)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          products: { items: [] },
+          customers: { items: [] },
+          stock: [],
+          lots: {},
+          notices: [
+            { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
+            { id: 'n2', severity: 'warning', message: 'Venta dudosa', ref: { type: 'sale', id: 's1' } },
+          ],
+        }),
+      ),
+    );
+
+    const result = await createRestFetchConnector(config).pullBatch({
+      deviceId: 'dev-1',
+      cursors: {},
+      pendingLotIds: [],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        notices: [
+          { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
+          { id: 'n2', severity: 'warning', message: 'Venta dudosa', ref: { type: 'sale', id: 's1' } },
+        ],
+      }) as unknown,
+    });
+  });
+
   it('acepta los estados queued/processing y un producto bloqueado', async () => {
     vi.stubGlobal(
       'fetch',
@@ -220,10 +254,19 @@ describe('pullBatch', () => {
     });
   });
 
+  // 4.4.0 (#128): lo que el POS no entiende de un lote es "terminado con aviso", no un pull inválido.
   it.each([
-    ['un lote con el estado viejo pending', { lots: { x: { status: 'pending' } } }],
-    ['un issue como texto (v2)', { lots: { x: { status: 'issues', issues: ['texto'] } } }],
-  ])('%s es payload inválido', async (_label, overrides) => {
+    [
+      'un lote con el estado viejo pending',
+      { status: 'pending' },
+      'El backend informó el estado «pending», que este POS no conoce.',
+    ],
+    [
+      'un issue como texto (v2)',
+      { status: 'issues', issues: ['texto'] },
+      'El backend informó problemas con este lote en un formato que el POS no entiende.',
+    ],
+  ])('%s se da por terminado con un aviso', async (_label, lot, message) => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -231,7 +274,7 @@ describe('pullBatch', () => {
           products: { items: [] },
           customers: { items: [] },
           stock: [],
-          ...overrides,
+          lots: { x: lot },
         }),
       ),
     );
@@ -239,7 +282,10 @@ describe('pullBatch', () => {
 
     const result = await connector.pullBatch({ deviceId: 'dev-1', cursors: {}, pendingLotIds: [] });
 
-    expect(result).toMatchObject({ ok: false, error: 'sync/invalid-payload' });
+    expect(result).toMatchObject({
+      ok: true,
+      value: { lots: { x: { status: 'issues', issues: [{ message }] } } },
+    });
   });
 
   it('un producto sin fecha de alta es payload inválido (contrato v3)', async () => {

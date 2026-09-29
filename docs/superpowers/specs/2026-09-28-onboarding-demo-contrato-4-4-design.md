@@ -268,3 +268,17 @@ PR cierra #115.
 
 1. Contrato y compatibilidad por piso. 2. Tolerancias. 3. Capacidades y `/ANULAR`. 4. `notices`.
 5. Demo-backend. 6. Onboarding del POS. 7. Limpieza del código viejo. 8. e2e. 9. #115. 10. Docs.
+
+## Desvíos aprobados durante la implementación
+
+- **Estado de lote que el POS no entiende (Tarea 2, 2026-09-28)**: la spec decía tratar un estado
+  desconocido como `processing`; se cambió a **terminado con aviso**. Qué significa cada estado para
+  el POS: `ok` e `issues` = el lote terminó y está aplicado (los problemas los resuelve el backend con
+  bloqueos de productos, clientes, stock o saldos; los avisos son informativos); `queued` y
+  `processing` son de paso y el backend no debería dejarlos mucho tiempo. Como `processing` nunca
+  puede quedar colgado, lo que el POS no entiende se trata como `issues` con un aviso: un `issues` con
+  los avisos mal armados ("El backend informó problemas con este lote en un formato que el POS no
+  entiende."), un estado desconocido ("El backend informó el estado «X», que este POS no conoce.") o
+  algo que ni siquiera tiene estado. Un estado futuro que pida otra cosa (por ejemplo, un error grave
+  que desaliente seguir vendiendo, otra etapa) llega con una versión del POS que lo anuncie, así que
+  un POS de hoy nunca lo recibe.
