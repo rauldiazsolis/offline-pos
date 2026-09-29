@@ -21,6 +21,15 @@ export default defineConfig({
     // e2e/ es de Playwright; demo-backend/ tiene su propio Vitest (entorno
     // node, no jsdom) — sin esto, sus *.test.ts colisionarían acá. .claude/ tiene
     // los worktrees de otras sesiones: copias enteras del repo con sus propios tests.
-    exclude: [...defaultExclude, 'e2e/**', 'demo-backend/**', 'mini-erp/**', '.claude/**'],
+    exclude: [
+      ...defaultExclude,
+      'e2e/**',
+      'demo-backend/**',
+      'mini-erp/**',
+      '.claude/**',
+      // Sitio publicado armado en local (#148).
+      '.site-dist/**',
+      '.site-out/**',
+    ],
   },
 });

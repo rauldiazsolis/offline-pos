@@ -4,19 +4,11 @@ info:
   version: '4.4.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
-    inventario) debe implementar para conectarse al POS — ver §6 del doc de
-    diseño (`pos-web-diseno-arquitectura.md`), la sección "Connector API" de
-    `AGENTS.md` y los specs de rediseño
-    (`docs/superpowers/specs/2026-09-22-sync-por-lotes-design.md`, issue #87;
-    `docs/superpowers/specs/2026-09-23-contrato-connector-api-v3-design.md`,
-    issue #96; `docs/superpowers/specs/2026-09-24-venta-enter-cantidades-advertencias-design.md`,
-    issue #99; `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`,
-    issues #100 y #120; `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`,
-    issue #101; `docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`,
-    issue #125; `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`,
-    issues #128 y #115).
+    inventario) implementa para conectarse al POS. La guía para integradores
+    (`guia.md`, publicada junto a este archivo) explica cómo probarlo y por
+    dónde empezar.
 
-    **4.4.0 respecto de 4.3.0** (aditivo, #128) — la última versión antes del
+    **4.4.0 respecto de 4.3.0** (aditivo) — la última versión antes del
     MVP: desde acá el contrato casi no cambia de forma y lo nuevo entra como
     capacidad opcional.
       - **Compatibilidad por piso**: el POS acepta cualquier backend 4.x con
@@ -32,7 +24,7 @@ info:
         `customer`, stock vacío, numeración sin contigüidad), sin cambios de
         forma.
 
-    **4.3.0 respecto de 4.2.0** (aditivo, #125):
+    **4.3.0 respecto de 4.2.0** (aditivo):
       - `CustomerPayment.voidsPaymentId` opcional: la anulación de una
         cobranza es otra cobranza, con los mismos medios en negativo, `total`
         negativo, el mismo `customerId`, su propio `receipt` y
@@ -44,7 +36,7 @@ info:
       - Un POS 4.3.0 considera incompatible a un backend 4.2: podría rechazar
         o malinterpretar una cobranza negativa.
 
-    **4.2.0 respecto de 4.1.0** (aditivo, Etapa 6 del epic #94):
+    **4.2.0 respecto de 4.1.0** (aditivo):
       - `CustomerPayment.receipt` opcional (`{ date, number }`): el número de
         recibo en su día local de la terminal, con la misma forma que
         `Sale.ticket` y un contador propio. Una cobranza anterior a 4.2.0 no
@@ -60,7 +52,7 @@ info:
       - Un POS 4.2.0 considera incompatible a un backend 4.1: podría no llevar
         el saldo de los clientes sin crédito ni guardar el recibo.
 
-    **4.1.0 respecto de 4.0.0** (aditivo, Etapa 5 del epic #94):
+    **4.1.0 respecto de 4.0.0** (aditivo):
       - `Sale.ticket` opcional (`{ date, number }`): el número del ticket en
         su día local de la terminal. Lo comparten ventas y anulaciones. Una
         venta anterior a 4.1.0 no lo trae.
@@ -68,7 +60,7 @@ info:
         POS 4.1.0 considera incompatible a un backend 4.0.0: podría no guardar
         el número. Un backend 4.1.0 acepta ventas con y sin `ticket`.
 
-    **4.0.0 reemplaza a la v3** (cambio incompatible, Etapa 4 del epic #94):
+    **4.0.0 reemplaza a la v3** (cambio incompatible):
       - La anulación es un **ticket propio**: viaja como un `SaleEvent` más,
         con líneas y pagos invertidos y `voidsSaleId` apuntando a la venta
         que anula. Se elimina `SaleVoidEvent` (7 tipos de evento). El backend
@@ -81,7 +73,7 @@ info:
         habla esa versión mayor responde `409 IncompatibleContract` sin
         procesar nada ni dar ack.
 
-    **v3 reemplazó a la v2** (cambio incompatible, Etapa 1 del epic #94):
+    **v3 reemplazó a la v2** (cambio incompatible):
       - Sobre por evento: cada `OutboxBatchItem` lleva `id`, `type`,
         `createdAt` y `origin` (`branch`/`pointOfSale`, estampados en el POS
         al encolar el evento, no al armar el lote). El `deviceId` de la
@@ -97,9 +89,9 @@ info:
         informativo) en productos y clientes.
 
     **Identidad**: `deviceId`, `origin.branch` y `origin.pointOfSale` son
-    obligatorios en v3. El POS los manda siempre desde la Etapa 2 del epic #94
-    (#97). Un evento encolado antes puede llegar sin ellos: el backend lo
-    guarda con el valor vacío.
+    obligatorios en v3. El POS los manda siempre, pero un evento encolado por
+    una versión anterior del POS puede llegar sin ellos: el backend lo guarda
+    con el valor vacío.
 
     **v2 reemplazó por completo la v1** (10 endpoints por recurso/evento) por
     dos operaciones batch más dos excepciones síncronas. Principio central:
@@ -120,7 +112,7 @@ info:
     ack, el lote sigue congelado en el outbox del POS con su mismo
     `idempotency_id` y sale cuando el backend se actualice.
 
-    **Compatibilidad del lado del POS (4.4.0, #128)**: el POS habla 4.4.0 y
+    **Compatibilidad del lado del POS (4.4.0)**: el POS habla 4.4.0 y
     considera compatible a un backend del **mismo major con minor igual o
     mayor que el piso 4.0.0** (hasta 4.3.0 exigía su mismo minor). Lo que un
     backend puede o no hacer más allá del piso lo declara como **capacidad**
@@ -132,7 +124,7 @@ info:
     | `demo-sessions` | El backend implementa `POST /demo-sessions` | El POS no la consulta antes: un link de demo prueba directo y el 404 es la respuesta |
     | `customer-payment-void` | El POS anula cobranzas (`voidsPaymentId`, 4.3.0) | La cobranza se ve en `/ANULAR` pero no se anula |
 
-    **Reglas de evolución (4.4.0, #128)**:
+    **Reglas de evolución (4.4.0)**:
       - **Campos desconocidos**: los dos lados los ignoran, en cualquier nivel.
         Ningún schema del POS sobre datos del backend es estricto.
       - **Enums desconocidos, del lado del POS**: un `status` de `/info`
@@ -153,9 +145,9 @@ info:
           hay paginación, el backend la usa solo con un POS que la anuncie en
           su versión de contrato.
         - **No espera números contiguos** en `Sale.ticket` ni en
-          `CustomerPayment.receipt`: puede haber huecos (#139).
+          `CustomerPayment.receipt`: puede haber huecos.
 
-    **Vuelta del onboarding (4.4.0, #128)**: un POS en demo (ver
+    **Vuelta del onboarding (4.4.0)**: un POS en demo (ver
     `POST /demo-sessions`) manda al usuario a `onboarding.url` con
     `?return_url=<url del POS>&wipe_key=<token>`. Cuando el alta termina, el
     backend lo devuelve a `return_url` con la conexión en el **fragmento**
@@ -172,8 +164,8 @@ info:
     operador decida.
 
     Cada operación está marcada con una extensión `x-pos-status`:
-      - `implemented-v4`: el POS ya la consume con la forma de 4.x (4.0.0, #99; 4.1.0, #120; 4.2.0, #101; 4.4.0, #128).
-      - `implemented-v3`: el POS ya la consume con la forma de v3 (#96).
+      - `implemented-v4`: el POS ya la consume con la forma de 4.x.
+      - `implemented-v3`: el POS ya la consume con la forma de v3.
       - `documented-not-implemented`: parte del contrato, sin consumidor todavía.
 
     Autenticación: Bearer token, configurado por terminal (ver `/CONFIG` en
@@ -219,7 +211,7 @@ paths:
       summary: Arranca una demo para un POS nuevo (sin autenticación)
       x-pos-status: implemented-v4
       description: |
-        Opcional (4.4.0, #128): solo lo implementa un backend que ofrece
+        Opcional (4.4.0): solo lo implementa un backend que ofrece
         demos, y lo declara con la capacidad `demo-sessions`. Es el **único
         endpoint sin autenticación** (no lleva API key; sí el header de
         versión).
@@ -316,12 +308,12 @@ paths:
         darse cuenta de las bajas — un delta nunca las informa). `stock`
         nunca tiene cursor: siempre viaja completo, es liviano.
 
-        **Stock vacío (4.4.0, #115)**: `stock: []` significa "el backend no
+        **Stock vacío (4.4.0)**: `stock: []` significa "el backend no
         mandó información de stock", no "todo el stock es 0": el POS conserva
         el suyo intacto, en la foto completa y en el delta. Un backend que no
         maneja stock manda sus productos con `tracksStock: false`.
 
-        **Avisos (4.4.0, #128)**: `notices` es la lista **vigente y completa**
+        **Avisos (4.4.0)**: `notices` es la lista **vigente y completa**
         de avisos del backend para esta terminal (discrepancias, cuota,
         contrato), como el stock: sin cursor ni acuse. Un aviso desaparece
         cuando el backend deja de mandarlo; ausente = ninguno. El POS los
@@ -342,7 +334,7 @@ paths:
         ya los tiene todos. Todo cambio de saldo de un cliente mueve su
         cursor (`updatedAt`), así viaja en el pull por delta.
 
-        **Regla de aplicación del POS (Etapa 3 del epic #94, #98)**: datos
+        **Regla de aplicación del POS**: datos
         maestros y bloqueos de productos y clientes se aplican siempre. Stock
         y saldos: si algún lote sigue `processing` (o equivalente), el POS
         conserva los suyos y no avanza el cursor de clientes; si no, toma los
@@ -546,7 +538,7 @@ components:
         unrestricted:
           type: boolean
           description: |
-            Fiado sin bloqueo de crédito para este cliente (Etapa 3, #69) —
+            Fiado sin bloqueo de crédito para este cliente —
             aprueba sin evaluar creditLimit/margin/balance, que pueden omitirse.
 
     Discount:
@@ -617,11 +609,11 @@ components:
         ticket:
           type: object
           description: >-
-            Número del ticket en su día (4.1.0, #120). `date` es la fecha local
+            Número del ticket en su día (4.1.0). `date` es la fecha local
             de la terminal con la que se numeró; el número arranca en 1 cada
             día y lo comparten ventas y anulaciones. Una venta anterior a 4.1.0
             no lo trae. El backend no espera números contiguos: puede haber
-            huecos (4.4.0, #139).
+            huecos (4.4.0).
           required: [date, number]
           properties:
             date: { type: string, format: date, example: '2026-09-24' }
@@ -629,7 +621,7 @@ components:
         voidsSaleId:
           type: string
           description: |
-            Solo en el ticket de una anulación (4.0.0, #99): el id de la venta
+            Solo en el ticket de una anulación (4.0.0): el id de la venta
             que anula. La anulación es un documento propio — mismas líneas con
             `qty` invertida (el descuento de cada línea se conserva), pagos
             invertidos (un pago `account` pierde su `reference`: negativo y
@@ -697,11 +689,11 @@ components:
         receipt:
           type: object
           description: >-
-            Número de recibo en su día (4.2.0, #101). `date` es la fecha local de
+            Número de recibo en su día (4.2.0). `date` es la fecha local de
             la terminal con la que se numeró; el número arranca en 1 cada día,
             independiente del de tickets. Una cobranza anterior a 4.2.0 no lo
             trae. El backend no espera números contiguos: puede haber huecos
-            (4.4.0, #139).
+            (4.4.0).
           required: [date, number]
           properties:
             date: { type: string, format: date, example: '2026-09-27' }
@@ -709,7 +701,7 @@ components:
         voidsPaymentId:
           type: string
           description: |
-            Solo en la anulación de una cobranza (4.3.0, #125): el id de la
+            Solo en la anulación de una cobranza (4.3.0): el id de la
             cobranza que anula. Mismos medios con `amount` negativo, `total`
             negativo, mismo `customerId` y su propio `receipt`. El original
             nunca se modifica.
@@ -721,9 +713,9 @@ components:
         Sucursal y punto de venta, texto libre, estampados al encolar el
         evento en el POS (no al armar el lote): cambiar la sucursal con
         eventos pendientes no reescribe los ya encolados. Obligatorios en
-        v3: el POS los manda siempre desde la Etapa 2 del epic #94 (#97). Un
-        evento encolado antes puede llegar sin ellos: el backend lo guarda
-        con el valor vacío.
+        v3: el POS los manda siempre, pero un evento encolado por una versión
+        anterior del POS puede llegar sin ellos: el backend lo guarda con el
+        valor vacío.
       properties:
         branch: { type: string }
         pointOfSale: { type: string }
@@ -776,8 +768,8 @@ components:
 
     CustomerEvent:
       description: |
-        Alta **o actualización** de un cliente por `id` (aclaración de 4.4.0,
-        #37), con `updatedAt`. Hoy el POS solo da altas; la pantalla para
+        Alta **o actualización** de un cliente por `id` (aclaración de 4.4.0),
+        con `updatedAt`. Hoy el POS solo da altas; la pantalla para
         editar viene después del MVP.
       allOf:
         - $ref: '#/components/schemas/EventEnvelope'
@@ -830,7 +822,7 @@ components:
       properties:
         deviceId:
           type: string
-          description: UUID de la terminal, una vez por request. El POS lo manda siempre desde la Etapa 2 del epic #94 (#97).
+          description: UUID de la terminal, una vez por request.
         events:
           type: array
           items: { $ref: '#/components/schemas/OutboxBatchItem' }
@@ -842,10 +834,8 @@ components:
         deviceId:
           type: string
           description: |
-            UUID de la terminal (el POS lo manda siempre desde la Etapa 2 del
-            epic #94, #97). En v3 todavía no
-            se usa: habilita que el backend informe lotes que la terminal
-            perdió de vista (#90).
+            UUID de la terminal. En v3 todavía no se usa: habilita que el
+            backend informe lotes que la terminal perdió de vista.
         cursors:
           type: object
           description: Cursor por recurso; ausente pide la foto completa de ese recurso.
@@ -916,7 +906,7 @@ components:
         stock:
           type: array
           items: { $ref: '#/components/schemas/StockItem' }
-          description: 'Siempre completo. `[]` = el backend no mandó stock: el POS conserva el suyo (4.4.0, #115).'
+          description: 'Siempre completo. `[]` = el backend no mandó stock: el POS conserva el suyo (4.4.0).'
         lots:
           type: object
           additionalProperties: { $ref: '#/components/schemas/BatchLotStatus' }
@@ -930,7 +920,7 @@ components:
       type: object
       required: [id, severity, message]
       description: |
-        Aviso del backend para el humano (4.4.0, #128): una discrepancia de un
+        Aviso del backend para el humano (4.4.0): una discrepancia de un
         lote, un aviso de cuota o de contrato. Informativo, nunca bloquea.
       properties:
         id: { type: string }
