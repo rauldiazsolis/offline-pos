@@ -337,6 +337,19 @@ describe('Enter con la barra vacía (#99)', () => {
     expect(activeScreenSignal.value).toBe('collection');
   });
 
+  it('un Enter con el alta de @ todavía en curso no crea el cliente dos veces: abre la cobranza (#146)', async () => {
+    setCustomerRepository(await loadCustomerRepository());
+    updateCommandBarBuffer('@Cliente Nuevo');
+    submitCommandBar(); // crea el cliente en segundo plano (pendingBarOperation)
+    submitCommandBar(); // el segundo Enter llega con la barra todavía llena
+
+    await vi.waitFor(() => {
+      expect(activeScreenSignal.value).toBe('collection');
+    });
+    expect(await db.customers.count()).toBe(1);
+    expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
+  });
+
   it('sin líneas ni cliente no hace nada', async () => {
     await submitEmptyCommandBar();
 

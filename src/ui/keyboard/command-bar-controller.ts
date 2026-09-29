@@ -72,9 +72,17 @@ import { syncNow } from '../../sync/engine.ts';
  * `triggerCheckout` espera esto antes de cambiar de pantalla.
  */
 let pendingBarOperation: Promise<void> = Promise.resolve();
+/** Hay una operación de la barra sin terminar (ver `submitCommandBar`, #146). */
+let barOperationInFlight = false;
 
 function trackPendingBarOperation(promise: Promise<void>): void {
-  pendingBarOperation = promise;
+  barOperationInFlight = true;
+  const tracked: Promise<void> = promise.finally(() => {
+    if (pendingBarOperation === tracked) {
+      barOperationInFlight = false;
+    }
+  });
+  pendingBarOperation = tracked;
 }
 
 // Type predicate (no solo `boolean`): varios callers necesitan `result.value`
@@ -418,6 +426,19 @@ function runCommand(name: string, _args: string[]): void {
 
 /** Se llama al presionar Enter con la barra de comandos activa (no en modo navegación del carrito). */
 export function submitCommandBar(): void {
+  // #146: un Enter que llega con una operación de la barra en curso (el alta de `@<nombre nuevo>`,
+  // que vacía la barra recién al terminar) espera y decide con la barra como quedó: vacía es el
+  // Enter con la barra vacía. Si no, creaba el cliente dos veces en vez de abrir la cobranza.
+  if (barOperationInFlight) {
+    void pendingBarOperation.then(async () => {
+      if (commandBarBufferSignal.value === '') {
+        await submitEmptyCommandBar();
+      } else {
+        submitCommandBar();
+      }
+    });
+    return;
+  }
   // Más de 3 decimales en el prefijo se redondea (#99): se avisa si la acción salió bien.
   const rounded = roundedQuantityPrefix(commandBarBufferSignal.value);
   doSubmitCommandBar();

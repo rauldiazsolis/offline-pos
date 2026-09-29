@@ -374,7 +374,10 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 - **Operaciones async de la barra trackeadas contra la navegación**: `pendingBarOperation`
   (`command-bar-controller.ts`) guarda la promesa en curso de cualquier efecto async disparado desde
   la barra (hoy, crear un cliente con `@<nombre>`) y `triggerCheckout` la espera antes de cambiar de
-  pantalla. Un caso nuevo se suma ahí, no en un tracker paralelo.
+  pantalla. Un Enter que llega con una operación en curso también la espera y decide con la barra como
+  quedó (`submitCommandBar`, #146: el alta vacía la barra recién al terminar, y un segundo Enter rápido
+  creaba el cliente dos veces en vez de abrir la cobranza). Un caso nuevo se suma ahí, no en un
+  tracker paralelo.
 - **Preselección visual real**: cuando el render resalta la fila 0 por defecto sin que el signal de
   selección tenga valor todavía, el primer ↑/↓ parte de esa fila (`moveSelectionOver`,
   `assumeFirstSelected`); si no, el primer toque de flecha no se nota.
