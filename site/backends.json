@@ -1,0 +1,8 @@
+[
+  {
+    "name": "demo-backend local",
+    "url": "http://localhost:4000",
+    "local": "demo-backend",
+    "notes": "Levantalo con el demo-backend/ del mismo tag que la versión del POS: pnpm --filter demo-backend run start."
+  }
+]
