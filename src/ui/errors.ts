@@ -150,6 +150,10 @@ export function describeError(failure: Failure): string {
         : 'el backend tiene que ser https (o http a localhost)';
     case 'demo/invalid-return':
       return 'los datos de conexión que devolvió el alta no son válidos';
+    case 'demo/unknown-template':
+      return `La plantilla ${failure.meta.template} no existe (hay: ${failure.meta.templates.join(', ')}).`;
+    case 'demo/not-offered':
+      return 'este backend no ofrece demos';
     case 'terminal/reset-failed':
       return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
     default: {

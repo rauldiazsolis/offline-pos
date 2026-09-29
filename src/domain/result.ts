@@ -105,6 +105,9 @@ export type ErrorMeta = {
   // sync/demo-link.ts (onboarding de demo, #128)
   'demo/invalid-link': { reason: 'backend-missing' | 'backend-invalid' | 'backend-insecure' };
   'demo/invalid-return': { issues: { path: string; message: string }[] };
+  // sync/demo-session.ts (POST /demo-sessions, #128)
+  'demo/unknown-template': { template: string; templates: string[] };
+  'demo/not-offered': undefined;
 
   // sync/terminal-data.ts (pos.reset() desde la consola)
   'terminal/reset-failed': { message: string };
