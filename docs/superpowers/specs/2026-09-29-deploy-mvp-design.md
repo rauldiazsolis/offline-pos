@@ -92,9 +92,10 @@ cron diario / a mano ────────────► regenera /versions 
   - `site/build-version.ts`: arma `/<ver>/` en un directorio de sitio a partir de `dist/`.
   - `site/build-versions-page.ts`: consulta los backends y genera `/versions/index.html` y
     `/llms.txt`.
-  - `site/build-site.ts`: los dos anteriores sobre un directorio (lo usan la Action y
-    `pnpm site:build`).
-  - `site/templates/`: `_headers`, `_redirects`, la plantilla HTML de la guía y la de `/versions`.
+  - `site/build-site.ts`: los dos anteriores sobre un directorio vacío (`pnpm site:build`, para
+    probar en local y en el e2e). La Action llama a los dos por separado sobre la rama `publish`.
+  - `site/templates/`: `_headers`, `_redirects` y la plantilla HTML de la guía (`/versions` se
+    arma en `site/versions-page.ts`).
 - **Rama `publish`**: huérfana; la crea la Action la primera vez. Una carpeta `/<ver>/` que ya existe
   nunca se pisa.
 - **Cloudflare** solo mira `publish`: sin build, raíz como salida, preview deployments desactivados.
