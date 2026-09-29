@@ -20,7 +20,7 @@ import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
 import { initDemoMode } from './state/demo-mode.ts';
 import { handleUrlAutoConfig } from '../sync/url-auto-config.ts';
-import { setActiveConnectorType, setConnectionState } from './state/sync.ts';
+import { setActiveConnectorType, setConnectionState, setDemoSession } from './state/sync.ts';
 import { identityResetSignal } from './state/sync-config.ts';
 
 /**
@@ -80,6 +80,7 @@ export async function bootstrap(): Promise<void> {
   const state = connectionState(configResult);
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
+  setDemoSession(state === 'active' && configResult.ok ? (configResult.value.demo ?? null) : null);
   if (state !== 'active' || (autoConfig.handled && autoConfig.mode === 'wizard-fallback')) {
     await openRequiredWizard();
   }

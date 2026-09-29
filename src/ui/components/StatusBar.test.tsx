@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { activeScreenSignal } from '../state/screen.ts';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
-import { isDemoModeSignal } from '../state/demo-mode.ts';
+import { startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
   backendNoticesSignal,
   backendStatusSignal,
@@ -12,9 +12,18 @@ import {
   lastSyncedAtSignal,
   localCatalogCountsSignal,
   pendingOutboxCountSignal,
+  setDemoSession,
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
+
+vi.mock('../keyboard/onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
+
+const demo = {
+  template: 'kiosco',
+  onboarding: { url: 'https://b.x/alta', label: 'Crear mi comercio' },
+  startedAt: '2026-09-28T12:00:00.000Z',
+};
 
 beforeEach(() => {
   syncStatusSignal.value = 'offline';
@@ -49,16 +58,43 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
     expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
   });
 
-  it('convive con el botón de modo demo', () => {
+  it('convive con la marca DEMO y el botón de alta', () => {
     lastCashCountAtSignal.value = undefined;
-    isDemoModeSignal.value = true;
+    setDemoSession(demo);
     try {
       render(<StatusBar />);
       expect(screen.getByRole('button', { name: 'Sin arqueo en 24 h' })).not.toBeNull();
-      expect(screen.getByText('Conectar Mini-ERP')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).not.toBeNull();
     } finally {
-      isDemoModeSignal.value = false;
+      setDemoSession(null);
     }
+  });
+});
+
+describe('StatusBar — terminal en demo (#128)', () => {
+  afterEach(() => {
+    setDemoSession(null);
+  });
+
+  it('sin demo no hay marca ni botón de alta', () => {
+    render(<StatusBar />);
+    expect(screen.queryByText('DEMO')).toBeNull();
+    expect(screen.queryByRole('button', { name: /\(\/ALTA\)/ })).toBeNull();
+  });
+
+  it('con demo se ven DEMO y el botón; el click lleva al alta sin abrir /DIAGNOSTICO', () => {
+    vi.mocked(startOnboarding).mockClear();
+    setDemoSession(demo);
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    expect(screen.getByText('DEMO')).not.toBeNull();
+    const button = screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' });
+    expect(button.tabIndex).toBe(-1);
+    fireEvent.click(button);
+
+    expect(startOnboarding).toHaveBeenCalledTimes(1);
+    expect(activeScreenSignal.value).toBe('sale');
   });
 });
 

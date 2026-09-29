@@ -48,6 +48,40 @@ describe('saveSyncConfig / loadSyncConfig', () => {
     });
   });
 
+  it('guarda y relee una terminal en demo (#128)', () => {
+    const config = {
+      type: 'rest' as const,
+      baseUrl: 'https://b.x',
+      apiKey: 'k',
+      demo: {
+        template: 'kiosco',
+        onboarding: { url: 'https://b.x/alta', label: 'Crear mi comercio' },
+        startedAt: '2026-09-28T12:00:00.000Z',
+      },
+    };
+    saveSyncConfig(config);
+
+    expect(loadSyncConfig()).toEqual({ ok: true, value: config });
+  });
+
+  it('una demo con onboarding.url que no es URL es sync/config-invalid (#128)', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        type: 'rest',
+        baseUrl: 'https://b.x',
+        demo: { template: 'kiosco', onboarding: { url: 'nope', label: 'x' }, startedAt: 'x' },
+      }),
+    );
+
+    const result = loadSyncConfig();
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe('sync/config-invalid');
+    }
+  });
+
   it('apiKey es opcional', () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
 

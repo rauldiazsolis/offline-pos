@@ -42,13 +42,14 @@ import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
-import { activeConnectorTypeSignal } from '../state/sync.ts';
+import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
 import { enterCashScreen } from './cash-controller.ts';
 import { enterCheckout } from './checkout-controller.ts';
 import { enterCollection } from './collection-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
+import { startOnboarding } from './onboarding-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, disabledCommandMessage } from './commands.ts';
 import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
@@ -390,6 +391,15 @@ function runCommand(name: string, _args: string[]): void {
     case 'DIAGNOSTICO':
       enterDiagnosticoScreen();
       clearBuffer();
+      return;
+    case 'ALTA':
+      // Solo existe con la terminal en demo (#128).
+      if (demoSessionSignal.value === null) {
+        commandBarErrorSignal.value = `Comando desconocido: /${name}`;
+        return;
+      }
+      clearBuffer();
+      startOnboarding();
       return;
     default: {
       // Comandos que declara el conector activo (Etapa 2c, #77).

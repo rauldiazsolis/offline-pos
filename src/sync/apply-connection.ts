@@ -11,6 +11,7 @@ import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   setActiveConnectorType,
+  setDemoSession,
   setConnectionState,
   setLastSyncFailure,
   setLastSyncedAt,
@@ -157,6 +158,8 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
 
     setConnectionState('active');
     setActiveConnectorType(params.candidate.type);
+    // Otra conexión desde `/CONFIG` sale de la demo: el wizard arma el candidato sin `demo`.
+    setDemoSession(params.candidate.demo ?? null);
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);

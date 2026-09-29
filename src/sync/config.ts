@@ -17,6 +17,14 @@ function withLegacyType(value: unknown): unknown {
   return value;
 }
 
+/** Terminal en demo (#128): lo que devolvió `POST /demo-sessions`, para la marca y `/ALTA`. */
+export const demoSessionInfoSchema = z.object({
+  template: z.string(),
+  onboarding: z.object({ url: z.url(), label: z.string() }),
+  startedAt: z.string(),
+});
+export type DemoSessionInfo = z.infer<typeof demoSessionInfoSchema>;
+
 /**
  * Configuración de la terminal, editada por el humano vía `/CONFIG` (ver
  * `ui/screens/config-screen.tsx`): los campos del conector elegido
@@ -40,6 +48,9 @@ export const syncConfigSchema = z.preprocess(
       // config sin este campo (incluidas las guardadas antes de 2b) es "sin
       // probar" y la app pide probarla antes de operar.
       verifiedAt: z.string().optional(),
+      // Terminal en demo (#128): la pone el onboarding; aplicar otra conexión desde `/CONFIG` la
+      // saca (el wizard arma el candidato sin `demo`).
+      demo: demoSessionInfoSchema.optional(),
     }),
   ),
 );
