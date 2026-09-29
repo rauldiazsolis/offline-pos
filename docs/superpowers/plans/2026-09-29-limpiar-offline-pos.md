@@ -301,3 +301,18 @@ No hay cambios de comportamiento: la prueba es de humo.
 3. En el explorador del repo: ya no están `mini-erp/` ni `.agents/`.
 4. Antigravity IDE abierto sobre offline-pos: sigue leyendo el `AGENTS.md` de la raíz (sin reglas de
    `.agents/`).
+
+## Desvíos aprobados durante la implementación
+
+- **Al aprobar el plan**: el usuario pidió borrar también la etiqueta `feature:mini-erp` de GitHub
+  (sumado a la Tarea 5, paso 6).
+- **Tarea 2**: `pnpm install` a secas sumaba 62 líneas: reusaba restos del mini-erp (`jiti`,
+  `@noble/hashes`, `esbuild` y `rollup`, con sus binarios por plataforma) como peers opcionales del
+  importer de la raíz; una resolución desde cero en un directorio aparte confirmó que la raíz no los
+  necesita. Borrar a mano solo el bloque del importer tampoco alcanzaba (pnpm da el lock por al día y
+  no poda los huérfanos). Lo que anduvo: sacar a mano el importer y esas entradas, y correr
+  `pnpm dedupe`. Resultado verificado por contenido: ninguna línea que no estuviera en el lockfile
+  anterior y los importers `.` y `demo-backend` idénticos (las 18 inserciones que muestra `git diff`
+  son realineaciones).
+- **Tarea 3**: los párrafos tocados de `AGENTS.md` y `src/sync/AGENTS.md` se reacomodaron enteros a
+  ~100 caracteres por línea, así que el diff muestra más líneas que las del cambio.
