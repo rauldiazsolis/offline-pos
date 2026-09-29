@@ -7,10 +7,13 @@ import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
-import { openRequiredWizard } from './keyboard/config-controller.ts';
-import { cartSignal } from './state/cart.ts';
+import { stripOnboardingParams } from '../sync/demo-link.ts';
+import { openRequiredWizard, openWizardWithCandidate } from './keyboard/config-controller.ts';
+import { runOnboardingFromUrl } from './onboarding.ts';
+import { cartSelectionIndexSignal, cartSignal } from './state/cart.ts';
+import { commandBarNoticeSignal, commandBarWarningSignal } from './state/command-bar.ts';
 import { setCatalogRepository } from './state/catalog.ts';
-import { attachedCustomerSignal } from './state/customer.ts';
+import { attachedCustomerSignal, resetAttachedCustomer } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
@@ -18,10 +21,8 @@ import { refreshCustomerBalances } from './state/customer-balance.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
 import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
-import { initDemoMode } from './state/demo-mode.ts';
-import { handleUrlAutoConfig } from '../sync/url-auto-config.ts';
 import { setActiveConnectorType, setConnectionState, setDemoSession } from './state/sync.ts';
-import { identityResetSignal } from './state/sync-config.ts';
+import { configNoticeSignal, identityResetSignal } from './state/sync-config.ts';
 
 /**
  * Arma los repositorios antes del primer render y arranca el motor de sync.
@@ -67,10 +68,24 @@ export async function bootstrap(): Promise<void> {
   }
   startCartPersistence();
 
-  // Gestión de modo Demo y configuración automática vía URL (Onboarding / WhatsApp)
-  const localSummary = await summarizeLocalData();
-  initDemoMode(hasUserData(localSummary));
-  const autoConfig = await handleUrlAutoConfig(localSummary);
+  // Onboarding de demo (#128): un link de demo o la vuelta del alta. Antes de leer la config:
+  // puede haberla cambiado. La URL se limpia siempre, así un F5 no lo repite.
+  const onboarding = await runOnboardingFromUrl(window.location.href, {
+    config: loadSyncConfig(),
+    hasUserData: hasUserData(await summarizeLocalData()),
+  });
+  if (onboarding.kind !== 'none') {
+    window.history.replaceState(null, '', stripOnboardingParams(window.location.href));
+  }
+  if (onboarding.kind === 'applied') {
+    // Lo local se borró: la venta en curso restaurada más arriba ya no existe, y el último arqueo
+    // tampoco (aviso "Sin arqueo en 24 h").
+    cartSignal.value = { lines: [] };
+    cartSelectionIndexSignal.value = null;
+    resetAttachedCustomer();
+    identityResetSignal.value = false;
+    lastCashCountAtSignal.value = (await getCashBalance()).lastCountAt;
+  }
 
   // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
   // conexión activa la app solo muestra el wizard de `/CONFIG` (ver
@@ -81,13 +96,23 @@ export async function bootstrap(): Promise<void> {
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   setDemoSession(state === 'active' && configResult.ok ? (configResult.value.demo ?? null) : null);
-  if (state !== 'active' || (autoConfig.handled && autoConfig.mode === 'wizard-fallback')) {
-    await openRequiredWizard();
-  }
   // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
   // arranca sin red los sabe.
   restoreBackendCapabilities();
   restoreBackendNotices();
+
+  if (onboarding.kind === 'review') {
+    await openWizardWithCandidate(onboarding.candidate, onboarding.notice);
+  } else if (state !== 'active') {
+    await openRequiredWizard();
+    if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+      configNoticeSignal.value = onboarding.notice;
+    }
+  } else if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+    commandBarWarningSignal.value = onboarding.notice;
+  } else if (onboarding.kind === 'applied' && onboarding.notice !== undefined) {
+    commandBarNoticeSignal.value = onboarding.notice;
+  }
 
   startSyncEngine();
 }

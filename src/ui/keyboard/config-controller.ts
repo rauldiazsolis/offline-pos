@@ -4,9 +4,13 @@ import {
   applyTerminalSettings,
   flushPendingBeforeWipe,
 } from '../../sync/apply-connection.ts';
-import { loadSyncConfig } from '../../sync/config.ts';
+import { loadSyncConfig, type SyncConfig } from '../../sync/config.ts';
 import { probeConnection, type ProbeSnapshot } from '../../sync/connection.ts';
-import { CONNECTOR_TYPES, type ConnectorType } from '../../sync/connector-registry.ts';
+import {
+  CONNECTOR_TYPES,
+  toFieldValues,
+  type ConnectorType,
+} from '../../sync/connector-registry.ts';
 import { runPushThenPull } from '../../sync/engine.ts';
 import { describeError } from '../errors.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
@@ -17,6 +21,7 @@ import {
   configErrorFieldSignal,
   configErrorSignal,
   configFieldValuesSignal,
+  configNoticeSignal,
   configTerminalSignal,
   configTypeSignal,
   currentWizardInput,
@@ -104,6 +109,32 @@ export async function openRequiredWizard(): Promise<void> {
   openWizard();
   await refreshLocalData();
   goToStep(initialStep(model(), { active: false, identityReset: identityResetSignal.value }));
+}
+
+/**
+ * Vuelta del alta sin autorización para borrar, o con la prueba fallida (#128): el wizard abre con
+ * la conexión precargada y lanza la prueba; el operador elige Mantener o Borrar como en cualquier
+ * cambio de conexión. Activa o en modo requerido.
+ */
+export async function openWizardWithCandidate(
+  candidate: SyncConfig,
+  notice: string,
+): Promise<void> {
+  openWizard();
+  await refreshLocalData();
+  configTypeSignal.value = candidate.type;
+  configFieldValuesSignal.value = {
+    ...configFieldValuesSignal.value,
+    [candidate.type]: toFieldValues(candidate),
+  };
+  configTerminalSignal.value = {
+    locale: candidate.locale ?? '',
+    branch: candidate.branch ?? '',
+    pointOfSale: candidate.pointOfSale ?? '',
+  };
+  configNoticeSignal.value = notice;
+  activeScreenSignal.value = 'config';
+  goToStep('probe');
 }
 
 function leaveWizard(): void {

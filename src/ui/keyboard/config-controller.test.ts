@@ -8,6 +8,10 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { connectionStateSignal, syncPausedSignal } from '../state/sync.ts';
 import {
   configErrorFieldSignal,
+  configFieldValuesSignal,
+  configNoticeSignal,
+  configTerminalSignal,
+  configTypeSignal,
   identityResetSignal,
   localChoiceSignal,
   probeOutcomeSignal,
@@ -26,6 +30,7 @@ import {
   handleWizardEscape,
   jumpToStep,
   openRequiredWizard,
+  openWizardWithCandidate,
   setConfigField,
   setConfigTerminalField,
   setConfigType,
@@ -210,6 +215,64 @@ describe('wizard — instalación', () => {
     fastForward();
     expect(wizardStepSignal.value).toBe('terminal');
     expect(configErrorFieldSignal.value).toBe('pointOfSale');
+  });
+});
+
+describe('wizard — vuelta del alta para revisar (#128)', () => {
+  it('abre con la conexión precargada, el aviso puesto y la prueba en curso', async () => {
+    const fetchMock = stubRestBackend();
+    connectionStateSignal.value = 'unconfigured';
+
+    await openWizardWithCandidate(
+      {
+        type: 'rest',
+        baseUrl: 'http://b.test',
+        apiKey: 'real',
+        branch: 'CENTRAL',
+        pointOfSale: 'Caja 1',
+        locale: 'es-AR',
+      },
+      'Volviste del alta.',
+    );
+
+    expect(activeScreenSignal.value).toBe('config');
+    expect(syncPausedSignal.value).toBe(true);
+    expect(configTypeSignal.value).toBe('rest');
+    expect(configFieldValuesSignal.value.rest).toEqual({
+      baseUrl: 'http://b.test',
+      apiKey: 'real',
+    });
+    expect(configTerminalSignal.value).toEqual({
+      locale: 'es-AR',
+      branch: 'CENTRAL',
+      pointOfSale: 'Caja 1',
+    });
+    expect(configNoticeSignal.value).toBe('Volviste del alta.');
+    expect(wizardStepSignal.value).toBe('probe');
+    await vi.waitFor(() => {
+      expect(probeOutcomeSignal.value?.status).toBe('ok');
+    });
+    // La prueba corre contra la conexión del candidato.
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^http:\/\/b\.test\//),
+      expect.anything(),
+    );
+  });
+
+  it('el aviso se limpia al resetear el wizard', async () => {
+    stubRestBackend();
+    connectionStateSignal.value = 'unconfigured';
+    await openWizardWithCandidate(
+      { type: 'rest', baseUrl: 'http://b.test', branch: 'A', pointOfSale: 'B' },
+      'Aviso',
+    );
+    await vi.waitFor(() => {
+      expect(probeOutcomeSignal.value?.status).toBe('ok');
+    });
+
+    await openRequiredWizard();
+
+    expect(configNoticeSignal.value).toBeNull();
   });
 });
 
