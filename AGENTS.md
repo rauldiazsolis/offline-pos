@@ -496,10 +496,15 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #66 | Conectores: Google Sheets, registro cerrado, conexión verificada, comandos por conector, crédito ilimitado | #67, #68, #76, #77, #80, #69 |
 | #87 | Sync por lotes (`pushBatch`/`pullBatch`) y `/DIAGNOSTICO` | PR #89 |
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
-| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos) | PR #136, PR #141, rama `claude/demo-onboarding-128` |
+| Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos) | PR #136, PR #141, PR #145 |
 
-**Siguiente**: la Etapa 7 de #94 (#102, comandos de consulta). Fase 5 (hardware) pospuesta a v2:
-depende de dispositivos reales y nada depende de ella (§11 del diseño).
+**Siguiente**: el MVP del epic #134 — #148 (deploy: Cloudflare Pages, carpetas inmutables por versión
+con almacenamiento aislado, `/versions` y docs para integradores; decisiones en el issue). El
+lanzamiento es para developers con el demo-backend en `localhost:4000`: la demo pública, con el
+mini-erp, queda para después (#147, `backlog`). Después del MVP: #112 + #111 y #102 (comandos de
+consulta, antes la Etapa 7 de #94); antes del primer comercio real: service worker (#54) y dominio
+propio (#150). Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada depende de
+ella (§11 del diseño).
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
 etiqueta antes de tomar un issue.
@@ -508,13 +513,16 @@ etiqueta antes de tomar un issue.
   velocidad de tecleo), #24 (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
 - Anulación: #137 (comprobante de la anulación).
 - Caja: #57 (usabilidad del modal de `/CAJA`).
-- Clientes y cuenta corriente: #37 (documento y teléfono), #102 (comandos de consulta), #104
-  (`backlog`).
+- Clientes y cuenta corriente: #102 (comandos de consulta); `backlog`: #37 (documento y teléfono),
+  #104.
 - Sync: `backlog`: #113, #103, #13 (los dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #112 (prioritario: foco y selección del wizard), #111 (tipografía con zoom),
   #41 (resize en DevTools).
-- Pantallas y publicación: #49 (tracking de modales), #52 (Historial), #54 (PWA, docs y lanzamiento);
-  `backlog`: #143 (pasar de demo a producción sin repetir el onboarding).
+- Pantallas y publicación: #148 (deploy del MVP), #49 (tracking de modales), #54 (service worker,
+  PWA y lanzamiento); `backlog`: #147 (backend para la demo pública), #150 (dominio propio), #52
+  (Historial), #143 (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
+- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #135 (fines de línea:
+  `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
   POS: #122, #144 (contrato 4.4.0 y el onboarding nuevo).
