@@ -11,7 +11,7 @@ import type { ConnectorCustomer } from './connector.ts';
  *   #101: tenga o no cuenta corriente); datos maestros y bloqueos llegan igual.
  * - Sin retener: valor del backend + efectos de los eventos a reaplicar. El
  *   stock viaja completo, así que un producto con efectos y sin fila parte de
- *   0; el saldo se ajusta solo en los clientes que vinieron con saldo (los que
+ *   0 — salvo con `stock: []`, que no toca el stock (#115); el saldo se ajusta solo en los clientes que vinieron con saldo (los que
  *   no vienen conservan el local, que ya incluye todo lo de esta terminal).
  */
 export function adjustPull(params: {
@@ -35,16 +35,8 @@ export function adjustPull(params: {
     };
   }
 
-  const incoming = new Set(params.stock.map((item) => item.productId));
-  const stock = params.stock.map((item) => {
-    const delta = params.effects.stock.get(item.productId);
-    return delta === undefined ? item : { ...item, quantity: roundQuantity(item.quantity + delta) };
-  });
-  for (const [productId, delta] of params.effects.stock) {
-    if (!incoming.has(productId)) {
-      stock.push({ productId, quantity: delta, updatedAt: params.now });
-    }
-  }
+  const stock =
+    params.stock.length === 0 ? [] : adjustStock(params.stock, params.effects, params.now);
 
   const customers = params.customers.map((item) => {
     const delta = params.effects.balance.get(item.id);
@@ -53,4 +45,26 @@ export function adjustPull(params: {
       : { ...item, balance: roundAmount(item.balance + delta) };
   });
   return { customers, stock };
+}
+
+/**
+ * Stock del backend más los efectos. Solo con stock no vacío: desde 4.4.0, `stock: []` es "el
+ * backend no mandó stock", no "todo en 0" (#115), así que no se arma ninguna fila desde 0.
+ */
+function adjustStock(
+  incomingStock: readonly StockItem[],
+  effects: ReapplyEffects,
+  now: string,
+): StockItem[] {
+  const incoming = new Set(incomingStock.map((item) => item.productId));
+  const stock = incomingStock.map((item) => {
+    const delta = effects.stock.get(item.productId);
+    return delta === undefined ? item : { ...item, quantity: roundQuantity(item.quantity + delta) };
+  });
+  for (const [productId, delta] of effects.stock) {
+    if (!incoming.has(productId)) {
+      stock.push({ productId, quantity: delta, updatedAt: now });
+    }
+  }
+  return stock;
 }

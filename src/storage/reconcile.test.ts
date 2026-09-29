@@ -47,7 +47,10 @@ async function ids(
 }
 
 /** Lo mismo que hacía `reconcileSnapshot` (se sacó en #98): la reconciliación dentro de su transacción. */
-async function reconcile(snap: ProbeSnapshot, params: { now: string; allowEmptyTables?: boolean }) {
+async function reconcile(
+  snap: ProbeSnapshot,
+  params: { now: string; allowEmptyTables?: boolean; keepStock?: boolean },
+) {
   return db.transaction(
     'rw',
     [db.products, db.stock, db.customers, db.customerAccounts, db.customerBalances, db.outbox],
@@ -233,6 +236,18 @@ describe('applySnapshotReconciled — salvaguardas', () => {
 
     expect(result).toEqual({ skipped: ['stock'] });
     expect(await ids('stock')).toEqual(['p1']);
+  });
+
+  it('keepStock: el stock local queda intacto y no se informa como omitido (#115)', async () => {
+    await db.stock.bulkPut([stockOf('p1', 8), stockOf('p2', 5)]);
+
+    const result = await reconcile(
+      snapshot({ products: [product('p1'), product('p2')], stock: [stockOf('p1', 0)] }),
+      { now, keepStock: true },
+    );
+
+    expect(result).toEqual({ skipped: [] });
+    expect(await db.stock.toArray()).toEqual([stockOf('p1', 8), stockOf('p2', 5)]);
   });
 
   it('nunca toca ventas, turnos, movimientos, el outbox ni la venta en curso', async () => {

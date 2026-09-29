@@ -164,6 +164,23 @@ describe('applyPull — delta sin retener', () => {
   });
 });
 
+describe('applyPull — delta con stock vacío (#115)', () => {
+  it('no toca el stock local ni arma filas con los pendientes', async () => {
+    await db.stock.bulkPut([
+      { productId: 'p1', quantity: 8, updatedAt: now },
+      { productId: 'p2', quantity: 5, updatedAt: now },
+    ]);
+    await db.outbox.bulkAdd([...saleEvents('s1', 'p1', 2), ...saleEvents('s2', 'p3', 1)]);
+
+    await applyPull({ full: false, result: pull(), retain: false, queuedEventIds: [], now });
+
+    expect(await db.stock.toArray()).toEqual([
+      { productId: 'p1', quantity: 8, updatedAt: now },
+      { productId: 'p2', quantity: 5, updatedAt: now },
+    ]);
+  });
+});
+
 describe('applyPull — reteniendo', () => {
   it('aplica datos maestros y bloqueos, conserva stock y saldo locales', async () => {
     await db.products.put(product('p1', 'Viejo'));
@@ -245,6 +262,35 @@ describe('applyPull — foto completa sin retener', () => {
     expect(await db.products.get('p2')).toBeUndefined();
     expect(await db.stock.get('p2')).toBeUndefined();
     expect((await db.stock.get('p1'))?.quantity).toBe(8);
+  });
+
+  it('con stock vacío no toca el stock local, aunque haya pendientes (#115)', async () => {
+    await db.products.bulkPut([product('p1'), product('p2')]);
+    await db.stock.bulkPut([
+      { productId: 'p1', quantity: 8, updatedAt: now },
+      { productId: 'p2', quantity: 5, updatedAt: now },
+    ]);
+    await db.outbox.bulkAdd(saleEvents('s1', 'p1', 2));
+
+    const report = await applyPull({
+      full: true,
+      result: pull({
+        products: {
+          items: [
+            { ...product('p1'), createdAt: now },
+            { ...product('p2'), createdAt: now },
+          ],
+        },
+        stock: [],
+      }),
+      retain: false,
+      queuedEventIds: [],
+      now,
+    });
+
+    expect(report).toEqual({ ok: true, value: { skipped: [], reappliedEvents: 2 } });
+    expect((await db.stock.get('p1'))?.quantity).toBe(8);
+    expect((await db.stock.get('p2'))?.quantity).toBe(5);
   });
 
   it('si Dexie falla devuelve sync/reconcile-failed sin cambiar nada', async () => {

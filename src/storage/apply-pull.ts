@@ -62,6 +62,8 @@ export async function applyPull(input: PullApplyInput): Promise<Result<PullApply
           });
 
           if (input.full) {
+            // 4.4.0 (#115): `stock: []` es "el backend no mandó stock", no "todo en 0".
+            const stockSent = input.result.stock.length > 0;
             const { skipped } = await applySnapshotReconciled(
               {
                 products: input.result.products.items,
@@ -69,7 +71,7 @@ export async function applyPull(input: PullApplyInput): Promise<Result<PullApply
                 customers: adjusted.customers,
                 cursors: {},
               },
-              { now: input.now },
+              { now: input.now, keepStock: !stockSent },
             );
             return { skipped, reappliedEvents: events.length };
           }
@@ -77,6 +79,7 @@ export async function applyPull(input: PullApplyInput): Promise<Result<PullApply
           if (input.result.products.items.length > 0) {
             await db.products.bulkPut(input.result.products.items);
           }
+          // Con `stock: []` (#115) `adjustPull` ya devuelve `[]`: el stock local no se toca.
           if (adjusted.stock.length > 0) {
             await db.stock.bulkPut(adjusted.stock);
           }

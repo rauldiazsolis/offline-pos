@@ -26,10 +26,12 @@ export type SnapshotTable = 'products' | 'stock' | 'customers';
  * convierte a `Result`.
  * `allowEmptyTables`: un backend **nuevo** vacío es legítimo (una planilla
  * recién creada), así que la salvaguarda de tabla vacía no aplica.
+ * `keepStock`: el backend no mandó stock (`stock: []`, 4.4.0, #115); el local queda intacto y no
+ * cuenta como tabla omitida.
  */
 export async function applySnapshotReconciled(
   snapshot: ProbeSnapshot,
-  params: { now: string; allowEmptyTables?: boolean },
+  params: { now: string; allowEmptyTables?: boolean; keepStock?: boolean },
 ): Promise<{ skipped: SnapshotTable[] }> {
   const { customers, accounts, balances } = splitConnectorCustomers(snapshot.customers, {
     now: params.now,
@@ -61,14 +63,16 @@ export async function applySnapshotReconciled(
     ),
   );
 
-  await db.stock.bulkPut(snapshot.stock);
-  await db.stock.bulkDelete(
-    absentKeys(
-      'stock',
-      await db.stock.toCollection().primaryKeys(),
-      snapshot.stock.map((item) => item.productId),
-    ),
-  );
+  if (params.keepStock !== true) {
+    await db.stock.bulkPut(snapshot.stock);
+    await db.stock.bulkDelete(
+      absentKeys(
+        'stock',
+        await db.stock.toCollection().primaryKeys(),
+        snapshot.stock.map((item) => item.productId),
+      ),
+    );
+  }
 
   const pendingCustomerIds = new Set(
     (await db.outbox.where('status').equals('pending').toArray()).flatMap((event) =>
