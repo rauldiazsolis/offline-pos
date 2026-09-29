@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { err, ok, type Result } from '../domain/result.ts';
 import { toZodIssues } from '../domain/zod-issues.ts';
 import { connectorConfigSchema } from './connector-registry.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /**
  * Antes del registro de conectores (Etapa 2, #68) la config guardada no tenía
@@ -57,7 +58,7 @@ export const syncConfigSchema = z.preprocess(
 
 export type SyncConfig = z.infer<typeof syncConfigSchema>;
 
-const STORAGE_KEY = 'offline-pos:sync-config';
+const STORAGE_KEY = storageKey('sync-config');
 
 function invalidConfig(message: string): Result<never> {
   return err('sync/config-invalid', { issues: [{ path: '', message }] });

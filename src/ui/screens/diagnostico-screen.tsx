@@ -132,9 +132,15 @@ export function DiagnosticoScreen() {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
-          Diagnóstico de sincronización
-        </h1>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>
+            Diagnóstico de sincronización
+          </h1>
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+            POS {diagnostics.posVersion} · almacenamiento{' '}
+            <span style={monoStyle}>{diagnostics.storageNamespace}</span>
+          </p>
+        </div>
         <button type="button" class="btn" onClick={exitDiagnosticoScreen}>
           Cerrar (Esc)
         </button>

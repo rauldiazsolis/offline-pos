@@ -116,3 +116,17 @@ describe('resetTerminal', () => {
     expect(syncPausedSignal.value).toBe(false);
   });
 });
+
+describe('almacenamiento por carpeta (#148)', () => {
+  it('pos.reset() y pos.export() no tocan las claves de otra carpeta', async () => {
+    localStorage.setItem('offline-pos@/0.1.0/:sync-config', '{"x":1}');
+    localStorage.setItem('offline-pos:ticket-counter', '{"date":"2026-09-29","last":3}');
+
+    const dump = await exportLocalData('2026-09-29T00:00:00.000Z');
+    expect(Object.keys(dump.localStorage)).toEqual(['offline-pos:ticket-counter']);
+
+    expect((await resetTerminal()).ok).toBe(true);
+    expect(localStorage.getItem('offline-pos@/0.1.0/:sync-config')).toBe('{"x":1}');
+    expect(localStorage.getItem('offline-pos:ticket-counter')).toBeNull();
+  });
+});

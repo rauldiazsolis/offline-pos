@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { backendCapabilitiesSignal } from '../ui/state/sync.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /** Capacidades del contrato 4.4.0 (#128): un backend las declara en `GET /info`. */
 export const CAPABILITY_DEMO_SESSIONS = 'demo-sessions';
@@ -9,7 +10,7 @@ export const CAPABILITY_CUSTOMER_PAYMENT_VOID = 'customer-payment-void';
  * Las del último `getInfo` exitoso, en `localStorage`: una terminal que arranca sin red las sabe
  * igual. Estado operativo best-effort, como los cursores: perderlo solo vuelve a "nunca se supo".
  */
-const STORAGE_KEY = 'offline-pos:backend-capabilities';
+const STORAGE_KEY = storageKey('backend-capabilities');
 const capabilitiesSchema = z.array(z.string());
 
 export function restoreBackendCapabilities(): void {

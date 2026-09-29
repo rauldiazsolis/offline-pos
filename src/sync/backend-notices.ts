@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { backendNoticesSignal } from '../ui/state/sync.ts';
 import { backendNoticeSchema, type BackendNotice, type NoticeSeverity } from './connector.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /**
  * Avisos del backend (4.4.0, #128): la lista vigente llega completa en cada pull y reemplaza a la
  * anterior, sin acuse ni descarte local. En `localStorage` para que una terminal que arranca sin red
  * los siga mostrando; estado operativo best-effort, como los cursores.
  */
-const STORAGE_KEY = 'offline-pos:backend-notices';
+const STORAGE_KEY = storageKey('backend-notices');
 const noticesSchema = z.array(backendNoticeSchema);
 
 /** Omite `ref` si falta (`exactOptionalPropertyTypes`). */

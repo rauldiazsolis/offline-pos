@@ -1,11 +1,12 @@
 import { z } from 'zod';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /**
  * `wipe_key` del onboarding (#128): lo emite esta terminal al ir al alta y, si vuelve igual, la
  * autoriza a borrar lo local (la excepción a "cambiar la conexión nunca borra solo"). Un solo uso,
  * vence a las 2 h. `localStorage` es el borde: único try/catch.
  */
-const STORAGE_KEY = 'offline-pos:pending-wipe-key';
+const STORAGE_KEY = storageKey('pending-wipe-key');
 export const WIPE_KEY_TTL_MS = 2 * 60 * 60 * 1000;
 const storedSchema = z.object({ key: z.string(), issuedAt: z.string() });
 

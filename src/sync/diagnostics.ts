@@ -1,5 +1,6 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
+import { STORAGE_NAMESPACE } from '../storage/storage-namespace.ts';
 import {
   backendCapabilitiesSignal,
   backendNoticesSignal,
@@ -48,6 +49,10 @@ export type SyncDiagnostics = {
   log: SyncLogEntry[];
   /** Última limpieza de datos locales (#98); ausente si todavía no corrió. */
   lastCleanup: CleanupRecord | undefined;
+  /** Versión del POS (`package.json`, #148). */
+  posVersion: string;
+  /** Nombre del almacenamiento local de esta carpeta (#148, `storage/storage-namespace.ts`). */
+  storageNamespace: string;
 };
 
 export function collectDiagnostics(): SyncDiagnostics {
@@ -67,5 +72,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     deviceId: getDeviceId(),
     log: syncLogSignal.value,
     lastCleanup: getLastCleanup(),
+    posVersion: __POS_VERSION__,
+    storageNamespace: STORAGE_NAMESPACE,
   };
 }

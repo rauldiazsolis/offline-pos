@@ -1,7 +1,7 @@
 {
   "name": "offline-pos",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
@@ -16,8 +16,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "backend": "pnpm --filter demo-backend run start",
     "test:backend": "pnpm --filter demo-backend run test",
-    "typecheck:backend": "pnpm --filter demo-backend run typecheck"
+    "typecheck:backend": "pnpm --filter demo-backend run typecheck",
+    "site:build": "vite build --outDir .site-dist && node site/build-site.ts --dist .site-dist --out .site-out",
+    "site:preview": "vite preview --outDir .site-out --port 4174 --strictPort"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",
@@ -38,6 +41,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
+    "marked": "^18.0.14",
     "prettier": "^3.9.6",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.70.0",

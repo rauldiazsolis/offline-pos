@@ -17,6 +17,9 @@ export default defineConfig([
       'eslint.config.js',
       'dev-orchestrator.mjs',
       'mini-erp/**',
+      // Sitio publicado armado en local (#148).
+      '.site-dist/**',
+      '.site-out/**',
       // Worktrees de otras sesiones (copias enteras del repo).
       '.claude/**',
     ],

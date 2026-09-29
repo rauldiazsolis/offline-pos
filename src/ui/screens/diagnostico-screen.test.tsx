@@ -52,6 +52,8 @@ const diagnostics: SyncDiagnostics = {
   ],
   deviceId: 'dev-1',
   log: [],
+  posVersion: '0.1.0',
+  storageNamespace: 'offline-pos@/0.1.0/',
 };
 
 vi.mock('../../sync/diagnostics.ts', () => ({ collectDiagnostics: () => diagnostics }));
@@ -61,6 +63,12 @@ afterEach(() => {
 });
 
 describe('DiagnosticoScreen (contrato v3)', () => {
+  it('muestra la versión del POS y el almacenamiento de esta carpeta (#148)', () => {
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText(/POS 0\.1\.0/)).not.toBeNull();
+    expect(screen.getByText('offline-pos@/0.1.0/')).not.toBeNull();
+  });
+
   it('muestra el dispositivo, el estado de cada lote en espera y los avisos con su evento', () => {
     render(<DiagnosticoScreen />);
 

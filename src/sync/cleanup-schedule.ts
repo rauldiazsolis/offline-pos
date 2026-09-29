@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { runLocalCleanup, type CleanupReport } from '../storage/local-cleanup.ts';
 import { getAwaitingLots, getCurrentPushLot } from './push-lot.ts';
+import { storageKey } from '../storage/storage-namespace.ts';
 
 /**
  * Cuándo corre la limpieza de datos locales (spec de #98, §4): al arrancar y
@@ -9,7 +10,7 @@ import { getAwaitingLots, getCurrentPushLot } from './push-lot.ts';
  * ejecución vive en `localStorage` (best-effort, como los cursores: si se
  * pierde, la limpieza vuelve a correr antes — nunca borra de más).
  */
-const LAST_CLEANUP_KEY = 'offline-pos:cleanup:last-run';
+const LAST_CLEANUP_KEY = storageKey('cleanup:last-run');
 export const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type CleanupRecord = CleanupReport & { at: string };

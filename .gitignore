@@ -38,3 +38,7 @@ blob-report
 
 # demo-backend
 demo-backend/data
+
+# sitio publicado armado en local (#148)
+.site-dist
+.site-out

@@ -37,6 +37,8 @@ const diagnostics: SyncDiagnostics = {
       result: { ok: false, error: 'sync/timeout', meta: { seconds: 30 } },
     },
   ],
+  posVersion: '0.1.0',
+  storageNamespace: 'offline-pos',
 };
 
 const pendingEvent: OutboxEvent = {
