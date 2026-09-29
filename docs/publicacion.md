@@ -39,8 +39,11 @@ primera vez. El diseño está en `docs/superpowers/specs/2026-09-29-deploy-mvp-d
    git push origin v0.1.0
    ```
 
-3. En GitHub → pestaña **Actions** → **Publicación**, mirá que la corrida del tag termine en verde. La
-   primera vez crea la rama `publish`.
+3. En GitHub → pestaña **Actions** → **Publicación**, mirá que la corrida del tag termine en verde.
+
+La rama `publish` la crea la primera corrida de la Action, sea la de un tag o la de un push a `main`
+que toque `site/` (así pasó en `0.1.0`: el merge del PR de #148 la creó con `/versions` vacía, y el
+tag sumó la carpeta). Que la Action corra al mergear un PR así es lo esperado; corre aparte del CI.
 
 ## 3. Primera vez: el proyecto de Cloudflare Pages
 
@@ -48,11 +51,17 @@ Hacelo **después** de que la primera Action haya creado la rama `publish` (Clou
 configurar el proyecto).
 
 1. Creá una cuenta en [dash.cloudflare.com](https://dash.cloudflare.com) (el plan gratuito alcanza).
-2. En el panel: **Workers & Pages** → **Create application** → **Pages** → **Connect to Git**.
+2. En el panel: **Workers & Pages** → **Create application**. Esa pantalla arranca por **Workers**
+   (un asistente con "Select a method" que termina pidiendo "Build command" y "Deploy command:
+   `npx wrangler deploy`"): **ese no es**, no aprietes Deploy. Abajo de todo está el link **Looking
+   to deploy Pages? Get started**; ahí, **Import an existing Git repository**. (La documentación de
+   Cloudflare todavía describe el camino viejo, **Create application** → **Pages** → **Connect to
+   Git**.)
 3. Iniciá sesión con GitHub. Al instalar la app de Cloudflare en GitHub, elegí **Only select
    repositories** y marcá solo `offline-pos` (permisos mínimos). Después **Install & Authorize** y
    **Begin setup**.
-4. En **Set up builds and deployments**:
+4. En **Set up builds and deployments** (se reconoce porque pide **Production branch**, **Framework
+   preset** y **Build output directory**, y no "Deploy command"):
    - **Project name**: `offline-pos`. Si está tomado, otro: el sitio queda en
      `https://<nombre>.pages.dev`.
    - **Production branch**: `publish`.
