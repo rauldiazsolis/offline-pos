@@ -72,7 +72,9 @@ eventos de lotes `queued` ∪ pendientes del outbox que nunca viajaron — esto 
 previo: un pull pisaba el descuento local de ventas todavía sin enviar. Con retención quedan los
 locales, el cursor de clientes **no avanza** (el saldo viaja dentro del cliente: el próximo delta lo
 vuelve a traer) y una foto completa no cuenta como hecha (se vuelve a intentar). El stock se ajusta en
-todas las filas (un producto con efectos y sin fila parte de 0); el saldo, solo en los clientes que
+todas las filas (un producto con efectos y sin fila parte de 0), salvo que el backend mande
+`stock: []` (#115): eso es "no mandó stock", no "todo en 0", así que ni la foto completa
+(`applySnapshotReconciled` con `keepStock`) ni el delta tocan el stock local; el saldo, solo en los clientes que
 vinieron con saldo (nunca se inventa una cuenta). Desde #101 el saldo vive en su propia tabla
 (`customerBalances`, Dexie v8, que migró el `balance` de cada cuenta): un cliente que vino con
 `balance` (tenga o no crédito) toma el del backend más los efectos; uno que vino sin `balance`
@@ -83,9 +85,8 @@ el lote en espera (`AwaitingLot.lastStatus`, `sync/push-lot.ts::updateAwaitingLo
 lo muestra ("en cola · N eventos"/"procesando"/"sin informar"), junto con cómo se aplicó el último
 pull. Un lote que se resuelve con `issues` no bloquea nada (el POS nunca se autobloquea) — solo se
 muestra al humano vía `pushLotIssuesSignal` (`ui/state/sync.ts`, `ui/errors.ts::sync/push-issues`),
-formateado con el evento al que se refiere (`ui/format-lot.ts::formatLotIssue`). Pendiente: #115
-(foto completa con stock vacío y movimientos pendientes) y, en backlog, #113 (cálculo por ítem con un
-lote `processing`).
+formateado con el evento al que se refiere (`ui/format-lot.ts::formatLotIssue`). Pendiente, en
+backlog: #113 (cálculo por ítem con un lote `processing`).
 
 ## Limpieza a 7 días
 
@@ -130,7 +131,8 @@ motor (`sync/engine.ts::isSyncLockHeld`), el estado del backend (contrato y `ok`
 incompatible, #99), el id de dispositivo, los lotes en espera con su último
 estado y su cantidad de eventos, el lote en curso "no recibido por el backend", cómo se aplicó el
 último pull y la última limpieza de datos locales con su ancla — de solo lectura, mismo patrón de
-teclado que `/RESUMEN`. Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
+teclado que `/RESUMEN`. Desde 4.4.0 (#128) también las capacidades del backend ("sin consultar",
+"ninguna" o la lista) y la sección "Avisos del backend" (severidad, mensaje y `ref` como "tipo id"). Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
 (ver "Barra de estado" en `src/ui/AGENTS.md`).
 
 ## Cadencias
@@ -175,12 +177,40 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 
 ## Contrato: qué trajo cada versión
 
+**Contrato 4.4.0 (#128)** — aditivo, la última versión antes del MVP (spec
+`docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`):
+- **Piso de compatibilidad**: `domain/contract-version.ts::isCompatibleContract` compara contra
+  `MIN_BACKEND_CONTRACT = '4.0.0'`, no contra `POS_CONTRACT_VERSION` (4.4.0): mismo major, minor ≥ 0.
+  El mensaje de incompatible dice "se necesita 4.0 o posterior". Un backend 4.2 (Sheets, mini-erp)
+  vuelve a sincronizar sin tocarlo.
+- **Capacidades** (`GET /info.capabilities`, ausente = `[]`): `demo-sessions` y
+  `customer-payment-void` (`sync/backend-capabilities.ts`). Las del último `getInfo` exitoso se
+  guardan en `offline-pos:backend-capabilities` y en `backendCapabilitiesSignal` (estado operativo
+  best-effort, como los cursores): una terminal que arranca sin red las sabe igual. Las escriben la
+  prueba de conexión (`ProbeSnapshot.capabilities`, vía `applyConnection`) y `refreshBackendStatus`, y
+  las restaura `bootstrap`. `supportsCapability` distingue `true`/`false`/`undefined` (nunca se supo:
+  terminal previa a 4.4.0 que arranca sin red). Se leen solo de la lista, nunca se deducen de la
+  versión; un nombre desconocido se ignora. Hoy las usa `/ANULAR` (ver `src/ui/AGENTS.md`).
+- **Avisos** (`notices` en el pull, `sync/backend-notices.ts`): la lista vigente y completa del
+  backend, sin acuse ni descarte local. Cada pull aplicado la reemplaza entera
+  (`offline-pos:backend-notices`, `backendNoticesSignal`; ausente = `[]`), y también la prueba al
+  aplicar una conexión; un pull fallido no la toca. Se validan uno por uno: uno mal formado se
+  descarta sin tirar el pull. `mostSevere` da el color de "Avisos (N)". Nunca bloquean nada. Sheets
+  no los manda.
+- **Tolerancias** (reglas de evolución, `sync/connector.ts`): ningún schema de red es estricto (un
+  test lo fija); `status` de `/info` desconocido → `ok`; `severity` desconocida → `info`; un estado de
+  lote desconocido, un `issues` con los avisos mal armados o algo sin estado → **`issues` con un aviso**
+  (desvío aprobado en la Tarea 2: `processing` podría quedar colgado para siempre).
+- **Stock vacío** (#115): ver "Pull" más arriba.
+- `POST /demo-sessions` y la vuelta con `#connect`: ver "Onboarding de demo" más abajo.
+
 **Contrato 4.3.0 (#125)** — aditivo: `CustomerPayment.voidsPaymentId?`, la anulación de una
 cobranza como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
 `customer-payment` más: la reaplicación (`-total`) y la limpieza ya la cubren. Un POS 4.3.0 ve
 incompatible a un backend 4.2 ("se necesita 4.3 o posterior"). El minibackend la acompaña (su saldo
 ya se mueve por `-total`; el panel muestra qué anula cada documento). Sheets (congelado, #127; camino
-para retomarlo: #138) y el mini-erp (desarrollo separado) quedan en 4.2.
+para retomarlo: #138) y el mini-erp (desarrollo separado) quedan en 4.2 — compatibles de nuevo desde
+el piso de 4.4.0.
 
 **Contrato 4.2.0 (#101)** — aditivo: `CustomerPayment.receipt?: { date, number }` (el número de
 recibo en su día local, con contador propio) y `ConnectorCustomer.balance` pasa a ser **el saldo de
@@ -286,7 +316,33 @@ Con Datos locales salteado: otro origen → `wipe` (lo que queda es catálogo aj
 los repositorios y guardan la config con `verifiedAt` **al final** — riesgo residual aceptado: el
 guardado vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después
 del commit, el próximo arranque encontraría la config anterior con datos nuevos. Al terminar: vuelve a
-la venta, reanuda el sync y dispara `runPushThenPull()`.
+la venta, reanuda el sync y dispara `runPushThenPull()`. Los caminos 2 y 3 también reemplazan las
+capacidades y los avisos del backend por los de la prueba (4.4.0): nunca quedan los de la conexión
+anterior.
+
+## Onboarding de demo (#128)
+
+El flujo y la excepción de borrado están en "Onboarding de demo" y "Ciclo de vida de la conexión"
+del `AGENTS.md` de la raíz. Módulos:
+
+| Módulo | Qué hace |
+|---|---|
+| `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
+| `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, y los errores de red de siempre). No pasa por el puerto `Connector`. |
+| `sync/wipe-key.ts` | `issueWipeKey`/`consumeWipeKey`: token de un solo uso en `offline-pos:pending-wipe-key` (con su fecha), vence a las 2 h. Se consume siempre que vuelva, haga falta o no. |
+| `ui/onboarding.ts` | `runOnboardingFromUrl`: la orquestación, con dependencias inyectadas. Devuelve `none`/`applied`/`ignored`/`failed`/`review` y `bootstrap` decide qué mostrar. |
+
+`SyncConfig.demo?: { template, onboarding: { url, label }, startedAt }` (fuera de la unión por
+`type`, como `branch`/`locale`) marca la terminal en demo; aplicar otra conexión desde `/CONFIG` la
+guarda sin `demo`. Una terminal en demo usa el conector `rest`; `rest-demo` y `/DEMO_RESET` quedan
+para quien configure a mano el minibackend.
+
+`bootstrap` corre el onboarding **antes** de leer la config (puede cambiarla) y limpia la URL
+siempre (`history.replaceState`), así un F5 no lo repite. Si aplicó (lo local se borró), vacía la
+venta en curso y el cliente adjunto que ya había restaurado, y vuelve a leer el último arqueo
+(`lastCashCountAtSignal`): si no, el aviso "Sin arqueo en 24 h" quedaba con el arqueo borrado. Mientras
+espera, `index.html` muestra "Preparando…" dentro de `#app`. Pasar de demo a producción sin repetir el
+onboarding queda para después (#143).
 
 ## Sin sincronización de fondo mientras `/CONFIG` está abierto
 

@@ -1,7 +1,8 @@
 # Onboarding de demo del POS genérico y contrato 4.4.0
 
 Fecha: 2026-09-28
-Estado: diseño aprobado, pendiente de plan.
+Estado: implementado (plan `docs/superpowers/plans/2026-09-28-onboarding-demo-contrato-4-4.md`,
+rama `claude/demo-onboarding-128`); desvíos al final.
 Issues: #128 (etapa del epic #134, MVP publicado; decisiones en los comentarios "Decisiones del
 2026-09-28" y "Alcance ampliado del contrato 4.4.0"). Entra también #115 (foto completa con stock
 vacío). Fuera de alcance: el mini-erp (desarrollo separado) y Google Sheets (#127, #133, #138).
@@ -282,3 +283,8 @@ PR cierra #115.
   algo que ni siquiera tiene estado. Un estado futuro que pida otra cosa (por ejemplo, un error grave
   que desaliente seguir vendiendo, otra etapa) llega con una versión del POS que lo anuncie, así que
   un POS de hoy nunca lo recibe.
+- **El último arqueo después de borrar (Tarea 9)**: cuando el onboarding borra lo local, `bootstrap`
+  vuelve a leer el último arqueo (`lastCashCountAtSignal`, con `getCashBalance`) además de vaciar la
+  venta en curso. Si no, el aviso "Sin arqueo en 24 h" quedaba calculado con un arqueo que ya no
+  existe. No estaba en el código del plan.
+- **Pasar de demo a producción sin repetir el onboarding** queda fuera de esta etapa: #143 (backlog).
