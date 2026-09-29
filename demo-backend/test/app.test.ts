@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import { request, type IncomingHttpHeaders, type Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.ts';
 import { openDb } from '../src/db.ts';
@@ -47,5 +47,35 @@ describe('createApp', () => {
     expect(response.status).toBe(204);
     expect(response.headers.get('access-control-allow-methods')).toContain('POST');
     expect(response.headers.get('access-control-allow-headers')).toContain('Authorization');
+  });
+
+  // `fetch` de Node puede filtrar los headers `Access-Control-Request-*`: el preflight va con
+  // `node:http`, como lo manda el navegador.
+  function preflight(headers: Record<string, string>): Promise<IncomingHttpHeaders> {
+    return new Promise((resolve, reject) => {
+      const req = request(`${baseUrl}/info`, { method: 'OPTIONS', headers }, (res) => {
+        res.resume();
+        resolve(res.headers);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  it('contesta el preflight de red privada de Chrome (#148)', async () => {
+    const headers = await preflight({
+      Origin: 'https://offline-pos.pages.dev',
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Private-Network': 'true',
+    });
+    expect(headers['access-control-allow-private-network']).toBe('true');
+  });
+
+  it('sin el pedido de red privada no lo manda', async () => {
+    const headers = await preflight({
+      Origin: 'https://offline-pos.pages.dev',
+      'Access-Control-Request-Method': 'GET',
+    });
+    expect(headers['access-control-allow-private-network']).toBeUndefined();
   });
 });
