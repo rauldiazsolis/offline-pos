@@ -20,6 +20,7 @@ import {
   setSyncConfigured,
   setSyncStatus,
 } from '../ui/state/sync.ts';
+import { saveBackendCapabilities } from './backend-capabilities.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { connectionState } from './connection-state.ts';
 import { withTimeout, type ProbeSnapshot } from './connection.ts';
@@ -149,6 +150,8 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     if (!saved.ok) {
       return err('connection/apply-failed', { message: 'no se pudo guardar la configuración' });
     }
+    // 4.4.0 (#128): las capacidades son de esta conexión; una foto sin ellas las borra.
+    saveBackendCapabilities(params.snapshot.capabilities);
 
     setConnectionState('active');
     setActiveConnectorType(params.candidate.type);

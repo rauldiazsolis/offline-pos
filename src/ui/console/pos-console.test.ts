@@ -25,6 +25,7 @@ const diagnostics: SyncDiagnostics = {
   lastCleanup: undefined,
   pushLotIssues: null,
   backendStatus: { kind: 'unknown' },
+  capabilities: undefined,
   deviceId: 'dev-1',
   log: [
     { at: '2026-09-23T11:05:00.000Z', kind: 'pull', request: { full: true }, result: { ok: true } },

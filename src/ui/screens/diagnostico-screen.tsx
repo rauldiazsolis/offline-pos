@@ -80,6 +80,14 @@ function backendName(status: BackendStatus): string | undefined {
   return info?.backend !== undefined ? `${info.backend.name} ${info.backend.version}` : undefined;
 }
 
+/** Capacidades del backend (4.4.0, #128): `undefined` es que nunca se consultaron. */
+function capabilitiesText(capabilities: readonly string[] | undefined): string {
+  if (capabilities === undefined) {
+    return 'sin consultar';
+  }
+  return capabilities.length === 0 ? 'ninguna' : capabilities.join(', ');
+}
+
 export function DiagnosticoScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
 
@@ -161,6 +169,7 @@ export function DiagnosticoScreen() {
               {backendName(diagnostics.backendStatus)}
             </p>
           )}
+          <p style={{ margin: 0 }}>Capacidades: {capabilitiesText(diagnostics.capabilities)}</p>
         </div>
 
         <div style={cardStyle}>

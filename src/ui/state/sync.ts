@@ -47,6 +47,12 @@ export type BackendStatus =
 
 export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
 
+/**
+ * Capacidades del backend según su último `getInfo` exitoso (4.4.0, #128), persistidas por
+ * `sync/backend-capabilities.ts`. `undefined` = nunca se supo.
+ */
+export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(undefined);
+
 /** `true` = preguntar `getInfo` antes del próximo ciclo: al arrancar y tras un fallo que no es de red. */
 export const backendCheckDueSignal = signal(true);
 

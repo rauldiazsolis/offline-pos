@@ -202,7 +202,12 @@ describe('pullBatch', () => {
           lots: {},
           notices: [
             { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
-            { id: 'n2', severity: 'warning', message: 'Venta dudosa', ref: { type: 'sale', id: 's1' } },
+            {
+              id: 'n2',
+              severity: 'warning',
+              message: 'Venta dudosa',
+              ref: { type: 'sale', id: 's1' },
+            },
           ],
         }),
       ),
@@ -219,7 +224,12 @@ describe('pullBatch', () => {
       value: expect.objectContaining({
         notices: [
           { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
-          { id: 'n2', severity: 'warning', message: 'Venta dudosa', ref: { type: 'sale', id: 's1' } },
+          {
+            id: 'n2',
+            severity: 'warning',
+            message: 'Venta dudosa',
+            ref: { type: 'sale', id: 's1' },
+          },
         ],
       }) as unknown,
     });

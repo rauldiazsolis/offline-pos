@@ -2,6 +2,7 @@ import { test as base, expect, type Page } from '@playwright/test';
 
 export const CONFIG_STORAGE_KEY = 'offline-pos:sync-config';
 export const DEVICE_ID_STORAGE_KEY = 'offline-pos:device-id';
+export const CAPABILITIES_STORAGE_KEY = 'offline-pos:backend-capabilities';
 
 /**
  * Conexión `active` (con `verifiedAt`, sucursal y punto de venta) apuntando a
@@ -36,17 +37,26 @@ export async function seedDeviceIdentity(page: Page): Promise<void> {
   }, DEVICE_ID_STORAGE_KEY);
 }
 
-/** `test` de Playwright que siembra `ACTIVE_CONFIG` antes de que cargue la app (en cada navegación). */
+/**
+ * `test` de Playwright que siembra `ACTIVE_CONFIG` antes de que cargue la app (en cada navegación),
+ * más la capacidad `customer-payment-void` (4.4.0, #128): el backend del fixture es inalcanzable y
+ * nunca la va a informar, y sin ella `/ANULAR` no anula cobranzas.
+ */
 export const test = base.extend({
   // El segundo parámetro de un fixture de Playwright se suele llamar `use`;
   // acá `provide` para que la regla de hooks de React no lo confunda con uno.
   page: async ({ page }, provide) => {
     await seedDeviceIdentity(page);
     await page.addInitScript(
-      ({ key, config }) => {
+      ({ key, config, capabilitiesKey }) => {
         localStorage.setItem(key, JSON.stringify(config));
+        localStorage.setItem(capabilitiesKey, JSON.stringify(['customer-payment-void']));
       },
-      { key: CONFIG_STORAGE_KEY, config: ACTIVE_CONFIG },
+      {
+        key: CONFIG_STORAGE_KEY,
+        config: ACTIVE_CONFIG,
+        capabilitiesKey: CAPABILITIES_STORAGE_KEY,
+      },
     );
     await provide(page);
   },

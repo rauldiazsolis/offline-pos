@@ -10,6 +10,8 @@ export type ProbeSnapshot = {
   stock: StockItem[];
   customers: ConnectorCustomer[];
   cursors: { products?: string; customers?: string };
+  /** Las del `getInfo` de la prueba de conexión (4.4.0, #128); ausente = no se consultaron. */
+  capabilities?: string[];
 };
 
 /**

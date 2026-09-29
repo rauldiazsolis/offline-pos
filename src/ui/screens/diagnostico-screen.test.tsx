@@ -40,6 +40,7 @@ const diagnostics: SyncDiagnostics = {
       backend: { name: 'offline-pos-demo-backend', version: '4.2.0' },
     },
   },
+  capabilities: ['demo-sessions', 'customer-payment-void'],
   deviceId: 'dev-1',
   log: [],
 };
@@ -103,6 +104,12 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
 
     expect(screen.getByText('Backend: contrato 4.2.0 · ok')).not.toBeNull();
     expect(screen.getByText('offline-pos-demo-backend 4.2.0')).not.toBeNull();
+  });
+
+  it('muestra las capacidades del backend (4.4.0, #128)', () => {
+    render(<DiagnosticoScreen />);
+
+    expect(screen.getByText('Capacidades: demo-sessions, customer-payment-void')).not.toBeNull();
   });
 });
 

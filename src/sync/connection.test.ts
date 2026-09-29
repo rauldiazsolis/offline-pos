@@ -66,8 +66,22 @@ describe('probeConnection', () => {
         stock: [{ productId: 'p1', quantity: 5, updatedAt: '2026-01-01T00:00:00.000Z' }],
         customers: [{ id: 'c1', name: 'Ana', createdAt: '2025-01-01T00:00:00.000Z' }],
         cursors: { products: 'cur-p', customers: 'cur-c' },
+        capabilities: [],
       },
     });
+  });
+
+  it('suma las capacidades del getInfo de la prueba (4.4.0, #128)', async () => {
+    const connector = fakeConnector({
+      getInfo: () =>
+        Promise.resolve(
+          ok({ contractVersion: '4.4.0', status: 'ok' as const, capabilities: ['demo-sessions'] }),
+        ),
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result.ok && result.value.capabilities).toEqual(['demo-sessions']);
   });
 
   it('sin cursores en la respuesta, no los inventa', async () => {
@@ -75,7 +89,7 @@ describe('probeConnection', () => {
 
     expect(result).toEqual({
       ok: true,
-      value: { products: [], stock: [], customers: [], cursors: {} },
+      value: { products: [], stock: [], customers: [], cursors: {}, capabilities: [] },
     });
   });
 

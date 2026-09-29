@@ -15,6 +15,7 @@ import { commandBarNoticeSignal } from '../state/command-bar.ts';
 import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { backendCapabilitiesSignal } from '../state/sync.ts';
 import {
   filteredVoidCandidatesSignal,
   voidCandidatesSignal,
@@ -104,6 +105,8 @@ beforeEach(async () => {
   commandBarNoticeSignal.value = null;
   customerBalancesSignal.value = new Map();
   activeScreenSignal.value = 'void';
+  // 4.4.0 (#128): anular cobranzas necesita la capacidad; los casos sin ella la pisan.
+  backendCapabilitiesSignal.value = ['customer-payment-void'];
 });
 
 afterEach(async () => {
@@ -466,5 +469,42 @@ describe('/ANULAR con cobranzas (#125)', () => {
     expect(voidQuestion(sale)).toBe('¿Anular el Ticket #1?');
     expect(voidBalancePreview(sale)).toBeUndefined();
     expect(voidBalancePreview(collection)).toBeUndefined();
+  });
+});
+
+describe('/ANULAR sin la capacidad customer-payment-void (4.4.0, #128)', () => {
+  it('un backend que no la declara: la cobranza se ve pero no se anula, y dice por qué', async () => {
+    backendCapabilitiesSignal.value = [];
+    await collect();
+    await loadVoidCandidates();
+
+    selectForVoid();
+
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBe('El backend no permite anular cobranzas.');
+  });
+
+  it('si nunca se supo, pide sincronizar', async () => {
+    backendCapabilitiesSignal.value = undefined;
+    await collect();
+    await loadVoidCandidates();
+
+    selectForVoid();
+
+    expect(voidConfirmingSignal.value).toBe(false);
+    expect(voidMessageSignal.value).toBe(
+      'Todavía no se sabe si el backend permite anular cobranzas: probá /SINCRONIZAR.',
+    );
+  });
+
+  it('una venta se anula igual', async () => {
+    backendCapabilitiesSignal.value = [];
+    await sell();
+    await loadVoidCandidates();
+
+    selectForVoid();
+
+    expect(voidConfirmingSignal.value).toBe(true);
+    expect(voidMessageSignal.value).toBeNull();
   });
 });

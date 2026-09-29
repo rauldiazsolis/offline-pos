@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import {
+  backendCapabilitiesSignal,
   backendCheckDueSignal,
   backendStatusSignal,
   setBackendCheckDue,
@@ -30,6 +31,8 @@ beforeEach(() => {
 
 afterEach(() => {
   syncLogSignal.value = [];
+  backendCapabilitiesSignal.value = undefined;
+  localStorage.clear();
 });
 
 describe('classifyBackendInfo (#99)', () => {
@@ -71,6 +74,25 @@ describe('refreshBackendStatus', () => {
     expect(backendStatusSignal.value.kind).toBe('ok');
     expect(backendCheckDueSignal.value).toBe(false);
     expect(syncLogSignal.value[0]?.kind).toBe('info');
+  });
+
+  it('guarda las capacidades que declara el backend; sin la lista, ninguna (4.4.0, #128)', async () => {
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () =>
+          Promise.resolve(
+            ok({ contractVersion: '4.4.0', status: 'ok', capabilities: ['customer-payment-void'] }),
+          ),
+      }),
+      now,
+    );
+    expect(backendCapabilitiesSignal.value).toEqual(['customer-payment-void']);
+    expect(localStorage.getItem('offline-pos:backend-capabilities')).toBe(
+      '["customer-payment-void"]',
+    );
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendCapabilitiesSignal.value).toEqual([]);
   });
 
   it('un error de red no cambia el estado conocido', async () => {

@@ -1,5 +1,5 @@
 import { POS_CONTRACT_VERSION } from '../domain/contract-version.ts';
-import { err, type Result } from '../domain/result.ts';
+import { err, ok, type Result } from '../domain/result.ts';
 import { classifyBackendInfo } from './backend-status.ts';
 import type { SyncConfig } from './config.ts';
 import type { Connector } from './connector.ts';
@@ -76,7 +76,10 @@ async function checkThenPull(connector: Connector): Promise<Result<ProbeSnapshot
       info.value.message !== undefined ? { message: info.value.message } : {},
     );
   }
-  return pullEverything(connector);
+  const snapshot = await pullEverything(connector);
+  return snapshot.ok
+    ? ok({ ...snapshot.value, capabilities: info.value.capabilities ?? [] })
+    : snapshot;
 }
 
 function normalizeEndpoint(raw: string): string {

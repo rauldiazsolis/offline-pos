@@ -7,6 +7,7 @@ import {
   setBackendStatus,
   type BackendStatus,
 } from '../ui/state/sync.ts';
+import { saveBackendCapabilities } from './backend-capabilities.ts';
 import type { BackendInfo, Connector } from './connector.ts';
 import { logSyncAttempt } from './sync-log.ts';
 
@@ -49,6 +50,8 @@ export async function refreshBackendStatus(
   const result = await connector.getInfo();
   logSyncAttempt('info', now, { contractVersion: POS_CONTRACT_VERSION }, result);
   if (result.ok) {
+    // 4.4.0 (#128): lo que el backend declara, también si está incompatible o en mantenimiento.
+    saveBackendCapabilities(result.value.capabilities ?? []);
     const status = classifyBackendInfo(result.value);
     setBackendStatus(status);
     setBackendCheckDue(false);
