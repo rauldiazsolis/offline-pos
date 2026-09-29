@@ -895,3 +895,10 @@ sesión nueva desde `origin/main`.
 - **Agregado a pedido del usuario**: `.gitattributes` con `* text=auto eol=lf` como quinto commit del
   PR. Todo el repo ya estaba con LF, así que no hubo renormalización.
 - **Resultado**: rauldiazsolis/mini-erp#4, mergeado con merge commit (`1350f94`); cerró #158 y #131.
+- **Después del merge, a pedido del usuario**: borrar `.agents/` fue un error de supuesto. El usuario
+  va a seguir el mini-erp también con Antigravity IDE, que lee el `AGENTS.md` de la raíz (y
+  `.agents/rules/*.md`). En un PR chico del repo nuevo, `AGENTS.md` pasa a una redacción neutral
+  respecto del agente y recupera la regla de tests con Vitest en `test/`, que se había perdido en la
+  fusión. También suma quién commitea según el agente: en Antigravity, el agente nunca ejecuta
+  `git commit` ni `git push` y sugiere el commit; en Claude Code, commitea en la rama. La regla vive en
+  `AGENTS.md` y no en `.agents/rules/`, para que Antigravity no lea dos reglas contradictorias.
