@@ -529,12 +529,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos); #148: publicación del MVP (carpetas por versión, almacenamiento por ruta, `/versions`, docs, Cloudflare Pages) | PR #136, PR #141, PR #145, PR #156 |
 | #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
 
-**Siguiente**: la primera publicación (`v0.1.0`, siguiendo `docs/publicacion.md`) y su verificación
-con Local Network Access; con eso se cierra #148 y el MVP del epic #134. El lanzamiento es para
-developers con el demo-backend en `localhost:4000`: la demo pública, con el mini-erp, queda para
-después (#147, `backlog`). Después del MVP: #112 + #111 y #102 (comandos de consulta, antes la
-Etapa 7 de #94); antes del primer comercio real: service worker (#54) y dominio propio (#150). Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada depende de
-ella (§11 del diseño).
+**Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
+publica con `docs/publicacion.md`). El lanzamiento es para developers con el demo-backend en
+`localhost:4000`: la demo pública, con el mini-erp, queda para después (#147, `backlog`). Ahora:
+#112 + #111 (una pasada visual de foco, selección y tipografía) y #102 (comandos de consulta, antes
+la Etapa 7 de #94), en ese orden; antes del primer comercio real: service worker (#54) y dominio
+propio (#150). En paralelo, sin bloquear nada: separar el mini-erp (#153 se resuelve con eso), #135 y el
+brainstorming de #138. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
+depende de ella (§11 del diseño).
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
 etiqueta antes de tomar un issue.
@@ -549,10 +551,9 @@ etiqueta antes de tomar un issue.
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #112 (prioritario: foco y selección del wizard), #111 (tipografía con zoom),
   #41 (resize en DevTools).
-- Pantallas y publicación: #148 (deploy del MVP: falta la primera publicación), #49 (tracking de
-  modales), #54 (service worker, PWA y lanzamiento); `backlog`: #147 (backend para la demo pública),
-  #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143 (pasar de demo a
-  producción sin repetir el onboarding).
+- Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
+  `backlog`: #147 (backend para la demo pública), #150 (dominio propio), #151 (`GET /info` sin
+  autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #135 (fines de línea:
   `.gitattributes` con `eol=lf`), #153 (lockfile de la raíz con entradas viejas de mini-erp).
