@@ -212,8 +212,15 @@ export function dismissCommandBarOverlay(): void {
   overlayDismissedSignal.value = true;
 }
 
-/** Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). */
+/**
+ * Alta local de un cliente nuevo desde `@<nombre>` sin match existente (RF-16). La barra se vacía
+ * al terminar (#146) **solo si todavía tiene lo que se envió** (#152): si el operador ya tipeó o
+ * escaneó otra cosa mientras el alta estaba en curso, eso no se pierde, y su Enter (que espera esta
+ * operación, ver `submitCommandBar`) lo procesa.
+ */
 async function createAndAttachCustomer(name: string): Promise<void> {
+  // Antes del primer `await`: es la barra del Enter que disparó el alta.
+  const submitted = commandBarBufferSignal.value;
   const result = await createCustomerLocally(name);
   if (!result.ok) {
     commandBarErrorSignal.value = describeError(result);
@@ -221,7 +228,9 @@ async function createAndAttachCustomer(name: string): Promise<void> {
   }
   setCustomerRepository(await loadCustomerRepository());
   attachedCustomerSignal.value = result.value;
-  clearBuffer();
+  if (commandBarBufferSignal.value === submitted) {
+    clearBuffer();
+  }
 }
 
 /**

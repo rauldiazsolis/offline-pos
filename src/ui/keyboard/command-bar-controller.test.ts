@@ -350,6 +350,34 @@ describe('Enter con la barra vacía (#99)', () => {
     expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
   });
 
+  it('lo tipeado durante el alta de @ no se pierde cuando el alta termina (#152)', async () => {
+    setCustomerRepository(await loadCustomerRepository());
+    updateCommandBarBuffer('@Cliente Nuevo');
+    submitCommandBar(); // crea el cliente en segundo plano (pendingBarOperation)
+    updateCommandBarBuffer('regalo$50'); // el operador sigue tipeando antes de que termine
+
+    await vi.waitFor(() => {
+      expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
+    });
+    expect(commandBarBufferSignal.value).toBe('regalo$50');
+  });
+
+  it('un Enter sobre lo tipeado durante el alta de @ lo agrega, no abre la cobranza (#152)', async () => {
+    setCustomerRepository(await loadCustomerRepository());
+    updateCommandBarBuffer('@Cliente Nuevo');
+    submitCommandBar(); // crea el cliente en segundo plano (pendingBarOperation)
+    updateCommandBarBuffer('regalo$50');
+    submitCommandBar(); // Enter con el alta todavía en curso
+
+    await vi.waitFor(() => {
+      expect(cartSignal.value.lines).toHaveLength(1);
+    });
+    expect(cartSignal.value.lines[0]).toMatchObject({ kind: 'freeform', description: 'regalo' });
+    expect(commandBarBufferSignal.value).toBe('');
+    expect(attachedCustomerSignal.value?.name).toBe('Cliente Nuevo');
+    expect(activeScreenSignal.value).toBe('sale');
+  });
+
   it('sin líneas ni cliente no hace nada', async () => {
     await submitEmptyCommandBar();
 
