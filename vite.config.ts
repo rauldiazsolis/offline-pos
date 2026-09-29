@@ -25,7 +25,6 @@ export default defineConfig({
       ...defaultExclude,
       'e2e/**',
       'demo-backend/**',
-      'mini-erp/**',
       '.claude/**',
       // Sitio publicado armado en local (#148).
       '.site-dist/**',

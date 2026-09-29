@@ -181,7 +181,7 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`):
 - **Piso de compatibilidad**: `domain/contract-version.ts::isCompatibleContract` compara contra
   `MIN_BACKEND_CONTRACT = '4.0.0'`, no contra `POS_CONTRACT_VERSION` (4.4.0): mismo major, minor ≥ 0.
-  El mensaje de incompatible dice "se necesita 4.0 o posterior". Un backend 4.2 (Sheets, mini-erp)
+  El mensaje de incompatible dice "se necesita 4.0 o posterior". Un backend 4.2 (como Sheets)
   vuelve a sincronizar sin tocarlo.
 - **Capacidades** (`GET /info.capabilities`, ausente = `[]`): `demo-sessions` y
   `customer-payment-void` (`sync/backend-capabilities.ts`). Las del último `getInfo` exitoso se
@@ -204,33 +204,31 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 - **Stock vacío** (#115): ver "Pull" más arriba.
 - `POST /demo-sessions` y la vuelta con `#connect`: ver "Onboarding de demo" más abajo.
 
-**Contrato 4.3.0 (#125)** — aditivo: `CustomerPayment.voidsPaymentId?`, la anulación de una
-cobranza como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
+**Contrato 4.3.0 (#125)** — aditivo: `CustomerPayment.voidsPaymentId?`, la anulación de una cobranza
+como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
 `customer-payment` más: la reaplicación (`-total`) y la limpieza ya la cubren. Un POS 4.3.0 ve
 incompatible a un backend 4.2 ("se necesita 4.3 o posterior"). El minibackend la acompaña (su saldo
-ya se mueve por `-total`; el panel muestra qué anula cada documento). Sheets (congelado, #127; camino
-para retomarlo: #138) y el mini-erp (desarrollo separado) quedan en 4.2 — compatibles de nuevo desde
-el piso de 4.4.0.
+ya se mueve por `-total`; el panel muestra qué anula cada documento). Sheets (congelado, #127;
+camino para retomarlo: #138) y los backends externos que no se actualizaron quedan en 4.2 —
+compatibles de nuevo desde el piso de 4.4.0.
 
 **Contrato 4.2.0 (#101)** — aditivo: `CustomerPayment.receipt?: { date, number }` (el número de
 recibo en su día local, con contador propio) y `ConnectorCustomer.balance` pasa a ser **el saldo de
-cualquier cliente, tenga o no crédito** (un `balance` sin `creditLimit`/`margin` es "saldo sin cuenta
-corriente"; un backend que no lleva saldo lo omite y el POS conserva el local). Un POS 4.2.0 ve
-incompatible a un backend 4.1 ("se necesita 4.2 o posterior"). El minibackend lleva el saldo de
+cualquier cliente, tenga o no crédito** (un `balance` sin `creditLimit`/`margin` es "saldo sin
+cuenta corriente"; un backend que no lleva saldo lo omite y el POS conserva el local). Un POS 4.2.0
+ve incompatible a un backend 4.1 ("se necesita 4.2 o posterior"). El minibackend lleva el saldo de
 cualquier cliente (arranca en 0 con su primer movimiento) y muestra recibos y saldos en `/_demo`; el
-puente de Sheets (hay que redesplegar `bridge.gs` y `columnas.gs`) escribe "Fecha del recibo" y "N° de
-recibo" en Cobranzas y calcula el saldo de cada cliente sumando el libro `CuentaCorriente` (entra en
-el fingerprint, así viaja en el delta). (El mini-erp se adaptó a 4.2.0 dentro de esta etapa, antes de
-separar los dos desarrollos.)
+puente de Sheets (hay que redesplegar `bridge.gs` y `columnas.gs`) escribe "Fecha del recibo" y "N°
+de recibo" en Cobranzas y calcula el saldo de cada cliente sumando el libro `CuentaCorriente` (entra
+en el fingerprint, así viaja en el delta).
 
 **Contrato 4.1.0 (#120)** — aditivo: `Sale.ticket?: { date, number }`, el número del ticket en su
-día local (ver "Numeración" en `src/domain/AGENTS.md`). Por la regla de
-compatibilidad, un POS 4.1.0 ve **incompatible** a un backend 4.0.0 (podría no guardar el número): el
-minibackend, el puente de Sheets (hay que redesplegar `bridge.gs`: dos columnas opcionales nuevas en
-Ventas, "Fecha del ticket" y "N° de ticket") y el mini-erp (adaptado en esta etapa, antes de la
-separación) hablan 4.1.0. El mensaje dice "se necesita 4.1 o posterior"
-(`domain/contract-version.ts::contractRequirement`). `sync/connector.ts` no tiene schema de venta (las
-ventas solo se empujan), así que del lado del POS no hubo nada que aceptar.
+día local (ver "Numeración" en `src/domain/AGENTS.md`). Por la regla de compatibilidad, un POS 4.1.0
+ve **incompatible** a un backend 4.0.0 (podría no guardar el número): el minibackend y el puente de
+Sheets (hay que redesplegar `bridge.gs`: dos columnas opcionales nuevas en Ventas, "Fecha del
+ticket" y "N° de ticket") hablan 4.1.0. El mensaje dice "se necesita 4.1 o posterior"
+(`domain/contract-version.ts::contractRequirement`). `sync/connector.ts` no tiene schema de venta
+(las ventas solo se empujan), así que del lado del POS no hubo nada que aceptar.
 
 **Contrato 4.0.0 (#99)** — la anulación es un **ticket propio**: viaja como un evento `sale` más, con
 líneas y pagos invertidos y `voidsSaleId` apuntando al original (sale `sale-void`: 7 tipos de evento;

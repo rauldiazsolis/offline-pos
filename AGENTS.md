@@ -83,14 +83,10 @@ Convenciones de proceso acordadas con el usuario (antes vivían en la memoria lo
 
 ## POS y mini-erp: desarrollo separado
 
-`mini-erp/` es un backend propio (Express + SQLite multitenant) que implementa el Connector API: uno
-más de los backends que usan el POS, no parte del POS. Desde el 2026-09-28 los dos se desarrollan por
-separado: **ningún cambio del POS dispara cambios en el mini-erp, ni al revés, sin autorización
-explícita del usuario en ese momento**. Un cambio de contrato en el POS se anuncia (qué rompe en los
-backends) y, a lo sumo, se propone un issue `feature:mini-erp`; no se adapta el mini-erp en el mismo
-trabajo. Trabajando en el mini-erp rigen su `mini-erp/AGENTS.md` y `.agents/rules/mini-erp.md`, que no
-permiten tocar el resto del repo. Hasta la Etapa 6 de #94 el mini-erp se adaptó dentro de las etapas
-del POS (Etapas 5 y 6); eso quedó atrás.
+El mini-erp (Express + SQLite multitenant) es un backend externo que implementa el Connector API: vive
+en su propio repo, [`rauldiazsolis/mini-erp`](https://github.com/rauldiazsolis/mini-erp), con sus
+propias reglas, desde el 2026-09-29 (epic #161). Un cambio de contrato en el POS se anuncia (qué rompe
+en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 
 ## Stack
 
@@ -132,7 +128,6 @@ src/
   workers/         # vacío: el service worker llega con la PWA (#54)
   test/            # helpers compartidos de tests (connector falso, planilla falsa, setup)
 demo-backend/      # minibackend de demo (Node + SQLite): la referencia ejecutable del contrato (`pnpm backend`)
-mini-erp/          # backend propio, desarrollo separado (ver "POS y mini-erp")
 site/              # publicación (#148): carpeta por versión, /versions, docs; no es parte de la app
 e2e/               # Playwright
 docs/              # connector-api.openapi.yaml, integradores/ (guía y llms.txt), publicacion.md, specs y planes (superpowers/), historia.md
@@ -261,27 +256,29 @@ contrato), dejar de aceptar lotes de una terminal — el POS nunca hace cumplir 
 se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arriba).
 
 **Compatibilidad por piso y capacidades (4.4.0, #128)**: compatible = mismo major que el POS y minor
-≥ el del **piso 4.0.0** (`domain/contract-version.ts::MIN_BACKEND_CONTRACT`), ya no el minor del POS:
-un agregado nuevo no obliga a todos los backends a actualizarse. Lo que un backend hace más allá del
-piso lo declara como **capacidad** en `GET /info` (`demo-sessions`, `customer-payment-void`); el POS
-nunca la deduce de la versión e ignora un nombre que no conoce. Un backend 4.2 (Sheets, el mini-erp)
-vuelve a ser compatible sin tocarlo: simplemente no anula cobranzas. Las **reglas de evolución**
-(campos y enums desconocidos, foto completa nunca truncada, numeración con huecos) están en el
-OpenAPI. Qué trajo cada versión (v3, 4.0.0 a 4.4.0), cómo el POS sigue el estado del backend, las
-capacidades y los avisos (`notices`) están en `src/sync/AGENTS.md`; las implementaciones y el
-registro de conectores, en `src/connectors/AGENTS.md`.
+≥ el del **piso 4.0.0** (`domain/contract-version.ts::MIN_BACKEND_CONTRACT`), ya no el minor del
+POS: un agregado nuevo no obliga a todos los backends a actualizarse. Lo que un backend hace más
+allá del piso lo declara como **capacidad** en `GET /info` (`demo-sessions`,
+`customer-payment-void`); el POS nunca la deduce de la versión e ignora un nombre que no conoce. Un
+backend 4.2 (Sheets, o uno externo que todavía no se actualizó) vuelve a ser compatible sin tocarlo:
+simplemente no anula cobranzas. Las **reglas de evolución** (campos y enums desconocidos, foto
+completa nunca truncada, numeración con huecos) están en el OpenAPI. Qué trajo cada versión (v3,
+4.0.0 a 4.4.0), cómo el POS sigue el estado del backend, las capacidades y los avisos (`notices`)
+están en `src/sync/AGENTS.md`; las implementaciones y el registro de conectores, en
+`src/connectors/AGENTS.md`.
 
 **Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
-mismo trabajo — es la referencia ejecutable del contrato. El mini-erp no (ver "POS y mini-erp:
-desarrollo separado"). El conector de Google Sheets tampoco: **congelado en 4.2.0** desde el
-2026-09-28 (#127) — un cambio de contrato o de la interfaz `Connector` no lo hace evolucionar; solo se
-hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso deja de ser mecánico se
-frena y se consulta (adaptarlo o sacarlo del registro). Con el piso 4.0.0 (#128) vuelve a ser
-compatible sin tocarlo: no declara capacidades, así que no anula cobranzas. La red de seguridad ya
-existe: el puente informa su versión (`bridge.gs::CONTRACT_VERSION`), así que con un POS de otro major
-la terminal lo ve incompatible, no sincroniza y sigue vendiendo sin perder nada. Cada cambio de contrato suma en #127
-lo que haría falta para retomarlo; `/CONFIG` lo muestra como "Sin mantenimiento". El camino decidido
-para retomarlo es #138 (el conector en el POS, con la API del puente especificada).
+mismo trabajo — es la referencia ejecutable del contrato. Los backends externos, como el mini-erp,
+no (ver "POS y mini-erp: desarrollo separado"). El conector de Google Sheets tampoco: **congelado en
+4.2.0** desde el 2026-09-28 (#127) — un cambio de contrato o de la interfaz `Connector` no lo hace
+evolucionar; solo se hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso
+deja de ser mecánico se frena y se consulta (adaptarlo o sacarlo del registro). Con el piso 4.0.0
+(#128) vuelve a ser compatible sin tocarlo: no declara capacidades, así que no anula cobranzas. La
+red de seguridad ya existe: el puente informa su versión (`bridge.gs::CONTRACT_VERSION`), así que
+con un POS de otro major la terminal lo ve incompatible, no sincroniza y sigue vendiendo sin perder
+nada. Cada cambio de contrato suma en #127 lo que haría falta para retomarlo; `/CONFIG` lo muestra
+como "Sin mantenimiento". El camino decidido para retomarlo es #138 (el conector en el POS, con la
+API del puente especificada).
 
 **Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
 (el puente de Sheets usa `@OnlyCurrentDoc`). Si una función más linda necesita un scope más amplio, se
@@ -528,14 +525,15 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #94, Etapas 0 a 6 | Consola `pos.*`, contrato v3, identidad y wizard, pull con reaplicación y limpieza, venta (4.0.0), caja sin turnos (4.1.0), cobranza y saldo (4.2.0) | PR #105, #107, #109, #116, #118, #123, #126 |
 | Epic #134 | #124, #125: `/RESUMEN` más nuevo primero, anular cobranzas (4.3.0) y `/ANULAR` como `/RESUMEN`; #128 y #115: onboarding de demo y contrato 4.4.0 (piso, capacidades, avisos); #148: publicación del MVP (carpetas por versión, almacenamiento por ruta, `/versions`, docs, Cloudflare Pages) | PR #136, PR #141, PR #145, PR #156 |
 | #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
+| Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 
 **Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
 publica con `docs/publicacion.md`). El lanzamiento es para developers con el demo-backend en
-`localhost:4000`: la demo pública, con el mini-erp, queda para después (#147, `backlog`). Ahora:
-#112 + #111 (una pasada visual de foco, selección y tipografía) y #102 (comandos de consulta, antes
-la Etapa 7 de #94), en ese orden; antes del primer comercio real: service worker (#54) y dominio
-propio (#150). En paralelo, sin bloquear nada: separar el mini-erp (#153 se resuelve con eso), #135 y el
-brainstorming de #138. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
+`localhost:4000`: la demo pública, con el mini-erp, queda para después (#147, `backlog`; se publica
+con rauldiazsolis/mini-erp#3). Ahora: #112 + #111 (una pasada visual de foco, selección y
+tipografía) y #102 (comandos de consulta, antes la Etapa 7 de #94), en ese orden; antes del primer
+comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin bloquear nada: #135 y
+el brainstorming de #138. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
 depende de ella (§11 del diseño).
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -555,7 +553,7 @@ etiqueta antes de tomar un issue.
   `backlog`: #147 (backend para la demo pública), #150 (dominio propio), #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
-- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #135 (fines de línea:
-  `.gitattributes` con `eol=lf`), #153 (lockfile de la raíz con entradas viejas de mini-erp).
-- Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Mini-erp, fuera del flujo del
-  POS: #122, #144 (contrato 4.4.0 y el onboarding nuevo).
+- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`) y #135 (fines de línea:
+  `.gitattributes` con `eol=lf`).
+- Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
+  su repo.

@@ -317,6 +317,22 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   y se mergeó antes que esta etapa. Otro flake visto, sin investigar: #155. #148 se cierra a mano
   después de la primera publicación y de verificar el permiso de red local de Chrome.
 
+- Separación del mini-erp (epic #161; spec
+  `docs/superpowers/specs/2026-09-29-separar-mini-erp-design.md`, planes
+  `docs/superpowers/plans/2026-09-29-separar-mini-erp.md` y
+  `docs/superpowers/plans/2026-09-29-limpiar-offline-pos.md`): el mini-erp se mudó a su propio repo
+  público, `rauldiazsolis/mini-erp`, con su historia (`git subtree split`, 37 commits), un
+  `AGENTS.md` que fusiona `mini-erp/AGENTS.md` con `.agents/rules/mini-erp.md`, dependencias propias,
+  una copia fijada del OpenAPI bajada de una carpeta publicada y CI propio (rauldiazsolis/mini-erp#4).
+  Sus issues se transfirieron: #122, #144 y #160 son rauldiazsolis/mini-erp#1 a #3; #131 se cerró con
+  la Etapa 1. En la Etapa 2 (#159) offline-pos borró `mini-erp/` y `.agents/` (el usuario también
+  usa Antigravity IDE con offline-pos, pero le alcanza el `AGENTS.md` de la raíz), sacó sus ignores
+  de ESLint y Vitest, borró la etiqueta `feature:mini-erp` y regeneró el lockfile sin el importer
+  viejo (#153). Un `pnpm install` a secas no alcanzaba: reusaba restos del mini-erp (`jiti`,
+  `@noble/hashes`, `esbuild`, `rollup`) como peers opcionales de la raíz; se sacaron a mano y
+  `pnpm dedupe` podó el resto. Desde entonces el mini-erp es un backend externo más: un cambio de
+  contrato se anuncia con un issue en su repo.
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear
