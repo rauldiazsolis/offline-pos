@@ -7,9 +7,9 @@ describe('describeError', () => {
       describeError({
         ok: false,
         error: 'sync/incompatible-contract',
-        meta: { backend: '4.0.0', pos: '4.2.0' },
+        meta: { backend: '4.0.0', pos: '4.3.0' },
       }),
-    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.2 o posterior.');
+    ).toBe('El backend usa el contrato 4.0.0; esta versión del POS necesita 4.3 o posterior.');
   });
 
   it('códigos de caja (#100)', () => {
@@ -35,6 +35,25 @@ describe('describeError', () => {
     expect(
       describeError({ ok: false, error: 'customer-payment/invalid', meta: { reason: 'empty' } }),
     ).toBe('Ingresá al menos un monto.');
+  });
+
+  it('códigos de la anulación de una cobranza (#125)', () => {
+    expect(
+      describeError({ ok: false, error: 'customer-payment/cannot-void-a-void', meta: undefined }),
+    ).toBe('Esta cobranza ya es una anulación: no se puede anular.');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/already-voided', meta: undefined }),
+    ).toBe('Esa cobranza ya estaba anulada.');
+    expect(
+      describeError({
+        ok: false,
+        error: 'customer-payment/void-window-expired',
+        meta: { createdAt: '2026-09-27T09:00:00.000Z' },
+      }),
+    ).toBe('Solo se pueden anular cobranzas de las últimas 24 horas.');
+    expect(
+      describeError({ ok: false, error: 'customer-payment/not-found', meta: { paymentId: 'cp1' } }),
+    ).toBe('No se encontró esa cobranza.');
   });
 
   it('demo/unavailable-for-connector', () => {

@@ -8,7 +8,7 @@ import type { RefObject } from 'preact';
  * al re-insertar el elemento dinámicamente) puede perderse o simplemente no
  * disparar el foco. Ver src/ui/AGENTS.md, "Patrones de UI" — este hook
  * consolida el patrón que ya usaban `CheckoutScreen`/`ConfigScreen`/
- * `VoidSaleScreen`/`ReceiptScreen` cada uno por su cuenta, y que
+ * `VoidScreen`/`ReceiptScreen` cada uno por su cuenta, y que
  * `CommandBarInput` no tenía (usaba `autoFocus` nativo, la causa real de un
  * bug reportado: el foco se perdía al volver de un popup con Esc).
  */

@@ -454,6 +454,28 @@ describe('saldo de cualquier cliente y recibo (4.2.0, #101)', () => {
     expect(customer?.creditLimit).toBeUndefined();
   });
 
+  it('la anulación de una cobranza devuelve el saldo (4.3.0, #125)', async () => {
+    seedCustomer('c-1');
+    const voidOf = {
+      type: 'customer-payment',
+      id: 'cp2',
+      payment: {
+        id: 'cp2',
+        customerId: 'c-1',
+        payments: [{ method: 'cash', amount: -300 }],
+        total: -300,
+        createdAt: '2026-09-27T11:00:00.000Z',
+        receipt: { date: '2026-09-27', number: 4 },
+        voidsPaymentId: 'cp1',
+      },
+    };
+
+    await push('lot-1', [collection('cp1', 'c-1', 300)]);
+    await push('lot-2', [voidOf]);
+
+    expect((await pulledCustomer('c-1'))?.balance).toBe(0);
+  });
+
   it('una acreditación (pago a cuenta negativo) de un cliente sin cuenta deja saldo negativo', async () => {
     seedCustomer('c-1');
 

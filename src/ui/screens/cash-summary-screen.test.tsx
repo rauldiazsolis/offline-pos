@@ -39,11 +39,13 @@ function dayView(sales: Sale[], extra: Partial<DayView> = {}): DayView {
       totalsByMethod: { cash: 300, debit: 50, credit: 0, transfer: 0, qr: 0, account: 0 },
       otherPayments: 50,
       cash: { sales: 300, income: 0, expense: 0, countAdjustments: 0, collections: 0 },
-      collections: { total: 0, count: 0 },
+      collections: { total: 0, count: 0, voidedCount: 0 },
       collectionsByMethod: { cash: 0, debit: 0, credit: 0, transfer: 0, qr: 0, account: 0 },
     },
     voidedSaleIds: new Set(),
     voidOriginals: new Map(),
+    voidedPaymentIds: new Set(),
+    paymentVoidOriginals: new Map(),
     collections: [],
     customerNames: new Map(),
     ...extra,
@@ -552,7 +554,7 @@ describe('cobranzas (#101)', () => {
       summary: {
         ...view.summary,
         cash: { ...view.summary.cash, collections: 500 },
-        collections: { total: 800, count: 2 },
+        collections: { total: 800, count: 2, voidedCount: 0 },
         collectionsByMethod: { cash: 500, debit: 100, credit: 0, transfer: 200, qr: 0, account: 0 },
       },
     };
@@ -568,6 +570,46 @@ describe('cobranzas (#101)', () => {
     expect(sidebar.getByText('(2 recibos)')).not.toBeNull();
     expect(within(screen.getByTestId('cash-collections-row')).getByText('500,00')).not.toBeNull();
     expect(sidebar.getByText('350,00')).not.toBeNull(); // Total vendido sin las cobranzas
+  });
+
+  it('una cobranza anulada y su anulación llevan su marca; el panel cuenta las anuladas (#125)', () => {
+    const view = dayViewSignal.value;
+    if (view === undefined) throw new Error('setup falló');
+    const original = {
+      id: 'cp1',
+      customerId: 'c9',
+      payments: [{ method: 'cash' as const, amount: 500 }],
+      total: 500,
+      createdAt: '2026-01-01T12:00:00.000Z',
+      receipt: { date: today, number: 1 },
+    };
+    const voidPayment = {
+      id: 'cp2',
+      customerId: 'c9',
+      payments: [{ method: 'cash' as const, amount: -500 }],
+      total: -500,
+      createdAt: '2026-01-01T13:00:00.000Z',
+      receipt: { date: today, number: 2 },
+      voidsPaymentId: 'cp1',
+    };
+    const collections = [original, voidPayment];
+    dayViewSignal.value = {
+      ...view,
+      collections,
+      customerNames: new Map([['c9', 'Ana Gómez']]),
+      entries: buildDayEntries({ sales: view.sales, movements: [], counts: [], collections }),
+      voidedPaymentIds: new Set(['cp1']),
+      paymentVoidOriginals: new Map([['cp1', original]]),
+      summary: { ...view.summary, collections: { total: 0, count: 2, voidedCount: 1 } },
+    };
+
+    render(<CashSummaryScreen />);
+
+    expect(screen.getByText('· Anulada')).not.toBeNull();
+    expect(screen.getByText('· Anulación del #1')).not.toBeNull();
+    expect(screen.getByText('-500,00')).not.toBeNull();
+    const sidebar = within(screen.getByTestId('cash-summary-sidebar'));
+    expect(sidebar.getByText('(2 recibos, 1 anulados)')).not.toBeNull();
   });
 
   it('Movimientos muestra cada recibo con su cliente y sus medios', () => {

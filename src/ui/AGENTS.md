@@ -119,7 +119,7 @@ propósito no interactiva; esa decisión se reabrió a propósito en la prueba m
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
 (`backendStatusSignal`), detrás de "sin configurar" y de offline y delante del resto: "Backend
-incompatible (contrato X, se necesita 4.2 o posterior)" con estilo de error, y "Backend en mantenimiento:
+incompatible (contrato X, se necesita 4.3 o posterior)" con estilo de error, y "Backend en mantenimiento:
 <mensaje>", informativo. 4 estados reales
 — `offline` (+ conteo de `outbox` pendiente), `online-idle` (+ hora de la última sync), `syncing`
 (+ conteo), `sync-error` (varios reintentos fallidos seguidos del lote de push, ver
@@ -185,7 +185,37 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 - **`/RESUMEN`**: las cobranzas no son ventas — no suman al total vendido ni a los tickets. Panel
   "Cobranzas $X (N recibos)" y la fila "Cobranzas" en el efectivo del día; en Movimientos, "Recibo #3 ·
   Ana" con los medios (el buscador encuentra "3", "#3" y el nombre); Medios de pago con columnas
-  Ventas | Cobranzas | Total. Se agrupan por `receipt.date` si lo tienen.
+  Ventas | Cobranzas | Total. Se agrupan por `receipt.date` si lo tienen. Una cobranza anulada dice
+  "· Anulada" y su anulación "· Anulación del #1" (#125), como los tickets; el panel, "(N recibos, M
+  anulados)", donde N cuenta también las anulaciones.
+
+## `/ANULAR` (#125, con #110 y #58)
+
+- **Layout de Movimientos de `/RESUMEN`** (`ui/screens/void-screen.tsx`, `ui/keyboard/void-controller.ts`,
+  estado en `ui/state/void.ts`): franja oscura con "Anular", el buscador y "Volver a la venta (Esc)", y
+  la lista con las filas compartidas (`ui/components/document-rows.tsx`) y el buscador compartido
+  (`ui/document-search.ts`). Ventas y cobranzas de las últimas 24 h, sin tope, lo más nuevo primero
+  (`storage/void-repository.ts::listVoidCandidates`, unión `VoidCandidate` venta | cobranza). Nunca
+  se muestra un ULID.
+- **Filas sin acción**: la original anulada y la anulación se ven atenuadas con su marca, y se
+  navegan como cualquier otra (decisión de la prueba manual de #125): ↑/↓, PageUp/PageDown y el click
+  usan la mecánica de `/RESUMEN` (`useTicketListNavigation`). Enter o click sobre una de ellas no abre
+  el modal: dice por qué en un slot de alto fijo debajo del buscador ("El Ticket #1 ya está anulado
+  (con el Ticket #3)." / "El Ticket #3 es la anulación del Ticket #1: no se puede anular."), que se
+  borra con la próxima tecla.
+- **Buscador**: el único input, siempre enfocado. Tipear filtra y la selección vuelve a la primera
+  fila del resultado (al abrir, la más nueva); Esc lo limpia si tiene texto y, si no, sale a la venta. Sin nada anulable,
+  "No hay ventas ni cobranzas de las últimas 24 horas para anular." (arriba de las filas sin acción);
+  con un filtro sin coincidencias, "Ningún documento coincide con la búsqueda.".
+- **Modal de confirmación** (solo sobre una fila anulable): tarjeta chica sobre la lista, con la pregunta ("¿Anular el Ticket #1?",
+  "¿Anular el Recibo #1 de Ana?"; sin número, "el ticket de las 17:20"), el total y, en una cobranza
+  con saldo conocido, "Saldo de Ana: A favor $500,00 → Sin saldo". "Volver (Esc)" y "Anular (Enter)";
+  un error de negocio se muestra adentro. El foco se queda en el buscador y, con el modal abierto, el
+  buscador no recibe texto (Enter anula, Esc vuelve con la misma selección y filtro, Tab llega a los
+  botones).
+- **Al anular**: vuelve a la venta con un aviso en el slot de la barra (`commandBarNoticeSignal`,
+  como `/CAJA`): "Anulado el Recibo #1 con el Recibo #2". Recarga el stock y los saldos. El
+  comprobante de la anulación queda en #137.
 
 ## `/CONFIG` como wizard
 
@@ -252,7 +282,7 @@ del overlay lo cierra como Esc (#28), sin tocar lo tipeado (`sale-screen.tsx`); 
 carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). **Cobro** (#99): click
 en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobranza** (#101): lo
 mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
-seleccionar + Enter, `void-controller.ts::activateVoidRow`), **comprobante**, **`/DIAGNOSTICO`**,
+seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
 abre `/CAJA`).
@@ -331,6 +361,11 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 - **Persistir la venta en curso con `effect()` fuera de un componente** (`ui/state/persist-cart.ts`):
   guarda `cartSignal` en `draftCart` en cada cambio, sin debounce (cambia una vez por acción, no por
   tecla). `draftCart` no es el outbox: sobrevive a un refresh/crash de esta terminal y nunca viaja.
+- **Filas de documentos compartidas** entre `/RESUMEN` y `/ANULAR` (`ui/components/document-rows.tsx`,
+  con el buscador en `ui/document-search.ts`): una sola forma de dibujar un ticket o un recibo. Las
+  filas reciben la selección, la marca, el ref y el click como props; `/RESUMEN` las envuelve en
+  componentes propios para leer `nav.ticketRef(index)` en el nivel superior del render
+  (`react-hooks/refs`).
 - **Hooks de lista reusables**: `useScrollSelectedIntoView` y `useScrollIndicator` no saben nada de
   carrito ni de overlays; cada lista los llama con su signal y sus refs. jsdom no implementa
   `scrollIntoView` ni `ResizeObserver`: los stubs globales viven en `src/test/setup.ts`.

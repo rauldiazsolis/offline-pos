@@ -105,6 +105,11 @@ class PosDatabase extends Dexie {
         });
         await tx.table<CustomerBalance, string>('customerBalances').bulkPut(balances);
       });
+    // #125: la anulación de una cobranza es otra cobranza que apunta a la original — el índice
+    // responde "¿esta cobranza ya tiene anulación?" sin recorrer la tabla (como `voidsSaleId`, v6).
+    this.version(9).stores({
+      customerPayments: 'id, createdAt, customerId, voidsPaymentId',
+    });
   }
 }
 

@@ -34,9 +34,16 @@ archivos de esta carpeta viven donde está el grueso del tema:
   (acreditación); `storage/sale-repository.ts::voidSaleAndPersist` la persiste como cualquier venta
   (índice Dexie `voidsSaleId`, versión 6). Ventana de 24 h móviles (`isWithinVoidWindow`), no se
   anula dos veces (`sale/already-voided`) ni una anulación (`sale/cannot-void-a-void`); una devolución
-  común sí. `/ANULAR` (`listVoidCandidates`) lista los últimos 20 tickets de 24 h, con la original
-  anulada ("Anulada") y la anulación ("Anulación de HH:MM · $X") atenuadas y sin acción; `/RESUMEN`
-  marca lo mismo (`isVoided`, que también reconoce el `status: 'voided'` legado).
+  común sí. `/ANULAR` (`storage/void-repository.ts::listVoidCandidates`) lista las ventas y cobranzas
+  de las últimas 24 h, sin tope, con la original anulada ("Anulada") y la anulación ("Anulación del
+  #N") atenuadas y sin acción; `/RESUMEN` marca lo mismo (`isVoided`, que también reconoce el
+  `status: 'voided'` legado).
+- **Anulación de una cobranza** (#125): `domain/customer-payment.ts::buildVoidCustomerPayment`, espejo
+  de `buildVoidSale` — medios y total invertidos, `voidsPaymentId` a la original (que no se toca),
+  misma ventana de 24 h, no se anula dos veces (`customer-payment/already-voided`) ni una anulación
+  (`customer-payment/cannot-void-a-void`); consume número de recibo. `buildCustomerPayment` sigue
+  exigiendo montos > 0: la anulación es el único camino a una cobranza negativa. Revierte el saldo del
+  cliente y el de efectivo por su signo (`isVoidedPayment` marca la original).
 
 ## Caja: saldo de efectivo, conceptos y numeración (Etapa 5, #100 y #120)
 

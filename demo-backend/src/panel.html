@@ -41,7 +41,7 @@
     </section>
     <section>
       <h2>Ventas sincronizadas</h2>
-      <table id="sales-table"><thead><tr><th>id</th><th>ticket</th><th>total</th><th>status</th><th>anula a</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+      <table id="sales-table"><thead><tr><th>id</th><th>ticket</th><th>total</th><th>status</th><th>anula a</th><th>anulada por</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Movimientos de caja</h2>
@@ -49,7 +49,7 @@
     </section>
     <section>
       <h2>Cobranzas</h2>
-      <table id="customer-payments-table"><thead><tr><th>id</th><th>recibo</th><th>cliente</th><th>total</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
+      <table id="customer-payments-table"><thead><tr><th>id</th><th>recibo</th><th>cliente</th><th>total</th><th>anula a</th><th>anulada por</th><th>dispositivo</th><th>sucursal</th><th>punto de venta</th></tr></thead><tbody></tbody></table>
     </section>
     <section>
       <h2>Clientes creados desde el POS</h2>
@@ -146,9 +146,9 @@
         loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
         loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));
-        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.ticket ? `#${s.ticket.number} · ${s.ticket.date.slice(8, 10)}/${s.ticket.date.slice(5, 7)}` : ''}</td><td>${s.total}</td><td>${s.status ?? ''}</td><td>${s.voidsSaleId ?? ''}</td>${identity(s)}</tr>`);
+        loadTable('/_demo/api/sales', 'sales-table', (s) => `<tr><td>${s.id}</td><td>${s.ticket ? `#${s.ticket.number} · ${s.ticket.date.slice(8, 10)}/${s.ticket.date.slice(5, 7)}` : ''}</td><td>${s.total}</td><td>${s.status ?? ''}</td><td>${s.voids ?? ''}</td><td>${s.voidedBy ?? ''}</td>${identity(s)}</tr>`);
         loadTable('/_demo/api/cash-movements', 'cash-movements-table', (m) => `<tr><td>${m.id}</td><td>${m.direction}</td><td>${m.amount}</td><td>${escapeHtml(m.concept)}</td><td>${m.source}</td>${identity(m)}</tr>`);
-        loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.receipt ? `#${p.receipt.number} · ${p.receipt.date.slice(8, 10)}/${p.receipt.date.slice(5, 7)}` : ''}</td><td>${p.customerId}</td><td>${p.total}</td>${identity(p)}</tr>`);
+        loadTable('/_demo/api/customer-payments', 'customer-payments-table', (p) => `<tr><td>${p.id}</td><td>${p.receipt ? `#${p.receipt.number} · ${p.receipt.date.slice(8, 10)}/${p.receipt.date.slice(5, 7)}` : ''}</td><td>${escapeHtml(p.customerName || p.customerId)}</td><td>${p.total}</td><td>${p.voids ?? ''}</td><td>${p.voidedBy ?? ''}</td>${identity(p)}</tr>`);
         loadTable('/_demo/api/customer-balances', 'customer-balances-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td><td>${c.balance}</td></tr>`);
         loadTable('/_demo/api/customers', 'customers-table', (c) => `<tr><td>${c.id}</td><td>${escapeHtml(c.name)}</td></tr>`);
         loadTable('/_demo/api/customer-accounts', 'customer-accounts-table', (a) => `<tr><td>${a.id}</td><td>${escapeHtml(a.name)}</td><td>${a.creditLimit}</td><td>${a.margin}</td><td>${a.balance}</td><td>${a.available}</td></tr>`);

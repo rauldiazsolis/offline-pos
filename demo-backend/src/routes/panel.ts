@@ -18,7 +18,7 @@ function listPayloads(db: DatabaseSync, sql: string): unknown[] {
 function listWithIdentity(
   db: DatabaseSync,
   table: 'sales' | 'cash_movements' | 'customer_payments',
-): unknown[] {
+): Record<string, unknown>[] {
   const rows = db
     .prepare(
       `SELECT payload, device_id, branch, point_of_sale FROM ${table} ORDER BY created_at DESC`,
@@ -35,6 +35,48 @@ function listWithIdentity(
     branch: row.branch,
     pointOfSale: row.point_of_sale,
   }));
+}
+
+type Numbered = {
+  id: string;
+  ticket?: { date: string; number: number };
+  receipt?: { date: string; number: number };
+};
+
+/** "#12 · 28/09" para el panel; sin número, el id (#125). */
+function documentNumber(document: Numbered | undefined, fallbackId: string): string {
+  const number = document?.ticket ?? document?.receipt;
+  if (number === undefined) {
+    return fallbackId;
+  }
+  return `#${String(number.number)} · ${number.date.slice(8, 10)}/${number.date.slice(5, 7)}`;
+}
+
+/**
+ * Suma a cada documento qué anula (`voids`) y quién lo anula (`voidedBy`), por número (#125): se
+ * cruza dentro del mismo listado por `voidsSaleId` / `voidsPaymentId`.
+ */
+function withVoidLabels(
+  items: Record<string, unknown>[],
+  refKey: 'voidsSaleId' | 'voidsPaymentId',
+): Record<string, unknown>[] {
+  const byId = new Map(items.map((item) => [item.id as string, item as Numbered]));
+  const voidedBy = new Map<string, Numbered>();
+  for (const item of items) {
+    const ref = item[refKey];
+    if (typeof ref === 'string') {
+      voidedBy.set(ref, item as Numbered);
+    }
+  }
+  return items.map((item) => {
+    const ref = item[refKey];
+    const voider = voidedBy.get(item.id as string);
+    return {
+      ...item,
+      ...(typeof ref === 'string' ? { voids: documentNumber(byId.get(ref), ref) } : {}),
+      ...(voider !== undefined ? { voidedBy: documentNumber(voider, voider.id) } : {}),
+    };
+  });
 }
 
 /** Bloqueo informativo (contrato v3): toca el payload y `updated_at`, así viaja en el pull por delta. */
@@ -79,7 +121,7 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/sales$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
-      sendJson(res, 200, listWithIdentity(ctx.db, 'sales'));
+      sendJson(res, 200, withVoidLabels(listWithIdentity(ctx.db, 'sales'), 'voidsSaleId'));
     },
   },
   {
@@ -95,7 +137,24 @@ export const panelRoutes: RouteDef[] = [
     pattern: /^\/_demo\/api\/customer-payments$/,
     requiresAuth: false,
     handler: (_req, res, ctx) => {
-      sendJson(res, 200, listWithIdentity(ctx.db, 'customer_payments'));
+      // Con el nombre del cliente (no el id) y qué anula cada cobranza (#125).
+      const rows = ctx.db.prepare('SELECT id, payload FROM customers').all() as {
+        id: string;
+        payload: string;
+      }[];
+      const names = new Map(
+        rows.map((row) => [row.id, (JSON.parse(row.payload) as { name?: string }).name ?? '']),
+      );
+      sendJson(
+        res,
+        200,
+        withVoidLabels(listWithIdentity(ctx.db, 'customer_payments'), 'voidsPaymentId').map(
+          (item) => ({
+            ...item,
+            customerName: names.get(item.customerId as string) ?? '',
+          }),
+        ),
+      );
     },
   },
   {

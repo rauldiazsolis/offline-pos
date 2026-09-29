@@ -94,7 +94,36 @@ describe('getDaySummary (#100)', () => {
     expect(view.collections.map((item) => item.id)).toEqual(['cp-hoy']);
     expect(view.entries.map((entry) => entry.kind)).toEqual(['collection']);
     expect(view.customerNames.get('c1')).toBe('Ana');
-    expect(view.summary.collections).toEqual({ total: 300, count: 1 });
+    expect(view.summary.collections).toEqual({ total: 300, count: 1, voidedCount: 0 });
+  });
+
+  it('marca la cobranza anulada y trae la original de su anulación (#125)', async () => {
+    const original = {
+      id: 'cp1',
+      customerId: 'c1',
+      payments: [{ method: 'cash' as const, amount: 300 }],
+      total: 300,
+      createdAt: at(24, 10),
+      receipt: { date: today, number: 1 },
+    };
+    await db.customerPayments.bulkAdd([
+      original,
+      {
+        id: 'cp2',
+        customerId: 'c1',
+        payments: [{ method: 'cash', amount: -300 }],
+        total: -300,
+        createdAt: at(24, 11),
+        receipt: { date: today, number: 2 },
+        voidsPaymentId: 'cp1',
+      },
+    ]);
+
+    const view = await getDaySummary(today, now);
+
+    expect(view.voidedPaymentIds).toEqual(new Set(['cp1']));
+    expect(view.paymentVoidOriginals.get('cp1')).toEqual(original);
+    expect(view.summary.collections).toEqual({ total: 0, count: 2, voidedCount: 1 });
   });
 
   it('una cobranza cuenta para el día de su recibo aunque su hora sea del día siguiente', async () => {

@@ -175,6 +175,13 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 
 ## Contrato: qué trajo cada versión
 
+**Contrato 4.3.0 (#125)** — aditivo: `CustomerPayment.voidsPaymentId?`, la anulación de una
+cobranza como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
+`customer-payment` más: la reaplicación (`-total`) y la limpieza ya la cubren. Un POS 4.3.0 ve
+incompatible a un backend 4.2 ("se necesita 4.3 o posterior"). El minibackend la acompaña (su saldo
+ya se mueve por `-total`; el panel muestra qué anula cada documento). Sheets (congelado, #127; camino
+para retomarlo: #138) y el mini-erp (desarrollo separado) quedan en 4.2.
+
 **Contrato 4.2.0 (#101)** — aditivo: `CustomerPayment.receipt?: { date, number }` (el número de
 recibo en su día local, con contador propio) y `ConnectorCustomer.balance` pasa a ser **el saldo de
 cualquier cliente, tenga o no crédito** (un `balance` sin `creditLimit`/`margin` es "saldo sin cuenta

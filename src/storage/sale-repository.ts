@@ -8,13 +8,7 @@ import {
 } from '../domain/outbox.ts';
 import type { EventOrigin } from '../domain/event-origin.ts';
 import { err, ok, type Result } from '../domain/result.ts';
-import {
-  buildStockMovementsForSale,
-  buildVoidSale,
-  closeSale,
-  isVoided,
-  VOID_WINDOW_MS,
-} from '../domain/sale-lifecycle.ts';
+import { buildStockMovementsForSale, buildVoidSale, closeSale } from '../domain/sale-lifecycle.ts';
 import type { Payment, Sale, SaleLine } from '../domain/sale.ts';
 import type { StockMovement } from '../domain/stock.ts';
 import {
@@ -271,17 +265,6 @@ export async function voidSaleAndPersist(
   return ok(persisted.value);
 }
 
-/** Una fila de `/ANULAR` (#99): anulable, original ya anulada, o el ticket de una anulación. */
-export type VoidCandidate = {
-  sale: Sale;
-  state: 'voidable' | 'voided' | 'void-ticket';
-  /** Solo en `void-ticket`: la venta que anula (si todavía está en la base). */
-  original?: Sale;
-};
-
-/** Tope de `/ANULAR` (#99): los últimos 20 tickets de la ventana de 24 h. */
-export const VOID_CANDIDATES_LIMIT = 20;
-
 /** Ids de las ventas de `saleIds` que tienen un ticket que las anula. */
 export async function loadVoidedSaleIds(saleIds: readonly string[]): Promise<Set<string>> {
   if (saleIds.length === 0) {
@@ -305,23 +288,4 @@ export async function loadVoidOriginals(sales: readonly Sale[]): Promise<Map<str
   return new Map(
     originals.flatMap((sale) => (sale !== undefined ? [[sale.id, sale] as const] : [])),
   );
-}
-
-/**
- * Lo que muestra `/ANULAR` (#99): los últimos 20 tickets de las últimas 24 h,
- * anulaciones incluidas, más nuevo primero.
- */
-export async function listVoidCandidates(now: string): Promise<VoidCandidate[]> {
-  const since = new Date(Date.parse(now) - VOID_WINDOW_MS).toISOString();
-  const recent = await db.sales.where('createdAt').above(since).reverse().sortBy('createdAt');
-  const sales = recent.slice(0, VOID_CANDIDATES_LIMIT);
-  const voidedIds = await loadVoidedSaleIds(sales.map((sale) => sale.id));
-  const originals = await loadVoidOriginals(sales);
-  return sales.map((sale): VoidCandidate => {
-    if (sale.voidsSaleId !== undefined) {
-      const original = originals.get(sale.voidsSaleId);
-      return { sale, state: 'void-ticket', ...(original !== undefined ? { original } : {}) };
-    }
-    return { sale, state: isVoided(sale, voidedIds) ? 'voided' : 'voidable' };
-  });
 }

@@ -110,8 +110,9 @@ test('venta sin turno, anulación numerada y /RESUMEN del día', async ({ page }
 
   await commandBar.fill('/anular');
   await commandBar.press('Enter');
-  await expect(page.getByRole('listitem').first()).toBeVisible();
+  await expect(page.getByTestId('void-row').first()).toBeVisible();
   await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(commandBar).toBeVisible();
 
@@ -120,7 +121,7 @@ test('venta sin turno, anulación numerada y /RESUMEN del día', async ({ page }
 
   await commandBar.fill('/anular');
   await commandBar.press('Enter');
-  await expect(page.getByText(/^Anulación del #2 · /)).toBeVisible();
+  await expect(page.getByText('· Anulación del #2', { exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
 
   await commandBar.fill('/RESUMEN');

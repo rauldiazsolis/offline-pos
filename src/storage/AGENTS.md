@@ -9,7 +9,8 @@ que rigen archivos de esta carpeta viven donde está el grueso del tema:
 - `sale-repository.ts` (venta y anulación): el outbox en [`src/sync/AGENTS.md`](../sync/AGENTS.md) y
   la anulación en [`src/domain/AGENTS.md`](../domain/AGENTS.md).
 - `demo-reset.ts`: [`src/connectors/AGENTS.md`](../connectors/AGENTS.md).
-- `cash-summary-repository.ts` (`/RESUMEN`): [`src/ui/AGENTS.md`](../ui/AGENTS.md).
+- `cash-summary-repository.ts` (`/RESUMEN`) y `void-repository.ts` (candidatos de `/ANULAR`):
+  [`src/ui/AGENTS.md`](../ui/AGENTS.md).
 - Tests de Dexie con `fake-indexeddb`: "Testing" en la raíz.
 
 ## Borrado de lo local
@@ -40,6 +41,11 @@ compartido con `/DEMO_RESET`.
   tickets (`domain/ticket-number.ts::nextDailyNumber`, `DailyNumber`), con su propio contador
   best-effort (`offline-pos:receipt-counter`, `sync/receipt-counter.ts`; `sync/daily-counter.ts` es el
   lector/escritor compartido con el de tickets).
+- **Anulación** (`voidCollectionAndPersist`, #125): la misma transacción (`persistCollectionDocument`,
+  que comparte con `collectAndPersist`) con la cobranza negativa — consume número de recibo, su
+  `AccountMovement` es positivo y el saldo sube. Índice `voidsPaymentId` en Dexie v9 ("¿ya tiene
+  anulación?" sin recorrer la tabla); `loadVoidedPaymentIds` y `loadPaymentVoidOriginals` los usan
+  `/ANULAR` y `/RESUMEN`.
 
 ## Fixtures
 

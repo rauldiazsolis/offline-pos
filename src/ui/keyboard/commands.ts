@@ -46,7 +46,7 @@ export const CORE_COMMANDS: CommandInfo[] = [
     name: 'RESUMEN',
     description: 'Consultar tickets, productos, medios de pago y caja de un día',
   },
-  { name: 'ANULAR', description: 'Anular una venta ya cerrada' },
+  { name: 'ANULAR', description: 'Anular una venta o una cobranza de las últimas 24 h' },
   { name: 'DESCARTAR', description: 'Vaciar la venta en curso (líneas, cliente y ajuste)' },
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },
   { name: 'SINCRONIZAR', description: 'Sincronizar ahora' },

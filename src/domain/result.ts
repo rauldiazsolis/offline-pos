@@ -92,6 +92,11 @@ export type ErrorMeta = {
   'customer-payment/invalid': { reason: 'empty' | 'account-method' | 'non-positive-amount' };
   // storage/customer-payment-repository.ts (#101)
   'customer-payment/persist-failed': { message: string };
+  // customer-payment.ts y storage (anular cobranzas, #125)
+  'customer-payment/cannot-void-a-void': undefined;
+  'customer-payment/already-voided': undefined;
+  'customer-payment/void-window-expired': { createdAt: string };
+  'customer-payment/not-found': { paymentId: string };
 
   // storage/demo-reset.ts
   'demo/reset-failed': { message: string };

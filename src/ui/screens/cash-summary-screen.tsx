@@ -3,9 +3,9 @@ import type { TargetedEvent, TargetedKeyboardEvent } from 'preact';
 import { useMemo } from 'preact/hooks';
 import type { CashCount } from '../../domain/cash-count.ts';
 import type { CashMovement } from '../../domain/cash-movement.ts';
-import type { CustomerPayment } from '../../domain/customer-payment.ts';
+import { isVoidedPayment, type CustomerPayment } from '../../domain/customer-payment.ts';
 import type { DayEntry } from '../../domain/day-summary.ts';
-import type { PaymentMethod, Sale, SaleLine } from '../../domain/sale.ts';
+import type { PaymentMethod, Sale } from '../../domain/sale.ts';
 import { roundAmount } from '../../domain/rounding.ts';
 import { isVoided } from '../../domain/sale-lifecycle.ts';
 import { calculateProductQuantities, type ProductQuantity } from '../../domain/sales-summary.ts';
@@ -13,7 +13,9 @@ import { localDateKey } from '../../domain/ticket-number.ts';
 import type { DayView } from '../../storage/cash-summary-repository.ts';
 import { formatMoney, formatQuantity, formatTime } from '../format.ts';
 import { formatDayHeading } from '../format-day.ts';
-import { receiptLabel, ticketLabel, voidOfLabel } from '../format-ticket.ts';
+import { CollectionDocumentRow, SaleDocumentRow } from '../components/document-rows.tsx';
+import { collectionSearchText, filterByText, saleSearchText } from '../document-search.ts';
+import { voidOfLabel, voidOfReceiptLabel } from '../format-ticket.ts';
 import { highlightMatches } from '../highlight.tsx';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { useIndexListNavigation } from '../hooks/use-index-list-navigation.ts';
@@ -47,7 +49,6 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
-import { getCustomerRepository } from '../state/customer-repository.ts';
 
 const sidebarCardStyle = {
   border: '1px solid var(--color-border)',
@@ -101,12 +102,6 @@ const TAB_HOTKEYS: Record<CashSummaryTab, string> = {
   payments: 'Alt+3',
 };
 
-function lineLabel(line: SaleLine): string {
-  return line.kind === 'product'
-    ? (getCatalogRepository().getProduct(line.productId)?.name ?? line.productId)
-    : line.description;
-}
-
 function movementTitle(movement: CashMovement): string {
   return `${movement.direction === 'in' ? 'Ingreso' : 'Egreso'} · ${movement.concept}`;
 }
@@ -126,35 +121,16 @@ function countText(count: CashCount): string {
 /** Texto en el que busca el filtro de Movimientos, por tipo de fila. */
 function entrySearchText(entry: DayEntry, customerNames: ReadonlyMap<string, string>): string {
   switch (entry.kind) {
-    case 'sale': {
-      const { sale } = entry;
-      const customerName =
-        sale.customerId !== undefined
-          ? (getCustomerRepository().getCustomer(sale.customerId)?.name ?? '')
-          : '';
-      const lineNames = sale.lines.map(lineLabel).join(' ');
-      const lineCodes = sale.lines
-        .map((line) =>
-          line.kind === 'product' ? getCatalogRepository().getProduct(line.productId) : undefined,
-        )
-        .filter((p): p is NonNullable<typeof p> => p !== undefined)
-        .map((p) => `${p.sku} ${p.barcodes.join(' ')}`)
-        .join(' ');
-      const number = sale.ticket !== undefined ? String(sale.ticket.number) : '';
-      return `${number} ${customerName} ${lineNames} ${lineCodes}`;
-    }
+    case 'sale':
+      return saleSearchText(entry.sale);
     case 'movement':
       return `${entry.movement.direction === 'in' ? 'ingreso' : 'egreso'} ${entry.movement.concept} ${
         entry.movement.description ?? ''
       }`;
     case 'count':
       return 'arqueo';
-    case 'collection': {
-      // Como los tickets: encuentra "3", "#3" y el nombre del cliente (#101).
-      const number = entry.payment.receipt?.number;
-      const customerName = customerNames.get(entry.payment.customerId) ?? '';
-      return `${number !== undefined ? String(number) : ''} recibo cobranza ${customerName}`;
-    }
+    case 'collection':
+      return collectionSearchText(entry.payment, customerNames.get(entry.payment.customerId) ?? '');
   }
 }
 
@@ -177,22 +153,23 @@ function filterEntries(
   query: string,
   customerNames: ReadonlyMap<string, string>,
 ): DayEntry[] {
-  const cleaned = query.trim().replace(/^#/, '');
-  if (cleaned === '') return entries;
-  const index = new Index({ tokenize: 'forward' });
-  entries.forEach((entry, position) => {
-    index.add(position, entrySearchText(entry, customerNames));
-  });
-  const positions = new Set(index.search(cleaned).map(Number));
-  return entries.filter((_, position) => positions.has(position));
+  return filterByText(entries, query, (entry) => entrySearchText(entry, customerNames));
 }
 
 /** Marca de un ticket anulado o de una anulación (#99, con el número desde #120). */
-function voidMark(sale: Sale, view: DayView): string | undefined {
+function saleMark(sale: Sale, view: DayView): string | undefined {
   if (sale.voidsSaleId !== undefined) {
     return voidOfLabel(sale, view.voidOriginals.get(sale.voidsSaleId));
   }
   return isVoided(sale, view.voidedSaleIds) ? 'Anulada' : undefined;
+}
+
+/** Marca de una cobranza anulada o de una anulación (#125), como la de los tickets. */
+function collectionMark(payment: CustomerPayment, view: DayView): string | undefined {
+  if (payment.voidsPaymentId !== undefined) {
+    return voidOfReceiptLabel(payment, view.paymentVoidOriginals.get(payment.voidsPaymentId));
+  }
+  return isVoidedPayment(payment, view.voidedPaymentIds) ? 'Anulada' : undefined;
 }
 
 type RowProps = {
@@ -215,7 +192,8 @@ function rowContainerStyle(index: number) {
 }
 
 /**
- * Fila de venta como componente propio (no un `.map()` inline) — el ref callback que devuelve
+ * Un ticket en Movimientos: la fila compartida con `/ANULAR` (#125) más la selección y la marca de
+ * `/RESUMEN`. Componente propio (no un `.map()` inline) — el ref callback que devuelve
  * `nav.ticketRef(index)` toca `.current` recién cuando Preact lo invoca o dentro de
  * `handleKeyDown`, nunca durante el render; como componente separado, esa lectura queda en el
  * nivel superior de SU propio render, que es la forma que espera `react-hooks/refs`.
@@ -228,86 +206,44 @@ function SaleEntryRow({
   nav,
   onSelect,
 }: RowProps & { sale: Sale; view: DayView }) {
-  const customer =
-    sale.customerId !== undefined
-      ? getCustomerRepository().getCustomer(sale.customerId)
-      : undefined;
-  const { isSelected, style } = rowContainerStyle(index);
-  const mark = voidMark(sale, view);
   return (
-    <div
-      ref={nav.ticketRef(index)}
+    <SaleDocumentRow
+      sale={sale}
+      index={index}
+      query={query}
+      selected={index === selectedEntryIndexSignal.value}
+      mark={saleMark(sale, view)}
+      rowRef={nav.ticketRef(index)}
       onClick={() => {
         onSelect(index);
       }}
-      style={style}
-    >
-      <div
-        class="ticket__header"
-        style={{
-          position: 'sticky',
-          top: 0,
-          background: isSelected ? 'var(--color-surface)' : 'var(--color-bg)',
-          padding: 'var(--space-2) var(--space-3)',
-          boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ fontWeight: 600 }}>
-            {highlightMatches(ticketLabel(sale), query.replace(/^#/, ''))}
-            {mark !== undefined && (
-              <span
-                style={{
-                  marginLeft: 'var(--space-2)',
-                  fontWeight: 'normal',
-                  color: 'var(--color-text-muted)',
-                }}
-              >
-                · {mark}
-              </span>
-            )}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
-            {formatTime(sale.createdAt)}
-          </span>
-        </div>
-        {customer !== undefined && (
-          <p
-            style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}
-          >
-            <b style={{ color: 'var(--color-text)' }}>{highlightMatches(customer.name, query)}</b>
-          </p>
-        )}
-      </div>
-      <div style={{ padding: 'var(--space-1) var(--space-3)' }}>
-        {sale.lines.map((line, lineIndex) => (
-          <div
-            key={lineIndex}
-            style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: 'var(--space-2)' }}
-          >
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
-              {formatQuantity(line.qty)}x
-            </span>
-            <span>{highlightMatches(lineLabel(line), query)}</span>
-            <span style={{ fontFamily: 'var(--font-mono)' }}>
-              {formatMoney(line.unitPrice * line.qty)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          padding: 'var(--space-1) var(--space-3) var(--space-3)',
-        }}
-      >
-        <span>{sale.payments.map((p) => PAYMENT_METHOD_LABELS[p.method]).join(', ')}</span>
-        <span class="ticket__total" style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-          {formatMoney(sale.total)}
-        </span>
-      </div>
-    </div>
+    />
+  );
+}
+
+/** Una cobranza en Movimientos (#101), con su marca de anulada o de anulación (#125). */
+function CollectionEntryRow({
+  payment,
+  customerName,
+  view,
+  index,
+  query,
+  nav,
+  onSelect,
+}: RowProps & { payment: CustomerPayment; customerName: string; view: DayView }) {
+  return (
+    <CollectionDocumentRow
+      payment={payment}
+      customerName={customerName}
+      index={index}
+      query={query}
+      selected={index === selectedEntryIndexSignal.value}
+      mark={collectionMark(payment, view)}
+      rowRef={nav.ticketRef(index)}
+      onClick={() => {
+        onSelect(index);
+      }}
+    />
   );
 }
 
@@ -346,50 +282,6 @@ function MovementEntryRow({
         <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
           {sign}
           {formatMoney(movement.amount)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Cobranza sin venta (#101): "Recibo #3 · Ana", su total y, debajo, los medios. */
-function CollectionEntryRow({
-  payment,
-  customerName,
-  index,
-  query,
-  nav,
-  onSelect,
-}: RowProps & { payment: CustomerPayment; customerName: string }) {
-  const { isSelected, style } = rowContainerStyle(index);
-  return (
-    <div
-      ref={nav.ticketRef(index)}
-      onClick={() => {
-        onSelect(index);
-      }}
-      style={{
-        ...style,
-        padding: 'var(--space-2) var(--space-3)',
-        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
-        <span style={{ fontWeight: 600 }}>
-          {highlightMatches(`${receiptLabel(payment)} · ${customerName}`, query.replace(/^#/, ''))}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text-muted)' }}>
-          {formatTime(payment.createdAt)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
-        <span style={{ color: 'var(--color-text-muted)' }}>
-          {payment.payments
-            .map((item) => `${PAYMENT_METHOD_LABELS[item.method]} $${formatMoney(item.amount)}`)
-            .join(' · ')}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
-          {formatMoney(payment.total)}
         </span>
       </div>
     </div>
@@ -454,6 +346,7 @@ function MovementsTab({
             key={entryKey(entry)}
             payment={entry.payment}
             customerName={view.customerNames.get(entry.payment.customerId) ?? ''}
+            view={view}
             {...props}
           />
         );
@@ -704,7 +597,11 @@ function Sidebar({ view }: { view: DayView }) {
           {summary.collections.count > 0 && (
             <span style={{ color: 'var(--color-text-muted)' }}>
               {' '}
-              {`(${String(summary.collections.count)} recibos)`}
+              {`(${String(summary.collections.count)} recibos${
+                summary.collections.voidedCount > 0
+                  ? `, ${String(summary.collections.voidedCount)} anulados`
+                  : ''
+              })`}
             </span>
           )}
         </p>

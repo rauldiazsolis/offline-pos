@@ -439,4 +439,70 @@ describe('cobranzas y saldos en el panel (#101)', () => {
     }[];
     expect(balances).toEqual([{ id: 'c-1', name: 'Ana', balance: -300 }]);
   });
+
+  it('cobranzas y ventas muestran qué anulan y quién las anula, por número (#125)', async () => {
+    db.prepare('INSERT INTO customers (id, payload, source, updated_at) VALUES (?, ?, ?, ?)').run(
+      'c-1',
+      JSON.stringify({ id: 'c-1', name: 'Ana' }),
+      'seed',
+      '2026-01-01T00:00:00.000Z',
+    );
+    await pushLot('l1', [
+      {
+        type: 'customer-payment',
+        id: 'cp1',
+        payment: {
+          id: 'cp1',
+          customerId: 'c-1',
+          payments: [{ method: 'cash', amount: 300 }],
+          total: 300,
+          createdAt: '2026-09-28T10:00:00.000Z',
+          receipt: { date: '2026-09-28', number: 1 },
+        },
+      },
+      {
+        type: 'customer-payment',
+        id: 'cp2',
+        payment: {
+          id: 'cp2',
+          customerId: 'c-1',
+          payments: [{ method: 'cash', amount: -300 }],
+          total: -300,
+          createdAt: '2026-09-28T11:00:00.000Z',
+          receipt: { date: '2026-09-28', number: 2 },
+          voidsPaymentId: 'cp1',
+        },
+      },
+      {
+        type: 'sale',
+        id: 's1',
+        sale: { id: 's1', total: 100, ticket: { date: '2026-09-28', number: 1 } },
+      },
+      {
+        type: 'sale',
+        id: 's2',
+        sale: {
+          id: 's2',
+          total: -100,
+          voidsSaleId: 's1',
+          ticket: { date: '2026-09-28', number: 2 },
+        },
+      },
+      { type: 'sale', id: 's3', sale: { id: 's3', total: -5, voidsSaleId: 'no-esta' } },
+    ]);
+
+    expect(await getJson('/_demo/api/customer-payments')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'cp1', customerName: 'Ana', voidedBy: '#2 · 28/09' }),
+        expect.objectContaining({ id: 'cp2', customerName: 'Ana', voids: '#1 · 28/09' }),
+      ]),
+    );
+    expect(await getJson('/_demo/api/sales')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 's1', voidedBy: '#2 · 28/09' }),
+        expect.objectContaining({ id: 's2', voids: '#1 · 28/09' }),
+        expect.objectContaining({ id: 's3', voids: 'no-esta' }),
+      ]),
+    );
+  });
 });

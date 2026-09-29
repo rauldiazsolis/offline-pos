@@ -1,9 +1,9 @@
 /**
  * Versión del Connector API que habla este POS: 4.0.0 desde la Etapa 4 de #94 (#99), 4.1.0 desde
  * la Etapa 5 (#120: `Sale.ticket`), 4.2.0 desde la Etapa 6 (#101: `CustomerPayment.receipt` y
- * saldo sin cuenta corriente).
+ * saldo sin cuenta corriente), 4.3.0 desde #125 (`CustomerPayment.voidsPaymentId`: anular cobranzas).
  */
-export const POS_CONTRACT_VERSION = '4.2.0';
+export const POS_CONTRACT_VERSION = '4.3.0';
 
 function parseVersion(version: string): [number, number, number] | undefined {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);

@@ -6,13 +6,13 @@ import {
 } from './contract-version.ts';
 
 describe('isCompatibleContract (#99)', () => {
-  it('el POS habla 4.2.0 (#101: recibo de cobranza y saldo sin cuenta corriente)', () => {
-    expect(POS_CONTRACT_VERSION).toBe('4.2.0');
+  it('el POS habla 4.3.0 (#125: anular cobranzas)', () => {
+    expect(POS_CONTRACT_VERSION).toBe('4.3.0');
   });
 
   it('mismo major y minor igual o mayor', () => {
-    expect(isCompatibleContract('4.2.0')).toBe(true);
-    expect(isCompatibleContract('4.3.1')).toBe(true);
+    expect(isCompatibleContract('4.3.0')).toBe(true);
+    expect(isCompatibleContract('4.4.1')).toBe(true);
   });
 
   it('otro major es incompatible', () => {
@@ -21,6 +21,7 @@ describe('isCompatibleContract (#99)', () => {
   });
 
   it('un backend en un minor anterior es incompatible', () => {
+    expect(isCompatibleContract('4.2.0')).toBe(false);
     expect(isCompatibleContract('4.1.0')).toBe(false);
     expect(isCompatibleContract('4.0.0')).toBe(false);
   });
@@ -30,6 +31,6 @@ describe('isCompatibleContract (#99)', () => {
   });
 
   it('contractRequirement', () => {
-    expect(contractRequirement(POS_CONTRACT_VERSION)).toBe('4.2 o posterior');
+    expect(contractRequirement(POS_CONTRACT_VERSION)).toBe('4.3 o posterior');
   });
 });

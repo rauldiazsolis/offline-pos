@@ -57,6 +57,7 @@ describe('calculateDaySummary', () => {
       sales: [original, voidTicket],
       movements: [],
       voidedSaleIds: new Set(['s1']),
+      voidedPaymentIds: new Set(),
       collections: [],
     });
 
@@ -69,6 +70,7 @@ describe('calculateDaySummary', () => {
       sales: [sale({ status: 'voided' })],
       movements: [],
       voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(),
       collections: [],
     });
 
@@ -89,6 +91,7 @@ describe('calculateDaySummary', () => {
       ],
       movements: [],
       voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(),
       collections: [],
     });
 
@@ -101,6 +104,7 @@ describe('calculateDaySummary', () => {
       sales: [sale({ total: 900, payments: [{ method: 'cash', amount: 900 }] })],
       movements: [],
       voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(),
       collections: [],
     });
 
@@ -117,6 +121,7 @@ describe('calculateDaySummary', () => {
         movement({ id: 'm4', direction: 'out', amount: 50, source: 'count-adjustment' }),
       ],
       voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(),
       collections: [],
     });
 
@@ -169,16 +174,37 @@ describe('cobranzas en el resumen del día (#101)', () => {
     }),
   ];
 
+  it('una cobranza y su anulación: total 0, dos recibos, uno anulado (#125)', () => {
+    const summary = calculateDaySummary({
+      sales: [],
+      movements: [],
+      voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(['cp1']),
+      collections: [
+        collection({ id: 'cp1', total: 100 }),
+        collection({
+          id: 'cp2',
+          payments: [{ method: 'cash', amount: -100 }],
+          total: -100,
+          voidsPaymentId: 'cp1',
+        }),
+      ],
+    });
+    expect(summary.collections).toEqual({ total: 0, count: 2, voidedCount: 1 });
+    expect(summary.cash.collections).toBe(0);
+  });
+
   it('se suman aparte: no son ventas', () => {
     const summary = calculateDaySummary({
       sales: [sale()],
       movements: [],
       voidedSaleIds: noVoids,
+      voidedPaymentIds: new Set(),
       collections,
     });
 
     expect(summary).toMatchObject({ totalSold: 1000, ticketCount: 1 });
-    expect(summary.collections).toEqual({ total: 800, count: 2 });
+    expect(summary.collections).toEqual({ total: 800, count: 2, voidedCount: 0 });
     expect(summary.collectionsByMethod).toEqual({
       cash: 500,
       debit: 100,
