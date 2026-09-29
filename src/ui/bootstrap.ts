@@ -4,6 +4,7 @@ import { loadDraftCart } from '../storage/draft-cart-repository.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
+import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { openRequiredWizard } from './keyboard/config-controller.ts';
@@ -82,8 +83,10 @@ export async function bootstrap(): Promise<void> {
   if (state !== 'active' || (autoConfig.handled && autoConfig.mode === 'wizard-fallback')) {
     await openRequiredWizard();
   }
-  // 4.4.0 (#128): las del último `getInfo`, así una terminal que arranca sin red las sabe.
+  // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
+  // arranca sin red los sabe.
   restoreBackendCapabilities();
+  restoreBackendNotices();
 
   startSyncEngine();
 }

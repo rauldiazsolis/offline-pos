@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
-import type { BackendInfo, LotIssue } from '../../sync/connector.ts';
+import type { BackendInfo, BackendNotice, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 import type { PullApplication } from '../../sync/pull-rule.ts';
 
@@ -52,6 +52,12 @@ export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
  * `sync/backend-capabilities.ts`. `undefined` = nunca se supo.
  */
 export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(undefined);
+
+/**
+ * Avisos vigentes del backend según el último pull aplicado (4.4.0, #128), persistidos por
+ * `sync/backend-notices.ts`. Nunca bloquean nada.
+ */
+export const backendNoticesSignal = signal<readonly BackendNotice[]>([]);
 
 /** `true` = preguntar `getInfo` antes del próximo ciclo: al arrancar y tras un fallo que no es de red. */
 export const backendCheckDueSignal = signal(true);

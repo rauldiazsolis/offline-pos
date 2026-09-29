@@ -5,6 +5,7 @@ import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
 import { isDemoModeSignal } from '../state/demo-mode.ts';
 import {
+  backendNoticesSignal,
   backendStatusSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
@@ -23,6 +24,7 @@ beforeEach(() => {
   localCatalogCountsSignal.value = null;
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
+  backendNoticesSignal.value = [];
   // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
   nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
   lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
@@ -146,6 +148,29 @@ describe('StatusBar', () => {
     render(<StatusBar />);
 
     expect(screen.getByText(/· 120 productos · 22 clientes$/)).not.toBeNull();
+  });
+});
+
+describe('StatusBar — avisos del backend (4.4.0, #128)', () => {
+  it('sin avisos no aparece', () => {
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: /^Avisos/ })).toBeNull();
+  });
+
+  it('con avisos muestra "Avisos (N)" con el color del más grave y el click abre /DIAGNOSTICO', () => {
+    backendNoticesSignal.value = [
+      { id: 'a', severity: 'info', message: 'uno' },
+      { id: 'b', severity: 'critical', message: 'dos' },
+    ];
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    const button = screen.getByRole('button', { name: 'Avisos (2)' });
+    expect(button.tabIndex).toBe(-1);
+    expect(button.style.color).toBe('var(--color-danger)');
+    fireEvent.click(button);
+
+    expect(activeScreenSignal.value).toBe('diagnostico');
   });
 });
 

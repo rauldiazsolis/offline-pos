@@ -7,6 +7,7 @@ import { db } from '../storage/db.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
+  backendNoticesSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -582,6 +583,38 @@ describe('runPullCycle — delta', () => {
     expect(lastSyncFailureSignal.value).toBeNull();
     expect(localCatalogCountsSignal.value).toEqual({ products: 1, customers: 0 });
     expect(lastSyncedAtSignal.value).toBe(now);
+  });
+});
+
+describe('runPullCycle — avisos del backend (4.4.0, #128)', () => {
+  const emptyPull = { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} };
+
+  afterEach(() => {
+    backendNoticesSignal.value = [];
+  });
+
+  it('un pull con notices los guarda; el siguiente sin notices los vacía; uno fallido no los toca', async () => {
+    const notice = { id: 'n1', severity: 'warning' as const, message: 'Cuota por vencer' };
+
+    await runPullCycle(
+      fakeConnector({
+        pullBatch: () => Promise.resolve(ok({ ...emptyPull, notices: [notice] })),
+      }),
+      now,
+    );
+    expect(backendNoticesSignal.value).toEqual([notice]);
+    expect(localStorage.getItem('offline-pos:backend-notices')).not.toBeNull();
+
+    await runPullCycle(
+      fakeConnector({
+        pullBatch: () => Promise.resolve(err('sync/request-failed', { message: 'down' })),
+      }),
+      now,
+    );
+    expect(backendNoticesSignal.value).toEqual([notice]);
+
+    await runPullCycle(fakeConnector({ pullBatch: () => Promise.resolve(ok(emptyPull)) }), now);
+    expect(backendNoticesSignal.value).toEqual([]);
   });
 });
 

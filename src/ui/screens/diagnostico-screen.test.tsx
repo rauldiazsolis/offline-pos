@@ -41,6 +41,15 @@ const diagnostics: SyncDiagnostics = {
     },
   },
   capabilities: ['demo-sessions', 'customer-payment-void'],
+  notices: [
+    { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
+    {
+      id: 'n2',
+      severity: 'warning',
+      message: 'Venta con precio raro',
+      ref: { type: 'sale', id: 's1' },
+    },
+  ],
   deviceId: 'dev-1',
   log: [],
 };
@@ -106,6 +115,16 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
     expect(screen.getByText('offline-pos-demo-backend 4.2.0')).not.toBeNull();
   });
 
+  it('muestra los avisos del backend con su severidad y su referencia (4.4.0, #128)', () => {
+    render(<DiagnosticoScreen />);
+
+    const lines = screen
+      .getAllByText((_content, element) => element?.tagName === 'P')
+      .map((element) => element.textContent);
+    expect(lines).toContain('Crítico · Cuota vencida');
+    expect(lines).toContain('Advertencia · Venta con precio raro (sale s1)');
+  });
+
   it('muestra las capacidades del backend (4.4.0, #128)', () => {
     render(<DiagnosticoScreen />);
 
@@ -122,6 +141,22 @@ describe('DiagnosticoScreen — backend incompatible resaltado (prueba manual de
       expect(screen.getByText('Backend: contrato 3.0.0 · incompatible').style.color).toBe(
         'var(--color-danger)',
       );
+    } finally {
+      diagnostics.backendStatus = original;
+    }
+  });
+});
+
+describe('DiagnosticoScreen — mensaje con estado ok (4.4.0, #128)', () => {
+  it('un backend ok (o con un estado desconocido tratado como ok) muestra su mensaje', () => {
+    const original = diagnostics.backendStatus;
+    diagnostics.backendStatus = {
+      kind: 'ok',
+      info: { contractVersion: '4.5.0', status: 'ok', message: 'Degradado' },
+    };
+    try {
+      render(<DiagnosticoScreen />);
+      expect(screen.getByText('Backend: contrato 4.5.0 · ok (Degradado)')).not.toBeNull();
     } finally {
       diagnostics.backendStatus = original;
     }
