@@ -17,7 +17,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:backend": "pnpm --filter demo-backend run test",
-    "typecheck:backend": "pnpm --filter demo-backend run typecheck"
+    "typecheck:backend": "pnpm --filter demo-backend run typecheck",
+    "site:build": "vite build --outDir .site-dist && node site/build-site.ts --dist .site-dist --out .site-out",
+    "site:preview": "vite preview --outDir .site-out --port 4174 --strictPort"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",

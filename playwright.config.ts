@@ -38,5 +38,21 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
+    {
+      // Sitio publicado armado en local (#148): la versión actual en /<versión>/ más /versions.
+      command: 'pnpm site:build && pnpm site:preview',
+      url: 'http://localhost:4174/versions/',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    {
+      // Backend en memoria propio de `e2e/published-site.spec.ts`: `POST /demo-sessions`
+      // re-siembra la base, así que no comparte el de `demo-onboarding.spec.ts` (#148).
+      command: 'pnpm --filter demo-backend run start',
+      env: { DEMO_BACKEND_PORT: '4002', DEMO_BACKEND_DB: ':memory:' },
+      url: 'http://localhost:4002/_demo',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
   ],
 });

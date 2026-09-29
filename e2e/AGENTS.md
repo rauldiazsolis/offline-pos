@@ -26,9 +26,17 @@ esta etapa, encontrado por el e2e y no por jsdom: `useSignalEffect` corre diferi
 ventana en la que tipear tras un error agregaba texto en vez de reemplazarlo — se usa
 `useLayoutEffect`.
 
-**Dos demo-backends** (`playwright.config.ts`): el de `4000` (archivo `demo-backend/data/demo.sqlite`)
-para `minibackend-sync.spec.ts`, y otro en `4001`, en memoria (`DEMO_BACKEND_PORT`,
-`DEMO_BACKEND_DB=:memory:`), solo para `e2e/demo-onboarding.spec.ts` (#128): cada
+**Tres demo-backends** (`playwright.config.ts`): el de `4000` (archivo `demo-backend/data/demo.sqlite`)
+para `minibackend-sync.spec.ts`, otro en `4001`, en memoria (`DEMO_BACKEND_PORT`,
+`DEMO_BACKEND_DB=:memory:`), solo para `e2e/demo-onboarding.spec.ts` (#128), y un tercero en `4002`
+para `e2e/published-site.spec.ts` (#148), por el mismo motivo: cada
 `POST /demo-sessions` vuelve a cargar la base desde cero, así que con uno solo le pisaría los datos a
 los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 'serial'`) por el mismo
 motivo; el de "conexión real" usa el `test` de `fixtures.ts`, el resto el de Playwright a secas.
+
+**Sitio publicado** (#148): `e2e/published-site.spec.ts` corre contra `.site-out/` (`pnpm site:build`,
+con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4173`), servido por
+`pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`. Prueba `/versions`, que la
+carpeta de la versión arranca con rutas relativas y que su almacenamiento es
+`offline-pos@/<versión>/`. El resto de la suite sigue en `/`: prueba de paso que la raíz no cambió. El
+redirect de `/` y los headers son de Cloudflare: se verifican en la primera publicación.
