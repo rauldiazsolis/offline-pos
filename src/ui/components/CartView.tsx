@@ -208,14 +208,13 @@ function CartTable({
               onClick={() => {
                 selectCartLine(index);
               }}
-              class={line.qty < 0 ? 'cart-view__refund-line' : undefined}
+              class={line.qty < 0 ? 'selectable-row cart-view__refund-line' : 'selectable-row'}
+              // Seleccionada, la pinta `.selectable-row[data-selected]` (tokens.css, #112): una
+              // devolución seleccionada muestra la selección en vez de su tinte rojo.
+              data-selected={index === selectedIndex ? '' : undefined}
               style={{
                 background:
-                  index === selectedIndex
-                    ? 'var(--color-surface)'
-                    : line.qty < 0
-                      ? 'var(--color-refund-bg)'
-                      : 'transparent',
+                  index !== selectedIndex && line.qty < 0 ? 'var(--color-refund-bg)' : undefined,
                 cursor: 'pointer',
               }}
             >

@@ -34,6 +34,7 @@ import {
 } from '../state/sync-config.ts';
 import { StepContent } from './config-wizard/steps.tsx';
 import { stepSummary } from './config-wizard/summary.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const overlayStyle = {
   height: 'var(--app-height)',
@@ -50,8 +51,9 @@ const overlayStyle = {
 // quedan siempre en el mismo lugar; solo el contenido del paso scrollea.
 const dialogStyle = {
   width: '100%',
-  maxWidth: '860px',
-  height: 'min(640px, 100%)',
+  // Crecen con el texto por debajo de ~870 px (#111), como la columna de pasos.
+  maxWidth: scaledPx(860),
+  height: `min(${scaledPx(640)}, 100%)`,
   minHeight: 0,
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
@@ -81,7 +83,11 @@ function statusMark(status: WizardModel['steps'][number]['status']): string {
 /** Columna izquierda: todos los pasos con su estado y lo cargado — nada queda oculto. */
 function StepList({ model, current }: { model: WizardModel; current: WizardStepId }) {
   return (
-    <nav aria-label="Pasos" style={{ overflowY: 'auto', minHeight: 0 }}>
+    // `--focus-room`: la columna scrollea y recortaría el anillo de foco de un paso (#112).
+    <nav
+      aria-label="Pasos"
+      style={{ overflowY: 'auto', minHeight: 0, padding: 'var(--focus-room)' }}
+    >
       <ol
         style={{
           listStyle: 'none',
@@ -117,9 +123,7 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                   textAlign: 'left',
                   padding: 'var(--space-2)',
                   borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  borderLeft: `3px solid ${isCurrent ? 'var(--color-accent)' : 'transparent'}`,
-                  background: isCurrent ? 'var(--color-surface)' : 'transparent',
+                  // Borde, fondo y la marca del paso actual: `.wizard-step-button` (tokens.css, #112).
                   color:
                     step.status === 'skipped' || (!reachable && !isCurrent)
                       ? 'var(--color-text-muted)'
@@ -147,7 +151,7 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                 >
                   {mark}
                 </span>
-                {/* Siempre presente y de alto fijo (dos renglones): completar un paso no
+                {/* Siempre presente y de alto fijo (un renglón): completar un paso no
                     agranda su ítem ni corre la lista. El texto completo, en el title. */}
                 <span class="wizard-step-summary" title={summary === '' ? undefined : summary}>
                   {summary}
@@ -411,7 +415,7 @@ export function ConfigScreen() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '240px 1fr',
+            gridTemplateColumns: `${scaledPx(240)} 1fr`,
             gap: 'var(--space-4)',
             minHeight: 0,
             flex: 1,
@@ -426,9 +430,9 @@ export function ConfigScreen() {
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
-              // Margen para el anillo de foco: un contenedor con scroll recorta lo
-              // que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
-              padding: 'var(--space-1) var(--space-2) var(--space-1) var(--space-1)',
+              // Margen para el anillo de foco (`--focus-room`): un contenedor con scroll
+              // recorta lo que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
+              padding: 'var(--focus-room) var(--space-2) var(--focus-room) var(--focus-room)',
             }}
           >
             <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>

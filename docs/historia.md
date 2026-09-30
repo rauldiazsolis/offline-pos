@@ -952,6 +952,31 @@ para cargarlo como issue a futuro) y terminó implementándose en el mismo ciclo
 del usuario poco después — ver "UX keyboard-first" más arriba (sección "Menú de '/'") para el detalle
 completo del cambio y su razonamiento.
 
+**Pasada visual: foco, selección y texto (#112, #111)**. En la prueba manual de la Etapa 2 de #94
+(#97) hubo tres rondas de ajustes del foco y la selección del wizard de `/CONFIG` que no convencieron
+(el `outline` general, que parecía un doble foco; un anillo por dentro, que parecía selección; un
+círculo de radio con un halo). Esta vez se hizo diseño primero, sobre capturas de la app real a 600,
+1024 y 1440 px. El relevamiento encontró la causa de fondo: había seis formas distintas de marcar
+"elegido" (gris sin marca en el carrito, gris con barra en `/RESUMEN`, azul sólido en los overlays,
+borde azul de 2 px en las opciones…) y **el contorno azul significaba dos cosas**, foco y selección (y
+además hover). Se compararon tres lenguajes inyectando CSS sobre la app real: A, "contorno = foco,
+relleno = selección"; B, foco en color tinta; C, selección sólida en todos lados. El usuario eligió A:
+separa los dos estados por forma sin cambiar el azul del foco que ya usaban la barra y `/RESUMEN`
+(B lo perdía) y sin el peso del azul sólido en el wizard y el carrito (C). La selección pasó de
+estilos inline repetidos en cada pantalla a una clase con el estado en un atributo
+(`.selectable-row[data-selected]`). En el mismo trabajo, la primera flecha sin opción elegida pasó a
+elegir la opción enfocada (antes saltaba a la segunda) y el resumen de cada paso quedó en un renglón.
+
+Tipografía: con el zoom único por debajo de 1024 px el texto se achicaba igual que el layout, y a
+600 px el más chico medía 7 px efectivos (la barra de estado usaba un `--font-size-xs` que nunca
+existió y caía en 12 px). Se descartaron subir el ancho mínimo a ~870 px (dejaba afuera tablets de 768
+y 800 px) y un layout angosto con reflow (reabría la decisión del Ciclo 7). Quedó un piso: el texto
+conserva el 85 % de su tamaño (`--text-zoom-compensation`) mientras el layout sigue escalando, y los
+anchos fijos que envuelven texto crecen con él (`scaledPx`). El e2e nuevo (`e2e/text-size.spec.ts`)
+encontró un caso que las capturas del brainstorming no mostraban: el botón "Sin arqueo en 24 h" de la
+barra de estado se partía en dos renglones; los botones de las franjas pasaron a `nowrap`. Desvíos
+del plan en `docs/superpowers/plans/2026-09-29-foco-seleccion-y-texto.md`.
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores

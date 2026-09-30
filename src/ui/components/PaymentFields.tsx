@@ -3,6 +3,7 @@ import type { MutableRef } from 'preact/hooks';
 import type { PaymentMethod } from '../../domain/sale.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const fieldRowStyle = {
   display: 'flex',
@@ -12,7 +13,7 @@ const fieldRowStyle = {
 };
 
 const fieldInputStyle = {
-  width: '160px',
+  width: scaledPx(160),
   fontFamily: 'var(--font-mono)',
   fontSize: 'var(--font-size-base)',
   padding: 'var(--space-2)',

@@ -23,6 +23,10 @@
   --color-focus-ring: #2563eb;
   /* texto de ejemplo de un campo vacío: bien distinto de un dato cargado */
   --color-placeholder: #a1a1aa;
+  /* selección y paso actual (#112): relleno + marca, nunca un contorno azul */
+  --color-selected-bg: #dbeafe;
+  --color-selected-bg-subtle: #eff6ff;
+  --color-selected-text: #1e40af;
 
   /* "chrome" oscuro — barra de comandos y barra de estado (pase de diseño,
      ver src/ui/AGENTS.md). El resto de la app (carrito, pantallas de tarea) sigue
@@ -51,18 +55,23 @@
   /* tipografía — mono para códigos de barra/SKU en la barra de comandos */
   --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
-  --font-size-sm: 13px;
-  --font-size-base: 16px;
-  --font-size-lg: 20px;
-  --font-size-xl: 28px;
+  /* con piso para el zoom de pantallas angostas (#111, ver --text-zoom-compensation) */
+  --font-size-sm: calc(13px * var(--text-zoom-compensation));
+  --font-size-base: calc(16px * var(--text-zoom-compensation));
+  --font-size-lg: calc(20px * var(--text-zoom-compensation));
+  --font-size-xl: calc(28px * var(--text-zoom-compensation));
 
-  /* foco — visible siempre, nunca depende de :hover (ver AGENTS.md) */
+  /* foco — visible siempre, nunca depende de :hover (ver AGENTS.md). Solo el foco dibuja un
+     contorno azul (#112): por fuera, con aire, en toda la app. */
   --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  /* margen que reserva un contenedor con scroll para no recortar el anillo de un hijo */
+  --focus-room: calc(var(--focus-ring-width) + var(--focus-ring-offset));
 }
 
 *:focus-visible {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
-  outline-offset: 2px;
+  outline-offset: var(--focus-ring-offset);
 }
 
 /*
@@ -82,6 +91,21 @@ textarea {
 
 button:not(:disabled) {
   cursor: pointer;
+}
+
+/*
+ * Tamaños base (#111): todo texto sale de un token, así ninguno escapa del piso de zoom. Los
+ * controles sin tamaño propio usan --font-size-sm (el default del navegador era 13,33 px).
+ */
+body {
+  font-size: var(--font-size-base);
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: var(--font-size-sm);
 }
 
 /*
@@ -184,6 +208,13 @@ button:not(:disabled) {
    * `100svh` sin modificar.
    */
   --app-height: calc(100svh / var(--app-zoom));
+  /*
+   * Piso del texto (#111): el layout se achica con `--app-zoom`, pero el texto conserva al menos el
+   * 85 % de su tamaño. Vale 1 con zoom ≥ 0,85 (ventana de ~870 px o más) y crece por debajo, así
+   * que a 600 px `--font-size-sm` mide 11 px efectivos en vez de 7,6. Los anchos fijos que envuelven
+   * texto lo acompañan con `ui/text-scale.ts::scaledPx`.
+   */
+  --text-zoom-compensation: max(1, calc(0.85 / var(--app-zoom)));
 }
 
 .app-zoom-wrapper {
@@ -258,26 +289,41 @@ button:not(:disabled) {
 }
 
 /*
- * Wizard de /CONFIG (Etapa 2 de #94). El hover es decorativo: nunca mueve la
- * selección (Enter sigue actuando sobre lo elegido con el teclado).
+ * Wizard de /CONFIG. Lenguaje de #112: el foco es el anillo general (por fuera); la selección y el
+ * paso actual son relleno + marca. El hover es decorativo: nunca un contorno azul ni la selección, y
+ * nunca mueve la selección (Enter sigue actuando sobre lo elegido con el teclado).
  */
-.wizard-step-button:hover:not(:disabled) {
+.wizard-step-button {
+  border: none;
+  border-left: 3px solid transparent;
+  background: transparent;
+}
+
+.wizard-step-button[aria-current='step'] {
+  background: var(--color-selected-bg);
+  border-left-color: var(--color-accent);
+}
+
+.wizard-step-button:hover:not(:disabled):not([aria-current='step']) {
   background: var(--color-surface);
 }
 
-.wizard-option:hover {
-  border-color: var(--color-accent);
+/* Opción de un grupo tipo radio: borde neutro siempre del mismo grosor (elegir no corre nada). */
+.wizard-option {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
 }
 
-/*
- * Opción de un grupo tipo radio: la selección y el foco se ven distinto. La
- * elegida lleva el círculo lleno y el borde de acento; la enfocada, un halo
- * suave alrededor (sin la separación del outline general, que se veía como un
- * doble foco). Así una opción enfocada pero no elegida no parece elegida.
- */
-.wizard-option:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+.wizard-option:hover {
+  border-color: var(--color-placeholder);
+}
+
+.wizard-option[aria-pressed='true'] {
+  background: var(--color-selected-bg-subtle);
+}
+
+.wizard-option[aria-pressed='true'] .wizard-option__title {
+  color: var(--color-selected-text);
 }
 
 .wizard-radio {
@@ -296,39 +342,27 @@ button:not(:disabled) {
   box-shadow: inset 0 0 0 3px var(--color-bg);
 }
 
-/*
- * Paso de la columna enfocado con Tab: anillo por dentro, así no lo recorta el
- * borde de la columna (que tiene scroll propio).
- */
-.wizard-step-button:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--color-focus-ring);
-}
-
-/* Resumen de un paso en la columna: siempre dos renglones de alto, recortado con "…". */
+/* Resumen de un paso en la columna: un renglón fijo, recortado con "…" (#112); completo en el title. */
 .wizard-step-summary {
   grid-column: 2 / 4;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   line-height: 1.3;
-  min-height: 2.6em;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  min-height: 1.3em;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /*
- * Campo de texto enfocado: siempre visible, con `:focus` y no solo
+ * Campo de texto enfocado: el anillo general (#112), con `:focus` y no solo
  * `:focus-visible` — Chromium no marca `:focus-visible` cuando el foco se
  * pone por código antes de cualquier interacción (el primer campo de un
  * paso al cargar la página), y el campo quedaba enfocado sin que se note.
  */
 .wizard-input:focus {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
-  outline-offset: 0;
-  border-color: var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* Texto de ejemplo de los campos del wizard: gris claro y en cursiva, que no pase por un dato. */
@@ -347,7 +381,8 @@ button:not(:disabled) {
 }
 
 .command-bar-row:hover:not([aria-disabled='true']) {
-  box-shadow: inset 0 0 0 1px var(--color-chrome-border);
+  /* hover decorativo, nunca un contorno azul (#112) */
+  background: var(--color-chrome-surface);
 }
 
 .command-bar-row[aria-disabled='true'] {
@@ -361,4 +396,28 @@ button:not(:disabled) {
 
 .status-bar:hover {
   color: var(--color-chrome-text);
+}
+
+/*
+ * Fila seleccionable de una lista sobre superficie clara (#112): la selección es relleno + barra de
+ * acento de 3 px, nunca un contorno. El estado viaja en `data-selected`, no en el `style`. En una
+ * tabla la barra va en la primera celda: `box-shadow` en un `<tr>` no es confiable.
+ */
+.selectable-row[data-selected] {
+  background: var(--color-selected-bg);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+tr.selectable-row[data-selected] {
+  box-shadow: none;
+}
+
+tr.selectable-row[data-selected] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+/* Encabezado sticky de un ticket seleccionado (/RESUMEN, /ANULAR): tapa lo que scrollea debajo. */
+.selectable-row[data-selected] .ticket__header {
+  background: var(--color-selected-bg);
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }

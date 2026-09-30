@@ -34,6 +34,7 @@ import {
   voidMessageSignal,
   voidSelectionIndexSignal,
 } from '../state/void.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const listStyle = {
   flex: 1,
@@ -325,7 +326,7 @@ export function VoidScreen() {
               borderRadius: 'var(--radius-md)',
               boxShadow: 'var(--shadow-card)',
               padding: 'var(--space-4)',
-              width: 'min(420px, 90%)',
+              width: `min(${scaledPx(420)}, 90%)`,
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-2)',

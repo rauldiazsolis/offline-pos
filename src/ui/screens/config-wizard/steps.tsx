@@ -53,20 +53,19 @@ const controlStyle = {
 const paragraph = { margin: 0 };
 const muted = { margin: 0, color: 'var(--color-text-muted)' };
 
-const optionStyle = (selected: boolean) => ({
+// Borde, fondo y la marca de la opción elegida: `.wizard-option` (tokens.css, #112).
+const optionStyle = {
   display: 'flex',
   flexDirection: 'column' as const,
   gap: 'var(--space-1)',
   textAlign: 'left' as const,
   padding: 'var(--space-3)',
   borderRadius: 'var(--radius-md)',
-  border: `${selected ? '2px' : '1px'} solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-  background: selected ? 'var(--color-surface)' : 'var(--color-bg)',
   color: 'var(--color-text)',
   fontFamily: 'var(--font-sans)',
   fontSize: 'var(--font-size-base)',
   cursor: 'pointer',
-});
+};
 
 const statusStyle = {
   margin: 0,
@@ -183,7 +182,10 @@ const groupStyle = { display: 'flex', flexDirection: 'column' as const, gap: 'va
 /** Título de una opción con su círculo de radio (lleno si está elegida, vía CSS). */
 function OptionTitle({ children }: { children: string }) {
   return (
-    <strong style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+    <strong
+      class="wizard-option__title"
+      style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+    >
       <span class="wizard-radio" aria-hidden="true" />
       {children}
     </strong>
@@ -208,7 +210,7 @@ function TypeStep() {
           onClick={() => {
             chooseConnectorType(info.type);
           }}
-          style={optionStyle(selected === info.type)}
+          style={optionStyle}
         >
           <OptionTitle>{info.label}</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>{info.description}</span>
@@ -376,7 +378,7 @@ function LocalDataOptions(props: { choice: 'keep' | 'wipe'; model: WizardModel; 
           onClick={() => {
             setLocalChoice('keep');
           }}
-          style={optionStyle(choice === 'keep')}
+          style={optionStyle}
         >
           <OptionTitle>Mantener</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>
@@ -395,7 +397,7 @@ function LocalDataOptions(props: { choice: 'keep' | 'wipe'; model: WizardModel; 
           onClick={() => {
             setLocalChoice('wipe');
           }}
-          style={optionStyle(choice === 'wipe')}
+          style={optionStyle}
         >
           <OptionTitle>Borrar</OptionTitle>
           <span style={{ color: 'var(--color-text-muted)' }}>

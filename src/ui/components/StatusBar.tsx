@@ -136,7 +136,7 @@ export function StatusBar() {
         borderBottom: '2px solid var(--color-chrome-border)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}>
         <span
           aria-hidden="true"
           style={{
@@ -150,8 +150,16 @@ export function StatusBar() {
         {statusText()}
       </div>
 
+      {/* Los botones nunca parten su etiqueta (#111): si falta lugar, se parte el estado de la izquierda. */}
       <div
-        style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+        style={{
+          marginLeft: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+        }}
       >
         {demo !== null && (
           <>
@@ -179,7 +187,7 @@ export function StatusBar() {
                 border: '1px solid var(--color-accent)',
                 borderRadius: 'var(--radius-sm, 6px)',
                 padding: '2px 8px',
-                fontSize: 'var(--font-size-xs, 12px)',
+                fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
               }}
             >
@@ -203,7 +211,7 @@ export function StatusBar() {
               border: `1px solid ${noticeColor}`,
               borderRadius: 'var(--radius-sm, 6px)',
               padding: '2px 8px',
-              fontSize: 'var(--font-size-xs, 12px)',
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
             }}
           >
@@ -226,7 +234,7 @@ export function StatusBar() {
               border: '1px solid var(--color-chrome-warning)',
               borderRadius: 'var(--radius-sm, 6px)',
               padding: '2px 8px',
-              fontSize: 'var(--font-size-xs, 12px)',
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
             }}
           >

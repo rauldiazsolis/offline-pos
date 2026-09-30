@@ -188,10 +188,11 @@ export function CommandBarInput() {
     }
   };
 
-  const rowStyle = (selected: boolean): { [key: string]: string } => ({
+  const rowStyle = (selected: boolean): { [key: string]: string | undefined } => ({
     padding: 'var(--space-2)',
     borderRadius: 'var(--radius-md)',
-    background: selected ? 'var(--color-accent)' : 'transparent',
+    // Sin fondo si no está seleccionada: un `transparent` inline le ganaba al hover de la clase.
+    background: selected ? 'var(--color-accent)' : undefined,
     color: selected ? '#ffffff' : 'var(--color-chrome-text)',
     // Mismo diagnóstico que el header sticky del carrito: scrollIntoView
     // no sabe que el padding del overlay reserva espacio arriba/abajo del

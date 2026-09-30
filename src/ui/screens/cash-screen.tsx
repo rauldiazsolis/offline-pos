@@ -38,6 +38,7 @@ import {
   conceptSuggestionsOpenSignal,
   conceptSuggestionsSignal,
 } from '../state/cash.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const overlayStyle = {
   height: 'var(--app-height)',
@@ -52,7 +53,7 @@ const overlayStyle = {
 
 const dialogStyle = {
   width: '100%',
-  maxWidth: '560px',
+  maxWidth: scaledPx(560),
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
   boxShadow: 'var(--shadow-card)',
@@ -72,7 +73,7 @@ const fieldRowStyle = {
 };
 
 const inputStyle = {
-  width: '280px',
+  width: scaledPx(280),
   fontSize: 'var(--font-size-base)',
   padding: 'var(--space-2)',
   borderRadius: 'var(--radius-md)',
@@ -83,7 +84,7 @@ const inputStyle = {
 
 const amountInputStyle = {
   ...inputStyle,
-  width: '160px',
+  width: scaledPx(160),
   fontFamily: 'var(--font-mono)',
   textAlign: 'right' as const,
 };
@@ -285,7 +286,7 @@ export function CashScreen() {
             position: 'absolute',
             top: '100%',
             right: 0,
-            width: '280px',
+            width: scaledPx(280),
             zIndex: 1,
             margin: 0,
             padding: 'var(--space-1)',
@@ -306,14 +307,12 @@ export function CashScreen() {
                 chooseConceptSuggestion(index);
                 focusField('description');
               }}
+              class="selectable-row"
+              data-selected={index === conceptSuggestionIndexSignal.value ? '' : undefined}
               style={{
                 padding: 'var(--space-1) var(--space-2)',
                 borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
-                background:
-                  index === conceptSuggestionIndexSignal.value
-                    ? 'var(--color-surface)'
-                    : 'transparent',
               }}
             >
               {concept}

@@ -15,6 +15,7 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { formatBalance } from '../format-balance.ts';
 import { receiptLabel, ticketLabel } from '../format-ticket.ts';
 import './receipt-screen.css';
+import { scaledPx } from '../text-scale.ts';
 
 function lineLabel(line: SaleLine): string {
   if (line.kind === 'freeform') {
@@ -104,7 +105,7 @@ function ReceiptFrame({ children }: { children: ComponentChildren }) {
         class="receipt"
         style={{
           width: '100%',
-          maxWidth: '360px',
+          maxWidth: scaledPx(360),
           fontFamily: 'var(--font-mono)',
           fontVariantNumeric: 'tabular-nums',
           border: '1px solid var(--color-border)',

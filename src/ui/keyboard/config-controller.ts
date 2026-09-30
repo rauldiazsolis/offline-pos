@@ -333,15 +333,16 @@ export function chooseConnectorType(type: ConnectorType): void {
 }
 
 /**
- * ↑/↓ en el paso "Tipo de conexión", como en un grupo de radio: se mueve desde
- * la opción enfocada — la elegida, o la primera si todavía no hay ninguna — y
- * elige la nueva. Sin elección, ↓ pasa a la segunda (no "elige" la que ya
- * tenía el foco sin que se note el movimiento).
+ * ↑/↓ en el paso "Tipo de conexión", como en un grupo de radio: con una opción
+ * elegida, se mueve a la vecina (sin ciclar) y la elige. Sin elección, la
+ * primera flecha elige la opción enfocada — la primera, la que se ve con el
+ * anillo de foco — en vez de saltar a la vecina (#112): así la flecha cambia
+ * lo que se ve, como la preselección del resto de las listas.
  */
 export function moveTypeChoice(direction: 1 | -1): void {
   const index = CONNECTOR_TYPES.findIndex((info) => info.type === configTypeSignal.value);
-  const from = index === -1 ? 0 : index;
-  const next = Math.min(Math.max(from + direction, 0), CONNECTOR_TYPES.length - 1);
+  const next =
+    index === -1 ? 0 : Math.min(Math.max(index + direction, 0), CONNECTOR_TYPES.length - 1);
   const chosen = CONNECTOR_TYPES[next];
   if (chosen !== undefined) {
     setConfigType(chosen.type);

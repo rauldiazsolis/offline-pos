@@ -31,9 +31,9 @@ export type DocumentRowProps = {
   testId?: string;
 };
 
-function rowContainerStyle(index: number, selected: boolean, dimmed: boolean) {
+// La selección (relleno + barra) la pinta `.selectable-row[data-selected]` (tokens.css, #112).
+function rowContainerStyle(index: number, dimmed: boolean) {
   return {
-    background: selected ? 'var(--color-surface)' : 'transparent',
     borderTop: index > 0 ? '1px solid var(--color-border)' : undefined,
     cursor: dimmed ? 'default' : 'pointer',
     ...(dimmed ? { opacity: 0.5 } : {}),
@@ -82,16 +82,18 @@ export function SaleDocumentRow({
       ref={rowRef ?? null}
       data-testid={testId}
       onClick={onClick}
-      style={rowContainerStyle(index, selected, dimmed)}
+      class="selectable-row"
+      data-selected={selected ? '' : undefined}
+      style={rowContainerStyle(index, dimmed)}
     >
       <div
         class="ticket__header"
         style={{
           position: 'sticky',
           top: 0,
-          background: selected ? 'var(--color-surface)' : 'var(--color-bg)',
+          // Opaco para tapar lo que scrollea debajo; seleccionado, lo pinta tokens.css.
+          background: selected ? undefined : 'var(--color-bg)',
           padding: 'var(--space-2) var(--space-3)',
-          boxShadow: selected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -161,10 +163,11 @@ export function CollectionDocumentRow({
       ref={rowRef ?? null}
       data-testid={testId}
       onClick={onClick}
+      class="selectable-row"
+      data-selected={selected ? '' : undefined}
       style={{
-        ...rowContainerStyle(index, selected, dimmed),
+        ...rowContainerStyle(index, dimmed),
         padding: 'var(--space-2) var(--space-3)',
-        boxShadow: selected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>

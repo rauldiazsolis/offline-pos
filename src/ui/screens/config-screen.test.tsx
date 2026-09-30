@@ -281,6 +281,27 @@ describe('ConfigScreen — correcciones de la prueba manual', () => {
     await openRequiredWizard();
   });
 
+  it('el paso actual y la opción elegida se marcan con atributos, sin estilos de selección inline (#112)', async () => {
+    configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
+    render(<ConfigScreen />);
+    await act(() => {
+      jumpToStep('type');
+      setConfigType('rest');
+    });
+    const current = screen.getByRole('button', { name: /^Paso 2:/ });
+    expect(current.getAttribute('aria-current')).toBe('step');
+    expect(current.style.background).toBe('');
+    expect(current.style.borderLeft).toBe('');
+    const options = screen
+      .getAllByRole('button')
+      .filter((button) => button.classList.contains('wizard-option'));
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(option.style.border).toBe('');
+      expect(option.style.background).toBe('');
+    }
+  });
+
   it('Tipo de conexión: el foco va a una opción y sigue a ↑/↓', async () => {
     configTerminalSignal.value = { branch: 'Centro', pointOfSale: 'Caja 1', locale: '' };
     render(<ConfigScreen />);
@@ -292,7 +313,12 @@ describe('ConfigScreen — correcciones de la prueba manual', () => {
     const rest = screen.getByRole('button', { name: /^REST genérico/ });
     expect(document.activeElement).toBe(rest);
     expect(rest.getAttribute('aria-pressed')).toBe('false');
-    // ↓ pasa a la siguiente y la elige (como un grupo de radio).
+    // ↓ sin nada elegido elige la opción enfocada, la que se ve (#112); la siguiente ↓ pasa a la vecina.
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    expect(rest.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(rest);
     await act(() => {
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
     });

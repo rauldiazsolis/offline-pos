@@ -1,3 +1,4 @@
+import { scaledPx } from '../text-scale.ts';
 /**
  * Estilos del diálogo modal de medios de pago, compartidos entre Cobro (`checkout-screen.tsx`) y
  * la cobranza sin venta (`collection-screen.tsx`, #101): para el usuario es el mismo diálogo.
@@ -15,7 +16,7 @@ export const overlayStyle = {
 
 export const dialogStyle = {
   width: '100%',
-  maxWidth: '720px',
+  maxWidth: scaledPx(720),
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
   boxShadow: 'var(--shadow-card)',
