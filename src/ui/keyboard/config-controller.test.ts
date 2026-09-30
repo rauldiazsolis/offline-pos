@@ -4,6 +4,7 @@ import { buildOutboxEventForSale } from '../../domain/outbox.ts';
 import type { Sale } from '../../domain/sale.ts';
 import { db } from '../../storage/db.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../sync/config.ts';
+import { CONNECTOR_TYPES } from '../../sync/connector-registry.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { connectionStateSignal, syncPausedSignal } from '../state/sync.ts';
 import {
@@ -29,6 +30,7 @@ import {
   goToStep,
   handleWizardEscape,
   jumpToStep,
+  moveTypeChoice,
   openRequiredWizard,
   openWizardWithCandidate,
   setConfigField,
@@ -137,6 +139,24 @@ describe('wizard — instalación', () => {
     advance();
     expect(configErrorFieldSignal.value).toBe('branch');
     expect(wizardStepSignal.value).toBe('terminal');
+  });
+
+  it('sin tipo elegido, la primera flecha elige la opción enfocada (la primera), no la vecina', () => {
+    configTypeSignal.value = null;
+    moveTypeChoice(1);
+    expect(configTypeSignal.value).toBe(CONNECTOR_TYPES[0]?.type);
+    configTypeSignal.value = null;
+    moveTypeChoice(-1);
+    expect(configTypeSignal.value).toBe(CONNECTOR_TYPES[0]?.type);
+  });
+
+  it('con un tipo elegido, las flechas se mueven a la vecina sin ciclar', () => {
+    configTypeSignal.value = CONNECTOR_TYPES[0]?.type ?? null;
+    moveTypeChoice(1);
+    expect(configTypeSignal.value).toBe(CONNECTOR_TYPES[1]?.type);
+    moveTypeChoice(-1);
+    moveTypeChoice(-1);
+    expect(configTypeSignal.value).toBe(CONNECTOR_TYPES[0]?.type);
   });
 
   it('recorrido completo: terminal → tipo → datos → probar (arranca solo) → revisar → aplicar', async () => {

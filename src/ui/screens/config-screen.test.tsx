@@ -292,7 +292,12 @@ describe('ConfigScreen — correcciones de la prueba manual', () => {
     const rest = screen.getByRole('button', { name: /^REST genérico/ });
     expect(document.activeElement).toBe(rest);
     expect(rest.getAttribute('aria-pressed')).toBe('false');
-    // ↓ pasa a la siguiente y la elige (como un grupo de radio).
+    // ↓ sin nada elegido elige la opción enfocada, la que se ve (#112); la siguiente ↓ pasa a la vecina.
+    await act(() => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
+    });
+    expect(rest.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(rest);
     await act(() => {
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'ArrowDown' });
     });
