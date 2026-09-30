@@ -208,9 +208,8 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
 `customer-payment` más: la reaplicación (`-total`) y la limpieza ya la cubren. Un POS 4.3.0 ve
 incompatible a un backend 4.2 ("se necesita 4.3 o posterior"). El minibackend la acompaña (su saldo
-ya se mueve por `-total`; el panel muestra qué anula cada documento). Sheets (congelado, #127;
-camino para retomarlo: #138) y los backends externos que no se actualizaron quedan en 4.2 —
-compatibles de nuevo desde el piso de 4.4.0.
+ya se mueve por `-total`; el panel muestra qué anula cada documento). El puente de Sheets y los backends externos que no se actualizaron quedaron en 4.2 —
+compatibles de nuevo desde el piso de 4.4.0 (el puente se mantiene con piso desde el epic #166).
 
 **Contrato 4.2.0 (#101)** — aditivo: `CustomerPayment.receipt?: { date, number }` (el número de
 recibo en su día local, con contador propio) y `ConnectorCustomer.balance` pasa a ser **el saldo de

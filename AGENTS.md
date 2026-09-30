@@ -269,16 +269,16 @@ están en `src/sync/AGENTS.md`; las implementaciones y el registro de conectores
 
 **Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
 mismo trabajo — es la referencia ejecutable del contrato. Los backends externos, como el mini-erp,
-no (ver "POS y mini-erp: desarrollo separado"). El conector de Google Sheets tampoco: **congelado en
-4.2.0** desde el 2026-09-28 (#127) — un cambio de contrato o de la interfaz `Connector` no lo hace
-evolucionar; solo se hace el mínimo mecánico para compilar y mantener sus tests en verde, y si eso
-deja de ser mecánico se frena y se consulta (adaptarlo o sacarlo del registro). Con el piso 4.0.0
-(#128) vuelve a ser compatible sin tocarlo: no declara capacidades, así que no anula cobranzas. La
-red de seguridad ya existe: el puente informa su versión (`bridge.gs::CONTRACT_VERSION`), así que
-con un POS de otro major la terminal lo ve incompatible, no sincroniza y sigue vendiendo sin perder
-nada. Cada cambio de contrato suma en #127 lo que haría falta para retomarlo; `/CONFIG` lo muestra
-como "Sin mantenimiento". El camino decidido para retomarlo es #138 (el conector en el POS, con la
-API del puente especificada).
+no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (`bridge.gs` y
+`columnas.gs`, en `src/connectors/google-sheets/`) **se mantiene en este repo como un backend más, con
+piso** (decisión del 2026-09-29, epic #166, que revirtió el congelamiento de #127 y el puente aparte de
+#138): no acompaña cada cambio de contrato, se actualiza cuando conviene una capacidad nueva o cuando
+cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla falsa) y **publicado en
+cada carpeta de versión** del deploy, al lado del OpenAPI, para que un integrador copie el puente de
+su versión. Un cambio de contrato que el puente no acompaña no lo rompe: con el piso 4.0.0 sigue
+compatible y simplemente no declara la capacidad nueva. El puente informa su versión
+(`bridge.gs::CONTRACT_VERSION`): con un POS de otro major la terminal lo ve incompatible, no
+sincroniza y sigue vendiendo sin perder nada.
 
 **Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
 (el puente de Sheets usa `@OnlyCurrentDoc`). Si una función más linda necesita un scope más amplio, se
@@ -532,9 +532,9 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
 el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp —
 rauldiazsolis/mini-erp#2 (contrato 4.4.0) y rauldiazsolis/mini-erp#3 (publicarlo), en su repo, y
-después #147 (la demo pública apunta al mini-erp publicado); (2) en paralelo, el brainstorming de
-#138 (el conector de Sheets en el POS y los `.gs` en un proyecto aparte); (3) Sheets funcionando por
-el camino que salga de ahí. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
+después #147 (la demo pública apunta al mini-erp publicado); (2) en paralelo,
+el puente de Sheets publicado en cada carpeta de versión; (3) el puente al día con 4.4.0 y probado
+contra una planilla real. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
 Antes del primer comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin
 bloquear nada: #135. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
 depende de ella (§11 del diseño).
@@ -551,11 +551,11 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- Cierre del MVP: epic #166, con #147 (backend para la demo pública) y #138 (Sheets en el POS).
+- Cierre del MVP: epic #166, con #147 (backend para la demo pública) y el puente de Sheets.
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding).
-- Conectores (`backlog`): #127 (Sheets congelado), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
+- Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`) y #135 (fines de línea:
   `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
