@@ -1,7 +1,7 @@
 # src/connectors — implementaciones del contrato
 
 Detalle de los conectores. El contrato y sus principios (el backend nunca rechaza, compatibilidad,
-qué backends acompañan un cambio, Sheets congelado, permisos mínimos) están en el
+qué backends acompañan un cambio, el puente de Sheets mantenido con piso, permisos mínimos) están en el
 [`AGENTS.md` de la raíz](../../AGENTS.md); el puerto `Connector`, los schemas Zod compartidos y qué
 trajo cada versión del contrato (incluidas las columnas nuevas del puente de Sheets), en
 [`src/sync/AGENTS.md`](../sync/AGENTS.md). El registro vive en `sync/connector-registry.ts`, pero sus

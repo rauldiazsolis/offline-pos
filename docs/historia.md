@@ -333,6 +333,19 @@ Entre Fase 4 y Fase 5, dos ciclos de mejoras (no fases del roadmap, iteraciones 
   `pnpm dedupe` podó el resto. Desde entonces el mini-erp es un backend externo más: un cambio de
   contrato se anuncia con un issue en su repo.
 
+- El puente de Google Sheets vuelve a mantenerse en el POS (2026-09-29, epic #166): el 2026-09-28 se
+  había congelado en 4.2.0 (#127), con la idea de sacar los `.gs` a un proyecto aparte y escribir el
+  conector en TypeScript sobre una API del puente propia (#138). Al planificar el cierre del MVP el
+  usuario lo revirtió: con el piso 4.0.0 y las capacidades de 4.4.0, un puente viejo sigue siendo
+  compatible, así que el dolor que motivó el congelamiento (tocar y redesplegar los `.gs` en cada
+  cambio de contrato) casi desapareció, y el rediseño de #138 costaba más que revivir un código que ya
+  tiene tests. El puente queda en `src/connectors/google-sheets/` como **un backend más, con piso**:
+  no acompaña cada cambio de contrato (eso sigue siendo solo del demo-backend), se actualiza cuando
+  conviene una capacidad nueva o cambia el major, y se publica en cada carpeta de versión al lado
+  del OpenAPI. Se descartó el otro nivel, acompañar cada cambio como el demo-backend, por su costo:
+  la lógica del contrato queda duplicada en Apps Script y cada actualización es un redeploy a mano.
+  #127 y #138 se cerraron.
+
 **Issues marcados `backlog` en GitHub**: para separar hallazgos que valen la pena pero son más
 grandes que un fix de ciclo — a definir/priorizar recién después de terminar las fases ya diseñadas
 para esta primera etapa (Fase 5, 6, 7), no antes. Ejemplo: que la falta de stock no debería bloquear
