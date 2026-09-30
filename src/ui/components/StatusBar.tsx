@@ -179,7 +179,7 @@ export function StatusBar() {
                 border: '1px solid var(--color-accent)',
                 borderRadius: 'var(--radius-sm, 6px)',
                 padding: '2px 8px',
-                fontSize: 'var(--font-size-xs, 12px)',
+                fontSize: 'var(--font-size-sm)',
                 cursor: 'pointer',
               }}
             >
@@ -203,7 +203,7 @@ export function StatusBar() {
               border: `1px solid ${noticeColor}`,
               borderRadius: 'var(--radius-sm, 6px)',
               padding: '2px 8px',
-              fontSize: 'var(--font-size-xs, 12px)',
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
             }}
           >
@@ -226,7 +226,7 @@ export function StatusBar() {
               border: '1px solid var(--color-chrome-warning)',
               borderRadius: 'var(--radius-sm, 6px)',
               padding: '2px 8px',
-              fontSize: 'var(--font-size-xs, 12px)',
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
             }}
           >

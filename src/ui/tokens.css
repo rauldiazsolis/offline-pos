@@ -55,10 +55,11 @@
   /* tipografía — mono para códigos de barra/SKU en la barra de comandos */
   --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
-  --font-size-sm: 13px;
-  --font-size-base: 16px;
-  --font-size-lg: 20px;
-  --font-size-xl: 28px;
+  /* con piso para el zoom de pantallas angostas (#111, ver --text-zoom-compensation) */
+  --font-size-sm: calc(13px * var(--text-zoom-compensation));
+  --font-size-base: calc(16px * var(--text-zoom-compensation));
+  --font-size-lg: calc(20px * var(--text-zoom-compensation));
+  --font-size-xl: calc(28px * var(--text-zoom-compensation));
 
   /* foco — visible siempre, nunca depende de :hover (ver AGENTS.md). Solo el foco dibuja un
      contorno azul (#112): por fuera, con aire, en toda la app. */
@@ -90,6 +91,21 @@ textarea {
 
 button:not(:disabled) {
   cursor: pointer;
+}
+
+/*
+ * Tamaños base (#111): todo texto sale de un token, así ninguno escapa del piso de zoom. Los
+ * controles sin tamaño propio usan --font-size-sm (el default del navegador era 13,33 px).
+ */
+body {
+  font-size: var(--font-size-base);
+}
+
+button,
+input,
+select,
+textarea {
+  font-size: var(--font-size-sm);
 }
 
 /*
@@ -192,6 +208,13 @@ button:not(:disabled) {
    * `100svh` sin modificar.
    */
   --app-height: calc(100svh / var(--app-zoom));
+  /*
+   * Piso del texto (#111): el layout se achica con `--app-zoom`, pero el texto conserva al menos el
+   * 85 % de su tamaño. Vale 1 con zoom ≥ 0,85 (ventana de ~870 px o más) y crece por debajo, así
+   * que a 600 px `--font-size-sm` mide 11 px efectivos en vez de 7,6. Los anchos fijos que envuelven
+   * texto lo acompañan con `ui/text-scale.ts::scaledPx`.
+   */
+  --text-zoom-compensation: max(1, calc(0.85 / var(--app-zoom)));
 }
 
 .app-zoom-wrapper {
