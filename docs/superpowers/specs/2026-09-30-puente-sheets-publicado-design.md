@@ -23,7 +23,7 @@ El README del conector no sirve tal cual para un integrador:
 - quedó desactualizado: dice `contractVersion: '4.0.0'` y que "el balance de cada cliente no vuelve
   al POS", que dejó de ser cierto en 4.2.0.
 
-`bridge.gs` tiene 19 comentarios que citan issues (`(#96)`, `#87`…) y uno que remite a
+`bridge.gs` tiene 18 comentarios que citan issues (`(#96)`, `#87`…), uno de ellos también el requisito `RNF-07` del doc de diseño, y uno que remite a
 `demo-backend/src/lots.ts`; `columnas.gs` no tiene ninguno. `bridge.gs` también tiene formatos
 numéricos de Sheets (`'#,##0.00'`), que un patrón `#\d+` confundiría con un issue.
 
@@ -57,7 +57,11 @@ La arma `site/build-version.ts::buildVersionFolder`, en el mismo paso que el res
 omisión del repo, así el test puede seguir pasando fixtures. `publish.yml` no cambia, y el zip de la
 versión incluye la subcarpeta sin hacer nada.
 
-`renderGuidePage` se reusa sin cambios: el título de la página sale del primer `# ` del Markdown.
+`renderGuidePage` se reusa (el título de la página sale del primer `# ` del Markdown), con un
+parámetro nuevo: la ruta relativa hasta `docs/` (`''` para la guía, `'../'` para la del puente). El
+encabezado de `site/templates/guide.html` enlaza al OpenAPI, a `llms.txt` y a `/versions` con
+rutas relativas a `docs/`, que desde `docs/google-sheets/` se romperían; el link "Markdown" queda
+relativo a la página (en las dos lleva a su propio `guia.md`).
 
 **Links**: en el repo, el doc apunta a los archivos del repo para que se puedan seguir desde GitHub;
 al publicar, `build-version.ts` los reescribe a su lugar en la carpeta, igual que ya hace
@@ -121,7 +125,7 @@ es del punto 3.
 
 ### 3. `bridge.gs` sin referencias internas
 
-Los 19 comentarios pierden el número de issue y conservan la versión del contrato cuando la tienen
+Los 18 comentarios pierden el número de issue y conservan la versión del contrato cuando la tienen
 ("4.0.0 (#99): una anulación…" → "4.0.0: una anulación…"; "(conector de Google Sheets, #67)" → sin
 paréntesis). El comentario que remite a `demo-backend/src/lots.ts` describe el despacho sin nombrar
 el archivo. Solo cambian comentarios: `bridge.test.ts` sigue en verde sin tocarse.
@@ -145,14 +149,17 @@ el archivo. Solo cambian comentarios: `bridge.test.ts` sigue en verde sin tocars
     `pos-web-diseno`, `historia.md` ni `demo-backend`, y las únicas apariciones de `src/` son los
     dos links a los `.gs` que se localizan al publicar;
   - `bridge.gs` y `columnas.gs` no citan issues (`\(#\d+`, `#\d{2,}`, `, #\d`), ni `superpowers`,
-    `AGENTS.md` o `demo-backend` — el patrón no se confunde con `'#,##0.00'`;
+    `AGENTS.md`, `demo-backend` o requisitos del doc de diseño (`RNF-07`) — el patrón no se
+    confunde con `'#,##0.00'`;
   - la guía del puente dice el mismo `CONTRACT_VERSION` que `bridge.gs` (se lee del archivo), así
     no se desactualiza cuando el punto 3 lo lleve a 4.4.0;
   - la guía y `llms.txt` enlazan a la guía del puente.
 - `site/build-version.test.ts`: la carpeta armada tiene `docs/google-sheets/` con sus cuatro
   archivos, los `.gs` idénticos a su fuente, los links localizados (sin `../../src/` ni
   `google-sheets.md`), `docs/guia.md` enlazando a `google-sheets/`, e `index.html` con el título de
-  la guía del puente.
+  la guía del puente y el encabezado apuntando a `../connector-api.openapi.yaml`.
+- `e2e/published-site.spec.ts`: desde `/<versión>/docs/`, el link a la guía del puente abre su
+  página, y `bridge.gs`, `columnas.gs` y el OpenAPI del encabezado responden.
 
 ### 6. Documentación del repo
 
