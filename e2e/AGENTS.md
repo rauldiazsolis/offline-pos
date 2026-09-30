@@ -40,3 +40,9 @@ con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4
 carpeta de la versión arranca con rutas relativas y que su almacenamiento es
 `offline-pos@/<versión>/`. El resto de la suite sigue en `/`: prueba de paso que la raíz no cambió. El
 redirect de `/` y los headers son de Cloudflare: se verifican en la primera publicación.
+
+**Flakes en CI** (#169): `playwright.config.ts` reintenta una vez solo con `CI`, así
+`trace: 'on-first-retry'` deja la traza; un test que pasa al reintentar sale como "flaky" en el log.
+El workflow sube `test-results/` (artefacto `playwright-test-results`, 14 días) si falla el e2e o si
+quedó algún `trace.zip`: ahí están la traza, las capturas y el `error-context.md` de cada test. Un
+flake nuevo se anota como issue con lo que muestre la traza, no solo con el timeout.
