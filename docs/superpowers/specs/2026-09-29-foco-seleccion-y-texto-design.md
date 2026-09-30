@@ -1,7 +1,7 @@
 # Foco, selección y paso actual; texto legible con zoom
 
 Fecha: 2026-09-29
-Estado: diseño aprobado en el brainstorming; falta el plan.
+Estado: diseño aprobado; plan en `docs/superpowers/plans/2026-09-29-foco-seleccion-y-texto.md`.
 Issues: #112 (foco, selección y paso actual, prioritario) y #111 (tipografía con el zoom responsive).
 Comparación con capturas (estado actual contra las alternativas A, B y C, y el piso de texto a
 600 px): https://claude.ai/artifact/2RmD9ssHtPEGfscT8WabFw
