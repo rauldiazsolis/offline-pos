@@ -81,7 +81,11 @@ function statusMark(status: WizardModel['steps'][number]['status']): string {
 /** Columna izquierda: todos los pasos con su estado y lo cargado — nada queda oculto. */
 function StepList({ model, current }: { model: WizardModel; current: WizardStepId }) {
   return (
-    <nav aria-label="Pasos" style={{ overflowY: 'auto', minHeight: 0 }}>
+    // `--focus-room`: la columna scrollea y recortaría el anillo de foco de un paso (#112).
+    <nav
+      aria-label="Pasos"
+      style={{ overflowY: 'auto', minHeight: 0, padding: 'var(--focus-room)' }}
+    >
       <ol
         style={{
           listStyle: 'none',
@@ -117,9 +121,7 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                   textAlign: 'left',
                   padding: 'var(--space-2)',
                   borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  borderLeft: `3px solid ${isCurrent ? 'var(--color-accent)' : 'transparent'}`,
-                  background: isCurrent ? 'var(--color-surface)' : 'transparent',
+                  // Borde, fondo y la marca del paso actual: `.wizard-step-button` (tokens.css, #112).
                   color:
                     step.status === 'skipped' || (!reachable && !isCurrent)
                       ? 'var(--color-text-muted)'
@@ -426,9 +428,9 @@ export function ConfigScreen() {
               display: 'flex',
               flexDirection: 'column',
               gap: 'var(--space-3)',
-              // Margen para el anillo de foco: un contenedor con scroll recorta lo
-              // que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
-              padding: 'var(--space-1) var(--space-2) var(--space-1) var(--space-1)',
+              // Margen para el anillo de foco (`--focus-room`): un contenedor con scroll
+              // recorta lo que se dibuja por fuera de sus hijos (el anillo de un campo al borde).
+              padding: 'var(--focus-room) var(--space-2) var(--focus-room) var(--focus-room)',
             }}
           >
             <h2 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>
