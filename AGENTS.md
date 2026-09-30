@@ -556,7 +556,8 @@ etiqueta antes de tomar un issue.
   `backlog`: #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
-- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`) y #135 (fines de línea:
+- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
+  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:
   `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
   su repo.
