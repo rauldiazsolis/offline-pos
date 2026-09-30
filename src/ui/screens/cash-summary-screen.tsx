@@ -49,6 +49,7 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const sidebarCardStyle = {
   border: '1px solid var(--color-border)',
@@ -69,7 +70,9 @@ const sidebarRowStyle = {
   fontFamily: 'var(--font-mono)',
   fontSize: 'var(--font-size-sm)',
 };
+// Botones de la franja: nunca parten su etiqueta (#111).
 const tabButtonStyle = (active: boolean) => ({
+  whiteSpace: 'nowrap' as const,
   background: active ? 'var(--color-accent)' : 'transparent',
   color: active ? 'var(--color-chrome-bg)' : 'var(--color-chrome-text)',
   border: '1px solid var(--color-chrome-border)',
@@ -78,6 +81,7 @@ const tabButtonStyle = (active: boolean) => ({
   cursor: 'pointer',
 });
 const dayButtonStyle = {
+  whiteSpace: 'nowrap' as const,
   background: 'transparent',
   color: 'var(--color-chrome-text)',
   border: '1px solid var(--color-chrome-border)',
@@ -788,9 +792,23 @@ export function CashSummaryScreen() {
             gap: 'var(--space-3)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Resumen del día</h1>
-            <span data-testid="day-heading" style={{ color: 'var(--color-chrome-text-muted)' }}>
+          {/* Con el texto más grande a 600 px (#111) los botones de día bajan de renglón. */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              columnGap: 'var(--space-3)',
+              rowGap: 'var(--space-1)',
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)', whiteSpace: 'nowrap' }}>
+              Resumen del día
+            </h1>
+            <span
+              data-testid="day-heading"
+              style={{ color: 'var(--color-chrome-text-muted)', whiteSpace: 'nowrap' }}
+            >
               {formatDayHeading(view.date, today)}
             </span>
             <button
@@ -825,6 +843,7 @@ export function CashSummaryScreen() {
               border: 'none',
               cursor: 'pointer',
               fontSize: 'var(--font-size-sm)',
+              whiteSpace: 'nowrap',
             }}
           >
             Cerrar (Esc)
@@ -879,7 +898,7 @@ export function CashSummaryScreen() {
         style={{
           flex: 1,
           display: 'grid',
-          gridTemplateColumns: '1fr clamp(240px, 25%, 320px)',
+          gridTemplateColumns: `1fr clamp(${scaledPx(240)}, 25%, ${scaledPx(320)})`,
           minHeight: 0,
         }}
       >

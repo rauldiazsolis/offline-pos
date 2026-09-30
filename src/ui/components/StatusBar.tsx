@@ -136,7 +136,7 @@ export function StatusBar() {
         borderBottom: '2px solid var(--color-chrome-border)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}>
         <span
           aria-hidden="true"
           style={{
@@ -150,8 +150,16 @@ export function StatusBar() {
         {statusText()}
       </div>
 
+      {/* Los botones nunca parten su etiqueta (#111): si falta lugar, se parte el estado de la izquierda. */}
       <div
-        style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}
+        style={{
+          marginLeft: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+        }}
       >
         {demo !== null && (
           <>

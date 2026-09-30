@@ -34,6 +34,7 @@ import {
 } from '../state/sync-config.ts';
 import { StepContent } from './config-wizard/steps.tsx';
 import { stepSummary } from './config-wizard/summary.ts';
+import { scaledPx } from '../text-scale.ts';
 
 const overlayStyle = {
   height: 'var(--app-height)',
@@ -50,8 +51,9 @@ const overlayStyle = {
 // quedan siempre en el mismo lugar; solo el contenido del paso scrollea.
 const dialogStyle = {
   width: '100%',
-  maxWidth: '860px',
-  height: 'min(640px, 100%)',
+  // Crecen con el texto por debajo de ~870 px (#111), como la columna de pasos.
+  maxWidth: scaledPx(860),
+  height: `min(${scaledPx(640)}, 100%)`,
   minHeight: 0,
   background: 'var(--color-bg)',
   borderRadius: 'var(--radius-md)',
@@ -413,7 +415,7 @@ export function ConfigScreen() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: '240px 1fr',
+            gridTemplateColumns: `${scaledPx(240)} 1fr`,
             gap: 'var(--space-4)',
             minHeight: 0,
             flex: 1,
