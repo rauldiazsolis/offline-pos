@@ -529,11 +529,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 
 **Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
-publica con `docs/publicacion.md`). El lanzamiento es para developers con el demo-backend en
-`localhost:4000`: la demo pública, con el mini-erp, queda para después (#147, `backlog`; se publica
-con rauldiazsolis/mini-erp#3). Ahora: #102 (comandos de consulta, antes la Etapa 7 de #94); antes
-del primer comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin bloquear
-nada: #135 y el brainstorming de #138. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
+publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
+el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp —
+rauldiazsolis/mini-erp#2 (contrato 4.4.0) y rauldiazsolis/mini-erp#3 (publicarlo), en su repo, y
+después #147 (la demo pública apunta al mini-erp publicado); (2) en paralelo, el brainstorming de
+#138 (el conector de Sheets en el POS y los `.gs` en un proyecto aparte); (3) Sheets funcionando por
+el camino que salga de ahí. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
+Antes del primer comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin
+bloquear nada: #135. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
 depende de ella (§11 del diseño).
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -548,10 +551,11 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
+- Cierre del MVP: epic #166, con #147 (backend para la demo pública) y #138 (Sheets en el POS).
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
-  `backlog`: #147 (backend para la demo pública), #150 (dominio propio), #151 (`GET /info` sin
-  autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding).
-- Conectores (`backlog`): #127 (Sheets congelado), #138 (Sheets en el POS), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
+  `backlog`: #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143
+  (pasar de demo a producción sin repetir el onboarding).
+- Conectores (`backlog`): #127 (Sheets congelado), #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`) y #135 (fines de línea:
   `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
