@@ -768,3 +768,19 @@ Responsive de DevTools).
 5. `/RESUMEN` y `/ANULAR`: la fila elegida con fondo azul claro y barra.
 6. DevTools → modo Responsive a 600 × 700: repetir 2 a 5; nada ilegible (el texto más chico ~11 px),
    ningún botón partido, nada que se salga. A 1024 y 1440, todo del tamaño de siempre.
+
+## Desvíos
+
+- **Tarea 2**: `e2e/config-connector.spec.ts` afirmaba el halo viejo de la opción enfocada
+  (`outline-style: none` y un `box-shadow` azul); ahora exige el anillo (`outline-style: solid` y
+  `outline-color` de acento).
+- **Tarea 3**: `CommandBarInput.tsx::rowStyle` tipaba sus valores como `string`; se amplió a
+  `string | undefined` para dejar la fila no seleccionada sin fondo inline (si no, le ganaba al
+  hover de la clase).
+- **Tarea 5**: el lint rechazó dos `?? ''` del e2e (`textContent` de un `Element` nunca es `null` en
+  estos tipos). Antes del commit se confirmó, con una copia temporal del spec que solo medía el
+  tamaño, que el piso de 11 px ya se cumplía en todas las pantallas.
+- **Tarea 6**: el e2e encontró un caso fuera del plan: "Sin arqueo en 24 h" se partía en la barra de
+  estado. El grupo de botones de la derecha pasó a `flexShrink: 0` + `nowrap` y el texto de estado a
+  `minWidth: 0` (si falta lugar, se parte el estado, nunca un botón). A 600 px el placeholder del
+  buscador de `/RESUMEN` se corta; no es un botón y quedó así.

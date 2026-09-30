@@ -236,10 +236,12 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
 wizard secuencial que oculta lo ya cargado"): lo cargado nunca se oculta, queda resumido en una
-columna lateral con los 6 pasos (credenciales como `•••`), y se vuelve a cualquier paso ya alcanzado.
+columna lateral con los 6 pasos (credenciales como `•••`; el resumen de cada paso ocupa un renglón,
+recortado con "…" y completo en el `title`), y se vuelve a cualquier paso ya alcanzado.
 1. **Terminal**: Sucursal y Punto de venta (obligatorios) y Locale (opcional); muestra el aviso de
    identidad perdida (`identityResetSignal`).
 2. **Tipo de conexión**: las opciones de `CONNECTOR_TYPES` con su `description`; ↑/↓ + Enter o click.
+   Sin nada elegido, la primera flecha elige la opción enfocada, la que se ve (#112).
 3. **Datos del conector**: los `configFields` del tipo más sus instrucciones (`setupHelp`).
 4. **Probar** (`sync/connection.ts::probeConnection`): arranca solo al entrar; pull completo **en
    memoria**, todo o nada, con tope de tiempo — no toca IndexedDB, cursores ni config. Mientras
@@ -319,6 +321,17 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 - **Chrome oscuro arriba y abajo, contenido claro en el medio**: la barra de comandos (abajo) y la de
   estado (arriba) usan los tokens `--color-chrome-*` (`tokens.css`); el resto de la app, los claros.
   Es un contraste fijo, no un modo oscuro conmutable.
+- **Foco, selección y paso actual (#112)**: **solo el foco dibuja un contorno azul** — el anillo
+  general de `tokens.css` (2 px por fuera, `--focus-ring-offset` de aire), igual en botones,
+  opciones, pasos, filas y campos; nunca un halo, un anillo por dentro ni otro color. La **selección**
+  (sobre qué actúa Enter, la opción elegida) y el **paso actual** son **relleno azul claro + una
+  marca**: barra de 3 px en filas y pasos (`.selectable-row[data-selected]`,
+  `.wizard-step-button[aria-current]`), círculo lleno en las opciones
+  (`.wizard-option[aria-pressed]`); el borde de una tarjeta elegida queda neutro y del mismo grosor. El **hover** es decorativo: nunca contorno azul ni la marca.
+  Excepciones: sobre el chrome oscuro y en controles compactos (overlays de la barra, selector de
+  `/CAJA`, pestañas de `/RESUMEN`) la selección es relleno sólido; la barra de comandos marca su foco
+  con el borde inferior. Se eligió comparando capturas de tres alternativas (spec
+  `docs/superpowers/specs/2026-09-29-foco-seleccion-y-texto-design.md`).
 - **Montos** en `--font-mono` con `font-variant-numeric: tabular-nums`, alineados a la derecha, en
   carrito, cobro y comprobante. Sin numeritos de atajo (`/1`, `/2`…) en el menú de comandos: el
   usuario los descartó.
@@ -352,8 +365,14 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
   del wrapper a propósito (tiene que andar aunque falle el arranque). Por debajo de
   `MIN_SUPPORTED_WIDTH_PX` (600, `ui/state/viewport.ts`) se muestra `unsupported-screen.tsx`, sin
   zoom. `viewportWidthSignal` es el único lector del ancho del viewport y usa `ResizeObserver` sobre
-  `document.documentElement`, no el evento `resize`. Pendientes: #41 (resize en el modo Responsive de
-  DevTools) y #111 (tipografía chica con zoom).
+  `document.documentElement`, no el evento `resize`. **Piso de texto (#111)**: el texto no baja del
+  85 % de su tamaño — `--text-zoom-compensation` (`max(1, 0,85 / --app-zoom)`) multiplica los
+  `--font-size-*`, así que a 600 px nada mide menos de 11 px efectivos; todo texto sale de un token
+  (`body` toma `base`, los controles sin tamaño `sm`; no hay `--font-size-xs`). Los anchos fijos que
+  envuelven texto (diálogos, la columna de pasos, campos) usan `ui/text-scale.ts::scaledPx`, y los
+  botones de las franjas no parten su etiqueta (`white-space: nowrap`; si falta lugar, baja de renglón
+  el grupo). Lo vigila `e2e/text-size.spec.ts` (≥ 11 px, botones enteros y sin desborde a 600 × 700;
+  13 px a 1440). Pendiente: #41 (resize en el modo Responsive de DevTools).
 - **Placeholder** de la barra de comandos: "Escribí para buscar · @ cliente · / comandos" (#24 sigue
   abierto para algo más completo).
 
@@ -398,6 +417,10 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
   filas reciben la selección, la marca, el ref y el click como props; `/RESUMEN` las envuelve en
   componentes propios para leer `nav.ticketRef(index)` en el nivel superior del render
   (`react-hooks/refs`).
+- **Selección por atributo, no por estilo inline** (#112): una fila seleccionable lleva
+  `class="selectable-row"` y `data-selected` (el estilo vive en `tokens.css`; en un `<tr>` la barra va
+  en la primera celda), y un contenedor con scroll que tiene controles enfocables adentro reserva
+  `--focus-room` de padding para no recortar el anillo de foco.
 - **Hooks de lista reusables**: `useScrollSelectedIntoView` y `useScrollIndicator` no saben nada de
   carrito ni de overlays; cada lista los llama con su signal y sus refs. jsdom no implementa
   `scrollIntoView` ni `ResizeObserver`: los stubs globales viven en `src/test/setup.ts`.
