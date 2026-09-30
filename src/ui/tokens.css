@@ -319,18 +319,16 @@ button:not(:disabled) {
   box-shadow: inset 0 0 0 3px var(--color-bg);
 }
 
-/* Resumen de un paso en la columna: siempre dos renglones de alto, recortado con "…". */
+/* Resumen de un paso en la columna: un renglón fijo, recortado con "…" (#112); completo en el title. */
 .wizard-step-summary {
   grid-column: 2 / 4;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   line-height: 1.3;
-  min-height: 2.6em;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  min-height: 1.3em;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /*

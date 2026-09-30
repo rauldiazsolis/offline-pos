@@ -149,7 +149,7 @@ function StepList({ model, current }: { model: WizardModel; current: WizardStepI
                 >
                   {mark}
                 </span>
-                {/* Siempre presente y de alto fijo (dos renglones): completar un paso no
+                {/* Siempre presente y de alto fijo (un renglón): completar un paso no
                     agranda su ítem ni corre la lista. El texto completo, en el title. */}
                 <span class="wizard-step-summary" title={summary === '' ? undefined : summary}>
                   {summary}
