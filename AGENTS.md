@@ -530,10 +530,12 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 
 **Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
 publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
-el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp —
-rauldiazsolis/mini-erp#2 (contrato 4.4.0) y rauldiazsolis/mini-erp#3 (publicarlo), en su repo, y
-después #147 (la demo pública apunta al mini-erp publicado); (2) en paralelo,
-el puente de Sheets publicado en cada carpeta de versión; (3) el puente al día con 4.4.0 y probado
+el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp, en su repo —
+rauldiazsolis/mini-erp#9 (un landing en su raíz abre el POS publicado 0.1.0 en demo, con
+`/demo-sessions`, el alta con `#connect` y CORS, probado contra el mini-erp en localhost: no hace
+falta estar en `site/backends.json` para usarlo), después rauldiazsolis/mini-erp#3 (su primer
+deploy) y el resto de rauldiazsolis/mini-erp#2 (anular cobranzas, avisos); #147 (sumarlo a
+`/versions`) queda al final; (2) en paralelo, el puente de Sheets publicado en cada carpeta de versión; (3) el puente al día con 4.4.0 y probado
 contra una planilla real. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
 Antes del primer comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin
 bloquear nada: #135. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
