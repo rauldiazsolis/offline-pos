@@ -6,6 +6,9 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   reporter: 'list',
+  // Un reintento solo en CI (#169): así `trace: 'on-first-retry'` deja la traza de un flake, que el
+  // workflow sube como artefacto. Un test que pasa al reintentar se ve como "flaky" en el log.
+  retries: process.env.CI ? 1 : 0,
   use: {
     baseURL: `http://localhost:${String(PORT)}`,
     trace: 'on-first-retry',
