@@ -36,6 +36,21 @@ beforeEach(() => {
 });
 
 describe('CartView', () => {
+  it('la línea seleccionada se marca con data-selected, sin fondo inline (#112)', () => {
+    cartSignal.value = {
+      lines: [
+        { kind: 'product', productId: 'p1', qty: 1, unitPrice: 100 },
+        { kind: 'product', productId: 'p1', qty: -1, unitPrice: 100 },
+      ],
+    };
+    cartSelectionIndexSignal.value = 1;
+    const { container } = render(<CartView />);
+    const rows = [...container.querySelectorAll<HTMLTableRowElement>('tbody tr')];
+    expect(rows[1]?.hasAttribute('data-selected')).toBe(true);
+    expect(rows[1]?.style.background).toBe('');
+    expect(rows[0]?.hasAttribute('data-selected')).toBe(false);
+  });
+
   it('muestra "carrito vacío" cuando no hay líneas', () => {
     render(<CartView />);
     expect(screen.getByText('El carrito está vacío.')).not.toBeNull();

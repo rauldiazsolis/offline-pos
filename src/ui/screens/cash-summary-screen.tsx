@@ -85,10 +85,6 @@ const dayButtonStyle = {
   padding: 'var(--space-1) var(--space-2)',
   cursor: 'pointer',
 };
-const rowStyle = (selected: boolean) => ({
-  background: selected ? 'var(--color-surface)' : undefined,
-  cursor: 'pointer',
-});
 
 const TAB_ORDER: CashSummaryTab[] = ['movements', 'products', 'payments'];
 const TAB_LABELS: Record<CashSummaryTab, string> = {
@@ -183,8 +179,8 @@ function rowContainerStyle(index: number) {
   const isSelected = index === selectedEntryIndexSignal.value;
   return {
     isSelected,
+    // La selección la pinta `.selectable-row[data-selected]` (tokens.css, #112).
     style: {
-      background: isSelected ? 'var(--color-surface)' : 'transparent',
       borderTop: index > 0 ? '1px solid var(--color-border)' : undefined,
       cursor: 'pointer',
     },
@@ -260,13 +256,14 @@ function MovementEntryRow({
   return (
     <div
       ref={nav.ticketRef(index)}
+      class="selectable-row"
+      data-selected={isSelected ? '' : undefined}
       onClick={() => {
         onSelect(index);
       }}
       style={{
         ...style,
         padding: 'var(--space-2) var(--space-3)',
-        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
@@ -293,13 +290,14 @@ function CountEntryRow({ count, index, nav, onSelect }: RowProps & { count: Cash
   return (
     <div
       ref={nav.ticketRef(index)}
+      class="selectable-row"
+      data-selected={isSelected ? '' : undefined}
       onClick={() => {
         onSelect(index);
       }}
       style={{
         ...style,
         padding: 'var(--space-2) var(--space-3)',
-        boxShadow: isSelected ? 'inset 3px 0 0 var(--color-accent)' : undefined,
         display: 'flex',
         justifyContent: 'space-between',
         gap: 'var(--space-2)',
@@ -441,7 +439,9 @@ function ProductsTab({
               onClick={() => {
                 onSelect(index);
               }}
-              style={rowStyle(index === selectedProductIndexSignal.value)}
+              class="selectable-row"
+              data-selected={index === selectedProductIndexSignal.value ? '' : undefined}
+              style={{ cursor: 'pointer' }}
             >
               <td
                 style={{
@@ -515,7 +515,9 @@ function PaymentsTab({
               onClick={() => {
                 onSelect(index);
               }}
-              style={rowStyle(index === selectedPaymentIndexSignal.value)}
+              class="selectable-row"
+              data-selected={index === selectedPaymentIndexSignal.value ? '' : undefined}
+              style={{ cursor: 'pointer' }}
             >
               <td style={{ padding: 'var(--space-1) var(--space-3)', fontWeight: 600 }}>
                 {highlightMatches(PAYMENT_METHOD_LABELS[method], query)}

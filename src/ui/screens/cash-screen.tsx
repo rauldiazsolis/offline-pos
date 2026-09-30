@@ -306,14 +306,12 @@ export function CashScreen() {
                 chooseConceptSuggestion(index);
                 focusField('description');
               }}
+              class="selectable-row"
+              data-selected={index === conceptSuggestionIndexSignal.value ? '' : undefined}
               style={{
                 padding: 'var(--space-1) var(--space-2)',
                 borderRadius: 'var(--radius-md)',
                 cursor: 'pointer',
-                background:
-                  index === conceptSuggestionIndexSignal.value
-                    ? 'var(--color-surface)'
-                    : 'transparent',
               }}
             >
               {concept}
