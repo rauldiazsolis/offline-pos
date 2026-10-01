@@ -367,7 +367,8 @@ qué hacer si falla) en `docs/publicacion.md`.
 - **`site/`** es tooling de publicación en TypeScript que Node 24 corre sin compilar; puede importar
   módulos puros de `src/`, nunca al revés. Sus errores se lanzan (una publicación con datos malos
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
-  arman y sirven el sitio en local (`4174`).
+  arman y sirven el sitio en local (`4174`); con `--only-local`, `/versions` consulta solo los
+  backends locales (lo usa el e2e, para no depender de uno publicado).
 - **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
   cada `/<versión>/docs/`. El OpenAPI no lleva referencias internas (issues, specs, `AGENTS.md`): lo
   vigila `site/docs.test.ts`.

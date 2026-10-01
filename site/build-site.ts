@@ -9,13 +9,19 @@ import { isMain } from './cli.ts';
  * `/versions`. No arma el zip (lo hace la Action con `zip`) ni parte de la rama `publish`.
  */
 if (isMain(import.meta.url)) {
-  const { values } = parseArgs({ options: { dist: { type: 'string' }, out: { type: 'string' } } });
+  const { values } = parseArgs({
+    options: {
+      dist: { type: 'string' },
+      out: { type: 'string' },
+      'only-local': { type: 'boolean', default: false },
+    },
+  });
   if (values.dist === undefined || values.out === undefined) {
-    throw new Error('Uso: node site/build-site.ts --dist <dir> --out <dir>');
+    throw new Error('Uso: node site/build-site.ts --dist <dir> --out <dir> [--only-local]');
   }
   rmSync(values.out, { recursive: true, force: true });
   mkdirSync(values.out, { recursive: true });
   buildVersionFolder({ distDir: values.dist, siteDir: values.out, info: currentVersionInfo() });
-  await buildVersionsPage(values.out, new Date());
+  await buildVersionsPage(values.out, new Date(), { onlyLocal: values['only-local'] });
   console.log(`Sitio armado en ${values.out}`);
 }
