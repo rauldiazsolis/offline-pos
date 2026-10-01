@@ -40,6 +40,8 @@ con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4
 carpeta de la versión arranca con rutas relativas y que su almacenamiento es
 `offline-pos@/<versión>/`. El resto de la suite sigue en `/`: prueba de paso que la raíz no cambió. El
 redirect de `/` y los headers son de Cloudflare: se verifican en la primera publicación.
+Se arma con `--only-local` (#147): `/versions` solo con el demo-backend local, así el e2e no
+depende de un backend publicado ni le crea una demo en cada corrida.
 
 **Flakes en CI** (#169): `playwright.config.ts` reintenta una vez solo con `CI`, así
 `trace: 'on-first-retry'` deja la traza; un test que pasa al reintentar sale como "flaky" en el log.

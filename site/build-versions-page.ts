@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { loadBackends } from './backends.ts';
+import { loadBackends, selectBackends } from './backends.ts';
 import { isMain } from './cli.ts';
 import { withLocalDemoBackend } from './local-demo-backend.ts';
 import { queryBackend } from './query-backend.ts';
@@ -25,10 +25,14 @@ function writeIfChanged(path: string, content: string): void {
  * Regenera `/versions/index.html`, `/llms.txt`, `_headers` y `_redirects` del sitio (#148),
  * consultando cada backend conocido. Falla si alguno no contesta.
  */
-export async function buildVersionsPage(siteDir: string, now: Date): Promise<void> {
+export async function buildVersionsPage(
+  siteDir: string,
+  now: Date,
+  { onlyLocal = false }: { onlyLocal?: boolean } = {},
+): Promise<void> {
   const versions = readPublishedVersions(siteDir);
   const backends: KnownBackend[] = [];
-  for (const entry of loadBackends()) {
+  for (const entry of selectBackends(loadBackends(), { onlyLocal })) {
     const facts =
       entry.local === 'demo-backend'
         ? await withLocalDemoBackend((url) => queryBackend(url, now))

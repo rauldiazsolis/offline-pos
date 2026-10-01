@@ -30,6 +30,17 @@ export function parseBackends(raw: unknown): BackendEntry[] {
   }));
 }
 
+/**
+ * `onlyLocal`: solo los que levanta la propia corrida. Lo usa el e2e (#147), para no depender de un
+ * backend publicado ni crearle una demo en cada corrida; la Action los consulta todos.
+ */
+export function selectBackends(
+  backends: BackendEntry[],
+  { onlyLocal }: { onlyLocal: boolean },
+): BackendEntry[] {
+  return onlyLocal ? backends.filter((entry) => entry.local !== undefined) : backends;
+}
+
 export function loadBackends(
   path: URL = new URL('./backends.json', import.meta.url),
 ): BackendEntry[] {

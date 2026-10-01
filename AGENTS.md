@@ -361,11 +361,14 @@ qué hacer si falla) en `docs/publicacion.md`.
   **sitio** (la app nunca lo lee) y cambia por PR. El contrato y las capacidades de cada backend se
   consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de contrato; `/info` público
   quedó en #151), así que la lista solo admite backends con demo. Se regenera con el tag, con un push
-  a `main` que toca `site/`, todos los días y a mano; si un backend no contesta, no se publica nada.
+  a `main` que toca `site/`, todos los días y a mano; si un backend no contesta, no se publica nada
+  (con un tag, ni la carpeta). Lista el demo-backend local y mini contax
+  (`https://mini.contax.ar/connector`, #147).
 - **`site/`** es tooling de publicación en TypeScript que Node 24 corre sin compilar; puede importar
   módulos puros de `src/`, nunca al revés. Sus errores se lanzan (una publicación con datos malos
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
-  arman y sirven el sitio en local (`4174`).
+  arman y sirven el sitio en local (`4174`); con `--only-local`, `/versions` consulta solo los
+  backends locales (lo usa el e2e, para no depender de uno publicado).
 - **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
   cada `/<versión>/docs/`. El OpenAPI no lleva referencias internas (issues, specs, `AGENTS.md`): lo
   vigila `site/docs.test.ts`.
@@ -534,6 +537,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
+| #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0`,
 2026-09-29; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
@@ -557,8 +561,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180; #147 (sumar el mini-erp a
-  `/versions`), sin bloquear nada.
+- MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180.
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del

@@ -128,7 +128,9 @@ Abrí la corrida en **Actions** y mirá el paso que falló:
   (`0.1.1`) y publicá esa.
 - **Un backend no contesta** (en `/versions y /llms.txt`): el sitio queda como estaba. Se reintenta
   solo al día siguiente, o a mano en **Actions** → **Publicación** → **Run workflow**. Si el backend
-  dejó de existir, sacalo de `site/backends.json`.
+  dejó de existir, sacalo de `site/backends.json`. Con un **tag** tampoco se publica la carpeta de la
+  versión (el commit va después de `/versions`): cuando el backend vuelva, abrí esa misma corrida y
+  usá **Re-run jobs**, no **Run workflow** (que corre sobre `main` y solo regenera `/versions`).
 
 ## 8. Dominio propio (#150)
 
