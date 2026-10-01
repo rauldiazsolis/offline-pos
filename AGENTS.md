@@ -352,6 +352,11 @@ qué hacer si falla) en `docs/publicacion.md`.
   IndexedDB y su prefijo de `localStorage`; en `/` sigue siendo `offline-pos` (detalle en
   `src/storage/AGENTS.md`). Cambiar de carpeta, de versión o de dominio es una instalación nueva (un
   canal estable llega con #54). `/DIAGNOSTICO` muestra la versión y el almacenamiento.
+- **Dominio** (#150): `https://pos.contax.ar`, dominio propio del proyecto de Pages con un CNAME en
+  el DNS de DreamHost; `pos.contax.com.ar` redirige ahí con el Redirect de DreamHost (como todo
+  `*.contax.com.ar` → `*.contax.ar`). `offline-pos.pages.dev` sigue sirviendo, sin redirigir: es otro
+  origen con sus propias terminales, y el mini-erp todavía baja de ahí su copia del POS y el contrato.
+  Una terminal real se instala solo en `pos.contax.ar`. Pasos en `docs/publicacion.md`.
 - **`/versions`** cruza todas las carpetas publicadas con `site/backends.json`, que es un dato del
   **sitio** (la app nunca lo lee) y cambia por PR. El contrato y las capacidades de cada backend se
   consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de contrato; `/info` público
@@ -528,13 +533,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
 | Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
+| #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 
-**Siguiente**: el MVP del POS está publicado en https://offline-pos.pages.dev (`0.1.0`,
+**Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0`,
 2026-09-29; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
-impresión (#174) y una sola pestaña (#175), más #54 (service worker) y #150 (dominio propio); antes
+impresión (#174) y una sola pestaña (#175), más #54 (service worker); antes
 del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
 (contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
@@ -553,8 +559,8 @@ etiqueta antes de tomar un issue.
 - Config y accesibilidad: #41 (resize en DevTools).
 - MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180; #147 (sumar el mini-erp a
   `/versions`), sin bloquear nada.
-- Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento),
-  #150 (dominio propio); `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
+- Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
+  `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del
   backend).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).

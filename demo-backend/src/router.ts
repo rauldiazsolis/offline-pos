@@ -82,7 +82,7 @@ export async function handleRequest(
   // El preflight del navegador no tiene body ni le importa ninguna ruta en
   // particular — solo pregunta si el request real va a estar permitido.
   if (method === 'OPTIONS') {
-    // Una página pública (el POS en pages.dev) que llama a localhost: Chrome pide permiso de red
+    // Una página pública (el POS publicado) que llama a localhost: Chrome pide permiso de red
     // local, y algunos Chromium todavía mandan este preflight de Private Network Access (#148).
     if (req.headers['access-control-request-private-network'] === 'true') {
       res.setHeader('Access-Control-Allow-Private-Network', 'true');

@@ -84,7 +84,7 @@ production branch deployments** para `publish`.
 
 ## 5. Verificar
 
-Con `https://<proyecto>.pages.dev`:
+Con `https://pos.contax.ar` (antes del dominio propio era `https://<proyecto>.pages.dev`; ver §8):
 
 1. `/` redirige a `/versions/` (lo hace `_redirects`).
 2. `/versions/` lista `0.1.0`, con el demo-backend local, su contrato y sus capacidades.
@@ -92,7 +92,7 @@ Con `https://<proyecto>.pages.dev`:
 4. Los assets tienen caché larga:
 
    ```sh
-   curl -I https://<proyecto>.pages.dev/0.1.0/assets/<un archivo de la carpeta>
+   curl -I https://pos.contax.ar/0.1.0/assets/<un archivo de la carpeta>
    ```
 
    tiene que mostrar `cache-control: public, max-age=31536000, immutable`.
@@ -130,8 +130,62 @@ Abrí la corrida en **Actions** y mirá el paso que falló:
   solo al día siguiente, o a mano en **Actions** → **Publicación** → **Run workflow**. Si el backend
   dejó de existir, sacalo de `site/backends.json`.
 
-## 8. Dominio propio (#150, cuando llegue)
+## 8. Dominio propio (#150)
 
-En el proyecto de Pages → **Custom domains**. Tené en cuenta que el almacenamiento del navegador es
-por origen: pasar de `*.pages.dev` al dominio propio es una instalación nueva para cada terminal (lo
-que no se sincronizó queda en la dirección vieja).
+El POS se publica en **`https://pos.contax.ar`**. El DNS de `contax.ar` y `contax.com.ar` está en
+DreamHost y se queda ahí: Cloudflare solo sirve el sitio.
+
+### `pos.contax.ar` en Pages
+
+El orden importa: primero Cloudflare, después el DNS (con el registro cargado antes, Cloudflare
+contesta con un error 522).
+
+1. En Cloudflare: **Workers & Pages** → el proyecto `offline-pos` → **Custom domains** → **Set up a
+   custom domain** → `pos.contax.ar` → **Continue**. Como el DNS no está en Cloudflare, muestra el
+   registro a cargar: un **CNAME** con nombre `pos` y destino `offline-pos.pages.dev`, y queda en
+   **Inactive (Requires DNS setup)**.
+2. En DreamHost: la sección de **DNS** del dominio `contax.ar` → agregar un registro **CNAME**, nombre
+   `pos`, valor `offline-pos.pages.dev`.
+3. Comprobar que el DNS ya lo devuelve (puede tardar unos minutos):
+
+   ```sh
+   nslookup pos.contax.ar 8.8.8.8
+   ```
+
+   tiene que mostrar `Name: offline-pos.pages.dev` y `Aliases: pos.contax.ar`.
+4. De vuelta en **Custom domains**: **Complete DNS setup** → **Check DNS records**. Si Cloudflare
+   revisó antes de que el registro llegara a todos los servidores de DreamHost, sigue en
+   **Inactive**: vuelve a revisar solo y avisa por mail. Cuando dice **Active**, emite el certificado
+   en unos minutos.
+5. Verificar con `https://pos.contax.ar` (§5).
+
+Ningún registro CAA de `contax.ar` limita quién emite certificados; si algún día se agrega uno, tiene
+que permitir a las autoridades que usa Cloudflare.
+
+### `pos.contax.com.ar` redirige a `pos.contax.ar`
+
+Como todo `*.contax.com.ar`, redirige a su par en `*.contax.ar`. Lo hace DreamHost, sin pasar por
+Cloudflare:
+
+1. En [panel.dreamhost.com](https://panel.dreamhost.com): **Websites** → **Manage Websites** →
+   **Add Website** → **Create a Subdomain** → `pos.contax.com.ar` → **Continue**.
+2. Elegir **Redirect Domain**, con **Destination URL** `https://pos.contax.ar` (sin barra ni ruta al
+   final), y guardar con **Redirect Domain**. DreamHost crea solo el registro DNS del subdominio.
+3. En **Manage Websites**, en `pos.contax.com.ar`: agregarle el certificado gratuito de **Let's
+   Encrypt**.
+4. Verificar:
+
+   ```sh
+   curl -I https://pos.contax.com.ar/0.1.0/
+   ```
+
+   tiene que mostrar un `301` con `location: https://pos.contax.ar/0.1.0/` (la ruta se conserva).
+
+### `offline-pos.pages.dev` sigue sirviendo
+
+No redirige al dominio propio. El almacenamiento del navegador es **por origen**: una terminal que
+operó en `offline-pos.pages.dev` no ve sus datos en `pos.contax.ar` (lo que no se sincronizó queda en
+la dirección vieja), así que una redirección no traería nada y le cortaría el acceso a lo guardado.
+Las dos direcciones son instalaciones separadas que no se mezclan; la oficial es `pos.contax.ar` y
+una terminal real se instala solo ahí. Además, el mini-erp baja de `offline-pos.pages.dev` su copia
+del POS publicado y el contrato.
