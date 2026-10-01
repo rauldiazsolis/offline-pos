@@ -162,6 +162,25 @@ contesta con un error 522).
 Ningún registro CAA de `contax.ar` limita quién emite certificados; si algún día se agrega uno, tiene
 que permitir a las autoridades que usa Cloudflare.
 
+### `pos.contax.com.ar` redirige a `pos.contax.ar`
+
+Como todo `*.contax.com.ar`, redirige a su par en `*.contax.ar`. Lo hace DreamHost, sin pasar por
+Cloudflare:
+
+1. En [panel.dreamhost.com](https://panel.dreamhost.com): **Websites** → **Manage Websites** →
+   **Add Website** → **Create a Subdomain** → `pos.contax.com.ar` → **Continue**.
+2. Elegir **Redirect Domain**, con **Destination URL** `https://pos.contax.ar` (sin barra ni ruta al
+   final), y guardar con **Redirect Domain**. DreamHost crea solo el registro DNS del subdominio.
+3. En **Manage Websites**, en `pos.contax.com.ar`: agregarle el certificado gratuito de **Let's
+   Encrypt**.
+4. Verificar:
+
+   ```sh
+   curl -I https://pos.contax.com.ar/0.1.0/
+   ```
+
+   tiene que mostrar un `301` con `location: https://pos.contax.ar/0.1.0/` (la ruta se conserva).
+
 ### `offline-pos.pages.dev` sigue sirviendo
 
 No redirige al dominio propio. El almacenamiento del navegador es **por origen**: una terminal que
