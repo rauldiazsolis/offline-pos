@@ -351,6 +351,11 @@ qué hacer si falla) en `docs/publicacion.md`.
   IndexedDB y su prefijo de `localStorage`; en `/` sigue siendo `offline-pos` (detalle en
   `src/storage/AGENTS.md`). Cambiar de carpeta, de versión o de dominio es una instalación nueva (un
   canal estable llega con #54). `/DIAGNOSTICO` muestra la versión y el almacenamiento.
+- **Dominio** (#150): `https://pos.contax.ar`, dominio propio del proyecto de Pages con un CNAME en
+  el DNS de DreamHost; `pos.contax.com.ar` redirige ahí con el Redirect de DreamHost (como todo
+  `*.contax.com.ar` → `*.contax.ar`). `offline-pos.pages.dev` sigue sirviendo, sin redirigir: es otro
+  origen con sus propias terminales, y el mini-erp todavía baja de ahí su copia del POS y el contrato.
+  Una terminal real se instala solo en `pos.contax.ar`. Pasos en `docs/publicacion.md`.
 - **`/versions`** cruza todas las carpetas publicadas con `site/backends.json`, que es un dato del
   **sitio** (la app nunca lo lee) y cambia por PR. El contrato y las capacidades de cada backend se
   consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de contrato; `/info` público
@@ -528,7 +533,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 
-**Siguiente**: el MVP está publicado en https://offline-pos.pages.dev (`0.1.0`, 2026-09-29; se
+**Siguiente**: el MVP está publicado en https://pos.contax.ar (`0.1.0`, 2026-09-29; se
 publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
 el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp, en su repo —
 rauldiazsolis/mini-erp#9 (un landing en su raíz abre el POS publicado 0.1.0 en demo, con
@@ -537,7 +542,7 @@ falta estar en `site/backends.json` para usarlo), después rauldiazsolis/mini-er
 deploy) y el resto de rauldiazsolis/mini-erp#2 (anular cobranzas, avisos); #147 (sumarlo a
 `/versions`) queda al final; (2) en paralelo, el puente de Sheets publicado en cada carpeta de versión; (3) el puente al día con 4.4.0 y probado
 contra una planilla real. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
-Antes del primer comercio real: service worker (#54) y dominio propio (#150). En paralelo, sin
+Antes del primer comercio real: service worker (#54). En paralelo, sin
 bloquear nada: #135. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
 depende de ella (§11 del diseño).
 
@@ -555,7 +560,7 @@ etiqueta antes de tomar un issue.
 - Config y accesibilidad: #41 (resize en DevTools).
 - Cierre del MVP: epic #166, con #147 (backend para la demo pública) y el puente de Sheets.
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
-  `backlog`: #150 (dominio propio), #151 (`GET /info` sin autenticación), #52 (Historial), #143
+  `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
