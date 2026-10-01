@@ -64,7 +64,7 @@ describe('createApp', () => {
 
   it('contesta el preflight de red privada de Chrome (#148)', async () => {
     const headers = await preflight({
-      Origin: 'https://offline-pos.pages.dev',
+      Origin: 'https://pos.contax.ar',
       'Access-Control-Request-Method': 'GET',
       'Access-Control-Request-Private-Network': 'true',
     });
@@ -73,7 +73,7 @@ describe('createApp', () => {
 
   it('sin el pedido de red privada no lo manda', async () => {
     const headers = await preflight({
-      Origin: 'https://offline-pos.pages.dev',
+      Origin: 'https://pos.contax.ar',
       'Access-Control-Request-Method': 'GET',
     });
     expect(headers['access-control-allow-private-network']).toBeUndefined();
