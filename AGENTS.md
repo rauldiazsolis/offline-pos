@@ -41,8 +41,9 @@ backend externo (ERP, e-commerce, facturación) vía un contrato de API propio v
 conoce ningún backend específico.
 
 Fuera de alcance por ahora: facturación fiscal de un país específico (idea en #73), pasarelas de pago
-(un pago es medio + monto, con 6 medios fijos y sin integración con ningún procesador) y hardware
-(impresora, cajón: Fase 5, pospuesta a v2).
+(un pago es medio + monto, con 6 medios fijos y sin integración con ningún procesador) y la mayor parte
+del hardware. La impresión de tickets (58 y 80 mm, A6 y ESC/POS directo, con corte y cajón) entra
+en el MVP de mini contax (#174).
 
 ## Cómo trabajamos
 
@@ -100,7 +101,7 @@ en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 | Build | Vite |
 | Testing | Vitest + Testing Library (preact) + Playwright |
 | PWA / service worker | `vite-plugin-pwa` (Workbox) — **pendiente** (#54) |
-| Impresión / hardware | Web Serial / WebUSB — **pendiente** (Fase 5, v2) |
+| Impresión / hardware | `window.print()` y, en Chromium, Web Serial / WebUSB — **pendiente** (#174) |
 
 Navegador de referencia: Chromium (Chrome/Edge). La app anda en Firefox/Safari; el hardware, cuando
 exista, va a depender de Web Serial/WebUSB (solo Chromium).
@@ -534,18 +535,15 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 
-**Siguiente**: el MVP está publicado en https://pos.contax.ar (`0.1.0`, 2026-09-29; se
-publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
-el **cierre del MVP** (epic #166), en este orden: (1) el circuito con el mini-erp, en su repo —
-rauldiazsolis/mini-erp#9 (un landing en su raíz abre el POS publicado 0.1.0 en demo, con
-`/demo-sessions`, el alta con `#connect` y CORS, probado contra el mini-erp en localhost: no hace
-falta estar en `site/backends.json` para usarlo), después rauldiazsolis/mini-erp#3 (su primer
-deploy) y el resto de rauldiazsolis/mini-erp#2 (anular cobranzas, avisos); #147 (sumarlo a
-`/versions`) queda al final; (2) en paralelo, el puente de Sheets publicado en cada carpeta de versión; (3) el puente al día con 4.4.0 y probado
-contra una planilla real. Después del MVP: #102 (comandos de consulta, antes la Etapa 7 de #94).
-Antes del primer comercio real: service worker (#54). En paralelo, sin
-bloquear nada: #135. Fase 5 (hardware) pospuesta a v2: depende de dispositivos reales y nada
-depende de ella (§11 del diseño).
+**Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0`,
+2026-09-29; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
+producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
+del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
+impresión (#174) y una sola pestaña (#175), más #54 (service worker); antes
+del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
+(contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
+MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
 etiqueta antes de tomar un issue.
@@ -559,10 +557,12 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- Cierre del MVP: epic #166, con #147 (backend para la demo pública) y el puente de Sheets.
+- MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180; #147 (sumar el mini-erp a
+  `/versions`), sin bloquear nada.
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
-  (pasar de demo a producción sin repetir el onboarding).
+  (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del
+  backend).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:
