@@ -532,6 +532,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #152 | La barra no pierde lo tipeado durante el alta de un cliente (era el flake de `account-sale.spec.ts`) | PR #154 |
 | Epic #161, Etapas 1 y 2 | El mini-erp se muda a rauldiazsolis/mini-erp; offline-pos queda sin `mini-erp/` ni `.agents/` y con el lockfile limpio | rauldiazsolis/mini-erp#4, PR #162, PR #163 |
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
+| #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 
 **Siguiente**: el MVP está publicado en https://pos.contax.ar (`0.1.0`, 2026-09-29; se
 publica con `docs/publicacion.md`), para developers con el demo-backend en `localhost:4000`. Ahora,
