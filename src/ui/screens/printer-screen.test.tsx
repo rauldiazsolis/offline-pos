@@ -43,7 +43,7 @@ describe('PrinterScreen', () => {
     expect(screen.queryByRole('button', { name: 'Imprimir' })).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'No imprimir' }));
     expect(screen.queryByRole('button', { name: 'Imprimir' })).toBeNull();
-    expect(screen.queryByText('Prueba de impresión')).toBeNull();
+    expect(screen.queryByText('Prueba de impresión (Alt+P)')).toBeNull();
   });
 
   it('Ctrl+Enter guarda y vuelve a la venta', () => {
@@ -69,8 +69,25 @@ describe('PrinterScreen', () => {
   it('la prueba imprime el ejemplo en el formato elegido', () => {
     render(<PrinterScreen />);
     fireEvent.click(screen.getByRole('button', { name: '80 mm' }));
-    fireEvent.click(screen.getByText('Prueba de impresión'));
+    fireEvent.click(screen.getByText('Prueba de impresión (Alt+P)'));
     expect(printed).toEqual(['80mm:PRUEBA']);
+  });
+
+  it('Alt+P imprime la prueba, también desde un textarea; con "No imprimir" no hace nada', () => {
+    render(<PrinterScreen />);
+    fireEvent.keyDown(screen.getByLabelText('Encabezado'), {
+      key: 'π',
+      code: 'KeyP',
+      altKey: true,
+    });
+    expect(printed).toEqual(['a6:PRUEBA']);
+    fireEvent.click(screen.getByRole('button', { name: 'No imprimir' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'No imprimir' }), {
+      key: 'p',
+      code: 'KeyP',
+      altKey: true,
+    });
+    expect(printed).toEqual(['a6:PRUEBA']);
   });
 
   it('la vista previa usa el encabezado tipeado y el formato elegido', () => {

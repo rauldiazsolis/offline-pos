@@ -132,7 +132,8 @@ function OptionGroup<T extends string>(props: {
 
 /**
  * `/IMPRESORA` (#174): formato, qué pasa al cobrar, encabezado y pie, con la vista previa del
- * ticket de ejemplo. Ctrl+Enter guarda (Enter en un `textarea` es salto de línea), Esc cancela.
+ * ticket de ejemplo. Ctrl+Enter guarda (Enter en un `textarea` es salto de línea), Alt+P imprime
+ * la prueba y Esc cancela.
  */
 export function PrinterScreen() {
   const form = printerFormSignal.value;
@@ -147,6 +148,12 @@ export function PrinterScreen() {
     if (event.key === 'Enter' && event.ctrlKey) {
       event.preventDefault();
       savePrinterForm();
+      return;
+    }
+    // Por la tecla física: en algunos sistemas Alt+P escribe otro carácter (`event.key` no es "p").
+    if (event.altKey && event.code === 'KeyP') {
+      event.preventDefault();
+      if (form.format !== 'none') void printTestReceipt();
     }
   };
 
@@ -228,7 +235,7 @@ export function PrinterScreen() {
                 void printTestReceipt();
               }}
             >
-              Prueba de impresión
+              Prueba de impresión (Alt+P)
             </button>
           )}
           <button type="button" class="btn btn-primary" onClick={savePrinterForm}>
