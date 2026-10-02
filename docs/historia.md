@@ -990,6 +990,23 @@ encontró un caso que las capturas del brainstorming no mostraban: el botón "Si
 barra de estado se partía en dos renglones; los botones de las franjas pasaron a `nowrap`. Desvíos
 del plan en `docs/superpowers/plans/2026-09-29-foco-seleccion-y-texto.md`.
 
+**Impresión de tickets (#174, PR #190)**. Primera etapa del MVP de mini contax (epic #182). Hasta
+acá, Enter en el comprobante llamaba a `window.print()` sobre la pantalla entera con un `@media print`.
+Se descartó extender eso (no imprimía sin pasar por la pantalla y arrastraba los estilos de la app) y
+el texto de ancho fijo en `<pre>`. Quedó un modelo del comprobante (`ReceiptDocument`) que dibuja un
+solo componente, en la pantalla y en un iframe aparte para imprimir, detrás de un puerto
+(`ReceiptPrinter`) donde va a entrar ESC/POS (#188, afuera por no tener una impresora con qué
+probarlo). La config es un comando propio, `/IMPRESORA`, y no `/CONFIG`: la impresora es del equipo,
+no de la conexión. "Al cobrar" tiene tres opciones, porque usar el POS solo para registrar ("Nada") se
+espera común. Lo que se encontró en el camino: el ticket en pantalla, dibujado en mm y pt, quedaba en
+7,8 px a 600 px (debajo del piso de #111), así que el papel se muestra a tamaño real cancelando el zoom
+de la app, y `text-size.spec.ts` pasó a medir con el zoom acumulado; el botón de Reimprimir hacía
+desbordar la franja de `/RESUMEN` a 600 px (parecía un test inestable). En la prueba manual, los
+grupos tipo radio de `/IMPRESORA` dejaban la pantalla muy alta y cambiaba de forma con el formato: se
+pasó a `select`s con columnas fijas, y se sumaron avisos después de cobrar y de reimprimir, porque con
+"Nada" no quedaba ninguna señal de que la venta se había registrado. Enter para anular en `/RESUMEN`
+quedó en #140. Spec y plan en `docs/superpowers/` (2026-10-02).
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores

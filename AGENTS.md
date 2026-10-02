@@ -541,13 +541,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
+| #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
-impresión (#174) y una sola pestaña (#175), más #54 (service worker); antes
+una sola pestaña (#175) y #54 (service worker) — la impresión (#174) ya está; antes
 del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
 (contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
@@ -564,7 +565,8 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180.
+- MVP de mini contax: epic #182 (#175 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+  directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del
