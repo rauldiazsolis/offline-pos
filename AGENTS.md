@@ -539,8 +539,8 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
 
-**Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0`,
-2026-09-29; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+**Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
+2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
