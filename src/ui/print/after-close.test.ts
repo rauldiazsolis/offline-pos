@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_PRINTER_CONFIG, type PrinterConfig } from '../../storage/printer-config.ts';
+import { commandBarNoticeSignal, overlayDismissedSignal } from '../state/command-bar.ts';
 import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
 import { receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
@@ -18,6 +19,7 @@ const source: ReceiptSource = {
     total: 50,
     status: 'closed',
     createdAt: '2026-10-02T12:00:00.000Z',
+    ticket: { date: '2026-10-02', number: 4 },
   },
 };
 
@@ -35,6 +37,8 @@ beforeEach(() => {
   });
   receiptSignal.value = null;
   activeScreenSignal.value = 'checkout';
+  commandBarNoticeSignal.value = null;
+  overlayDismissedSignal.value = false;
 });
 
 afterEach(() => {
@@ -71,6 +75,48 @@ describe('showOrPrintReceipt', () => {
     showOrPrintReceipt(source);
     expect(activeScreenSignal.value).toBe('receipt');
     expect(printed).toEqual([]);
+  });
+});
+
+describe('showOrPrintReceipt — aviso en la barra', () => {
+  it('Nada: "Ticket #4 registrado."', () => {
+    useConfig({ format: '80mm', onCheckout: 'skip' });
+    overlayDismissedSignal.value = true;
+    showOrPrintReceipt(source);
+    expect(commandBarNoticeSignal.value).toBe('Ticket #4 registrado.');
+    // Como `/CAJA`: si el overlay quedó cerrado por un click, el aviso no se vería.
+    expect(overlayDismissedSignal.value).toBe(false);
+  });
+
+  it('Imprimir: "Ticket #4 registrado y enviado a imprimir."', () => {
+    useConfig({ format: '58mm', onCheckout: 'print' });
+    showOrPrintReceipt(source);
+    expect(commandBarNoticeSignal.value).toBe('Ticket #4 registrado y enviado a imprimir.');
+  });
+
+  it('una cobranza nombra el recibo y el cliente', () => {
+    useConfig({ format: '80mm', onCheckout: 'skip' });
+    showOrPrintReceipt({
+      kind: 'collection',
+      copy: false,
+      customerName: 'Ana',
+      balances: { before: 0, after: -500 },
+      payment: {
+        id: 'pay-1',
+        customerId: 'c1',
+        payments: [{ method: 'cash', amount: 500 }],
+        total: 500,
+        createdAt: '2026-10-02T13:00:00.000Z',
+        receipt: { date: '2026-10-02', number: 3 },
+      },
+    });
+    expect(commandBarNoticeSignal.value).toBe('Recibo #3 de Ana registrado.');
+  });
+
+  it('Mostrar: sin aviso (el comprobante ya dice qué pasó)', () => {
+    useConfig({ format: '80mm', onCheckout: 'show' });
+    showOrPrintReceipt(source);
+    expect(commandBarNoticeSignal.value).toBeNull();
   });
 });
 

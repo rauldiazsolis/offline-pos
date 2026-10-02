@@ -74,6 +74,7 @@ test('Al cobrar: Imprimir — registra, imprime y sigue con la venta', async ({ 
   await expect(commandBar).toBeFocused();
   await expect(commandBar).toHaveValue('');
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toHaveCount(0);
+  await expect(page.getByText('Ticket #1 registrado y enviado a imprimir.')).toBeVisible();
   await expect.poll(() => printedTexts(page)).toHaveLength(1);
   const [printed] = await printedTexts(page);
   expect(printed).toContain('Kiosco E2E');
@@ -89,6 +90,7 @@ test('Al cobrar: Nada — vuelve directo a la venta sin imprimir', async ({ page
 
   await expect(page.getByLabel('Barra de comandos')).toBeFocused();
   await expect(page.getByRole('heading', { name: 'Comprobante' })).toHaveCount(0);
+  await expect(page.getByText('Ticket #1 registrado.')).toBeVisible();
   expect(await printedTexts(page)).toEqual([]);
   expect(await getAllFromStore(page, 'sales')).toHaveLength(1);
 });
