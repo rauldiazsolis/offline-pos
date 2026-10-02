@@ -1,3 +1,4 @@
+import type { DayEntry } from '../../domain/day-summary.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import { getDaySummary } from '../../storage/cash-summary-repository.ts';
 import {
@@ -11,6 +12,8 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
+import { reprintReceipt } from '../print/after-close.ts';
+import type { ReceiptSource } from '../print/resolve-receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 /** Capa de glue entre `/RESUMEN` y `storage/cash-summary-repository.ts` — mismo rol que `cash-controller.ts`. */
@@ -96,4 +99,37 @@ export function updatePaymentFilter(value: string): void {
   // coincidencias, nunca oculta filas, así que no hace falta reindexar la selección como en
   // Productos.
   paymentFilterSignal.value = value;
+}
+
+/**
+ * Qué se reimprime de una fila de Movimientos (#174): ventas y cobranzas (también las anuladas y
+ * las anulaciones), siempre como copia. Una cobranza va sin saldos: los de ese momento no están
+ * guardados. Los movimientos de caja y los arqueos no tienen comprobante.
+ */
+export function reprintSourceFor(
+  entry: DayEntry,
+  customerNames: ReadonlyMap<string, string>,
+): ReceiptSource | undefined {
+  switch (entry.kind) {
+    case 'sale':
+      return { kind: 'sale', sale: entry.sale, copy: true };
+    case 'collection':
+      return {
+        kind: 'collection',
+        payment: entry.payment,
+        customerName: customerNames.get(entry.payment.customerId) ?? entry.payment.customerId,
+        copy: true,
+      };
+    case 'movement':
+    case 'count':
+      return undefined;
+  }
+}
+
+/** Reimprimir (o ver, sin papel) la fila elegida; nada si no es una venta ni una cobranza. */
+export function reprintEntry(entry: DayEntry, customerNames: ReadonlyMap<string, string>): void {
+  const source = reprintSourceFor(entry, customerNames);
+  if (source !== undefined) {
+    reprintReceipt(source);
+  }
 }

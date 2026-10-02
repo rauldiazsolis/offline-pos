@@ -29,6 +29,8 @@ import {
 } from '../keyboard/cash-form-model.ts';
 import {
   exitCashSummaryScreen,
+  reprintEntry,
+  reprintSourceFor,
   setCashSummaryTab,
   showNextDay,
   showPreviousDay,
@@ -49,6 +51,7 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
+import { printerConfigSignal } from '../state/printer.ts';
 import { scaledPx } from '../text-scale.ts';
 
 const sidebarCardStyle = {
@@ -687,6 +690,17 @@ export function CashSummaryScreen() {
   const today = localDateKey(new Date().toISOString());
   const canGoBack = view.date > view.oldestDate;
   const canGoForward = !view.isToday;
+  // Reimprimir (#174): solo con una venta o una cobranza elegida en Movimientos.
+  const selectedEntry =
+    tab === 'movements' ? filteredEntries[selectedEntryIndexSignal.value] : undefined;
+  const reprintable =
+    selectedEntry !== undefined &&
+    reprintSourceFor(selectedEntry, view.customerNames) !== undefined;
+  const reprintLabel =
+    printerConfigSignal.value.format === 'none' ? 'Ver comprobante (Enter)' : 'Reimprimir (Enter)';
+  const reprintSelected = () => {
+    if (selectedEntry !== undefined) reprintEntry(selectedEntry, view.customerNames);
+  };
 
   const filterValue =
     tab === 'products'
@@ -743,6 +757,15 @@ export function CashSummaryScreen() {
         (currentIdx + (event.shiftKey ? -1 : 1) + TAB_ORDER.length) % TAB_ORDER.length;
       const nextTab = TAB_ORDER[nextIdx];
       if (nextTab !== undefined) setCashSummaryTab(nextTab);
+      return;
+    }
+    // Enter no estaba usado en Movimientos (lo tipeado va al buscador): Reimprimir (#174). Un botón
+    // enfocado se activa solo, de forma nativa.
+    if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
+      if (reprintable) {
+        event.preventDefault();
+        reprintSelected();
+      }
       return;
     }
     const navHandled =
@@ -892,6 +915,18 @@ export function CashSummaryScreen() {
               {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
             </button>
           ))}
+          {reprintable && (
+            <button
+              type="button"
+              onClick={() => {
+                reprintSelected();
+                focusFilter();
+              }}
+              style={tabButtonStyle(false)}
+            >
+              {reprintLabel}
+            </button>
+          )}
         </div>
       </div>
       <div

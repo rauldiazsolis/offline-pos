@@ -1,5 +1,8 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { CustomerPayment } from '../../domain/customer-payment.ts';
+import type { DayEntry } from '../../domain/day-summary.ts';
+import type { Sale } from '../../domain/sale.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import { db } from '../../storage/db.ts';
 import {
@@ -18,6 +21,7 @@ import {
   showPreviousDay,
   triggerCashSummary,
   updateMovementFilter,
+  reprintSourceFor,
   updatePaymentFilter,
 } from './cash-summary-controller.ts';
 
@@ -140,5 +144,77 @@ describe('filtros', () => {
     updatePaymentFilter('efec');
     expect(paymentFilterSignal.value).toBe('efec');
     expect(selectedPaymentIndexSignal.value).toBe(1);
+  });
+});
+
+describe('reprintSourceFor (#174)', () => {
+  const sale: Sale = {
+    id: 's1',
+    lines: [],
+    payments: [{ method: 'cash', amount: 10 }],
+    total: 10,
+    status: 'closed',
+    createdAt: '2026-10-02T12:00:00.000Z',
+  };
+
+  it('una venta se reimprime como copia', () => {
+    expect(reprintSourceFor({ kind: 'sale', at: sale.createdAt, sale }, new Map())).toEqual({
+      kind: 'sale',
+      sale,
+      copy: true,
+    });
+  });
+
+  it('una cobranza se reimprime con el nombre del cliente y sin saldos', () => {
+    const payment: CustomerPayment = {
+      id: 'p1',
+      customerId: 'c1',
+      payments: [{ method: 'cash', amount: 500 }],
+      total: 500,
+      createdAt: '2026-10-02T13:00:00.000Z',
+    };
+    expect(
+      reprintSourceFor(
+        { kind: 'collection', at: payment.createdAt, payment },
+        new Map([['c1', 'Ana']]),
+      ),
+    ).toEqual({ kind: 'collection', payment, customerName: 'Ana', copy: true });
+  });
+
+  it('sin el cliente en la base usa su id', () => {
+    const payment: CustomerPayment = {
+      id: 'p1',
+      customerId: 'c9',
+      payments: [],
+      total: 0,
+      createdAt: '2026-10-02T13:00:00.000Z',
+    };
+    const source = reprintSourceFor(
+      { kind: 'collection', at: payment.createdAt, payment },
+      new Map(),
+    );
+    expect(source?.kind === 'collection' ? source.customerName : null).toBe('c9');
+  });
+
+  it('un movimiento de caja o un arqueo no se reimprimen', () => {
+    const count: DayEntry = {
+      kind: 'count',
+      at: '2026-10-02T09:00:00.000Z',
+      count: { id: 'k1', expected: 100, counted: 100, createdAt: '2026-10-02T09:00:00.000Z' },
+    };
+    const movement: DayEntry = {
+      kind: 'movement',
+      at: '2026-10-02T09:30:00.000Z',
+      movement: {
+        id: 'm1',
+        direction: 'in',
+        amount: 50,
+        concept: 'Cambio',
+        source: 'manual',
+        createdAt: '2026-10-02T09:30:00.000Z',
+      },
+    };
+    expect(reprintSourceFor(count, new Map())).toBeUndefined();
+    expect(reprintSourceFor(movement, new Map())).toBeUndefined();
   });
 });
