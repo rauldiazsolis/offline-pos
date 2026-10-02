@@ -11,8 +11,9 @@ async function load() {
   const engine = await import('../sync/engine.ts');
   const syncState = await import('./state/sync.ts');
   const { db } = await import('../storage/db.ts');
+  const tracker = await import('../storage/transaction-tracker.ts');
   const { prepareTabRelease } = await import('./tab-release.ts');
-  return { engine, syncState, db, prepareTabRelease };
+  return { engine, syncState, db, tracker, prepareTabRelease };
 }
 
 describe('prepareTabRelease (#175)', () => {
@@ -34,7 +35,7 @@ describe('prepareTabRelease (#175)', () => {
   });
 
   it('espera a que termine una escritura en IndexedDB', async () => {
-    const { db, prepareTabRelease } = await load();
+    const { db, tracker, prepareTabRelease } = await load();
     const { default: Dexie } = await import('dexie');
     let finish: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
@@ -46,7 +47,10 @@ describe('prepareTabRelease (#175)', () => {
       await Dexie.waitFor(gate);
       written = true;
     });
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    // Dexie abre la base de forma asíncrona: esperar a que la escritura esté abierta de verdad.
+    await vi.waitFor(() => {
+      expect(tracker.openWriteTransactionCount()).toBe(1);
+    });
     let done = false;
     const release = prepareTabRelease(2000).then(() => {
       done = true;
