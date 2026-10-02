@@ -29,3 +29,14 @@ export const LOCAL_STORAGE_PREFIX = `${STORAGE_NAMESPACE}:`;
 export function storageKey(name: string): string {
   return `${LOCAL_STORAGE_PREFIX}${name}`;
 }
+
+/**
+ * Cerrojo de `navigator.locks` y canal de `BroadcastChannel` de la pestaña que manda (#175). Los dos
+ * ya están separados por origen; con la carpeta, dos versiones publicadas del mismo origen tampoco se
+ * bloquean entre sí.
+ */
+export function tabLockNameFor(pathname: string): string {
+  return `${localStoragePrefixFor(pathname)}tab`;
+}
+
+export const TAB_LOCK_NAME = storageKey('tab');
