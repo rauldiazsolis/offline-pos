@@ -2,8 +2,10 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerAccount } from '../../domain/customer.ts';
 import { db } from '../../storage/db.ts';
+import { DEFAULT_PRINTER_CONFIG } from '../../storage/printer-config.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
+import { setCatalogRepository } from '../state/catalog.ts';
 import {
   checkoutBuffersSignal,
   checkoutErrorSignal,
@@ -12,7 +14,8 @@ import {
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { customerBalancesSignal } from '../state/customer-balance.ts';
-import { receiptSaleSignal } from '../state/receipt.ts';
+import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
+import { receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
   accountBalancePreview,
@@ -35,6 +38,12 @@ function fakeCustomerRepository(account: CustomerAccount | undefined, balance?: 
     getCustomerAccount: () => Promise.resolve(account),
     getCustomerBalance: () => Promise.resolve(balance),
   });
+}
+
+/** La venta del comprobante en pantalla, si hay una. */
+function receiptSale() {
+  const source = receiptSignal.value?.source;
+  return source?.kind === 'sale' ? source.sale : null;
 }
 
 function emptyBuffers() {
@@ -60,7 +69,7 @@ beforeEach(async () => {
   checkoutErrorSignal.value = null;
   pendingHoldSignal.value = undefined;
   attachedCustomerSignal.value = undefined;
-  receiptSaleSignal.value = null;
+  receiptSignal.value = null;
   activeScreenSignal.value = 'checkout';
 });
 
@@ -81,13 +90,54 @@ describe('amountTendered', () => {
 });
 
 describe('submitCheckout', () => {
+  it('con "Al cobrar: Imprimir", registra, vuelve a la venta e imprime (#174)', async () => {
+    const printed: string[] = [];
+    setReceiptPrinter({
+      print: (_document, format) => {
+        printed.push(format);
+        return Promise.resolve();
+      },
+    });
+    // El documento se arma al imprimir: el nombre del producto sale del catálogo.
+    setCatalogRepository({
+      search: () => [],
+      findByBarcodeOrSku: () => undefined,
+      searchByCode: () => [],
+      getProduct: () => undefined,
+      getStock: () => Promise.resolve(undefined),
+    });
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, format: '58mm', onCheckout: 'print' };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
+
+    await submitCheckout();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(receiptSignal.value).toBeNull();
+    expect(printed).toEqual(['58mm']);
+    expect(await db.sales.count()).toBe(1);
+    expect(cartSignal.value.lines).toEqual([]);
+    printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
+  });
+
+  it('con "Al cobrar: Nada", registra y vuelve directo a la venta (#174)', async () => {
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, onCheckout: 'skip' };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
+
+    await submitCheckout();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(receiptSignal.value).toBeNull();
+    expect(await db.sales.count()).toBe(1);
+    printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
+  });
+
   it('con el total exacto en efectivo, cierra la venta sin vuelto', async () => {
     checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
 
     await submitCheckout();
 
-    expect(receiptSaleSignal.value?.status).toBe('closed');
-    expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
+    expect(receiptSale()?.status).toBe('closed');
+    expect(receiptSale()?.payments).toEqual([{ method: 'cash', amount: 200 }]);
     expect(cartSignal.value.lines).toEqual([]);
     expect(activeScreenSignal.value).toBe('receipt');
   });
@@ -106,7 +156,7 @@ describe('submitCheckout', () => {
 
     await submitCheckout();
 
-    expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'cash', amount: 200 }]);
+    expect(receiptSale()?.payments).toEqual([{ method: 'cash', amount: 200 }]);
   });
 
   it('combina débito y efectivo', async () => {
@@ -114,7 +164,7 @@ describe('submitCheckout', () => {
 
     await submitCheckout();
 
-    expect(receiptSaleSignal.value?.payments).toEqual([
+    expect(receiptSale()?.payments).toEqual([
       { method: 'debit', amount: 150 },
       { method: 'cash', amount: 50 },
     ]);
@@ -127,7 +177,7 @@ describe('submitCheckout', () => {
 
     expect(checkoutErrorSignal.value).not.toBeNull();
     expect(activeScreenSignal.value).toBe('checkout');
-    expect(receiptSaleSignal.value).toBeNull();
+    expect(receiptSale()).toBeNull();
   });
 
   it('un medio no-efectivo que supera el total: muestra error y no cierra', async () => {
@@ -157,7 +207,7 @@ describe('cuenta corriente', () => {
     await submitCheckout();
 
     expect(checkoutErrorSignal.value).not.toBeNull();
-    expect(receiptSaleSignal.value).toBeNull();
+    expect(receiptSale()).toBeNull();
   });
 
   it('con red y hold aprobado, cierra la venta a cuenta corriente', async () => {
@@ -177,10 +227,10 @@ describe('cuenta corriente', () => {
     checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
-    expect(receiptSaleSignal.value?.payments).toEqual([
+    expect(receiptSale()?.payments).toEqual([
       { method: 'account', amount: 200, reference: 'hold-1' },
     ]);
-    expect(receiptSaleSignal.value?.customerId).toBe('c1');
+    expect(receiptSale()?.customerId).toBe('c1');
   });
 
   it('con red y hold rechazado, muestra el error y no cierra la venta', async () => {
@@ -217,7 +267,7 @@ describe('cuenta corriente', () => {
     checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
     await submitCheckout();
 
-    expect(receiptSaleSignal.value?.payments).toEqual([{ method: 'account', amount: 200 }]);
+    expect(receiptSale()?.payments).toEqual([{ method: 'account', amount: 200 }]);
   });
 
   it('sin red y fuera del margen, rechaza con account/offline-limit-exceeded', async () => {
@@ -352,8 +402,8 @@ describe('modo devolución (#99)', () => {
     await submitCheckout();
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(receiptSaleSignal.value?.total).toBe(-500);
-    expect(receiptSaleSignal.value?.payments).toEqual([
+    expect(receiptSale()?.total).toBe(-500);
+    expect(receiptSale()?.payments).toEqual([
       { method: 'account', amount: -200 },
       { method: 'cash', amount: -300 },
     ]);
@@ -368,7 +418,7 @@ describe('modo devolución (#99)', () => {
     await submitCheckout();
 
     expect(checkoutErrorSignal.value).not.toBeNull();
-    expect(receiptSaleSignal.value).toBeNull();
+    expect(receiptSale()).toBeNull();
   });
 });
 

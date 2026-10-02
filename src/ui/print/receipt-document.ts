@@ -90,13 +90,11 @@ export function saleReceiptDocument(params: {
     meta: [ticketLabel(sale), format.dateTime(sale.createdAt)],
     blocks: [
       { kind: 'divider' },
-      ...sale.lines.map(
-        (line, index): ReceiptBlock => ({
-          kind: 'row',
-          left: `${format.quantity(line.qty)} × ${lineNames[index] ?? ''}`,
-          right: format.money(calculateLineTotal(line)),
-        }),
-      ),
+      ...sale.lines.map((line, index): ReceiptBlock => ({
+        kind: 'row',
+        left: `${format.quantity(line.qty)} × ${lineNames[index] ?? ''}`,
+        right: format.money(calculateLineTotal(line)),
+      })),
       { kind: 'divider' },
       ...adjustmentRows,
       { kind: 'row', left: 'Total', right: format.money(sale.total), bold: true },

@@ -88,7 +88,11 @@ describe('receiptDocumentFor', () => {
 
 describe('sampleDocumentFor', () => {
   it('usa el encabezado y el pie de la config dada', () => {
-    const doc = sampleDocumentFor({ ...DEFAULT_PRINTER_CONFIG, header: 'Mi kiosco', footer: 'Chau' });
+    const doc = sampleDocumentFor({
+      ...DEFAULT_PRINTER_CONFIG,
+      header: 'Mi kiosco',
+      footer: 'Chau',
+    });
     expect(doc.header).toEqual(['Mi kiosco']);
     expect(doc.footer).toEqual(['Chau']);
   });
