@@ -82,7 +82,11 @@ export function ReceiptScreen() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <div style={{ boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' }}>
+      {/* El papel a tamaño real, sin el zoom de la app (`.receipt-paper`, tokens.css). */}
+      <div
+        class="receipt-paper"
+        style={{ boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' }}
+      >
         <ReceiptView
           document={receiptDocumentFor(current.source, config)}
           format={paperFormat(config.format)}

@@ -245,6 +245,8 @@ export function PrinterScreen() {
       </div>
       <section
         aria-label="Vista previa"
+        // El papel a tamaño real, sin el zoom de la app (`.receipt-paper`, tokens.css).
+        class="receipt-paper"
         style={{ boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' }}
       >
         <ReceiptView document={sampleDocumentFor(form)} format={paperFormat(form.format)} />
