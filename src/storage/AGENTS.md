@@ -31,6 +31,21 @@ prefijo (`pos.reset()`, `pos.export()`, `LOCAL_STORAGE_PREFIX`) nunca tocan otra
 final (`/0.1.0`) los assets relativos dan 404 y la app no arranca: nunca abre con el almacenamiento de
 la carpeta de arriba.
 
+**Una sola pestaña (#175)**: el cerrojo de `navigator.locks` y el `BroadcastChannel` de la pestaña que
+manda se llaman `TAB_LOCK_NAME` (`storageKey('tab')`: `offline-pos:tab` en `/`,
+`offline-pos@/0.1.0/:tab` en `/0.1.0/`), así dos carpetas del mismo origen nunca se bloquean entre sí.
+La marca de pestaña desplazada (`tab-displaced.ts`) va en `sessionStorage`, que es de la pestaña y
+sobrevive a su propio reload, con la clave `storageKey('tab-displaced')`. El resto, en
+[`src/ui/AGENTS.md`](../ui/AGENTS.md).
+
+## Contador de escrituras (#175)
+
+`transaction-tracker.ts` es un middleware de Dexie (capa `dbcore`, instalado en `db.ts`) que cuenta
+las transacciones `readwrite` abiertas de esta pestaña: suma al crearlas y resta en `complete` o
+`abort`. Antes de soltar el control, la pestaña que manda espera a que lleguen a 0
+(`waitForIdleWriteTransactions`, con tope), así un cobro que se está guardando nunca se corta a medias.
+Las lecturas no cuentan. Es genérico a propósito: una tabla o un repositorio nuevo queda cubierto solo.
+
 ## Borrado de lo local
 
 Un solo lugar borra lo local: `clearAllTables` (`db.tables`, así una tabla futura queda incluida sola),

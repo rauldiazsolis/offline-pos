@@ -43,6 +43,14 @@ redirect de `/` y los headers son de Cloudflare: se verifican en la primera publ
 Se arma con `--only-local` (#147): `/versions` solo con el demo-backend local, así el e2e no
 depende de un backend publicado ni le crea una demo en cada corrida.
 
+**Una sola pestaña** (#175): `e2e/single-tab.spec.ts` abre varias páginas en el **mismo contexto** de
+Playwright, que comparten `localStorage`, IndexedDB, `navigator.locks` y `BroadcastChannel` como dos
+pestañas de un navegador (cada test de los demás specs tiene su propio contexto, así que nunca se
+cruzan). Solo la primera página siembra la conexión (el `page` de `fixtures.ts`); las otras comparten
+su almacenamiento. La tercera página prueba **otra carpeta del mismo origen**: el sitio de
+`site:preview` tiene una sola carpeta de versión, así que `context.route` sirve el build de 4173 en
+`/otra-carpeta/` (la app usa rutas relativas) y la página arranca con su propio almacenamiento.
+
 **Flakes en CI** (#169): `playwright.config.ts` reintenta una vez solo con `CI`, así
 `trace: 'on-first-retry'` deja la traza; un test que pasa al reintentar sale como "flaky" en el log.
 El workflow sube `test-results/` (artefacto `playwright-test-results`, 14 días) si falla el e2e o si

@@ -287,6 +287,38 @@ Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
   el piso de 11 px de #111 a 600 px. Lo vigila `e2e/text-size.spec.ts`, que mide con el zoom
   acumulado de los ancestros. Un formato más ancho que A6, si llega, se achica para entrar al marco.
 
+## Una sola pestaña (#175)
+
+Spec: `docs/superpowers/specs/2026-10-02-una-sola-pestana-design.md`; el principio, en la raíz.
+
+- **Coordinación** (`ui/tab-leadership.ts`, todo inyectado en `TabLeadershipDeps`, sin DOM):
+  `claimTab(TAB_LOCK_NAME, deps)` pide el cerrojo con `ifAvailable` y, si lo recibe, lo retiene con
+  una promesa que nunca se resuelve y escucha el canal; si no, devuelve `{ kind: 'secondary',
+  takeOver }`. Puertos: `TabLocks` (lo que se usa de `navigator.locks`) y `TabChannel` (el canal,
+  con mensajes validados por `parseTabMessage`: el único es `release-request`). Los fakes viven en
+  `test/fake-tab-locks.ts`.
+- **Traspaso**: `takeOver` pide el cerrojo en espera y manda `release-request`. La original atiende un
+  solo pedido: `prepareRelease` (`ui/tab-release.ts::prepareTabRelease`: pausa el sync, toma el cerrojo
+  de sync y se queda con él, espera las escrituras de IndexedDB, todo con `RELEASE_WAIT_MS` = 4 s de
+  tope), marca la pestaña desplazada (`storage/tab-displaced.ts`) y se recarga. Si en
+  `STEAL_AFTER_MS` (5 s) el cerrojo no llegó, la segunda aborta su pedido en espera y lo pide con
+  `steal`; a una pestaña que le quitan el cerrojo se le rechaza su `request` y se recarga marcada. El
+  pedido en espera se aborta solo si todavía no llegó (`isHeld`, leído sincrónicamente): nunca se le
+  quita el cerrojo a sí misma.
+- **Adaptadores** (`ui/tab-browser.ts::browserTabLeadershipDeps`): `navigator.locks` solo si existe
+  (sin él, la pestaña manda siempre), `BroadcastChannel(TAB_LOCK_NAME)`, `location.reload`.
+- **Arranque** (`main.tsx::start`): lee y borra la marca de desplazada (siempre, así una vieja no
+  aparece después) y pide el cerrojo **antes de todo**: con él, `startApp` (consola `pos.*`,
+  `bootstrap()` y render, como antes); sin él, `document.title` = "POS en otra pestaña" y
+  `SecondaryTabScreen`, sin tocar la URL (un `?demo=…` o `#connect=…` se procesa al tomar el control).
+  Al tomar el control vuelve el título y corre `startApp` sin recargar.
+- **`SecondaryTabScreen`** (`ui/screens/secondary-tab-screen.tsx`): no depende de nada de la app
+  (nada está inicializado). "El POS está abierto en otra pestaña", el texto que explica qué hacer y,
+  si la desplazaron, "Se empezó a usar el POS en otra pestaña." arriba. El botón "Usar esta pestaña
+  (Enter)" tiene el foco (Enter nativo = click) y pasa a "Tomando el control…", deshabilitado.
+  `keepFocusOnMouseDown` en el contenedor. No hay link a la otra pestaña: Chromium no la deja traer al
+  frente.
+
 ## `/CONFIG` como wizard
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
@@ -338,8 +370,10 @@ nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión.
 ## Utilidades de consola `pos.*` (Etapa 0 de #94, issue #95)
 
 Objeto global `window.pos` para DevTools, instalado en `main.tsx` **antes** de `bootstrap()` (si el
-arranque falla, `pos.export()`/`pos.reset()` siguen disponibles para recuperar la terminal). Queda
-también en producción y nada pide confirmación: abrir DevTools y tipear ya es deliberado.
+arranque falla, `pos.export()`/`pos.reset()` siguen disponibles para recuperar la terminal), y solo
+en la pestaña que manda (#175): una segunda pestaña no tiene nada inicializado que inspeccionar ni
+borrar. Queda también en producción y nada pide confirmación: abrir DevTools y tipear ya es
+deliberado.
 `ui/console/pos-console.ts` es una capa fina con dependencias inyectadas, sin lógica propia:
 `help()`, `sync()` (= `/SINCRONIZAR`, `syncNow`), `status()` (= `/DIAGNOSTICO`: pantalla y consola
 leen la misma foto, `sync/diagnostics.ts::collectDiagnostics`), `outbox()`
