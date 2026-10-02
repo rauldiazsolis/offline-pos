@@ -4,9 +4,10 @@
 
 ## Docs
 
-- [Guía para integradores (0.1.0)](0.1.0/docs/guia.md): cómo probar el POS y cómo implementar el Connector API.
-- [Connector API 4.4.0 (OpenAPI)](0.1.0/docs/connector-api.openapi.yaml): el contrato completo.
+- [Guía para integradores (0.2.0)](0.2.0/docs/guia.md): cómo probar el POS y cómo implementar el Connector API.
+- [Connector API 4.4.0 (OpenAPI)](0.2.0/docs/connector-api.openapi.yaml): el contrato completo.
 
 ## Versiones
 
+- [0.2.0](0.2.0/docs/llms.txt): contrato 4.4.0
 - [0.1.0](0.1.0/docs/llms.txt): contrato 4.4.0
