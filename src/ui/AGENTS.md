@@ -173,8 +173,12 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   anulaciones), Enter o el botón al lado de las pestañas reimprime una copia ahí mismo
   ("Reimprimir (Enter)"); con "No imprimir", abre la copia en el comprobante ("Ver comprobante
   (Enter)") y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y búsqueda (la selección vuelve a la
-  primera fila). Con un movimiento de caja o un arqueo, Enter no hace nada. El botón siempre ocupa
-  su lugar (oculto si la fila no se reimprime) y la franja baja de renglón antes que desbordar a 600 px.
+  primera fila). Con un movimiento de caja o un arqueo, Enter no hace nada. Al imprimir, un renglón
+  de alto fijo debajo de la franja (`cashSummaryNoticeSignal`, como el de `/ANULAR`) dice "Copia del
+  Ticket #4 enviada a imprimir." y se borra con la próxima tecla, al cambiar de día o de pestaña y al
+  salir. El botón siempre ocupa su lugar (oculto si la fila no se reimprime) y va en un grupo con las
+  pestañas: si no entran al lado del buscador, bajan juntos al segundo renglón. Enter para anular acá
+  quedó anotado en #140.
 
 ## Cobranza sin venta y saldo del cliente (Etapa 6, #101)
 
@@ -243,14 +247,17 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
 
 - **`/IMPRESORA`** (`ui/screens/printer-screen.tsx`, `ui/keyboard/printer-controller.ts`, modelo puro
-  en `ui/keyboard/printer-form-model.ts`, estado en `ui/state/printer.ts`): dos grupos tipo radio
-  (`.wizard-option`, foco en la opción elegida, ↑/↓ la cambian) — **Formato** (No imprimir, 58 mm,
-  80 mm, A6) y **Al cobrar** (Imprimir, Mostrar el comprobante, Nada; sin papel no se ofrece
-  Imprimir y, si estaba elegido, pasa a Mostrar) —, Encabezado y Pie (`textarea`s libres) y la vista
-  previa de un ticket de ejemplo que se actualiza mientras se edita. Se edita una copia
-  (`printerFormSignal`): Guardar (Ctrl+Enter, porque Enter en un `textarea` es salto de línea) la
-  persiste y la pone en `printerConfigSignal`; Esc o Cancelar vuelven sin guardar; "Prueba de
-  impresión (Alt+P, por la tecla física)" imprime el ejemplo con lo que está en pantalla, sin guardar.
+  en `ui/keyboard/printer-form-model.ts`, estado en `ui/state/printer.ts`): dos `select`s — en la
+  prueba manual los grupos tipo radio dejaban la pantalla muy alta — **Formato** (No imprimir,
+  58 mm, 80 mm, A6; tiene el foco al abrir y ↑/↓ lo cambian con el `select` cerrado) y **Al cobrar**
+  (Imprimir, Mostrar el comprobante, Nada; sin papel no se ofrece Imprimir y, si estaba elegido,
+  pasa a Mostrar) —, Encabezado y Pie (`textarea`s libres) y la vista previa de un ticket de ejemplo
+  que se actualiza mientras se edita. Se edita una copia (`printerFormSignal`): Guardar (Ctrl+Enter,
+  porque Enter en un `textarea` es salto de línea) la persiste y la pone en `printerConfigSignal`;
+  Esc o Cancelar vuelven sin guardar; "Prueba de impresión (Alt+P, por la tecla física)" imprime el
+  ejemplo con lo que está en pantalla, sin guardar. **Estable**: el formulario tiene un ancho máximo,
+  la vista previa un marco de ancho fijo, y los botones van en dos líneas fijas (la prueba arriba,
+  siempre visible y deshabilitada sin papel; Cancelar y Guardar abajo).
 - **La config** (`storage/printer-config.ts`) es del equipo, no de la conexión: vive en
   `localStorage` (`storageKey('printer')`), validada con Zod; algo ausente o roto cae al default
   `{ format: 'a6', onCheckout: 'show' }` (como antes de #174). `/CONFIG` y "Borrar y cambiar" no la
@@ -266,14 +273,19 @@ Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
   ser otra implementación del puerto. En los tests, `setReceiptPrinter` pone una impresora falsa.
 - **Al cobrar** (`ui/print/after-close.ts::showOrPrintReceipt`): Cobro y la cobranza registran primero
   y después, según la config: Imprimir vuelve a la venta (barra vacía y enfocada) y manda a imprimir
-  sin esperar; Mostrar va al comprobante; Nada vuelve directo a la venta.
+  sin esperar; Mostrar va al comprobante; Nada vuelve directo a la venta. Los dos que vuelven a la
+  venta lo dicen en el slot de avisos de la barra (`commandBarNoticeSignal`, como `/CAJA`): "Ticket
+  #4 registrado." o "… registrado y enviado a imprimir." ("enviado": el POS no sabe si el diálogo se
+  canceló); en una cobranza, "Recibo #3 de Ana …" (`documentName`).
 - **El comprobante** (`ui/screens/receipt-screen.tsx`, `receiptSignal = { source, returnTo }`): dibuja
-  `ReceiptView` en el formato configurado; "Imprimir (Enter)" solo con papel; "Continuar (Esc)"
+  el papel (`ReceiptPreview`) en el formato configurado; "Imprimir (Enter)" solo con papel; "Continuar (Esc)"
   vuelve a `returnTo` (la venta o `/RESUMEN`).
-- **El papel en pantalla a tamaño real**: el comprobante y la vista previa cancelan el zoom de la app
-  (`.receipt-paper`, `tokens.css`), así sus mm y pt son los del papel y el texto (9 pt en 58 mm) queda
-  sobre el piso de 11 px de #111 a 600 px. Lo vigila `e2e/text-size.spec.ts`, que mide con el zoom
-  acumulado de los ancestros.
+- **El papel en pantalla** (`ui/print/ReceiptPreview.tsx`, en el comprobante y la vista previa): un
+  marco de ancho fijo (el de A6 más un margen) con el papel blanco centrado sobre fondo gris, así se
+  ve el ancho del rollo y nada cambia de forma con el formato. Cancela el zoom de la app
+  (`.receipt-paper`, `tokens.css`): el papel va a tamaño real y su texto (9 pt en 58 mm) queda sobre
+  el piso de 11 px de #111 a 600 px. Lo vigila `e2e/text-size.spec.ts`, que mide con el zoom
+  acumulado de los ancestros. Un formato más ancho que A6, si llega, se achica para entrar al marco.
 
 ## `/CONFIG` como wizard
 
@@ -354,7 +366,7 @@ en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobr
 mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
-(opciones, campos y botones), **`/CAJA`** (selector, campos,
+(`select`s, campos y botones), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
 abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta hace `/ALTA`, #128).
 
