@@ -42,7 +42,8 @@ Tomadas en el brainstorming del 2026-10-02:
 
 ## Config: `PrinterConfig`
 
-`ui/print/printer-config.ts`, en `localStorage` con `storageKey('printer')` (prefijo por carpeta,
+`storage/printer-config.ts` (es el borde con `localStorage`, el único lugar con `try/catch`; guardar
+devuelve `Result` con el código nuevo `printer/save-failed`), en `localStorage` con `storageKey('printer')` (prefijo por carpeta,
 #148), validada con Zod al leerla:
 
 ```ts
@@ -117,8 +118,10 @@ parámetros, así se testean sin locale). El contenido es el del comprobante de 
   fecha y el cliente; un renglón por pago; Total en negrita; "Saldo anterior" y "Saldo nuevo" en
   negrita, **solo si se conocen** (al cerrar la cobranza sí; en una copia no, ver "Reimprimir").
 
-El documento se arma **en el momento de cerrar** la venta o la cobranza, porque los saldos de la
-cobranza no se pueden recalcular después.
+Lo que se guarda al cerrar es el **origen** del comprobante (`ReceiptSource`: la venta, o la
+cobranza con el nombre del cliente y los saldos de ese momento, y si es copia); el documento se arma
+desde ahí cuando se muestra o se imprime (`ui/print/resolve-receipt.ts::receiptDocumentFor`). Así los
+saldos de la cobranza viajan con ella, que es lo que no se puede recalcular después.
 
 ## Cómo se dibuja: `ReceiptView`
 
@@ -132,13 +135,14 @@ Medidas por formato (en el papel; en pantalla, la vista previa respeta el ancho 
 
 | Formato | `@page` | Área útil | Letra |
 |---|---|---|---|
-| 58 mm | `size: 58mm auto; margin: 0` | ~48 mm (padding 5 mm) | 9 pt |
-| 80 mm | `size: 80mm auto; margin: 0` | ~72 mm (padding 4 mm) | 10 pt |
-| A6 | `size: 105mm 148mm; margin: 8mm` | 89 mm | 10 pt |
+| 58 mm | `margin: 0` | ~48 mm (ancho 58 mm, padding 5 mm) | 9 pt |
+| 80 mm | `margin: 0` | ~72 mm (ancho 80 mm, padding 4 mm) | 10 pt |
+| A6 | `size: A6; margin: 8mm` | 89 mm | 10 pt |
 
-Riesgo aceptado: en una térmica, el largo de la página depende del driver; `auto` suele andar en
-Chrome con el driver del rollo, pero solo se confirma en la prueba manual con una impresora real.
-Con "Guardar como PDF" se ven el ancho y el contenido.
+En las térmicas no se fija `size`: CSS no tiene "ancho fijo y largo libre" (`58mm auto` es inválido
+y se ignora entero), así que el tamaño del papel lo da el driver del rollo y el ticket se dibuja en el
+ancho exacto. Riesgo aceptado: cómo corta el largo depende del driver, y solo se confirma en la prueba
+manual con una impresora real. Con "Guardar como PDF" se ven el ancho y el contenido.
 
 ## La impresión: el puerto `ReceiptPrinter`
 
@@ -164,7 +168,7 @@ la impresora predeterminada).
 
 ## Al cobrar
 
-`ui/print/after-close.ts::showOrPrintReceipt(document)` reemplaza lo que hoy hacen al final
+`ui/print/after-close.ts::showOrPrintReceipt(source)` reemplaza lo que hoy hacen al final
 `checkout-controller.ts::confirmCheckout` y `collection-controller.ts` (poner el comprobante e ir a
 `'receipt'`). Primero se registra, como hoy (`closeSaleAndPersist`, `collectAndPersist`); después,
 según `onCheckout`:
@@ -172,13 +176,13 @@ según `onCheckout`:
 - **Imprimir**: vuelve a la venta, con la barra vacía y enfocada, y manda a imprimir. Mientras el
   diálogo del navegador está abierto, la app queda detrás; al cerrarlo (imprima o cancele), se sigue
   vendiendo. Un error del iframe no deshace nada: la venta ya está registrada.
-- **Mostrar el comprobante**: va a `'receipt'` con el documento.
+- **Mostrar el comprobante**: va a `'receipt'` con el origen.
 - **Nada**: vuelve directo a la venta.
 
 ## La pantalla del comprobante
 
-`ui/state/receipt.ts` pasa a tener un solo signal, `receiptSignal: { document: ReceiptDocument;
-returnTo: 'sale' | 'summary' } | null`, en vez de `receiptSaleSignal` y `receiptCollectionSignal`.
+`ui/state/receipt.ts` pasa a tener un solo signal, `receiptSignal: { source: ReceiptSource;
+returnTo: 'sale' | 'cash-summary' } | null`, en vez de `receiptSaleSignal` y `receiptCollectionSignal`.
 La pantalla dibuja `ReceiptView` en el formato configurado. "Imprimir (Enter)" solo aparece si el
 formato no es "No imprimir"; si es, Enter no hace nada. "Continuar (Esc)" vuelve a `returnTo`.
 
@@ -189,7 +193,8 @@ anuladas y las anulaciones), aparece un botón con su atajo:
 
 - Con impresora: **"Reimprimir (Enter)"** imprime la copia ahí mismo, sin salir de `/RESUMEN`.
 - Con "No imprimir": **"Ver comprobante (Enter)"** abre la pantalla del comprobante con la copia
-  (`returnTo: 'summary'`), y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y fila.
+  (`returnTo: 'cash-summary'`), y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y búsqueda (la
+  selección vuelve a la primera fila: la navegación de Movimientos la reinicia al montarse).
 
 Los movimientos de caja y los arqueos no tienen botón y Enter no hace nada. Enter está libre en
 Movimientos (lo que se tipea va al buscador), como en `/ANULAR`; un botón enfocado con Tab se activa
