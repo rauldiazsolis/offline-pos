@@ -1,7 +1,7 @@
 # Impresión de tickets: `/IMPRESORA`, 58 mm, 80 mm y A6 con `window.print()`
 
 Fecha: 2026-10-02
-Estado: diseño aprobado en el brainstorming del 2026-10-02; falta el plan.
+Estado: diseño aprobado en el brainstorming del 2026-10-02; plan en `docs/superpowers/plans/2026-10-02-impresion-de-tickets.md`.
 Issues: #174 (etapa P1 del epic #182, MVP de mini contax, antes del hito 1). Anotados en este
 brainstorming: #188 (ESC/POS directo, afuera de esta etapa) y un comentario en #140 (Reimprimir como
 primera acción de `/RESUMEN`). Spec del MVP: `docs/superpowers/specs/2026-10-01-mvp-mini-contax-design.md`
