@@ -16,3 +16,7 @@ export function getReceiptPrinter(): ReceiptPrinter {
 export function setReceiptPrinter(printer: ReceiptPrinter): void {
   receiptPrinter = printer;
 }
+
+/** El formulario de `/IMPRESORA`: una copia de la config que se edita sin guardar. */
+export const printerFormSignal = signal<PrinterConfig>(printerConfigSignal.value);
+export const printerErrorSignal = signal<string | null>(null);

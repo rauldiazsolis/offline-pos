@@ -219,6 +219,7 @@ describe('availableCommands (Etapa 2c)', () => {
     'ANULAR',
     'DESCARTAR',
     'CONFIG',
+    'IMPRESORA',
     'SINCRONIZAR',
     'DIAGNOSTICO',
   ];
