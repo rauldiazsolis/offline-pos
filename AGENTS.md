@@ -32,6 +32,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Almacenamiento por carpeta: base de Dexie y claves de `localStorage` según la ruta (#148) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
+| Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 
 ## Qué es esto
@@ -375,6 +376,19 @@ qué hacer si falla) en `docs/publicacion.md`.
   cada `/<versión>/docs/`. El OpenAPI no lleva referencias internas (issues, specs, `AGENTS.md`): lo
   vigila `site/docs.test.ts`.
 
+## Una sola pestaña (#175)
+
+Spec: `docs/superpowers/specs/2026-10-02-una-sola-pestana-design.md`. Una sola pestaña por
+almacenamiento (origen + carpeta, ver "Publicación") opera el POS, como WhatsApp Web: la que tiene el
+cerrojo de `navigator.locks` lo retiene mientras viva la página; otra pestaña muestra un aviso y
+"Usar esta pestaña", sin venta, sync ni consola `pos.*`. La segunda **nunca toma el control sola**
+(un F5, `pos.reset()` o la ida al alta en la original le pasarían el control sin que nadie lo pida):
+el botón le pide a la original que suelte, y la original **suelta sin cortar a medias** (termina el
+sync y las escrituras en curso, con tope) y se recarga como segunda; si no contesta, se le quita el
+cerrojo. **No hay forma de traer la original al frente** en Chromium (`window.focus()`,
+`window.open('', nombre)` y `alert()` no lo hacen, verificado en la spec): solo el texto y el título.
+Sin `navigator.locks` (contexto no seguro) la app arranca como antes. Detalle en `src/ui/AGENTS.md`.
+
 ## UX keyboard-first
 
 Principio central: **un único input siempre enfocado** (la barra de comandos) — se elimina el
@@ -542,13 +556,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
 | #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
+| #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR pendiente |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
-una sola pestaña (#175) y #54 (service worker) — la impresión (#174) ya está; antes
+#54 (service worker) — la impresión (#174) y una sola pestaña (#175) ya están; antes
 del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
 (contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
@@ -565,7 +580,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#175 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+- MVP de mini contax: epic #182 (#176 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143

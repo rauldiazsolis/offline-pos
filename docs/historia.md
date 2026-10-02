@@ -1007,6 +1007,24 @@ pasó a `select`s con columnas fijas, y se sumaron avisos después de cobrar y d
 "Nada" no quedaba ninguna señal de que la venta se había registrado. Enter para anular en `/RESUMEN`
 quedó en #140. Spec y plan en `docs/superpowers/` (2026-10-02).
 
+**Una sola pestaña (#175)**. Segunda etapa del MVP de mini contax (epic #182). Hasta acá, dos pestañas
+del mismo almacenamiento corrían las dos completas: dos motores de sync con cerrojos en memoria que no
+se veían, dos ventas en curso pisándose en `draftCart`. Ahora manda la que tiene el cerrojo de
+`navigator.locks` (`BroadcastChannel` solo lleva el pedido de traspaso), y la otra muestra un aviso. El
+issue pedía, si se podía, un link a la pestaña original; se verificó en Chrome estable con dos
+pestañas en la misma ventana y no se puede: `window.focus()` pedido desde la otra (incluso justo
+después de un click real), `window.open('', nombre)` (abre una pestaña nueva) y `alert()` (abre el
+diálogo sin traer la pestaña, y le bloquea el JS) no la traen al frente; solo `clients.focus()` desde
+un service worker en el click de una notificación, que queda para después de #54. La medición tuvo su
+trampa: con Playwright conectado, su emulación de foco hacía que las dos pestañas dijeran `visible`;
+hubo que manejar Chrome por CDP crudo. Dos decisiones: la segunda **nunca toma el control sola** (con
+toma automática, un F5 en la original le pasaba el control a la otra) y la original **suelta sin
+cortar a medias** (termina el sync y las escrituras en curso, contadas por un middleware de Dexie) y
+se recarga como segunda. Un test de esa espera resultó inestable con la suite completa: esperaba 30 ms
+fijos a que Dexie abriera la base; pasó a esperar a que la escritura esté abierta de verdad. El e2e
+prueba otra carpeta del mismo origen sirviendo el mismo build con `context.route`, porque el sitio de
+`site:preview` tiene una sola carpeta de versión. Spec y plan en `docs/superpowers/` (2026-10-02).
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
