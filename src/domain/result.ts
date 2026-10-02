@@ -109,6 +109,9 @@ export type ErrorMeta = {
   'demo/unknown-template': { template: string; templates: string[] };
   'demo/not-offered': undefined;
 
+  // storage/printer-config.ts (impresión, #174)
+  'printer/save-failed': { message: string };
+
   // sync/terminal-data.ts (pos.reset() desde la consola)
   'terminal/reset-failed': { message: string };
 };
