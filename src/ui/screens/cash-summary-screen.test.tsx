@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { fireEvent, render, screen, within } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../storage/db.ts';
+import { DEFAULT_PRINTER_CONFIG } from '../../storage/printer-config.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
 import { buildDayEntries } from '../../domain/day-summary.ts';
@@ -9,6 +10,7 @@ import type { Sale } from '../../domain/sale.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import type { DayView } from '../../storage/cash-summary-repository.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -19,6 +21,8 @@ import {
   selectedProductIndexSignal,
 } from '../state/cash-summary.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
+import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
+import { receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { CashSummaryScreen } from './cash-summary-screen.tsx';
 
@@ -647,5 +651,96 @@ describe('cobranzas (#101)', () => {
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
     ).toEqual(['Efectivo', '300,00', '500,00', '800,00']);
+  });
+});
+
+describe('Reimprimir (#174)', () => {
+  const printed: string[] = [];
+
+  beforeEach(() => {
+    printed.length = 0;
+    receiptSignal.value = null;
+    setReceiptPrinter({
+      print: (document, format) => {
+        printed.push(`${format}:${document.marks.join(',')}:${document.meta[0] ?? ''}`);
+        return Promise.resolve();
+      },
+    });
+  });
+
+  afterEach(() => {
+    printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
+  });
+
+  it('con una venta elegida, Enter la reimprime como copia sin salir de /RESUMEN', () => {
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, format: '80mm' };
+    render(<CashSummaryScreen />);
+
+    expect(screen.getByRole('button', { name: 'Reimprimir (Enter)' })).not.toBeNull();
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'Enter' });
+
+    expect(printed).toEqual(['80mm:COPIA:Ticket']);
+    expect(activeScreenSignal.value).toBe('cash-summary');
+  });
+
+  it('al reimprimir avisa qué copia salió, y la próxima tecla lo borra', () => {
+    cashSummaryNoticeSignal.value = null;
+    render(<CashSummaryScreen />);
+    const search = screen.getByLabelText('Buscar');
+
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(screen.getByRole('status').textContent).toBe('Copia del Ticket enviada a imprimir.');
+
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  it('el botón hace lo mismo que Enter, sobre la fila elegida', () => {
+    render(<CashSummaryScreen />);
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'ArrowDown' });
+    fireEvent.click(screen.getByText('Reimprimir (Enter)'));
+    expect(printed).toEqual(['a6:COPIA:Ticket']);
+  });
+
+  it('con "No imprimir", Enter abre la copia en el comprobante y vuelve a /RESUMEN', () => {
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, format: 'none' };
+    render(<CashSummaryScreen />);
+
+    expect(screen.getByText('Ver comprobante (Enter)')).not.toBeNull();
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'Enter' });
+
+    expect(printed).toEqual([]);
+    expect(activeScreenSignal.value).toBe('receipt');
+    expect(receiptSignal.value?.returnTo).toBe('cash-summary');
+    expect(receiptSignal.value?.source.copy).toBe(true);
+  });
+
+  it('con un arqueo elegido no hay botón y Enter no hace nada', () => {
+    const view = dayViewSignal.value;
+    if (view === undefined) throw new Error('setup falló');
+    dayViewSignal.value = {
+      ...view,
+      sales: [],
+      entries: buildDayEntries({
+        sales: [],
+        movements: [],
+        counts: [
+          { id: 'k1', expected: 1000, counted: 1000, createdAt: '2026-01-01T07:00:00.000Z' },
+        ],
+        collections: [],
+      }),
+    };
+    render(<CashSummaryScreen />);
+
+    expect(screen.queryByRole('button', { name: 'Reimprimir (Enter)' })).toBeNull();
+    fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'Enter' });
+    expect(printed).toEqual([]);
+    expect(activeScreenSignal.value).toBe('cash-summary');
+  });
+
+  it('en otra pestaña no hay botón', () => {
+    cashSummaryTabSignal.value = 'products';
+    render(<CashSummaryScreen />);
+    expect(screen.queryByRole('button', { name: 'Reimprimir (Enter)' })).toBeNull();
   });
 });

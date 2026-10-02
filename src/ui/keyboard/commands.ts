@@ -49,6 +49,7 @@ export const CORE_COMMANDS: CommandInfo[] = [
   { name: 'ANULAR', description: 'Anular una venta o una cobranza de las últimas 24 h' },
   { name: 'DESCARTAR', description: 'Vaciar la venta en curso (líneas, cliente y ajuste)' },
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },
+  { name: 'IMPRESORA', description: 'Configurar la impresión de tickets' },
   { name: 'SINCRONIZAR', description: 'Sincronizar ahora' },
   { name: 'DIAGNOSTICO', description: 'Ver el estado y el historial reciente de sincronización' },
 ];

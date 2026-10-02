@@ -50,6 +50,7 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { startOnboarding } from './onboarding-controller.ts';
+import { enterPrinterScreen } from './printer-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, disabledCommandMessage } from './commands.ts';
 import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
@@ -398,6 +399,10 @@ function runCommand(name: string, _args: string[]): void {
       return;
     case 'CONFIG':
       enterConfigScreen();
+      clearBuffer();
+      return;
+    case 'IMPRESORA':
+      enterPrinterScreen();
       clearBuffer();
       return;
     case 'SINCRONIZAR':

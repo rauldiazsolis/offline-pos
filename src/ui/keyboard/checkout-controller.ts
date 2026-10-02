@@ -9,6 +9,7 @@ import { newId } from '../../storage/ids.ts';
 import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
 import { requestAccountHoldNow } from '../../sync/account-hold.ts';
 import { describeError } from '../errors.ts';
+import { showOrPrintReceipt } from '../print/after-close.ts';
 import { formatAmountInput, parseNonNegativeAmount } from '../parse-amount.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
@@ -20,7 +21,6 @@ import {
 } from '../state/checkout.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
-import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
 import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
@@ -244,12 +244,11 @@ export async function submitCheckout(): Promise<void> {
 
   await refreshStockSnapshot();
   await refreshCustomerBalances();
-  receiptSaleSignal.value = result.value;
   cartSignal.value = { lines: [] };
   // Sin esto la selección seguía apuntando a una línea que ya no existe, y el
   // próximo código de barras (todo dígitos) se tomaba como su cantidad.
   cartSelectionIndexSignal.value = null;
   resetAttachedCustomer();
   resetCheckout();
-  activeScreenSignal.value = 'receipt';
+  showOrPrintReceipt({ kind: 'sale', sale: result.value, copy: false });
 }

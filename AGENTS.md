@@ -31,6 +31,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Almacenamiento por carpeta: base de Dexie y claves de `localStorage` según la ruta (#148) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 
 ## Qué es esto
@@ -42,8 +43,8 @@ conoce ningún backend específico.
 
 Fuera de alcance por ahora: facturación fiscal de un país específico (idea en #73), pasarelas de pago
 (un pago es medio + monto, con 6 medios fijos y sin integración con ningún procesador) y la mayor parte
-del hardware. La impresión de tickets (58 y 80 mm, A6 y ESC/POS directo, con corte y cajón) entra
-en el MVP de mini contax (#174).
+del hardware. La impresión de tickets con `window.print()` (58 y 80 mm y A6) está desde #174;
+ESC/POS directo, con corte y cajón, queda para #188.
 
 ## Cómo trabajamos
 
@@ -101,7 +102,7 @@ en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 | Build | Vite |
 | Testing | Vitest + Testing Library (preact) + Playwright |
 | PWA / service worker | `vite-plugin-pwa` (Workbox) — **pendiente** (#54) |
-| Impresión / hardware | `window.print()` y, en Chromium, Web Serial / WebUSB — **pendiente** (#174) |
+| Impresión / hardware | `window.print()` en un iframe (#174); Web Serial / WebUSB / Web Bluetooth para ESC/POS — **pendiente** (#188) |
 
 Navegador de referencia: Chromium (Chrome/Edge). La app anda en Firefox/Safari; el hardware, cuando
 exista, va a depender de Web Serial/WebUSB (solo Chromium).
@@ -120,7 +121,8 @@ src/
   sync/            # motor de sincronización, config de la terminal, registro de conectores (connector-registry.ts)
   connectors/      # un subdirectorio por conector (rest/, rest-demo/, google-sheets/): su config, sus campos para /CONFIG y su factory
   ui/
-    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, /CAJA, /RESUMEN, /CONFIG (config-wizard/), /DIAGNOSTICO, /DEMO_RESET
+    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, /CAJA, /RESUMEN, /CONFIG (config-wizard/), /IMPRESORA, /DIAGNOSTICO, /DEMO_RESET
+    print/         # el comprobante (modelo, componente) y su impresión (puerto ReceiptPrinter, iframe)
     components/    # barra de comandos, carrito, barra de estado, campos de pago, indicador de scroll
     keyboard/      # un controller por pantalla (teclado y mouse) y modelos puros de formularios
     state/         # signals agrupados por concern
@@ -415,6 +417,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/ANULAR` | Anula un ticket o una cobranza de las últimas 24 h con otro documento |
 | `/DESCARTAR` | Vacía la venta en curso (líneas, cliente y ajuste global) con `domain/cart.ts::discardCart`, sin confirmación |
 | `/CONFIG` | Wizard de la terminal y su conexión (ver "Ciclo de vida de la conexión"); config en `localStorage`, no hay variables de entorno |
+| `/IMPRESORA` | Formato del ticket (No imprimir, 58 mm, 80 mm, A6), qué pasa al cobrar, encabezado y pie; config local de la terminal (`storage/printer-config.ts`), aparte de la conexión |
 | `/SINCRONIZAR` | Push y pull ya (RF-12); no cambia de pantalla, el feedback es la barra de estado |
 | `/DIAGNOSTICO` | Estado de sincronización, de solo lectura (también con un click en la barra de estado) |
 | `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |
@@ -538,13 +541,14 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #112 + #111 | Pasada visual: un lenguaje para foco, selección y paso actual (contorno = foco, relleno + marca = selección) y un piso de 11 px para el texto con zoom | PR #164 |
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
+| #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
-impresión (#174) y una sola pestaña (#175), más #54 (service worker); antes
+una sola pestaña (#175) y #54 (service worker) — la impresión (#174) ya está; antes
 del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
 (contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
@@ -561,7 +565,8 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#174 a #179); Sheets en el epic #180.
+- MVP de mini contax: epic #182 (#175 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+  directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
   (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del

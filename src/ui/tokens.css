@@ -235,6 +235,16 @@ textarea {
 }
 
 /*
+ * El ticket en pantalla (comprobante y vista previa de `/IMPRESORA`, #174) es el papel a tamaño
+ * real: cancela el `zoom` de la app, así sus medidas en mm y pt son las del papel y el texto nunca
+ * baja de ~12 px (9 pt en 58 mm), por encima del piso de #111. En el iframe de impresión no hay
+ * zoom que cancelar: esto vive acá y no en `receipt.css`.
+ */
+.receipt-paper {
+  zoom: calc(1 / var(--app-zoom));
+}
+
+/*
  * La barra de comandos vive sobre "chrome" oscuro (ver --color-chrome-*) —
  * un outline claro ahí no se lee bien, así que el foco se marca con un
  * borde inferior en el mismo azul de acento en vez del outline por default.

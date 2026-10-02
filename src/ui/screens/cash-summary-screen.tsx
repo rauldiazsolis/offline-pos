@@ -29,6 +29,8 @@ import {
 } from '../keyboard/cash-form-model.ts';
 import {
   exitCashSummaryScreen,
+  reprintEntry,
+  reprintSourceFor,
   setCashSummaryTab,
   showNextDay,
   showPreviousDay,
@@ -39,6 +41,7 @@ import {
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -49,6 +52,7 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
+import { printerConfigSignal } from '../state/printer.ts';
 import { scaledPx } from '../text-scale.ts';
 
 const sidebarCardStyle = {
@@ -687,6 +691,17 @@ export function CashSummaryScreen() {
   const today = localDateKey(new Date().toISOString());
   const canGoBack = view.date > view.oldestDate;
   const canGoForward = !view.isToday;
+  // Reimprimir (#174): solo con una venta o una cobranza elegida en Movimientos.
+  const selectedEntry =
+    tab === 'movements' ? filteredEntries[selectedEntryIndexSignal.value] : undefined;
+  const reprintable =
+    selectedEntry !== undefined &&
+    reprintSourceFor(selectedEntry, view.customerNames) !== undefined;
+  const reprintLabel =
+    printerConfigSignal.value.format === 'none' ? 'Ver comprobante (Enter)' : 'Reimprimir (Enter)';
+  const reprintSelected = () => {
+    if (selectedEntry !== undefined) reprintEntry(selectedEntry, view.customerNames);
+  };
 
   const filterValue =
     tab === 'products'
@@ -719,6 +734,8 @@ export function CashSummaryScreen() {
     focusFilter();
   };
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    // El aviso de la última reimpresión dura hasta la próxima tecla (#174).
+    cashSummaryNoticeSignal.value = null;
     if (event.key === 'Escape') {
       event.preventDefault();
       exitCashSummaryScreen();
@@ -743,6 +760,15 @@ export function CashSummaryScreen() {
         (currentIdx + (event.shiftKey ? -1 : 1) + TAB_ORDER.length) % TAB_ORDER.length;
       const nextTab = TAB_ORDER[nextIdx];
       if (nextTab !== undefined) setCashSummaryTab(nextTab);
+      return;
+    }
+    // Enter no estaba usado en Movimientos (lo tipeado va al buscador): Reimprimir (#174). Un botón
+    // enfocado se activa solo, de forma nativa.
+    if (event.key === 'Enter' && !(event.target instanceof HTMLButtonElement)) {
+      if (reprintable) {
+        event.preventDefault();
+        reprintSelected();
+      }
       return;
     }
     const navHandled =
@@ -851,10 +877,13 @@ export function CashSummaryScreen() {
         </div>
         <div
           style={{
-            padding: '0 var(--space-4) var(--space-3)',
+            padding: '0 var(--space-4) var(--space-1)',
             display: 'flex',
+            // Con el texto más grande a 600 px (#111), el grupo de botones baja de renglón entero.
+            flexWrap: 'wrap',
             alignItems: 'center',
-            gap: 'var(--space-3)',
+            columnGap: 'var(--space-3)',
+            rowGap: 'var(--space-2)',
           }}
         >
           <input
@@ -872,6 +901,8 @@ export function CashSummaryScreen() {
             onInput={handleFilterInput}
             style={{
               flex: 1,
+              // Sin piso, el buscador se achicaba a nada antes de que la franja baje de renglón.
+              minWidth: scaledPx(200),
               background: 'var(--color-chrome-surface)',
               color: 'var(--color-chrome-text)',
               border: '1px solid var(--color-chrome-border)',
@@ -879,20 +910,51 @@ export function CashSummaryScreen() {
               padding: 'var(--space-1) var(--space-2)',
             }}
           />
-          {TAB_ORDER.map((t) => (
+          {/* Pestañas y Reimprimir, un solo grupo (#174): si no entran al lado del buscador, bajan
+              juntos al segundo renglón; nunca queda un botón suelto. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+            {TAB_ORDER.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setCashSummaryTab(t);
+                  focusFilter();
+                }}
+                style={tabButtonStyle(t === tab)}
+              >
+                {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
+              </button>
+            ))}
+            {/* Siempre ocupa su lugar (#174): la franja no salta al pasar de una venta a un arqueo. */}
             <button
-              key={t}
               type="button"
+              disabled={!reprintable}
+              aria-hidden={!reprintable}
+              tabIndex={reprintable ? 0 : -1}
               onClick={() => {
-                setCashSummaryTab(t);
+                reprintSelected();
                 focusFilter();
               }}
-              style={tabButtonStyle(t === tab)}
+              style={{ ...tabButtonStyle(false), visibility: reprintable ? 'visible' : 'hidden' }}
             >
-              {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
+              {reprintLabel}
             </button>
-          ))}
+          </div>
         </div>
+        {/* Renglón de alto fijo (nunca corre el layout), como el de `/ANULAR`: qué copia salió. */}
+        <p
+          role="status"
+          style={{
+            margin: 0,
+            padding: '0 var(--space-4) var(--space-2)',
+            minHeight: '1.4em',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-chrome-text-muted)',
+          }}
+        >
+          {cashSummaryNoticeSignal.value ?? ''}
+        </p>
       </div>
       <div
         style={{

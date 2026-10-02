@@ -6,6 +6,7 @@ import { CollectionScreen } from './screens/collection-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
 import { DemoResetScreen } from './screens/demo-reset-screen.tsx';
 import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
+import { PrinterScreen } from './screens/printer-screen.tsx';
 import { ReceiptScreen } from './screens/receipt-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
@@ -40,6 +41,8 @@ function ActiveScreen() {
       return <DemoResetScreen />;
     case 'diagnostico':
       return <DiagnosticoScreen />;
+    case 'printer':
+      return <PrinterScreen />;
     default:
       return <SaleScreen />;
   }

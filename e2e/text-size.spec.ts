@@ -17,8 +17,15 @@ type Measure = {
 
 async function measure(page: Page): Promise<Measure> {
   return page.evaluate(() => {
-    const wrapper = document.querySelector('.app-zoom-wrapper');
-    const zoom = wrapper === null ? 1 : Number(getComputedStyle(wrapper).zoom);
+    // El zoom efectivo es el producto del de cada ancestro: `.app-zoom-wrapper` achica la app y el
+    // ticket en pantalla lo cancela (`.receipt-paper`, #174).
+    const zoomOf = (element: Element): number => {
+      let zoom = 1;
+      for (let node: Element | null = element; node !== null; node = node.parentElement) {
+        zoom *= Number(getComputedStyle(node).zoom) || 1;
+      }
+      return zoom;
+    };
     let smallest = { px: Number.POSITIVE_INFINITY, text: '' };
     for (const element of document.querySelectorAll('body *')) {
       if (element.getClientRects().length === 0) continue;
@@ -26,7 +33,7 @@ async function measure(page: Page): Promise<Measure> {
         (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() !== '',
       );
       if (!hasText) continue;
-      const px = parseFloat(getComputedStyle(element).fontSize) * zoom;
+      const px = parseFloat(getComputedStyle(element).fontSize) * zoomOf(element);
       if (px < smallest.px) {
         smallest = { px, text: element.textContent.trim().slice(0, 40) };
       }
@@ -130,6 +137,13 @@ test.describe('a 600 × 700', () => {
 
     await runCommand(page, '/DIAGNOSTICO');
     await expectLegible(page, '/DIAGNOSTICO');
+    await page.keyboard.press('Escape');
+
+    // #174: el ticket de la vista previa es el papel a tamaño real (58 mm: 9 pt, la letra más chica).
+    await runCommand(page, '/IMPRESORA');
+    await expectLegible(page, '/IMPRESORA A6');
+    await page.getByLabel('Formato').selectOption('58mm');
+    await expectLegible(page, '/IMPRESORA 58 mm');
     await page.keyboard.press('Escape');
 
     await runCommand(page, '/CONFIG');
