@@ -99,9 +99,10 @@ En la original, al recibir `release-request` (una sola vez; los pedidos repetido
 Si a la original le quitan el cerrojo con `steal`, la promesa de su `request` se rechaza
 (`AbortError`): marca que la desplazaron y se recarga igual.
 
-**Contador de transacciones**: un middleware de Dexie (`db.use`, capa `dbcore`, en `storage/`) cuenta
-las transacciones abiertas (suma al crearlas, resta en `complete`, `abort` o `error`) y expone
-`waitForIdleTransactions(timeoutMs)`. Es genérico a propósito: una tabla o un repositorio futuro queda
+**Contador de transacciones**: un middleware de Dexie (`db.use`, capa `dbcore`, en
+`storage/transaction-tracker.ts`) cuenta las transacciones **de escritura** (`readwrite`) abiertas —
+cortar una lectura no deja nada a medias — (suma al crearlas, resta en `complete` o `abort`) y expone
+`waitForIdleWriteTransactions(timeoutMs)`. Es genérico a propósito: una tabla o un repositorio futuro queda
 cubierto sin acordarse.
 
 **Riesgo aceptado**: el cobro con cuenta corriente pide la reserva por red antes de abrir la
@@ -152,8 +153,8 @@ La original no avisa nada cuando se abre una segunda: está en segundo plano y n
   cerrojo; traspaso cooperativo (pausa, espera el cerrojo de sync y las transacciones, recarga y marca);
   pedido repetido ignorado; tope de espera en la original; `steal` al vencer el tope en la segunda;
   desplazada por `steal`; sin `navigator.locks`.
-- **Contador de transacciones** (`storage/`, con `fake-indexeddb`): cuenta una transacción abierta,
-  vuelve a 0 al terminar o al abortar, y `waitForIdleTransactions` resuelve o vence.
+- **Contador de transacciones** (`storage/`, con `fake-indexeddb`): cuenta una escritura abierta (una lectura no),
+  vuelve a 0 al terminar o al abortar, y `waitForIdleWriteTransactions` resuelve o vence.
 - **Pantalla** (Testing Library): textos, el aviso de desplazada, foco en el botón, Enter y click
   llaman a lo mismo, estado "Tomando el control…".
 - **e2e** `e2e/single-tab.spec.ts`, dos páginas en el mismo contexto:
