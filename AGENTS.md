@@ -31,6 +31,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Almacenamiento por carpeta: base de Dexie y claves de `localStorage` según la ruta (#148) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 
 ## Qué es esto
@@ -42,8 +43,8 @@ conoce ningún backend específico.
 
 Fuera de alcance por ahora: facturación fiscal de un país específico (idea en #73), pasarelas de pago
 (un pago es medio + monto, con 6 medios fijos y sin integración con ningún procesador) y la mayor parte
-del hardware. La impresión de tickets (58 y 80 mm, A6 y ESC/POS directo, con corte y cajón) entra
-en el MVP de mini contax (#174).
+del hardware. La impresión de tickets con `window.print()` (58 y 80 mm y A6) está desde #174;
+ESC/POS directo, con corte y cajón, queda para #188.
 
 ## Cómo trabajamos
 
@@ -101,7 +102,7 @@ en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 | Build | Vite |
 | Testing | Vitest + Testing Library (preact) + Playwright |
 | PWA / service worker | `vite-plugin-pwa` (Workbox) — **pendiente** (#54) |
-| Impresión / hardware | `window.print()` y, en Chromium, Web Serial / WebUSB — **pendiente** (#174) |
+| Impresión / hardware | `window.print()` en un iframe (#174); Web Serial / WebUSB / Web Bluetooth para ESC/POS — **pendiente** (#188) |
 
 Navegador de referencia: Chromium (Chrome/Edge). La app anda en Firefox/Safari; el hardware, cuando
 exista, va a depender de Web Serial/WebUSB (solo Chromium).
@@ -120,7 +121,8 @@ src/
   sync/            # motor de sincronización, config de la terminal, registro de conectores (connector-registry.ts)
   connectors/      # un subdirectorio por conector (rest/, rest-demo/, google-sheets/): su config, sus campos para /CONFIG y su factory
   ui/
-    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, /CAJA, /RESUMEN, /CONFIG (config-wizard/), /DIAGNOSTICO, /DEMO_RESET
+    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, /CAJA, /RESUMEN, /CONFIG (config-wizard/), /IMPRESORA, /DIAGNOSTICO, /DEMO_RESET
+    print/         # el comprobante (modelo, componente) y su impresión (puerto ReceiptPrinter, iframe)
     components/    # barra de comandos, carrito, barra de estado, campos de pago, indicador de scroll
     keyboard/      # un controller por pantalla (teclado y mouse) y modelos puros de formularios
     state/         # signals agrupados por concern
@@ -415,6 +417,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/ANULAR` | Anula un ticket o una cobranza de las últimas 24 h con otro documento |
 | `/DESCARTAR` | Vacía la venta en curso (líneas, cliente y ajuste global) con `domain/cart.ts::discardCart`, sin confirmación |
 | `/CONFIG` | Wizard de la terminal y su conexión (ver "Ciclo de vida de la conexión"); config en `localStorage`, no hay variables de entorno |
+| `/IMPRESORA` | Formato del ticket (No imprimir, 58 mm, 80 mm, A6), qué pasa al cobrar, encabezado y pie; config local de la terminal (`storage/printer-config.ts`), aparte de la conexión |
 | `/SINCRONIZAR` | Push y pull ya (RF-12); no cambia de pantalla, el feedback es la barra de estado |
 | `/DIAGNOSTICO` | Estado de sincronización, de solo lectura (también con un click en la barra de estado) |
 | `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |

@@ -169,6 +169,12 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   "12", "#12", conceptos y descripciones), Productos y Medios de pago. Panel lateral: total vendido,
   tickets con "(N anuladas)", desc/recargos, otros pagos, efectivo del día (cobros, ingresos, egresos,
   ajustes) y, solo hoy, el saldo actual. Las ventas se agrupan por `ticket.date` si lo tienen.
+- **Reimprimir en Movimientos** (#174): con una venta o una cobranza elegida (también anuladas y
+  anulaciones), Enter o el botón al lado de las pestañas reimprime una copia ahí mismo
+  ("Reimprimir (Enter)"); con "No imprimir", abre la copia en el comprobante ("Ver comprobante
+  (Enter)") y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y búsqueda (la selección vuelve a la
+  primera fila). Con un movimiento de caja o un arqueo, Enter no hace nada. El botón siempre ocupa
+  su lugar (oculto si la fila no se reimprime) y la franja baja de renglón antes que desbordar a 600 px.
 
 ## Cobranza sin venta y saldo del cliente (Etapa 6, #101)
 
@@ -182,10 +188,10 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   `domain/customer-payment.ts::resolveCollection`, si no "Ingresá al menos un monto."). Total y
   "Saldo actual → Después" en vivo; un cliente bloqueado se advierte en ámbar. Mismas teclas que
   Cobro; Esc vuelve a la venta con el cliente todavía adjunto.
-- **Comprobante**: la misma pantalla (`ReceiptFrame` compartido), "Recibo de cobranza", "Recibo #3",
-  cliente, pagos por medio, total y "Saldo anterior / Saldo nuevo"; lo pone
-  `receiptCollectionSignal` (junto a `receiptSaleSignal`, `ui/state/receipt.ts`). Al cerrarlo, el
-  cliente queda desadjuntado, como después de cobrar una venta.
+- **Comprobante**: el mismo que el de una venta (ver "Impresión"), "Recibo de cobranza", "Recibo #3",
+  cliente, pagos por medio, total y "Saldo anterior / Saldo nuevo" (los de ese momento viajan en el
+  `ReceiptSource`, porque después no se pueden recalcular). Al registrarla, el cliente queda
+  desadjuntado, como después de cobrar una venta.
 - **Saldo en la venta**: `customerBalancesSignal` (`ui/state/customer-balance.ts`) tiene la tabla
   entera en memoria, como el stock, y se recarga en los mismos puntos más después de una cobranza. La
   tarjeta de Cliente suma una quinta fila fija, "Saldo: Debe $X / A favor $X / Sin saldo"
@@ -231,6 +237,43 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 - **Al anular**: vuelve a la venta con un aviso en el slot de la barra (`commandBarNoticeSignal`,
   como `/CAJA`): "Anulado el Recibo #1 con el Recibo #2". Recarga el stock y los saldos. El
   comprobante de la anulación queda en #137.
+
+## Impresión (#174)
+
+Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
+
+- **`/IMPRESORA`** (`ui/screens/printer-screen.tsx`, `ui/keyboard/printer-controller.ts`, modelo puro
+  en `ui/keyboard/printer-form-model.ts`, estado en `ui/state/printer.ts`): dos grupos tipo radio
+  (`.wizard-option`, foco en la opción elegida, ↑/↓ la cambian) — **Formato** (No imprimir, 58 mm,
+  80 mm, A6) y **Al cobrar** (Imprimir, Mostrar el comprobante, Nada; sin papel no se ofrece
+  Imprimir y, si estaba elegido, pasa a Mostrar) —, Encabezado y Pie (`textarea`s libres) y la vista
+  previa de un ticket de ejemplo que se actualiza mientras se edita. Se edita una copia
+  (`printerFormSignal`): Guardar (Ctrl+Enter, porque Enter en un `textarea` es salto de línea) la
+  persiste y la pone en `printerConfigSignal`; Esc o Cancelar vuelven sin guardar; "Prueba de
+  impresión (Alt+P, por la tecla física)" imprime el ejemplo con lo que está en pantalla, sin guardar.
+- **La config** (`storage/printer-config.ts`) es del equipo, no de la conexión: vive en
+  `localStorage` (`storageKey('printer')`), validada con Zod; algo ausente o roto cae al default
+  `{ format: 'a6', onCheckout: 'show' }` (como antes de #174). `/CONFIG` y "Borrar y cambiar" no la
+  tocan; `pos.reset()` sí, como todo el prefijo.
+- **`ui/print/`**: `receipt-document.ts` es el modelo puro del comprobante (`ReceiptDocument`:
+  encabezado, título, marcas como "COPIA" o "PRUEBA", meta, filas y pie), con los nombres y los
+  formateadores ya resueltos. `resolve-receipt.ts` lo arma desde un `ReceiptSource` (la venta, o la
+  cobranza con el cliente y sus saldos, y si es copia; una copia nunca lleva saldos).
+  `ReceiptView.tsx` lo dibuja en el ancho del formato, con `receipt.css` (papel blanco, sin variables
+  de tema: el iframe no las tiene). `receipt-printer.ts` es el puerto `ReceiptPrinter`;
+  `browser-printer.tsx`, la implementación con `window.print()` en un iframe oculto (CSS inyectado con
+  `?inline` más el `@page` del formato; lo saca con `afterprint` o a los 60 s). ESC/POS (#188) va a
+  ser otra implementación del puerto. En los tests, `setReceiptPrinter` pone una impresora falsa.
+- **Al cobrar** (`ui/print/after-close.ts::showOrPrintReceipt`): Cobro y la cobranza registran primero
+  y después, según la config: Imprimir vuelve a la venta (barra vacía y enfocada) y manda a imprimir
+  sin esperar; Mostrar va al comprobante; Nada vuelve directo a la venta.
+- **El comprobante** (`ui/screens/receipt-screen.tsx`, `receiptSignal = { source, returnTo }`): dibuja
+  `ReceiptView` en el formato configurado; "Imprimir (Enter)" solo con papel; "Continuar (Esc)"
+  vuelve a `returnTo` (la venta o `/RESUMEN`).
+- **El papel en pantalla a tamaño real**: el comprobante y la vista previa cancelan el zoom de la app
+  (`.receipt-paper`, `tokens.css`), así sus mm y pt son los del papel y el texto (9 pt en 58 mm) queda
+  sobre el piso de 11 px de #111 a 600 px. Lo vigila `e2e/text-size.spec.ts`, que mide con el zoom
+  acumulado de los ancestros.
 
 ## `/CONFIG` como wizard
 
@@ -310,7 +353,8 @@ carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). 
 en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobranza** (#101): lo
 mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
-**`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
+**`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
+(opciones, campos y botones), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
 abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta hace `/ALTA`, #128).
 

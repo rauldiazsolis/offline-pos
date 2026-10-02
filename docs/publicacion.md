@@ -155,6 +155,7 @@ contesta con un error 522).
    ```
 
    tiene que mostrar `Name: offline-pos.pages.dev` y `Aliases: pos.contax.ar`.
+
 4. De vuelta en **Custom domains**: **Complete DNS setup** → **Check DNS records**. Si Cloudflare
    revisó antes de que el registro llegara a todos los servidores de DreamHost, sigue en
    **Inactive**: vuelve a revisar solo y avisa por mail. Cuando dice **Active**, emite el certificado
@@ -191,3 +192,24 @@ la dirección vieja), así que una redirección no traería nada y le cortaría 
 Las dos direcciones son instalaciones separadas que no se mezclan; la oficial es `pos.contax.ar` y
 una terminal real se instala solo ahí. Además, el mini-erp baja de `offline-pos.pages.dev` su copia
 del POS publicado y el contrato.
+
+## 9. Imprimir sin el diálogo del navegador (#174)
+
+El POS imprime con `window.print()`: cada ticket abre el diálogo de impresión del navegador. Para
+que salga directo, sin diálogo, la terminal abre Chrome o Edge con el flag `--kiosk-printing`, por
+ejemplo con un acceso directo cuyo destino termine así:
+
+```text
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing https://pos.contax.ar/
+```
+
+Con el flag, el ticket va a la **impresora predeterminada** del sistema, así que:
+
+- la impresora de tickets tiene que ser la predeterminada;
+- en su driver tiene que estar elegido el papel del rollo (58 u 80 mm), el mismo formato que en
+  `/IMPRESORA`. Con un rollo, el largo del ticket lo corta el driver: se confirma con la impresora
+  real.
+
+El flag solo vale si no hay otra ventana de ese navegador abierta al lanzarlo (si la hay, se suma a
+ella y lo ignora). Para probar sin impresora, "Guardar como PDF" en el diálogo muestra el ancho y el
+contenido del ticket.
