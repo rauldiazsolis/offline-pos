@@ -8,6 +8,18 @@ import { PrinterScreen } from './printer-screen.tsx';
 
 const printed: string[] = [];
 
+function formatSelect(): HTMLSelectElement {
+  return screen.getByLabelText<HTMLSelectElement>('Formato');
+}
+
+function checkoutSelect(): HTMLSelectElement {
+  return screen.getByLabelText<HTMLSelectElement>('Al cobrar');
+}
+
+function testButton(): HTMLButtonElement {
+  return screen.getByRole<HTMLButtonElement>('button', { name: 'Prueba de impresión (Alt+P)' });
+}
+
 beforeEach(() => {
   printed.length = 0;
   setReceiptPrinter({
@@ -26,33 +38,42 @@ afterEach(() => {
 });
 
 describe('PrinterScreen', () => {
-  it('arranca con el foco en el formato elegido', () => {
+  it('arranca con el foco en el formato, con lo guardado elegido', () => {
     render(<PrinterScreen />);
-    expect(document.activeElement?.textContent).toBe('A6');
+    expect(document.activeElement).toBe(formatSelect());
+    expect(formatSelect().value).toBe('a6');
+    expect(checkoutSelect().value).toBe('show');
   });
 
-  it('↑ cambia el formato y mueve el foco', () => {
-    render(<PrinterScreen />);
-    fireEvent.keyDown(screen.getByRole('button', { name: 'A6' }), { key: 'ArrowUp' });
-    expect(printerFormSignal.value.format).toBe('80mm');
-    expect(document.activeElement?.textContent).toBe('80 mm');
+  it('elegir un formato cambia el formulario y la vista previa', () => {
+    const { container } = render(<PrinterScreen />);
+    fireEvent.change(formatSelect(), { target: { value: '58mm' } });
+    expect(printerFormSignal.value.format).toBe('58mm');
+    expect(container.querySelector('.receipt--58mm')).not.toBeNull();
   });
 
-  it('con "No imprimir" no se ofrecen "Imprimir" ni la prueba', () => {
+  it('con "No imprimir" no se ofrece "Imprimir" y la prueba queda deshabilitada', () => {
     render(<PrinterScreen />);
-    expect(screen.queryByRole('button', { name: 'Imprimir' })).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'No imprimir' }));
-    expect(screen.queryByRole('button', { name: 'Imprimir' })).toBeNull();
-    expect(screen.queryByText('Prueba de impresión (Alt+P)')).toBeNull();
+    const options = () => [...checkoutSelect().options].map((option) => option.textContent);
+    expect(options()).toEqual(['Imprimir', 'Mostrar el comprobante', 'Nada']);
+    expect(testButton().disabled).toBe(false);
+
+    fireEvent.change(formatSelect(), { target: { value: 'none' } });
+
+    expect(options()).toEqual(['Mostrar el comprobante', 'Nada']);
+    expect(testButton().disabled).toBe(true);
+  });
+
+  it('elegir "Al cobrar" cambia el formulario', () => {
+    render(<PrinterScreen />);
+    fireEvent.change(checkoutSelect(), { target: { value: 'skip' } });
+    expect(printerFormSignal.value.onCheckout).toBe('skip');
   });
 
   it('Ctrl+Enter guarda y vuelve a la venta', () => {
     render(<PrinterScreen />);
-    fireEvent.click(screen.getByRole('button', { name: '58 mm' }));
-    fireEvent.keyDown(screen.getByRole('button', { name: '58 mm' }), {
-      key: 'Enter',
-      ctrlKey: true,
-    });
+    fireEvent.change(formatSelect(), { target: { value: '58mm' } });
+    fireEvent.keyDown(formatSelect(), { key: 'Enter', ctrlKey: true });
     expect(printerConfigSignal.value.format).toBe('58mm');
     expect(loadPrinterConfig().format).toBe('58mm');
     expect(activeScreenSignal.value).toBe('sale');
@@ -60,16 +81,16 @@ describe('PrinterScreen', () => {
 
   it('Esc cancela sin guardar', () => {
     render(<PrinterScreen />);
-    fireEvent.click(screen.getByRole('button', { name: '58 mm' }));
-    fireEvent.keyDown(screen.getByRole('button', { name: '58 mm' }), { key: 'Escape' });
+    fireEvent.change(formatSelect(), { target: { value: '58mm' } });
+    fireEvent.keyDown(formatSelect(), { key: 'Escape' });
     expect(printerConfigSignal.value).toEqual(DEFAULT_PRINTER_CONFIG);
     expect(activeScreenSignal.value).toBe('sale');
   });
 
   it('la prueba imprime el ejemplo en el formato elegido', () => {
     render(<PrinterScreen />);
-    fireEvent.click(screen.getByRole('button', { name: '80 mm' }));
-    fireEvent.click(screen.getByText('Prueba de impresión (Alt+P)'));
+    fireEvent.change(formatSelect(), { target: { value: '80mm' } });
+    fireEvent.click(testButton());
     expect(printed).toEqual(['80mm:PRUEBA']);
   });
 
@@ -81,20 +102,14 @@ describe('PrinterScreen', () => {
       altKey: true,
     });
     expect(printed).toEqual(['a6:PRUEBA']);
-    fireEvent.click(screen.getByRole('button', { name: 'No imprimir' }));
-    fireEvent.keyDown(screen.getByRole('button', { name: 'No imprimir' }), {
-      key: 'p',
-      code: 'KeyP',
-      altKey: true,
-    });
+    fireEvent.change(formatSelect(), { target: { value: 'none' } });
+    fireEvent.keyDown(formatSelect(), { key: 'p', code: 'KeyP', altKey: true });
     expect(printed).toEqual(['a6:PRUEBA']);
   });
 
-  it('la vista previa usa el encabezado tipeado y el formato elegido', () => {
-    const { container } = render(<PrinterScreen />);
+  it('la vista previa usa el encabezado tipeado', () => {
+    render(<PrinterScreen />);
     fireEvent.input(screen.getByLabelText('Encabezado'), { target: { value: 'Mi kiosco' } });
     expect(screen.getByText('Mi kiosco')).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '58 mm' }));
-    expect(container.querySelector('.receipt--58mm')).not.toBeNull();
   });
 });

@@ -42,8 +42,8 @@ async function configurePrinter(page: Page, format: string, onCheckout: string):
   await commandBar.fill('/IMPRESORA');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Impresora' })).toBeVisible();
-  await page.getByRole('button', { name: format, exact: true }).click();
-  await page.getByRole('button', { name: onCheckout, exact: true }).click();
+  await page.getByLabel('Formato').selectOption({ label: format });
+  await page.getByLabel('Al cobrar').selectOption({ label: onCheckout });
   await page.getByLabel('Encabezado').fill('Kiosco E2E');
   await page.keyboard.press('Control+Enter');
   await expect(commandBar).toBeVisible();
@@ -117,6 +117,7 @@ test('la config de la impresora sobrevive a un reload', async ({ page }) => {
   const commandBar = page.getByLabel('Barra de comandos');
   await commandBar.fill('/IMPRESORA');
   await commandBar.press('Enter');
-  await expect(page.getByRole('button', { name: '80 mm', exact: true })).toBeFocused();
+  await expect(page.getByLabel('Formato')).toBeFocused();
+  await expect(page.getByLabel('Formato')).toHaveValue('80mm');
   await expect(page.getByLabel('Encabezado')).toHaveValue('Kiosco E2E');
 });

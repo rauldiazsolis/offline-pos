@@ -45,8 +45,9 @@ test('venta → /IMPRESORA → Esc → la barra de comandos recupera el foco', a
   await commandBar.fill('/IMPRESORA');
   await commandBar.press('Enter');
   await expect(page.getByRole('heading', { name: 'Impresora' })).toBeVisible();
-  // El foco arranca en el formato elegido (sin config, A6).
-  await expect(page.getByRole('button', { name: 'A6', exact: true })).toBeFocused();
+  // El foco arranca en el formato (sin config, A6).
+  await expect(page.getByLabel('Formato')).toBeFocused();
+  await expect(page.getByLabel('Formato')).toHaveValue('a6');
 
   await page.keyboard.press('Escape');
 

@@ -142,9 +142,7 @@ test.describe('a 600 × 700', () => {
     // #174: el ticket de la vista previa es el papel a tamaño real (58 mm: 9 pt, la letra más chica).
     await runCommand(page, '/IMPRESORA');
     await expectLegible(page, '/IMPRESORA A6');
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('ArrowUp');
-    await expect(page.getByRole('button', { name: '58 mm', exact: true })).toBeFocused();
+    await page.getByLabel('Formato').selectOption('58mm');
     await expectLegible(page, '/IMPRESORA 58 mm');
     await page.keyboard.press('Escape');
 

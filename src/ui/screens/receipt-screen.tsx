@@ -3,7 +3,7 @@ import { paperFormat } from '../../storage/printer-config.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { printReceipt } from '../print/after-close.ts';
-import { ReceiptView } from '../print/ReceiptView.tsx';
+import { ReceiptPreview } from '../print/ReceiptPreview.tsx';
 import { receiptDocumentFor } from '../print/resolve-receipt.ts';
 import { printerConfigSignal } from '../state/printer.ts';
 import { receiptSignal } from '../state/receipt.ts';
@@ -82,16 +82,10 @@ export function ReceiptScreen() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      {/* El papel a tamaño real, sin el zoom de la app (`.receipt-paper`, tokens.css). */}
-      <div
-        class="receipt-paper"
-        style={{ boxShadow: 'var(--shadow-card)', border: '1px solid var(--color-border)' }}
-      >
-        <ReceiptView
-          document={receiptDocumentFor(current.source, config)}
-          format={paperFormat(config.format)}
-        />
-      </div>
+      <ReceiptPreview
+        document={receiptDocumentFor(current.source, config)}
+        format={paperFormat(config.format)}
+      />
       <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
         {canPrint && (
           <button type="button" class="btn btn-primary" onClick={print}>

@@ -31,9 +31,3 @@ export function withFormat(form: PrinterConfig, format: PrintFormat): PrinterCon
   const onCheckout = format === 'none' && form.onCheckout === 'print' ? 'show' : form.onCheckout;
   return { ...form, format, onCheckout };
 }
-
-/** La opción vecina en un grupo tipo radio, sin dar la vuelta. */
-export function stepOption<T>(options: readonly T[], current: T, direction: 1 | -1): T {
-  const index = options.indexOf(current) + direction;
-  return options[Math.max(0, Math.min(index, options.length - 1))] ?? current;
-}
