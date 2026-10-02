@@ -876,7 +876,7 @@ export function CashSummaryScreen() {
           style={{
             padding: '0 var(--space-4) var(--space-3)',
             display: 'flex',
-            // Con el texto más grande a 600 px (#111), los botones bajan de renglón antes que partirse.
+            // Con el texto más grande a 600 px (#111), el grupo de botones baja de renglón entero.
             flexWrap: 'wrap',
             alignItems: 'center',
             columnGap: 'var(--space-3)',
@@ -907,33 +907,37 @@ export function CashSummaryScreen() {
               padding: 'var(--space-1) var(--space-2)',
             }}
           />
-          {TAB_ORDER.map((t) => (
+          {/* Pestañas y Reimprimir, un solo grupo (#174): si no entran al lado del buscador, bajan
+              juntos al segundo renglón; nunca queda un botón suelto. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+            {TAB_ORDER.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  setCashSummaryTab(t);
+                  focusFilter();
+                }}
+                style={tabButtonStyle(t === tab)}
+              >
+                {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
+              </button>
+            ))}
+            {/* Siempre ocupa su lugar (#174): la franja no salta al pasar de una venta a un arqueo. */}
             <button
-              key={t}
               type="button"
+              disabled={!reprintable}
+              aria-hidden={!reprintable}
+              tabIndex={reprintable ? 0 : -1}
               onClick={() => {
-                setCashSummaryTab(t);
+                reprintSelected();
                 focusFilter();
               }}
-              style={tabButtonStyle(t === tab)}
+              style={{ ...tabButtonStyle(false), visibility: reprintable ? 'visible' : 'hidden' }}
             >
-              {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
+              {reprintLabel}
             </button>
-          ))}
-          {/* Siempre ocupa su lugar (#174): la franja no salta al pasar de una venta a un arqueo. */}
-          <button
-            type="button"
-            disabled={!reprintable}
-            aria-hidden={!reprintable}
-            tabIndex={reprintable ? 0 : -1}
-            onClick={() => {
-              reprintSelected();
-              focusFilter();
-            }}
-            style={{ ...tabButtonStyle(false), visibility: reprintable ? 'visible' : 'hidden' }}
-          >
-            {reprintLabel}
-          </button>
+          </div>
         </div>
       </div>
       <div
