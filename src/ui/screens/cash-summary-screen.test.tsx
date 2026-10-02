@@ -675,7 +675,7 @@ describe('Reimprimir (#174)', () => {
     printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, format: '80mm' };
     render(<CashSummaryScreen />);
 
-    expect(screen.getByText('Reimprimir (Enter)')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Reimprimir (Enter)' })).not.toBeNull();
     fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'Enter' });
 
     expect(printed).toEqual(['80mm:COPIA:Ticket']);
@@ -719,7 +719,7 @@ describe('Reimprimir (#174)', () => {
     };
     render(<CashSummaryScreen />);
 
-    expect(screen.queryByText('Reimprimir (Enter)')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reimprimir (Enter)' })).toBeNull();
     fireEvent.keyDown(screen.getByLabelText('Buscar'), { key: 'Enter' });
     expect(printed).toEqual([]);
     expect(activeScreenSignal.value).toBe('cash-summary');
@@ -728,6 +728,6 @@ describe('Reimprimir (#174)', () => {
   it('en otra pestaña no hay botón', () => {
     cashSummaryTabSignal.value = 'products';
     render(<CashSummaryScreen />);
-    expect(screen.queryByText('Reimprimir (Enter)')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reimprimir (Enter)' })).toBeNull();
   });
 });

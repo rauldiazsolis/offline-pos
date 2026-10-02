@@ -876,8 +876,11 @@ export function CashSummaryScreen() {
           style={{
             padding: '0 var(--space-4) var(--space-3)',
             display: 'flex',
+            // Con el texto más grande a 600 px (#111), los botones bajan de renglón antes que partirse.
+            flexWrap: 'wrap',
             alignItems: 'center',
-            gap: 'var(--space-3)',
+            columnGap: 'var(--space-3)',
+            rowGap: 'var(--space-2)',
           }}
         >
           <input
@@ -895,6 +898,8 @@ export function CashSummaryScreen() {
             onInput={handleFilterInput}
             style={{
               flex: 1,
+              // Sin piso, el buscador se achicaba a nada antes de que la franja baje de renglón.
+              minWidth: scaledPx(200),
               background: 'var(--color-chrome-surface)',
               color: 'var(--color-chrome-text)',
               border: '1px solid var(--color-chrome-border)',
@@ -915,18 +920,20 @@ export function CashSummaryScreen() {
               {TAB_LABELS[t]} <span style={{ opacity: 0.75 }}>({TAB_HOTKEYS[t]})</span>
             </button>
           ))}
-          {reprintable && (
-            <button
-              type="button"
-              onClick={() => {
-                reprintSelected();
-                focusFilter();
-              }}
-              style={tabButtonStyle(false)}
-            >
-              {reprintLabel}
-            </button>
-          )}
+          {/* Siempre ocupa su lugar (#174): la franja no salta al pasar de una venta a un arqueo. */}
+          <button
+            type="button"
+            disabled={!reprintable}
+            aria-hidden={!reprintable}
+            tabIndex={reprintable ? 0 : -1}
+            onClick={() => {
+              reprintSelected();
+              focusFilter();
+            }}
+            style={{ ...tabButtonStyle(false), visibility: reprintable ? 'visible' : 'hidden' }}
+          >
+            {reprintLabel}
+          </button>
         </div>
       </div>
       <div
