@@ -13,7 +13,7 @@ export function printReceipt(source: ReceiptSource): void {
 }
 
 /** "Ticket #4" o "Recibo #3 de Ana": el documento como lo nombran los avisos. */
-function documentName(source: ReceiptSource): string {
+export function documentName(source: ReceiptSource): string {
   return source.kind === 'sale'
     ? ticketLabel(source.sale)
     : `${receiptLabel(source.payment)} de ${source.customerName}`;
@@ -53,12 +53,16 @@ export function showOrPrintReceipt(source: ReceiptSource): void {
   }
 }
 
-/** Reimprimir desde `/RESUMEN`: con papel imprime ahí mismo; sin papel, muestra la copia. */
-export function reprintReceipt(source: ReceiptSource): void {
+/**
+ * Reimprimir desde `/RESUMEN`: con papel imprime ahí mismo (`'printed'`); sin papel, muestra la
+ * copia en el comprobante (`'shown'`).
+ */
+export function reprintReceipt(source: ReceiptSource): 'printed' | 'shown' {
   if (printerConfigSignal.value.format === 'none') {
     receiptSignal.value = { source, returnTo: 'cash-summary' };
     activeScreenSignal.value = 'receipt';
-    return;
+    return 'shown';
   }
   printReceipt(source);
+  return 'printed';
 }

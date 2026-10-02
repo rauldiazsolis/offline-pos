@@ -41,6 +41,7 @@ import {
 import { PAYMENT_METHOD_LABELS } from '../payment-labels.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -733,6 +734,8 @@ export function CashSummaryScreen() {
     focusFilter();
   };
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
+    // El aviso de la última reimpresión dura hasta la próxima tecla (#174).
+    cashSummaryNoticeSignal.value = null;
     if (event.key === 'Escape') {
       event.preventDefault();
       exitCashSummaryScreen();
@@ -874,7 +877,7 @@ export function CashSummaryScreen() {
         </div>
         <div
           style={{
-            padding: '0 var(--space-4) var(--space-3)',
+            padding: '0 var(--space-4) var(--space-1)',
             display: 'flex',
             // Con el texto más grande a 600 px (#111), el grupo de botones baja de renglón entero.
             flexWrap: 'wrap',
@@ -939,6 +942,19 @@ export function CashSummaryScreen() {
             </button>
           </div>
         </div>
+        {/* Renglón de alto fijo (nunca corre el layout), como el de `/ANULAR`: qué copia salió. */}
+        <p
+          role="status"
+          style={{
+            margin: 0,
+            padding: '0 var(--space-4) var(--space-2)',
+            minHeight: '1.4em',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-chrome-text-muted)',
+          }}
+        >
+          {cashSummaryNoticeSignal.value ?? ''}
+        </p>
       </div>
       <div
         style={{

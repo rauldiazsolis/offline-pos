@@ -10,6 +10,7 @@ import type { Sale } from '../../domain/sale.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import type { DayView } from '../../storage/cash-summary-repository.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -680,6 +681,18 @@ describe('Reimprimir (#174)', () => {
 
     expect(printed).toEqual(['80mm:COPIA:Ticket']);
     expect(activeScreenSignal.value).toBe('cash-summary');
+  });
+
+  it('al reimprimir avisa qué copia salió, y la próxima tecla lo borra', () => {
+    cashSummaryNoticeSignal.value = null;
+    render(<CashSummaryScreen />);
+    const search = screen.getByLabelText('Buscar');
+
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(screen.getByRole('status').textContent).toBe('Copia del Ticket enviada a imprimir.');
+
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('el botón hace lo mismo que Enter, sobre la fila elegida', () => {

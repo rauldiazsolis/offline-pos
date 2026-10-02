@@ -2,6 +2,7 @@ import type { DayEntry } from '../../domain/day-summary.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import { getDaySummary } from '../../storage/cash-summary-repository.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -12,13 +13,14 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
-import { reprintReceipt } from '../print/after-close.ts';
+import { documentName, reprintReceipt } from '../print/after-close.ts';
 import type { ReceiptSource } from '../print/resolve-receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 /** Capa de glue entre `/RESUMEN` y `storage/cash-summary-repository.ts` — mismo rol que `cash-controller.ts`. */
 
 function resetTabsAndFilters(): void {
+  cashSummaryNoticeSignal.value = null;
   cashSummaryTabSignal.value = 'movements';
   movementFilterSignal.value = '';
   productFilterSignal.value = '';
@@ -40,6 +42,7 @@ export async function triggerCashSummary(): Promise<void> {
  * `await`, así una tecla en vuelo no se pisa).
  */
 export async function showSummaryDay(date: string): Promise<void> {
+  cashSummaryNoticeSignal.value = null;
   selectedEntryIndexSignal.value = 0;
   selectedProductIndexSignal.value = null;
   selectedPaymentIndexSignal.value = null;
@@ -71,6 +74,7 @@ export function exitCashSummaryScreen(): void {
 }
 
 export function setCashSummaryTab(tab: CashSummaryTab): void {
+  cashSummaryNoticeSignal.value = null;
   cashSummaryTabSignal.value = tab;
   movementFilterSignal.value = '';
   productFilterSignal.value = '';
@@ -126,10 +130,16 @@ export function reprintSourceFor(
   }
 }
 
-/** Reimprimir (o ver, sin papel) la fila elegida; nada si no es una venta ni una cobranza. */
+/**
+ * Reimprimir (o ver, sin papel) la fila elegida; nada si no es una venta ni una cobranza. Al
+ * imprimir, el aviso de `/RESUMEN` dice qué copia salió.
+ */
 export function reprintEntry(entry: DayEntry, customerNames: ReadonlyMap<string, string>): void {
   const source = reprintSourceFor(entry, customerNames);
-  if (source !== undefined) {
-    reprintReceipt(source);
+  if (source === undefined) {
+    return;
+  }
+  if (reprintReceipt(source) === 'printed') {
+    cashSummaryNoticeSignal.value = `Copia del ${documentName(source)} enviada a imprimir.`;
   }
 }

@@ -109,6 +109,7 @@ test('Reimprimir desde /RESUMEN imprime una copia', async ({ page }) => {
   const [printed] = await printedTexts(page);
   expect(printed).toContain('COPIA');
   expect(printed).toContain('Arroz 1kg');
+  await expect(page.getByText('Copia del Ticket #1 enviada a imprimir.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Resumen del día' })).toBeVisible();
 });
 
