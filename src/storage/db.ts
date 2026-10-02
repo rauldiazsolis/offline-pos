@@ -11,6 +11,7 @@ import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
 import { STORAGE_NAMESPACE } from './storage-namespace.ts';
+import { trackWriteTransactions } from './transaction-tracker.ts';
 
 /**
  * Fila única con la venta en curso (Fase de mejoras post-Fase 4, issue #17)
@@ -116,3 +117,6 @@ class PosDatabase extends Dexie {
 }
 
 export const db = new PosDatabase();
+
+// #175: la pestaña que suelta el control espera a que no quede ninguna escritura abierta.
+trackWriteTransactions(db);
