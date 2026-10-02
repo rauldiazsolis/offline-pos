@@ -2512,3 +2512,83 @@ test('/IMPRESORA → Esc → la barra de comandos recupera el foco', async ({ pa
   abre la copia y Esc vuelve a `/RESUMEN`.
 - `docs/historia.md` y la fila de "Estado del proyecto" de `AGENTS.md` se completan al mergear, con
   el número de PR.
+
+---
+
+## Ajustes de la prueba manual (2026-10-02)
+
+Aprobados por el usuario después de probar las Tareas 0 a 10 (ver "Ajustes de la prueba manual" en
+la spec). Mismo ritmo: tarea por tarea, con checkpoint. Enter para anular en `/RESUMEN` quedó
+anotado en #140.
+
+### Tarea 11: `/IMPRESORA` compacta y estable
+
+**Archivos:**
+- Crear: `src/ui/print/ReceiptPreview.tsx` (el marco del papel en pantalla)
+- Modificar: `src/ui/screens/printer-screen.tsx` y su test, `src/ui/screens/receipt-screen.tsx`,
+  `src/ui/tokens.css` (`.receipt-paper` pasa al marco), `e2e/printing.spec.ts`,
+  `e2e/keyboard-only.spec.ts`, `e2e/text-size.spec.ts`
+
+- [ ] **Paso 1: el marco** — `ReceiptPreview({ document, format })`: un `div.receipt-paper`
+  (cancela el zoom de la app) de ancho fijo `calc(89mm + 8mm)`, fondo `var(--color-surface)`,
+  `padding: 4mm 0`, borde y sombra de tarjeta, con el `ReceiptView` centrado (el papel blanco se
+  distingue del fondo: se ve el ancho del rollo y A6 no queda pegado al borde). Lo usan el
+  comprobante y la vista previa.
+- [ ] **Paso 2: `select`s** — Formato y Al cobrar pasan a `<label><strong>…</strong><select>`
+  con `onChange` → `choosePrinterFormat` / `choosePrinterCheckout` (el valor se busca en
+  `FORMAT_OPTIONS` / `checkoutOptions(format)`, nunca se castea). El foco al montar va al `select`
+  de Formato (`useFocusOnMount`). Se va `OptionGroup` y `stepOption` (y su test) si no queda otro uso.
+- [ ] **Paso 3: columnas fijas** — grid `minmax(0, scaledPx(480)) auto` con `justifyContent: 'start'`:
+  el formulario no se estira en una pantalla ancha y la vista previa no cambia de ancho con el formato.
+- [ ] **Paso 4: botones en dos líneas** — arriba "Prueba de impresión (Alt+P)", siempre visible y
+  `disabled` con "No imprimir"; abajo "Cancelar (Esc)" y "Guardar (Ctrl+Enter)".
+- [ ] **Paso 5: tests** — el test de la pantalla con `fireEvent.change` sobre los `select`s (el foco
+  arranca en Formato, "Imprimir" no se ofrece con "No imprimir", la prueba deshabilitada, Ctrl+Enter,
+  Esc, Alt+P, la vista previa). E2E: `configurePrinter` con `selectOption`; `keyboard-only` espera el
+  foco en el `select` de Formato; `text-size` elige 58 mm con `selectOption`.
+- [ ] **Paso 6:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` y los e2e de impresión,
+  `keyboard-only` y `text-size`. Commit — `fix(impresion): /IMPRESORA con selects y columnas fijas (#174)`.
+
+### Tarea 12: la franja de `/RESUMEN` baja entera
+
+**Archivos:** `src/ui/screens/cash-summary-screen.tsx`
+
+- [ ] **Paso 1:** las pestañas y "Reimprimir" van en un grupo propio (`display: flex`, sin wrap);
+  la franja (buscador + grupo) hace wrap, así si no entra en un renglón el grupo baja **entero** y el
+  buscador queda arriba con todo el ancho.
+- [ ] **Paso 2:** `pnpm lint && pnpm typecheck && pnpm test`, `text-size.spec.ts` repetido
+  (`--repeat-each=6`). Commit — `fix(impresion): la franja de /RESUMEN baja entera (#174)`.
+
+### Tarea 13: aviso después de cobrar
+
+**Archivos:** `src/ui/print/after-close.ts` y su test, `e2e/printing.spec.ts`
+
+- [ ] **Paso 1: tests** — con Nada, `commandBarNoticeSignal` dice "Ticket #4 registrado."; con
+  Imprimir, "Ticket #4 registrado y enviado a imprimir."; en una cobranza, "Recibo #3 de Ana
+  registrado."; con Mostrar, ningún aviso. `overlayDismissedSignal` vuelve a `false` (como `/CAJA`).
+- [ ] **Paso 2:** `showOrPrintReceipt` arma el nombre del documento (`ticketLabel` /
+  `receiptLabel` + cliente) y pone el aviso en los dos casos que vuelven a la venta.
+- [ ] **Paso 3:** el e2e de Imprimir y el de Nada verifican el aviso. Verificación y commit —
+  `feat(impresion): aviso después de cobrar sin comprobante (#174)`.
+
+### Tarea 14: aviso al reimprimir en `/RESUMEN`
+
+**Archivos:** `src/ui/state/cash-summary.ts`, `src/ui/keyboard/cash-summary-controller.ts`,
+`src/ui/screens/cash-summary-screen.tsx` y sus tests, `e2e/printing.spec.ts`
+
+- [ ] **Paso 1: tests** — reimprimir con papel deja "Copia del Ticket #4 enviada a imprimir." (o
+  "Copia del Recibo #3 de Ana…"); la próxima tecla lo borra; cambiar de día, de pestaña o salir
+  también.
+- [ ] **Paso 2:** `cashSummaryNoticeSignal` en `ui/state/cash-summary.ts`; `reprintEntry` lo pone
+  cuando imprime (no con "Ver comprobante"); la pantalla lo muestra en un renglón de alto fijo debajo
+  de la franja (como el de `/ANULAR`, `role="status"`) y lo borra al principio de `handleKeyDown`;
+  `resetTabsAndFilters`, `setCashSummaryTab` y `showSummaryDay` también lo borran.
+- [ ] **Paso 3:** el e2e de Reimprimir verifica el aviso. Verificación y commit —
+  `feat(impresion): aviso al reimprimir desde /RESUMEN (#174)`.
+
+### Tarea 15: documentación
+
+- [ ] `src/ui/AGENTS.md` (sección "Impresión" y `/RESUMEN`): `select`s, columnas fijas, el marco del
+  papel, los avisos y la franja. `pnpm format:check` sobre los `.md` tocados y la verificación
+  completa (`lint`, `typecheck`, `test`, `build`, `test:e2e`). Commit —
+  `docs: ajustes de la prueba manual de la impresión (#174)`.

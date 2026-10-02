@@ -2,6 +2,9 @@
 
 Fecha: 2026-10-02
 Estado: diseño aprobado en el brainstorming del 2026-10-02; plan en `docs/superpowers/plans/2026-10-02-impresion-de-tickets.md`.
+Ajustada después de la prueba manual del 2026-10-02 (`/IMPRESORA` con `select`s y columnas fijas, el
+papel a tamaño real en pantalla, la franja de `/RESUMEN` y los avisos después de cobrar y de
+reimprimir): ver "Ajustes de la prueba manual" al final.
 Issues: #174 (etapa P1 del epic #182, MVP de mini contax, antes del hito 1). Anotados en este
 brainstorming: #188 (ESC/POS directo, afuera de esta etapa) y un comentario en #140 (Reimprimir como
 primera acción de `/RESUMEN`). Spec del MVP: `docs/superpowers/specs/2026-10-01-mvp-mini-contax-design.md`
@@ -73,19 +76,23 @@ Un comando del núcleo (`CORE_COMMANDS`, "Configurar la impresión de tickets") 
 (`ui/screens/printer-screen.tsx`, controller `ui/keyboard/printer-controller.ts`, modelo puro del
 formulario `ui/keyboard/printer-form-model.ts`). Sigue los patrones de "Teclado y mouse":
 
-1. **Formato**: grupo tipo radio, No imprimir · 58 mm · 80 mm · A6. El foco está en la opción
-   elegida y la sigue con ↑/↓.
-2. **Al cobrar**: grupo tipo radio, Imprimir · Mostrar el comprobante · Nada. Con "No imprimir",
+1. **Formato**: un `select`, No imprimir · 58 mm · 80 mm · A6. Al abrir, el foco está en él; con
+   el `select` cerrado, ↑/↓ cambian la opción.
+2. **Al cobrar**: un `select`, Imprimir · Mostrar el comprobante · Nada. Con "No imprimir",
    "Imprimir" no aparece; si estaba elegido, pasa a "Mostrar el comprobante".
 3. **Encabezado** y **Pie**: `textarea`s con placeholders "ej. …" en gris claro
    (`--color-placeholder`), sin valores por omisión.
 4. **Vista previa**: un ticket de ejemplo dibujado con `ReceiptView` en el formato elegido, que se
    actualiza mientras se edita (con "No imprimir", se ve en A6).
-5. Botones **Guardar (Ctrl+Enter)**, **Prueba de impresión** y **Cancelar (Esc)**. Guardar es Ctrl+Enter y no Enter, porque en un `textarea` Enter hace salto de línea (como
-   `/COBRAR`). La prueba imprime el ticket de ejemplo con lo que está en pantalla, sin guardar; con
-   "No imprimir" no aparece. Esc y Cancelar vuelven a la venta sin guardar.
+5. Botones en dos líneas, para que nada se corra al cambiar el formato: arriba **Prueba de
+   impresión (Alt+P)**, siempre visible y deshabilitada con "No imprimir"; abajo **Cancelar (Esc)** y
+   **Guardar (Ctrl+Enter)**. Guardar es Ctrl+Enter y no Enter, porque en un `textarea` Enter hace
+   salto de línea (como `/COBRAR`). La prueba imprime el ticket de ejemplo con lo que está en
+   pantalla, sin guardar. Esc y Cancelar vuelven a la venta sin guardar.
 
-Tab recorre los grupos, los `textarea`s y los botones.
+Tab recorre los `select`s, los `textarea`s y los botones. **La pantalla no cambia de forma** al
+cambiar el formato ni con una ventana más ancha: el formulario tiene un ancho máximo y la vista
+previa va en una columna fija del ancho del papel más ancho (A6), con el ticket centrado.
 
 ## El modelo: `ReceiptDocument`
 
@@ -139,6 +146,12 @@ Medidas por formato (en el papel; en pantalla, la vista previa respeta el ancho 
 | 80 mm | `margin: 0` | ~72 mm (ancho 80 mm, padding 4 mm) | 10 pt |
 | A6 | `size: A6; margin: 8mm` | 89 mm | 10 pt |
 
+**En pantalla, el papel a tamaño real**: el comprobante y la vista previa cancelan el zoom de la app
+(`.receipt-paper`), así el texto del papel (9 pt en 58 mm) queda sobre el piso de 11 px de #111 a
+600 px. Van en un marco de ancho fijo (el de A6 más un margen), con el papel blanco sobre un fondo
+gris claro, así se ve el ancho de cada rollo y A6 no queda pegado al borde. Un formato más ancho que
+A6, si llega a haber, se achica para entrar en el marco.
+
 En las térmicas no se fija `size`: CSS no tiene "ancho fijo y largo libre" (`58mm auto` es inválido
 y se ignora entero), así que el tamaño del papel lo da el driver del rollo y el ticket se dibuja en el
 ancho exacto. Riesgo aceptado: cómo corta el largo depende del driver, y solo se confirma en la prueba
@@ -179,6 +192,11 @@ según `onCheckout`:
 - **Mostrar el comprobante**: va a `'receipt'` con el origen.
 - **Nada**: vuelve directo a la venta.
 
+En los dos casos que vuelven a la venta, el lugar de avisos de la barra (como `/CAJA` y `/ANULAR`)
+dice qué pasó: "Ticket #4 registrado." con Nada, y "Ticket #4 registrado y enviado a imprimir." con
+Imprimir ("enviado" y no "impreso": el POS no sabe si el diálogo se canceló). En una cobranza,
+"Recibo #3 de Ana registrado…".
+
 ## La pantalla del comprobante
 
 `ui/state/receipt.ts` pasa a tener un solo signal, `receiptSignal: { source: ReceiptSource;
@@ -195,6 +213,12 @@ anuladas y las anulaciones), aparece un botón con su atajo:
 - Con "No imprimir": **"Ver comprobante (Enter)"** abre la pantalla del comprobante con la copia
   (`returnTo: 'cash-summary'`), y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y búsqueda (la
   selección vuelve a la primera fila: la navegación de Movimientos la reinicia al montarse).
+
+Al reimprimir, un renglón de avisos de alto fijo debajo del buscador dice "Copia del Ticket #4
+enviada a imprimir." y se borra con la próxima tecla.
+
+El botón siempre ocupa su lugar (oculto si la fila no se reimprime), y si la franja no entra en un
+renglón, las pestañas y el botón bajan juntos al segundo; el buscador queda en el primero.
 
 Los movimientos de caja y los arqueos no tienen botón y Enter no hace nada. Enter está libre en
 Movimientos (lo que se tipea va al buscador), como en `/ANULAR`; un botón enfocado con Tab se activa
@@ -242,3 +266,13 @@ reimprimir; con una impresora real si hay alguna.
 - Datos del comercio y logo en el ticket desde el backend.
 - Unificar `/ANULAR` con `/RESUMEN`, o una pantalla de documentos con Reimprimir y Anular: #140.
 - Comprobante de la anulación al confirmar en `/ANULAR`: #137 (puede reusar `showOrPrintReceipt`).
+
+## Ajustes de la prueba manual (2026-10-02)
+
+- Alt+P para la prueba de impresión (todo botón con su atajo).
+- El papel a tamaño real en pantalla (sin esto, a 600 px el ticket se veía con letra de 7,8 px).
+- `/IMPRESORA`: `select`s en vez de grupos tipo radio (la pantalla quedaba muy alta), columnas de
+  ancho fijo, botones en dos líneas y la prueba siempre visible.
+- `/RESUMEN`: la franja baja de renglón con las pestañas y Reimprimir juntos.
+- Avisos después de cobrar sin comprobante y después de reimprimir.
+- Enter para anular en `/RESUMEN` quedó anotado en #140 (hoy Enter reimprime).
