@@ -1007,7 +1007,7 @@ pasó a `select`s con columnas fijas, y se sumaron avisos después de cobrar y d
 "Nada" no quedaba ninguna señal de que la venta se había registrado. Enter para anular en `/RESUMEN`
 quedó en #140. Spec y plan en `docs/superpowers/` (2026-10-02).
 
-**Una sola pestaña (#175)**. Segunda etapa del MVP de mini contax (epic #182). Hasta acá, dos pestañas
+**Una sola pestaña (#175, PR #191)**. Segunda etapa del MVP de mini contax (epic #182). Hasta acá, dos pestañas
 del mismo almacenamiento corrían las dos completas: dos motores de sync con cerrojos en memoria que no
 se veían, dos ventas en curso pisándose en `draftCart`. Ahora manda la que tiene el cerrojo de
 `navigator.locks` (`BroadcastChannel` solo lleva el pedido de traspaso), y la otra muestra un aviso. El

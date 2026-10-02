@@ -556,7 +556,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #150 | Dominio propio: el POS en `pos.contax.ar` (Pages + CNAME en DreamHost), `pos.contax.com.ar` redirige ahí, `offline-pos.pages.dev` sigue sirviendo | PR #184 |
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
 | #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
-| #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR pendiente |
+| #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR #191 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
