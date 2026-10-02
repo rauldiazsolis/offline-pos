@@ -38,6 +38,21 @@ test('venta → /ANULAR → Esc → la barra de comandos recupera el foco', asyn
   await expect(commandBar).toBeFocused();
 });
 
+test('venta → /IMPRESORA → Esc → la barra de comandos recupera el foco', async ({ page }) => {
+  await page.goto('/');
+  const commandBar = page.getByLabel('Barra de comandos');
+
+  await commandBar.fill('/IMPRESORA');
+  await commandBar.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Impresora' })).toBeVisible();
+  // El foco arranca en el formato elegido (sin config, A6).
+  await expect(page.getByRole('button', { name: 'A6', exact: true })).toBeFocused();
+
+  await page.keyboard.press('Escape');
+
+  await expect(commandBar).toBeFocused();
+});
+
 test('venta → cobrar → Comprobante → Esc → la barra de comandos recupera el foco', async ({
   page,
 }) => {
