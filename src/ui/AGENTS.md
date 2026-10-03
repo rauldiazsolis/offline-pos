@@ -137,9 +137,21 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 (`ui/errors.ts`): conectividad (`Failed to fetch` y equivalentes), 401/403, 404, timeout
 (`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
 
+**Dos líneas (#193)**: arriba, la de contexto (`data-testid="status-bar-context"`): la marca DEMO,
+`<caja> - <sucursal> - <empresa>` (`ui/terminal-context.ts::terminalContextText`, con
+`terminalIdentitySignal` — la sucursal y la caja de la config activa, que fijan `bootstrap`,
+`applyConnection` y `applyTerminalSettings` — y `backendCompanySignal`; sin empresa, `<caja> -
+<sucursal>`) y a la derecha el botón de la demo. Si falta lugar se recorta el contexto con "…", nunca
+el botón. Sin conexión activa ni demo, esa línea no se muestra. Abajo, la de sync
+(`status-bar-sync`): el estado, "Avisos (N)" y "Sin arqueo en 24 h". El click en cualquiera de las
+dos (fuera de los botones) abre `/DIAGNOSTICO`. El **título de la pestaña** es `<caja> - <sucursal>`,
+sin la empresa (`terminal-context.ts::startTerminalTitle`, que arranca `main.tsx::startApp`): vale
+también para las pantallas sin barra (`/CAJA`, `/COBRAR`, `/RESUMEN`…); sin conexión activa queda el
+de siempre y la segunda pestaña (#175) conserva el suyo.
+
 **Desde 4.4.0 (#128)**, además del estado de sync:
-- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): delante de
-  todo, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
+- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): en la
+  línea de contexto, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
   que llama a lo mismo que el comando (`ui/keyboard/onboarding-controller.ts::startOnboarding`: emite
   el `wipe_key` y navega al alta). No abre `/DIAGNOSTICO`. `/ALTA` solo aparece en el menú de "/" con
   la terminal en demo (`availableCommands`), igual que `/DEMO_NUEVA` (#176).
