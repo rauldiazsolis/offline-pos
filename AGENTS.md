@@ -56,7 +56,9 @@ Convenciones de proceso acordadas con el usuario (antes vivían en la memoria lo
 - **Plan antes de codear**: un trabajo de varios pasos (una etapa, un ciclo) arranca con un plan que el
   usuario revisa y aprueba; solo se saltea si él lo dice para ese trabajo puntual. El plan se ejecuta
   **inline** (`superpowers:executing-plans`, tarea por tarea con checkpoints), no con un subagente por
-  tarea: el ritmo pausado le da tiempo de revisar cada paso.
+  tarea: el ritmo pausado le da tiempo de revisar cada paso. **El plan se borra en el PR que cierra la
+  etapa** (queda en el historial de git); la spec queda en `docs/superpowers/specs/`, porque explica
+  las decisiones.
 - **Informe final con prueba manual**: al terminar, un informe más instrucciones paso a paso de qué
   hacer en la UI y qué se debería ver — la prueba en el navegador la hace el usuario.
 - **Revisión sin cambios**: en una revisión (entre etapas, o una tanda de observaciones) no se toca
@@ -552,7 +554,8 @@ de config frente a estado operativo en `src/sync/AGENTS.md`.
 ## Estado del proyecto
 
 La historia completa (qué trajo cada fase, ciclo y etapa, desvíos de los planes y bugs encontrados)
-está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `docs/superpowers/`.
+está en `docs/historia.md`; cada etapa desde #87 tiene su spec en `docs/superpowers/specs/` (su plan,
+en el historial de git).
 
 | Trabajo | Qué trajo | Referencia |
 |---|---|---|
