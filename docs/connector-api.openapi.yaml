@@ -161,7 +161,8 @@ info:
     `[::1]`). `wipeKey` es el `wipe_key` que recibió en la ida, sin
     modificar: con él (o sin datos del usuario) el POS borra lo local de la
     demo y aplica la conexión; sin él, precarga `/CONFIG` para que el
-    operador decida.
+    operador decida. Una demo revocada (ver `POST /demo-sessions`) puede ir
+    igual al alta: la vuelta trae una conexión nueva.
 
     Cada operación está marcada con una extensión `x-pos-status`:
       - `implemented-v4`: el POS ya la consume con la forma de 4.x.
@@ -217,8 +218,10 @@ paths:
         versión).
 
         El POS lo llama al abrirse con un link de demo
-        (`<pos>/?demo=true&backend=<base URL>&template=<opcional>`), en una
-        terminal sin config y sin datos del usuario, o que ya está en demo.
+        (`<pos>/?demo=true&backend=<base URL>&template=<opcional>`). En una
+        terminal sin config, o que ya está en demo, y sin datos del usuario,
+        lo llama directo; si no (tiene datos, o una conexión real), primero
+        le muestra al operador qué se pierde y lo llama recién si confirma.
         Con la respuesta arma una conexión REST, la prueba (un pull) y la
         aplica borrando lo local. Después muestra un botón
         `<onboarding.label> (/ALTA)` que lleva al usuario a `onboarding.url`
@@ -226,6 +229,15 @@ paths:
 
         Un `template` desconocido responde 422 con la lista: el POS reintenta
         sin template y avisa qué plantilla usó.
+
+        **Revocar una demo**: el backend puede revocar la conexión de una
+        demo cuando quiera (por ejemplo, al reiniciar los datos de la demo o
+        tras un tiempo sin uso). Desde entonces responde `401` a todo request
+        con esa API key. El POS en demo lo toma como "la demo terminó": deja
+        de sincronizar y ofrece empezar una demo nueva, que es otro
+        `POST /demo-sessions` al mismo backend (el del link) y con la misma
+        plantilla. Fuera de una demo, un `401` sigue siendo una credencial
+        inválida.
       security: []
       parameters:
         - $ref: '#/components/parameters/ContractVersion'

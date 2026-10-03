@@ -54,7 +54,13 @@ Un comercio llega al POS por un **link de demo** que arma el backend:
 nueva (sin conexión configurada y sin datos), el POS llama a `POST /demo-sessions` en ese backend: es
 el **único endpoint sin autenticación**. La respuesta trae la API key de la demo, la sucursal, el
 punto de venta y la página de alta (`onboarding.url` y el texto de su botón). El POS prueba la
-conexión, la aplica y entra a la venta.
+conexión, la aplica y entra a la venta. Si la terminal ya tiene datos o una conexión real, el POS
+primero le muestra al operador qué se pierde y llama a `POST /demo-sessions` recién si confirma.
+
+Para **revocar una demo** (por ejemplo, al reiniciar sus datos o tras un tiempo sin uso), el backend
+responde `401` a todo request con su API key. El POS en demo lo toma como "la demo terminó": deja de
+sincronizar y ofrece empezar una demo nueva, que es otro `POST /demo-sessions` al mismo backend y con
+la misma plantilla. Fuera de una demo, un `401` es una credencial inválida.
 
 Una terminal en demo muestra la marca **DEMO** y un botón para darse de alta. Ese botón lleva a
 `onboarding.url` con `?return_url=<url del POS>&wipe_key=<token>`. Cuando el alta termina, el backend
