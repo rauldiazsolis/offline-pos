@@ -4,6 +4,7 @@ import { contractRequirement, MIN_BACKEND_CONTRACT } from '../../domain/contract
 import {
   backendNoticesSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   demoSessionSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
@@ -15,7 +16,7 @@ import {
 } from '../state/sync.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { enterCashScreen } from '../keyboard/cash-controller.ts';
-import { startOnboarding } from '../keyboard/onboarding-controller.ts';
+import { startNewDemo, startOnboarding } from '../keyboard/onboarding-controller.ts';
 import { cashCountOverdueSignal } from '../state/cash.ts';
 import { mostSevere } from '../../sync/backend-notices.ts';
 import type { NoticeSeverity } from '../../sync/connector.ts';
@@ -42,13 +43,18 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
  * sin sacarle el foco a la barra de comandos. Antes, "Avisos (N)" (4.4.0, #128): los avisos
  * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
  * Delante de todo, con la terminal en demo (#128): la marca DEMO y el botón del alta
- * (`<onboarding.label> (/ALTA)`), que hace lo mismo que `/ALTA` y tampoco abre `/DIAGNOSTICO`.
+ * (`<onboarding.label> (/ALTA)`), que hace lo mismo que `/ALTA` y tampoco abre `/DIAGNOSTICO`. Con
+ * la demo revocada (#176), el estado dice "La demo terminó" y el botón pasa a ser "Empezar una demo
+ * nueva (/DEMO_NUEVA)".
  */
 /** Color del punto de estado — misma info que el texto, reforzada visualmente (pase de diseño). */
 function statusColor(): string {
   const status = syncStatusSignal.value;
   if (!syncConfiguredSignal.value || status === 'offline') {
     return 'var(--color-chrome-text-muted)';
+  }
+  if (demoRevokedSignal.value !== null) {
+    return 'var(--color-danger)';
   }
   const backend = backendStatusSignal.value;
   if (backend.kind === 'incompatible') {
@@ -75,6 +81,10 @@ function statusText(): string {
   }
   if (!syncConfiguredSignal.value) {
     return 'Sin configurar — /CONFIG';
+  }
+  // #176: el sync ya no corre; la barra ofrece una demo nueva.
+  if (demoRevokedSignal.value !== null) {
+    return 'La demo terminó';
   }
   // 4.0.0 (#99): detrás de "sin configurar" y de offline, delante del resto. La venta sigue.
   const backend = backendStatusSignal.value;
@@ -120,6 +130,10 @@ function statusText(): string {
 export function StatusBar() {
   const noticeColor = NOTICE_COLOR[mostSevere(backendNoticesSignal.value) ?? 'info'];
   const demo = demoSessionSignal.value;
+  const revoked = demoRevokedSignal.value !== null;
+  const demoButtonLabel = revoked
+    ? 'Empezar una demo nueva (/DEMO_NUEVA)'
+    : `${demo?.onboarding.label ?? ''} (/ALTA)`;
   return (
     <div
       class="status-bar"
@@ -179,9 +193,13 @@ export function StatusBar() {
               onMouseDown={keepFocusOnMouseDown}
               onClick={(event) => {
                 event.stopPropagation();
-                startOnboarding();
+                if (revoked) {
+                  startNewDemo();
+                } else {
+                  startOnboarding();
+                }
               }}
-              title={`${demo.onboarding.label} (/ALTA)`}
+              title={demoButtonLabel}
               // `.btn-primary` pone el color; borde y tamaño, como los otros botones de la barra.
               style={{
                 border: '1px solid var(--color-accent)',
@@ -191,7 +209,7 @@ export function StatusBar() {
                 cursor: 'pointer',
               }}
             >
-              {demo.onboarding.label} (/ALTA)
+              {demoButtonLabel}
             </button>
           </>
         )}

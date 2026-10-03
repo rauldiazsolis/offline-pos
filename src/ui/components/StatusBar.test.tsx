@@ -3,10 +3,11 @@ import { activeScreenSignal } from '../state/screen.ts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
-import { startOnboarding } from '../keyboard/onboarding-controller.ts';
+import { startNewDemo, startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
   backendNoticesSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -17,7 +18,10 @@ import {
   syncStatusSignal,
 } from '../state/sync.ts';
 
-vi.mock('../keyboard/onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
+vi.mock('../keyboard/onboarding-controller.ts', () => ({
+  startOnboarding: vi.fn(),
+  startNewDemo: vi.fn(),
+}));
 
 const demo = {
   template: 'kiosco',
@@ -74,6 +78,26 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
 describe('StatusBar — terminal en demo (#128)', () => {
   afterEach(() => {
     setDemoSession(null);
+    demoRevokedSignal.value = null;
+  });
+
+  it('con la demo revocada: "La demo terminó" y el botón de una demo nueva en lugar del alta (#176)', () => {
+    vi.mocked(startNewDemo).mockClear();
+    syncStatusSignal.value = 'sync-error';
+    setDemoSession(demo);
+    demoRevokedSignal.value = '2026-10-02T10:00:00.000Z';
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+
+    expect(screen.getByText('DEMO')).not.toBeNull();
+    expect(screen.getByText('La demo terminó')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Crear mi comercio (/ALTA)' })).toBeNull();
+    const button = screen.getByRole('button', { name: 'Empezar una demo nueva (/DEMO_NUEVA)' });
+    expect(button.tabIndex).toBe(-1);
+    fireEvent.click(button);
+
+    expect(startNewDemo).toHaveBeenCalledTimes(1);
+    expect(activeScreenSignal.value).toBe('sale');
   });
 
   it('sin demo no hay marca ni botón de alta', () => {

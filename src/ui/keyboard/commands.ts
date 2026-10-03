@@ -55,15 +55,20 @@ export const CORE_COMMANDS: CommandInfo[] = [
 ];
 
 /**
- * Los del núcleo, `/ALTA` si la terminal está en demo (#128) y los que declara el conector activo
- * (Etapa 2c, #77). Lee `activeConnectorTypeSignal` y `demoSessionSignal`, así que dentro de un
- * `computed` se recalcula solo cuando cambian.
+ * Los del núcleo, `/ALTA` (#128) y `/DEMO_NUEVA` (#176) si la terminal está en demo, y los que
+ * declara el conector activo (Etapa 2c, #77). Lee `activeConnectorTypeSignal` y
+ * `demoSessionSignal`, así que dentro de un `computed` se recalcula solo cuando cambian.
  */
 export function availableCommands(): CommandInfo[] {
   const demo = demoSessionSignal.value;
-  const alta: CommandInfo[] =
-    demo !== null ? [{ name: 'ALTA', description: `Darse de alta: ${demo.onboarding.label}` }] : [];
-  return [...CORE_COMMANDS, ...alta, ...connectorCommands(activeConnectorTypeSignal.value)];
+  const demoCommands: CommandInfo[] =
+    demo !== null
+      ? [
+          { name: 'ALTA', description: `Darse de alta: ${demo.onboarding.label}` },
+          { name: 'DEMO_NUEVA', description: 'Empezar una demo nueva (se borra lo de esta)' },
+        ]
+      : [];
+  return [...CORE_COMMANDS, ...demoCommands, ...connectorCommands(activeConnectorTypeSignal.value)];
 }
 
 /** Disponibilidad actual de un comando por nombre (para Ctrl+Enter, que no pasa por el menú). */

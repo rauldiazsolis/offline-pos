@@ -49,7 +49,7 @@ import { enterCollection } from './collection-controller.ts';
 import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
-import { startOnboarding } from './onboarding-controller.ts';
+import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
 import { enterPrinterScreen } from './printer-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, disabledCommandMessage } from './commands.ts';
@@ -422,6 +422,15 @@ function runCommand(name: string, _args: string[]): void {
       }
       clearBuffer();
       startOnboarding();
+      return;
+    case 'DEMO_NUEVA':
+      // Solo existe con la terminal en demo (#176).
+      if (demoSessionSignal.value === null) {
+        commandBarErrorSignal.value = `Comando desconocido: /${name}`;
+        return;
+      }
+      clearBuffer();
+      startNewDemo();
       return;
     default: {
       // Comandos que declara el conector activo (Etapa 2c, #77).
