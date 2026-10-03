@@ -32,7 +32,8 @@ para `minibackend-sync.spec.ts`, otro en `4001`, en memoria (`DEMO_BACKEND_PORT`
 para `e2e/published-site.spec.ts` (#148), por el mismo motivo: cada
 `POST /demo-sessions` vuelve a cargar la base desde cero, así que con uno solo le pisaría los datos a
 los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 'serial'`) por el mismo
-motivo; el de "conexión real" usa el `test` de `fixtures.ts`, el resto el de Playwright a secas.
+motivo; el de "datos sin enviar" (#176) usa el `test` de `fixtures.ts`, el resto el de Playwright a
+secas. El de la demo revocada la revoca con `POST /_demo/revoke-demos` del panel.
 
 **Sitio publicado** (#148): `e2e/published-site.spec.ts` corre contra `.site-out/` (`pnpm site:build`,
 con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4173`), servido por

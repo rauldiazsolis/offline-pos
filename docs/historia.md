@@ -1025,6 +1025,25 @@ fijos a que Dexie abriera la base; pasó a esperar a que la escritura esté abie
 prueba otra carpeta del mismo origen sirviendo el mismo build con `context.route`, porque el sitio de
 `site:preview` tiene una sola carpeta de versión. Spec y plan en `docs/superpowers/` (2026-10-02).
 
+**Link de demo con confirmación y demo revocada (#176)**. Tercera etapa del MVP de mini contax (epic
+#182), antes de M8 del mini-erp (demos v2: un comercio por rubro y una caja por visitante, que se
+revoca con el reinicio nocturno o a las 24 h sin uso). Hasta acá, el POS decidía solo qué hacer con un
+link de demo: con una conexión real o con datos lo ignoraba, y ya en demo lo aplicaba borrando aunque
+hubiera ventas de práctica sin enviar. Pasó a una sola regla: se aplica directo si no se pierde nada y,
+si no, una pantalla propia ("Abrir una demo", no el wizard: no hay nada que elegir) muestra lo que se
+pierde después de un último envío a la conexión actual. Se confirma **antes** de pedir la demo, así
+cancelar nunca le crea una caja al backend; Enter borra, como la confirmación del wizard, porque la
+pantalla ya es la confirmación. Para la demo revocada se descartó tocar el contrato: la key de una demo
+nunca la tipea nadie (la dio `POST /demo-sessions` y se probó con un pull), así que con la terminal en
+demo un 401 no puede ser una key mal cargada; queda como aclaración en el OpenAPI, sin cambio de forma.
+El POS la ofrece, nunca arranca otra sola, y para pedirla guarda el `backend` del link, que puede no
+ser la `baseUrl` de la sesión. El demo-backend pasó a emitir una key por demo, con "Revocar las demos"
+en el panel. Dos desvíos chicos del plan: `/DIAGNOSTICO` lee la revocación de `collectDiagnostics`
+(así `pos.status()` dice lo mismo) en vez del signal, y el OpenAPI y la guía también cambiaron cuándo
+el POS llama a `/demo-sessions`. El e2e de la demo revocada falló la primera vez por una carrera del
+test: al aplicar la demo arrancan ciclos de sync, y un `/SINCRONIZAR` que llega con el cerrojo tomado
+no corre; repite hasta ver el aviso. Spec y plan en `docs/superpowers/` (2026-10-02).
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
