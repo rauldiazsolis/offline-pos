@@ -45,11 +45,14 @@ describe('isDemoRevokedFailure (#176)', () => {
     expect(isDemoRevokedFailure(unauthorized, REAL)).toBe(false);
     expect(isDemoRevokedFailure(unauthorized, err('sync/config-missing', undefined))).toBe(false);
     expect(
-      isDemoRevokedFailure(failure(err('sync/request-failed', { status: 500, message: 'x' })), DEMO),
+      isDemoRevokedFailure(
+        failure(err('sync/request-failed', { status: 500, message: 'x' })),
+        DEMO,
+      ),
     ).toBe(false);
-    expect(
-      isDemoRevokedFailure(failure(err('sync/request-failed', { message: 'x' })), DEMO),
-    ).toBe(false);
+    expect(isDemoRevokedFailure(failure(err('sync/request-failed', { message: 'x' })), DEMO)).toBe(
+      false,
+    );
     expect(isDemoRevokedFailure(failure(err('sync/timeout', { seconds: 5 })), DEMO)).toBe(false);
   });
 });

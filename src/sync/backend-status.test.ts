@@ -161,7 +161,9 @@ describe('noteSyncFailure', () => {
 });
 
 describe('noteSyncFailure — demo revocada (#176)', () => {
-  const unauthorized = failure(err('sync/request-failed', { status: 401, message: 'Unauthorized' }));
+  const unauthorized = failure(
+    err('sync/request-failed', { status: 401, message: 'Unauthorized' }),
+  );
 
   it('un 401 con la terminal en demo marca la demo revocada', () => {
     saveSyncConfig({
