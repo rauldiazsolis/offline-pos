@@ -1044,6 +1044,20 @@ el POS llama a `/demo-sessions`. El e2e de la demo revocada falló la primera ve
 test: al aplicar la demo arrancan ciclos de sync, y un `/SINCRONIZAR` que llega con el cerrojo tomado
 no corre; repite hasta ver el aviso. Spec y plan en `docs/superpowers/` (2026-10-02).
 
+**Caja, sucursal y empresa a la vista (#193, PR #194)**. Pedido "de pasada" antes de seguir con el
+epic #182: en el POS no se veía en qué caja, sucursal y empresa estaba la terminal. La sucursal y la
+caja ya estaban en la config, pero solo se veían en `/CONFIG`; la empresa no viajaba en ningún lado
+(`backend.name` es el producto, no el comercio), así que el contrato pasó a 4.5.0 con `company`
+opcional en `GET /info`, guardado como las capacidades para que se vea sin red. Se comparó en un boceto
+dónde ponerlo (a la izquierda o a la derecha de la barra de estado, o una línea propia en todas las
+pantallas); el usuario eligió una barra de dos líneas, con la de contexto arriba llevando DEMO y el
+botón de la demo, y el título de la pestaña `<caja> - <sucursal>` para las pantallas sin barra. En la
+revisión del diseño el usuario aclaró que el demo-backend no es un backend "para demos" sino la
+referencia de un backend: después del alta la terminal ya no está en demo, así que la empresa sale de
+la key (la de la demo según la plantilla, o la que se cargó en el alta, que sumó el campo "Nombre del
+comercio"). El nombre de la carpeta quedó; se aclaró en `AGENTS.md`. Spec y plan en
+`docs/superpowers/` (2026-10-03).
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
