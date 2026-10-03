@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
+import { isRevokedKey } from './demo-keys.ts';
 import { sendJson } from './http-helpers.ts';
 import { backendContractVersion, contractMajor } from './settings.ts';
 
@@ -40,13 +41,14 @@ export function registerRoutes(defs: RouteDef[]): void {
   routes.push(...defs);
 }
 
-function hasValidBearerToken(req: IncomingMessage): boolean {
+/** El token de `Authorization: Bearer <token>`, o `undefined` si falta o está vacío. */
+function bearerToken(req: IncomingMessage): string | undefined {
   const header = req.headers.authorization;
   if (typeof header !== 'string') {
-    return false;
+    return undefined;
   }
-  const match = /^Bearer (.+)$/.exec(header);
-  return match !== null && match[1]?.trim() !== '';
+  const token = /^Bearer (.+)$/.exec(header)?.[1]?.trim();
+  return token === undefined || token === '' ? undefined : token;
 }
 
 /**
@@ -100,8 +102,13 @@ export async function handleRequest(
     if (match === null) {
       continue;
     }
-    if (route.requiresAuth && !hasValidBearerToken(req)) {
+    if (route.requiresAuth && bearerToken(req) === undefined) {
       sendJson(res, 401, { error: 'Falta el header Authorization: Bearer <token>' });
+      return;
+    }
+    // Una demo revocada (#176): el POS en demo lo toma como "la demo terminó".
+    if (route.requiresAuth && isRevokedKey(db, bearerToken(req))) {
+      sendJson(res, 401, { error: 'La demo terminó' });
       return;
     }
     if (route.checksContract === true) {

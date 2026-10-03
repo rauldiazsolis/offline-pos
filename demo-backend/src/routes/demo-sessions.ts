@@ -2,17 +2,20 @@ import { readFileSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { readJsonBody, sendJson } from '../http-helpers.ts';
+import { issueDemoKey, revokeDemoKeys } from '../demo-keys.ts';
 import type { RouteDef } from '../router.ts';
 import { DEFAULT_TEMPLATE, isTemplateName, resetToSeed, TEMPLATES } from '../seed.ts';
 
 const onboardingHtmlPath = fileURLToPath(new URL('../onboarding.html', import.meta.url));
 const onboardingHtml = readFileSync(onboardingHtmlPath, 'utf-8');
 
+/** Sucursal y punto de venta de una demo. La key es propia de cada demo (#176). */
+const DEMO_TERMINAL = { branch: 'CENTRAL', pointOfSale: 'Caja 1' };
 /**
- * La conexión que devuelve una demo: la API key de siempre (el minibackend acepta cualquier token,
- * los e2e usan esta), sucursal y punto de venta fijos.
+ * La conexión que devuelve la página falsa de alta: la del comercio "real" que nace del alta, con
+ * la key fija (el minibackend acepta cualquier token no revocado), que nunca se revoca.
  */
-const DEMO_CONNECTION = { apiKey: 'demo-api-key', branch: 'CENTRAL', pointOfSale: 'Caja 1' };
+const DEMO_CONNECTION = { apiKey: 'demo-api-key', ...DEMO_TERMINAL };
 
 function requestOrigin(req: IncomingMessage): string {
   return `http://${req.headers.host ?? 'localhost:4000'}`;
@@ -68,10 +71,12 @@ export const demoSessionRoutes: RouteDef[] = [
         sendJson(res, 422, { code: 'unknown-template', templates: Object.keys(TEMPLATES) });
         return;
       }
-      // Base única, de un solo comercio: cada demo pisa la anterior.
-      resetToSeed(ctx.db, new Date().toISOString(), requested);
+      const now = new Date().toISOString();
+      // Base única, de un solo comercio: cada demo pisa la anterior. Las keys no se re-siembran.
+      resetToSeed(ctx.db, now, requested);
       sendJson(res, 201, {
-        ...DEMO_CONNECTION,
+        apiKey: issueDemoKey(ctx.db, now),
+        ...DEMO_TERMINAL,
         template: requested,
         onboarding: { url: `${requestOrigin(req)}/_demo/onboarding`, label: 'Crear mi comercio' },
       });
@@ -84,6 +89,15 @@ export const demoSessionRoutes: RouteDef[] = [
     handler: (req, res, ctx) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(renderOnboardingPage(ctx.url, requestOrigin(req)));
+    },
+  },
+  {
+    // Panel (#176): revoca las keys de todas las demos, como el reinicio total de mini.
+    method: 'POST',
+    pattern: /^\/_demo\/revoke-demos$/,
+    requiresAuth: false,
+    handler: (_req, res, ctx) => {
+      sendJson(res, 200, { revoked: revokeDemoKeys(ctx.db, new Date().toISOString()) });
     },
   },
 ];
