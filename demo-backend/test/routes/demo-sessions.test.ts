@@ -4,11 +4,13 @@ import { createApp } from '../../src/app.ts';
 import { openDb } from '../../src/db.ts';
 import { registerRoutes } from '../../src/router.ts';
 import { demoSessionRoutes } from '../../src/routes/demo-sessions.ts';
+import { infoRoutes } from '../../src/routes/info.ts';
 import { seedIfEmpty } from '../../src/seed.ts';
 import { getDemoSettings, setDemoSettings } from '../../src/settings.ts';
 
 beforeAll(() => {
   registerRoutes(demoSessionRoutes);
+  registerRoutes(infoRoutes);
 });
 
 let server: Server;
@@ -55,8 +57,10 @@ describe('POST /demo-sessions (4.4.0, #128)', () => {
     const response = await createDemo({});
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toEqual({
-      apiKey: 'demo-api-key',
+    const { apiKey, ...rest } = (await response.json()) as { apiKey: string };
+    expect(apiKey).toMatch(/^demo-.+/);
+    expect(apiKey).not.toBe('demo-api-key');
+    expect(rest).toEqual({
       branch: 'CENTRAL',
       pointOfSale: 'Caja 1',
       template: 'kiosco',
@@ -152,5 +156,45 @@ describe('GET /_demo/onboarding (4.4.0, #128)', () => {
 
     expect(html).toContain('Falta return_url.');
     expect(html).not.toContain('#connect=');
+  });
+});
+
+async function getInfo(apiKey: string): Promise<Response> {
+  return fetch(`${baseUrl}/info`, {
+    headers: { Authorization: `Bearer ${apiKey}`, 'X-POS-Contract-Version': '4.4.0' },
+  });
+}
+
+async function createDemoKey(): Promise<string> {
+  const body = (await (await createDemo({})).json()) as { apiKey: string };
+  return body.apiKey;
+}
+
+describe('keys de demo y revocación (#176)', () => {
+  it('cada demo emite una key propia que anda', async () => {
+    const first = await createDemoKey();
+    const second = await createDemoKey();
+    expect(first).toMatch(/^demo-/);
+    expect(second).not.toBe(first);
+    expect((await getInfo(first)).status).toBe(200);
+  });
+
+  it('revocar las demos: sus keys dan 401, otras keys siguen andando', async () => {
+    const apiKey = await createDemoKey();
+    const revoke = await fetch(`${baseUrl}/_demo/revoke-demos`, { method: 'POST' });
+    expect(await revoke.json()).toEqual({ revoked: 1 });
+
+    const response = await getInfo(apiKey);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'La demo terminó' });
+    expect((await getInfo('demo-api-key')).status).toBe(200);
+  });
+
+  it('una demo nueva después de revocar anda, y re-sembrar no borra las keys revocadas', async () => {
+    const old = await createDemoKey();
+    await fetch(`${baseUrl}/_demo/revoke-demos`, { method: 'POST' });
+    const apiKey = await createDemoKey();
+    expect((await getInfo(apiKey)).status).toBe(200);
+    expect((await getInfo(old)).status).toBe(401);
   });
 });

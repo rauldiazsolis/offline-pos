@@ -5,6 +5,7 @@ import {
   backendCapabilitiesSignal,
   backendNoticesSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -53,6 +54,8 @@ export type SyncDiagnostics = {
   posVersion: string;
   /** Nombre del almacenamiento local de esta carpeta (#148, `storage/storage-namespace.ts`). */
   storageNamespace: string;
+  /** Desde cuándo la demo está revocada (#176); `null` = no lo está. */
+  demoRevokedAt: string | null;
 };
 
 export function collectDiagnostics(): SyncDiagnostics {
@@ -74,5 +77,6 @@ export function collectDiagnostics(): SyncDiagnostics {
     lastCleanup: getLastCleanup(),
     posVersion: __POS_VERSION__,
     storageNamespace: STORAGE_NAMESPACE,
+    demoRevokedAt: demoRevokedSignal.value,
   };
 }

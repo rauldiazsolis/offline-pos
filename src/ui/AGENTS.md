@@ -142,7 +142,13 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   todo, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
   que llama a lo mismo que el comando (`ui/keyboard/onboarding-controller.ts::startOnboarding`: emite
   el `wipe_key` y navega al alta). No abre `/DIAGNOSTICO`. `/ALTA` solo aparece en el menú de "/" con
-  la terminal en demo (`availableCommands`).
+  la terminal en demo (`availableCommands`), igual que `/DEMO_NUEVA` (#176).
+- **Demo revocada** (#176, `demoRevokedSignal`): el estado dice "La demo terminó" con el punto rojo
+  (detrás de "Sin conexión" y "Sin configurar") y el botón del alta pasa a ser "Empezar una demo
+  nueva (/DEMO_NUEVA)" (`onboarding-controller.ts::startNewDemo`, lo mismo que el comando: navega al
+  link de demo armado con `demo.backend`, o la `baseUrl` en una demo anterior, y la plantilla).
+  `/DIAGNOSTICO` muestra "Demo de <plantilla> · revocada desde <hora>" (`demoRevokedAt` de
+  `collectDiagnostics`, así `pos.status()` dice lo mismo).
 - **"Avisos (N)"** (`backendNoticesSignal`), a la derecha y antes de "Sin arqueo en 24 h": el color es
   el del aviso más grave (`critical` → error, `warning` → ámbar, `info` → neutro) y el click abre
   `/DIAGNOSTICO`, donde está el detalle. Sin avisos no se muestra. Nunca bloquea nada.
@@ -319,6 +325,27 @@ Spec: `docs/superpowers/specs/2026-10-02-una-sola-pestana-design.md`; el princip
   `keepFocusOnMouseDown` en el contenedor. No hay link a la otra pestaña: Chromium no la deja traer al
   frente.
 
+## "Abrir una demo" (#176)
+
+Spec: `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`; el principio, en
+"Onboarding de demo" de la raíz.
+
+- **Cuándo**: `bootstrap` con un `confirm` de `runOnboardingFromUrl` (un link de demo con algo que
+  perder) llama a `ui/keyboard/demo-confirm-controller.ts::openDemoConfirm`, que pausa el sync antes
+  de su primer `await`. Sin conexión activa, el wizard requerido queda abierto debajo.
+- **Estado** (`ui/state/demo-confirm.ts::demoConfirmSignal`): `checking` (último envío a la conexión
+  actual con `flushPendingBeforeWipe`, con red y config legible, y los conteos), `confirming` y
+  `starting`. `App` muestra la pantalla delante de todo, también sin conexión activa.
+- **Qué se pierde** (`ui/keyboard/demo-confirm-model.ts::describeDemoLoss`, puro): lo sin enviar
+  (destacado), la venta en curso, el historial de la terminal y la conexión actual (o la demo en
+  curso); se conservan `/IMPRESORA` y el locale. El catálogo y los clientes no se listan.
+- **Teclado y mouse** (`ui/screens/demo-confirm-screen.tsx`, como `/DEMO_RESET`): Enter = "Borrar y
+  abrir la demo" (`.btn-danger`), Esc = "Cancelar"; mientras revisa o abre la demo, los botones están
+  deshabilitados. Cancelar no toca nada y vuelve a la venta (reanuda el sync) o al wizard requerido.
+  Confirmar corre `startDemo`: si sale bien, `ui/session-reset.ts::resetSessionAfterWipe` (también lo
+  usa `bootstrap`) y vuelve a la venta con el aviso de plantilla; si falla, no se borró nada y el
+  motivo va a la barra de comandos o al wizard.
+
 ## `/CONFIG` como wizard
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
@@ -358,12 +385,12 @@ borrado, o sale si la terminal está `active`). Arranca en Revisar con la termin
 primer paso incompleto en modo requerido, y en Terminal tras perder la identidad.
 
 **Onboarding de demo (#128)**: `configNoticeSignal` (`ui/state/sync-config.ts`) muestra arriba del
-wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la demo: <motivo>.", "Esta
-terminal tiene datos locales: se ignoró el link de demo."). A la vuelta del alta sin `wipe_key` y con
+wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la demo: <motivo>."; un link
+con algo que perder ya no se ignora: va a "Abrir una demo", #176). A la vuelta del alta sin `wipe_key` y con
 datos del usuario, o si la prueba falla, `config-controller.ts::openWizardWithCandidate` precarga la
 conexión que trajo (`rest`, URL, clave, sucursal y punto de venta) y arranca en Probar, sin borrar
 nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión. Con una terminal
-`active`, un link ignorado o fallido se avisa en el slot de la barra de comandos
+`active`, un link fallido se avisa en el slot de la barra de comandos
 (`commandBarWarningSignal`), y "La plantilla X no existe; se usó Y." como aviso informativo
 (`commandBarNoticeSignal`).
 
@@ -401,8 +428,9 @@ mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y b
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
 (`select`s, campos y botones), **`/CAJA`** (selector, campos,
-sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
-abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta hace `/ALTA`, #128).
+sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones) y la **barra de estado** (click =
+`/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta
+hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176).
 
 ## Diseño visual
 

@@ -113,6 +113,17 @@ export function setDemoSession(demo: DemoSessionInfo | null): void {
 }
 
 /**
+ * Demo revocada (#176): cuándo un 401/403 con la terminal en demo mostró que su key ya no anda
+ * (`null` = no). La persiste `sync/demo-revoked.ts`. Con la demo revocada no corre ningún push ni
+ * pull; la barra de estado ofrece `/DEMO_NUEVA`. La venta sigue.
+ */
+export const demoRevokedSignal = signal<string | null>(null);
+
+export function setDemoRevoked(at: string | null): void {
+  demoRevokedSignal.value = at;
+}
+
+/**
  * Motivo del último fallo de sync (un pull que falló), tal cual — la barra de
  * estado lo traduce con `describeError`: `sync/` no importa `ui/errors.ts`.
  */

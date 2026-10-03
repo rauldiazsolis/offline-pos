@@ -22,7 +22,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Outbox: identidad de eventos y del dispositivo, push y pull por lotes, reaplicación, limpieza a 7 días, cadencias, foto completa, log de sync y `/DIAGNOSTICO` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) (también rige su código en `domain/` y `storage/`) |
 | Cuenta corriente: la reserva de crédito síncrona | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
 | Contrato: qué trajo cada versión (v3, 4.0.0 a 4.4.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
-| Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA` y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado, demo revocada | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA`, `/DEMO_NUEVA`, "Abrir una demo" y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns`), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
 | Venta: cantidades y redondeo, tickets en 0 o negativos, anulación de ventas y de cobranzas | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
@@ -306,9 +306,10 @@ conectividad: una terminal `active` abre y opera offline como siempre; solo el p
 cambio de conexión necesitan red, porque probar es hacer un pull.
 
 **Cambiar la conexión nunca borra datos locales automáticamente**, con una sola excepción, el
-onboarding de demo (#128): (a) un link de demo en una terminal sin config y sin datos del usuario, o
-que ya está en demo; (b) la vuelta del alta con un `wipe_key` válido emitido por esta terminal, o sin
-datos del usuario. En cualquier otro caso decide el operador en el wizard (Mantener o Borrar).
+onboarding de demo (#128): (a) un link de demo cuando no se pierde nada (sin config o ya en demo, sin
+datos del usuario), o con la confirmación del operador en "Abrir una demo" (#176); (b) la vuelta del
+alta con un `wipe_key` válido emitido por esta terminal, o sin datos del usuario. En cualquier otro
+caso decide el operador en el wizard (Mantener o Borrar).
 
 No hay valores por omisión: los
 campos arrancan vacíos y los ejemplos son `placeholder`s (`ConfigField.placeholder`) con el formato
@@ -325,9 +326,11 @@ backend). Spec:
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`.
 
 1. **Link de demo**: `<pos>/?demo=true&backend=<base URL>&template=<opcional>` (`backend` `https:`, o
-   `http:` a localhost). En una terminal sin config y sin datos del usuario, o ya en demo, el POS pide
-   `POST /demo-sessions`, prueba y aplica la conexión (`rest` con `SyncConfig.demo`) borrando lo local,
-   y entra a la venta. Con una conexión real o con datos, el link se ignora y lo avisa. Template
+   `http:` a localhost). Si no se pierde nada (sin config o ya en demo, sin datos del usuario), el POS
+   pide `POST /demo-sessions`, prueba y aplica la conexión (`rest` con `SyncConfig.demo`) borrando lo
+   local, y entra a la venta. Si se pierde algo (datos del usuario, una conexión real u otra demo con
+   datos), primero muestra **"Abrir una demo"** con lo que se pierde, después de un último envío de lo
+   pendiente; la demo se pide recién al confirmar (Enter), y Esc no toca nada (#176). Template
    desconocido: reintenta sin template y avisa cuál usó.
 2. **Terminal en demo**: marca **DEMO** y botón `<onboarding.label> (/ALTA)` en la barra de estado.
    `/ALTA` lleva a `onboarding.url` con `return_url` (origin + pathname) y un `wipe_key` de un solo uso
@@ -335,6 +338,11 @@ backend). Spec:
 3. **Vuelta**: `<return_url>#connect=<base64url>` — la config viaja en el **fragmento**, nunca en la
    query string. Con el `wipe_key` válido o sin datos del usuario, prueba, aplica borrando y guarda la
    config **sin `demo`**; si no (o si la prueba falla), precarga el wizard de `/CONFIG` sin borrar nada.
+4. **Demo revocada** (#176): el backend revoca una demo respondiendo 401 a su key (en mini, el
+   reinicio nocturno o 24 h sin uso). Con la terminal en demo, un 401/403 frena el sync y la barra dice
+   "La demo terminó", con "Empezar una demo nueva (/DEMO_NUEVA)": navega al link de demo con el backend
+   del link original y la misma plantilla. Nunca arranca una demo sola; la venta sigue. Spec:
+   `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`.
 
 Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de vida de la conexión").
 Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
@@ -435,6 +443,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/SINCRONIZAR` | Push y pull ya (RF-12); no cambia de pantalla, el feedback es la barra de estado |
 | `/DIAGNOSTICO` | Estado de sincronización, de solo lectura (también con un click en la barra de estado) |
 | `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |
+| `/DEMO_NUEVA` | Solo con la terminal en demo: empieza una demo nueva con el backend y la plantilla de la actual (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
 
 `/DESCARTAR` es a propósito distinto de `/ANULAR`, que anula una venta ya cerrada (con auditoría), y
@@ -557,6 +566,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #147 | mini contax (el mini-erp publicado) como backend de `/versions` | PR #185 |
 | #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
 | #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR #191 |
+| #176 | Link de demo con confirmación de lo que se pierde ("Abrir una demo"), demo revocada (401 en demo) y `/DEMO_NUEVA`; el demo-backend emite una key por demo y las revoca | PR #192 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
@@ -564,8 +574,8 @@ punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
 #54 (service worker) — la impresión (#174) y una sola pestaña (#175) ya están; antes
-del hito 2, link de demo con confirmación (#176), modo entrenamiento (#177) y el portal al backend
-(contrato #178, comando #179). Google Sheets pasa a su epic, #180, después del hito 1. Después del
+del hito 2, modo entrenamiento (#177) y el portal al backend (contrato #178, comando #179) — el link
+de demo con confirmación (#176) ya está. Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -580,7 +590,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#176 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+- MVP de mini contax: epic #182 (#177 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
   `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143

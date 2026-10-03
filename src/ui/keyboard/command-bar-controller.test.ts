@@ -25,7 +25,7 @@ import {
 } from './command-bar-controller.ts';
 import { syncNow } from '../../sync/engine.ts';
 import { availableCommands } from './commands.ts';
-import { startOnboarding } from './onboarding-controller.ts';
+import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
 
 // /SINCRONIZAR dispara un ciclo real en background: se neutraliza para no dejarlo corriendo tras cerrar la base.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
@@ -34,7 +34,7 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
 }));
 
 // /ALTA navega fuera de la app: se espía en vez de dejar que jsdom intente navegar.
-vi.mock('./onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
+vi.mock('./onboarding-controller.ts', () => ({ startOnboarding: vi.fn(), startNewDemo: vi.fn() }));
 
 beforeEach(async () => {
   await db.open();
@@ -281,6 +281,44 @@ describe('/ALTA (terminal en demo, #128)', () => {
     submitCommandBar();
 
     expect(startOnboarding).toHaveBeenCalledTimes(1);
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(commandBarBufferSignal.value).toBe('');
+  });
+});
+
+describe('/DEMO_NUEVA (terminal en demo, #176)', () => {
+  const demo = {
+    template: 'kiosco',
+    onboarding: { url: 'https://b.x/alta', label: 'Crear mi comercio' },
+    startedAt: '2026-09-28T12:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.mocked(startNewDemo).mockClear();
+  });
+
+  afterEach(() => {
+    setDemoSession(null);
+  });
+
+  it('sin demo no está en la lista y da "Comando desconocido"', () => {
+    expect(availableCommands().map((command) => command.name)).not.toContain('DEMO_NUEVA');
+
+    updateCommandBarBuffer('/DEMO_NUEVA');
+    submitCommandBar();
+
+    expect(commandBarErrorSignal.value).toBe('Comando desconocido: /DEMO_NUEVA');
+    expect(startNewDemo).not.toHaveBeenCalled();
+  });
+
+  it('con demo está en la lista y empieza una demo nueva', () => {
+    setDemoSession(demo);
+    expect(availableCommands().map((command) => command.name)).toContain('DEMO_NUEVA');
+
+    updateCommandBarBuffer('/DEMO_NUEVA');
+    submitCommandBar();
+
+    expect(startNewDemo).toHaveBeenCalledTimes(1);
     expect(commandBarErrorSignal.value).toBeNull();
     expect(commandBarBufferSignal.value).toBe('');
   });

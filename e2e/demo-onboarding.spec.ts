@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { test as fixtureTest } from './fixtures.ts';
-import { confirmCheckout, fillPayment } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 /**
@@ -106,11 +106,73 @@ test('avisos del backend: "Avisos (1)" y el detalle en /DIAGNOSTICO', async ({ p
   }
 });
 
-fixtureTest('con una conexión real el link se ignora y avisa', async ({ page }) => {
+fixtureTest(
+  'con datos sin enviar: el link pide confirmación; Esc no toca nada, Enter abre la demo (#176)',
+  async ({ page }) => {
+    await page.goto('/');
+    const commandBar = page.getByLabel('Barra de comandos');
+    await expect(commandBar).toBeVisible();
+    await seedCatalog(page);
+
+    // Una venta que nunca llega: el backend del fixture es inalcanzable.
+    await commandBar.fill('arroz');
+    await expect(page.getByText('Arroz 1kg')).toBeVisible();
+    await commandBar.press('Enter');
+    await commandBar.press('Control+Enter');
+    await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
+    await fillPayment(page, 'Efectivo', 1200);
+    await confirmCheckout(page);
+    await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
+
+    await page.goto(DEMO_LINK);
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toBeVisible();
+    await expect(page.getByText(/Sin enviar a 127\.0\.0\.1:9: 1 venta/)).toBeVisible();
+    await expect(page.getByText(/Conexión a 127\.0\.0\.1:9/)).toBeVisible();
+    expect(page.url()).not.toContain('demo=');
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toHaveCount(0);
+    expect(await getAllFromStore(page, 'sales')).toHaveLength(1);
+    expect(await readConfig(page)).toMatchObject({ baseUrl: 'http://127.0.0.1:9' });
+
+    await page.goto(DEMO_LINK);
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Borrar y abrir la demo (Enter)' }),
+    ).toBeEnabled();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+    expect(await getAllFromStore(page, 'sales')).toHaveLength(0);
+    // Sin navegar: el fixture vuelve a sembrar su conexión en cada carga de página.
+    expect(await readConfig(page)).toMatchObject({ baseUrl: BACKEND, demo: { backend: BACKEND } });
+  },
+);
+
+test('demo revocada: la barra lo dice y "Empezar una demo nueva" arranca otra limpia (#176)', async ({
+  page,
+}) => {
   await page.goto(DEMO_LINK);
-  await expect(
-    page.getByText('Esta terminal ya está conectada: se ignoró el link de demo.'),
-  ).toBeVisible();
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+  const { apiKey: oldKey } = (await readConfig(page)) as { apiKey: string };
+  expect(oldKey).toMatch(/^demo-/);
+
+  await page.request.post(`${BACKEND}/_demo/revoke-demos`);
+  // Al aplicar la demo arrancan ciclos de sync: si uno tiene el cerrojo, /SINCRONIZAR no corre y
+  // hay que repetirlo.
+  await expect(async () => {
+    await commandBar.fill('/SINCRONIZAR');
+    await commandBar.press('Enter');
+    await expect(page.getByText('La demo terminó')).toBeVisible({ timeout: 2_000 });
+  }).toPass();
+
+  await page.getByRole('button', { name: 'Empezar una demo nueva (/DEMO_NUEVA)' }).click();
+  await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+  await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+  await expect(page.getByText('La demo terminó')).toHaveCount(0);
   expect(page.url()).not.toContain('demo=');
-  expect(await readConfig(page)).toMatchObject({ baseUrl: 'http://127.0.0.1:9' });
+  const { apiKey } = (await readConfig(page)) as { apiKey: string };
+  expect(apiKey).toMatch(/^demo-/);
+  expect(apiKey).not.toBe(oldKey);
 });

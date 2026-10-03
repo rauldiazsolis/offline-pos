@@ -159,6 +159,13 @@ export function DiagnosticoScreen() {
             <>
               <p style={{ margin: 0 }}>{connectorLabel(configResult.value.type)}</p>
               <p style={{ ...monoStyle, margin: 0 }}>{originKey(configResult.value)}</p>
+              {configResult.value.demo !== undefined && (
+                <p style={{ margin: 0 }}>
+                  {`Demo de ${configResult.value.demo.template}`}
+                  {diagnostics.demoRevokedAt !== null &&
+                    ` · revocada desde ${new Date(diagnostics.demoRevokedAt).toLocaleString()}`}
+                </p>
+              )}
               <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
                 {configResult.value.verifiedAt !== undefined
                   ? `Probada: ${new Date(configResult.value.verifiedAt).toLocaleString()}`

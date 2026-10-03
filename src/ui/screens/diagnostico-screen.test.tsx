@@ -54,6 +54,7 @@ const diagnostics: SyncDiagnostics = {
   log: [],
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos@/0.1.0/',
+  demoRevokedAt: null,
 };
 
 vi.mock('../../sync/diagnostics.ts', () => ({ collectDiagnostics: () => diagnostics }));
@@ -168,5 +169,36 @@ describe('DiagnosticoScreen — mensaje con estado ok (4.4.0, #128)', () => {
     } finally {
       diagnostics.backendStatus = original;
     }
+  });
+});
+
+describe('DiagnosticoScreen — demo (#176)', () => {
+  const demoConfig = ok({
+    type: 'rest' as const,
+    baseUrl: 'http://localhost:4001',
+    demo: {
+      template: 'kiosco',
+      onboarding: { url: 'http://localhost:4001/alta', label: 'Alta' },
+      startedAt: '2026-10-02T09:00:00.000Z',
+    },
+  });
+
+  afterEach(() => {
+    diagnostics.config = ok({ type: 'rest', baseUrl: 'http://localhost:4000' });
+    diagnostics.demoRevokedAt = null;
+  });
+
+  it('con la terminal en demo muestra la plantilla', () => {
+    diagnostics.config = demoConfig;
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Demo de kiosco')).not.toBeNull();
+  });
+
+  it('con la demo revocada dice desde cuándo', () => {
+    diagnostics.config = demoConfig;
+    diagnostics.demoRevokedAt = '2026-10-02T10:00:00.000Z';
+    render(<DiagnosticoScreen />);
+    const when = new Date('2026-10-02T10:00:00.000Z').toLocaleString();
+    expect(screen.getByText(`Demo de kiosco · revocada desde ${when}`)).not.toBeNull();
   });
 });

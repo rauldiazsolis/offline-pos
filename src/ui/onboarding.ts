@@ -20,17 +20,22 @@ import { describeError } from './errors.ts';
 /**
  * Onboarding de demo (#128): lo llama `bootstrap` una vez, antes del primer render. La lectura de
  * los links es pura (`sync/demo-link.ts`); acá se decide qué hacer y se orquesta. Excepción a
- * "cambiar la conexión nunca borra solo" (AGENTS.md): se borra lo local en (a) un link de demo con
- * la terminal sin config y sin datos, o ya en demo; (b) la vuelta del alta con un `wipe_key`
- * emitido por esta terminal, o sin datos del usuario.
+ * "cambiar la conexión nunca borra solo" (AGENTS.md): se borra lo local en (a) un link de demo
+ * cuando no se pierde nada (sin config o ya en demo, sin datos del usuario); si no, la terminal
+ * pide confirmación (`confirm`, #176) y la demo se pide recién después (`startDemo`); (b) la vuelta
+ * del alta con un `wipe_key` emitido por esta terminal, o sin datos del usuario.
  */
 
 export type OnboardingOutcome =
   | { kind: 'none' }
   | { kind: 'applied'; notice?: string }
-  | { kind: 'ignored'; notice: string }
   | { kind: 'failed'; notice: string }
-  | { kind: 'review'; candidate: SyncConfig; notice: string };
+  | { kind: 'review'; candidate: SyncConfig; notice: string }
+  | { kind: 'confirm'; entry: DemoEntry };
+
+/** Cómo terminó pedir, probar y aplicar una demo (#176). */
+export type DemoStartOutcome =
+  { kind: 'applied'; notice?: string } | { kind: 'failed'; notice: string };
 
 export type OnboardingDeps = {
   requestDemoSession: (backend: string, template?: string) => Promise<Result<DemoSession>>;
@@ -42,7 +47,7 @@ export type OnboardingDeps = {
 
 export type OnboardingContext = { config: Result<SyncConfig>; hasUserData: boolean };
 
-const defaultDeps: OnboardingDeps = {
+export const defaultOnboardingDeps: OnboardingDeps = {
   requestDemoSession: (backend, template) =>
     withTimeout(requestDemoSession(backend, template), PROBE_TIMEOUT_MS),
   probeConnection: (config) => probeConnection(config),
@@ -59,7 +64,7 @@ function sentence(text: string): string {
 export async function runOnboardingFromUrl(
   href: string,
   context: OnboardingContext,
-  deps: OnboardingDeps = defaultDeps,
+  deps: OnboardingDeps = defaultOnboardingDeps,
 ): Promise<OnboardingOutcome> {
   const back = readConnectReturn(href);
   if (back !== undefined) {
@@ -76,6 +81,14 @@ function keptLocale(config: Result<SyncConfig>): { locale?: string } {
   return config.ok && config.value.locale !== undefined ? { locale: config.value.locale } : {};
 }
 
+/** No se pierde nada (#176): sin config, o ya en demo, y en los dos casos sin datos del usuario. */
+function nothingToLose(context: OnboardingContext): boolean {
+  const config = context.config;
+  const noConfig = !config.ok && config.error === 'sync/config-missing';
+  const inDemo = config.ok && config.value.demo !== undefined;
+  return (noConfig || inDemo) && !context.hasUserData;
+}
+
 async function handleEntry(
   entry: Result<DemoEntry>,
   context: OnboardingContext,
@@ -87,31 +100,28 @@ async function handleEntry(
       notice: sentence(`No se pudo iniciar la demo: ${describeError(entry)}`),
     };
   }
-  const inDemo = context.config.ok && context.config.value.demo !== undefined;
-  const hasConfig = context.config.ok || context.config.error !== 'sync/config-missing';
-  if (!inDemo && hasConfig) {
-    return {
-      kind: 'ignored',
-      notice: 'Esta terminal ya está conectada: se ignoró el link de demo.',
-    };
+  if (!nothingToLose(context)) {
+    return { kind: 'confirm', entry: entry.value };
   }
-  if (!inDemo && context.hasUserData) {
-    return {
-      kind: 'ignored',
-      notice: 'Esta terminal tiene datos locales: se ignoró el link de demo.',
-    };
-  }
+  return startDemo(entry.value, context.config, deps);
+}
 
+/**
+ * Pide la demo (reintenta sin template si no existe), la prueba y la aplica borrando lo local. La
+ * usan el arranque, cuando no se pierde nada, y la pantalla "Abrir una demo" después de confirmar
+ * (#176). Si algo falla no se borró nada.
+ */
+export async function startDemo(
+  entry: DemoEntry,
+  config: Result<SyncConfig>,
+  deps: OnboardingDeps = defaultOnboardingDeps,
+): Promise<DemoStartOutcome> {
   let notice: string | undefined;
-  let session = await deps.requestDemoSession(entry.value.backend, entry.value.template);
-  if (
-    !session.ok &&
-    session.error === 'demo/unknown-template' &&
-    entry.value.template !== undefined
-  ) {
-    session = await deps.requestDemoSession(entry.value.backend);
+  let session = await deps.requestDemoSession(entry.backend, entry.template);
+  if (!session.ok && session.error === 'demo/unknown-template' && entry.template !== undefined) {
+    session = await deps.requestDemoSession(entry.backend);
     if (session.ok) {
-      notice = `La plantilla ${entry.value.template} no existe; se usó ${session.value.template}.`;
+      notice = `La plantilla ${entry.template} no existe; se usó ${session.value.template}.`;
     }
   }
   if (!session.ok) {
@@ -124,15 +134,16 @@ async function handleEntry(
   const now = deps.now().toISOString();
   const candidate: SyncConfig = {
     type: 'rest',
-    baseUrl: session.value.baseUrl ?? entry.value.backend,
+    baseUrl: session.value.baseUrl ?? entry.backend,
     apiKey: session.value.apiKey,
     branch: session.value.branch,
     pointOfSale: session.value.pointOfSale,
-    ...keptLocale(context.config),
+    ...keptLocale(config),
     demo: {
       template: session.value.template,
       onboarding: session.value.onboarding,
       startedAt: now,
+      backend: entry.backend,
     },
   };
   const applied = await probeAndWipe(candidate, deps, now);

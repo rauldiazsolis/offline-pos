@@ -22,6 +22,7 @@ describe('openDb', () => {
         'cash_movements',
         'customer_payments',
         'customers',
+        'demo_keys',
         'demo_settings',
         'idempotency_keys',
         'products',

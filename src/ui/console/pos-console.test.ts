@@ -39,6 +39,7 @@ const diagnostics: SyncDiagnostics = {
   ],
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos',
+  demoRevokedAt: null,
 };
 
 const pendingEvent: OutboxEvent = {
