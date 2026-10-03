@@ -28,6 +28,7 @@ import { connectionState } from './connection-state.ts';
 import { withTimeout, type ProbeSnapshot } from './connection.ts';
 import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
+import { clearDemoRevoked } from './demo-revoked.ts';
 import { clearSyncCursors, setCustomersCursor, setProductsCursor } from './cursor.ts';
 import { acquireSyncLockWaiting, pushPendingLot } from './engine.ts';
 import { clearPushLotState } from './push-lot.ts';
@@ -160,6 +161,8 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     setActiveConnectorType(params.candidate.type);
     // Otra conexión desde `/CONFIG` sale de la demo: el wizard arma el candidato sin `demo`.
     setDemoSession(params.candidate.demo ?? null);
+    // #176: cualquier conexión aplicada deja atrás una demo revocada.
+    clearDemoRevoked();
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);

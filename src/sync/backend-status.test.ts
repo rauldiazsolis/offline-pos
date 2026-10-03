@@ -5,6 +5,7 @@ import {
   backendCapabilitiesSignal,
   backendCheckDueSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   setBackendCheckDue,
   setBackendStatus,
   syncLogSignal,
@@ -16,6 +17,7 @@ import {
   noteSyncFailure,
   refreshBackendStatus,
 } from './backend-status.ts';
+import { saveSyncConfig } from './config.ts';
 
 const now = '2026-09-24T12:00:00.000Z';
 
@@ -32,6 +34,7 @@ beforeEach(() => {
 afterEach(() => {
   syncLogSignal.value = [];
   backendCapabilitiesSignal.value = undefined;
+  demoRevokedSignal.value = null;
   localStorage.clear();
 });
 
@@ -154,5 +157,30 @@ describe('noteSyncFailure', () => {
       kind: 'incompatible',
       backendVersion: '3.0.0',
     });
+  });
+});
+
+describe('noteSyncFailure — demo revocada (#176)', () => {
+  const unauthorized = failure(err('sync/request-failed', { status: 401, message: 'Unauthorized' }));
+
+  it('un 401 con la terminal en demo marca la demo revocada', () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://b.x',
+      apiKey: 'demo-1',
+      demo: {
+        template: 'kiosco',
+        onboarding: { url: 'https://b.x/alta', label: 'Alta' },
+        startedAt: now,
+      },
+    });
+    noteSyncFailure(unauthorized);
+    expect(demoRevokedSignal.value).not.toBeNull();
+  });
+
+  it('un 401 con una conexión real no la marca', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://erp.x', apiKey: 'k' });
+    noteSyncFailure(unauthorized);
+    expect(demoRevokedSignal.value).toBeNull();
   });
 });

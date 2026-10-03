@@ -10,6 +10,7 @@ import {
   activeConnectorTypeSignal,
   backendCapabilitiesSignal,
   connectionStateSignal,
+  demoRevokedSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
 import {
@@ -122,6 +123,16 @@ describe('applyConnection', () => {
     await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
     expect(backendCapabilitiesSignal.value).toBeUndefined();
     expect(localStorage.getItem('offline-pos:backend-capabilities')).toBeNull();
+  });
+
+  it('deja atrás una demo revocada (#176)', async () => {
+    demoRevokedSignal.value = now;
+    localStorage.setItem('offline-pos:demo-revoked', JSON.stringify({ at: now }));
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+
+    expect(demoRevokedSignal.value).toBeNull();
+    expect(localStorage.getItem('offline-pos:demo-revoked')).toBeNull();
   });
 
   it('fija el tipo del conector activo (de ahí salen los comandos de la barra)', async () => {

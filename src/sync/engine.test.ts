@@ -22,6 +22,7 @@ import {
   syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
+import { demoRevokedSignal } from '../ui/state/sync.ts';
 import { getLastCleanup } from './cleanup-schedule.ts';
 import { saveSyncConfig } from './config.ts';
 import type { BatchLotStatus } from './connector.ts';
@@ -1719,5 +1720,61 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
     await syncNow();
 
     expect(backend.calls[0]).toBe('GET /info');
+  });
+});
+
+describe('demo revocada (#176)', () => {
+  const demo = {
+    template: 'kiosco',
+    onboarding: { url: 'https://api.example.com/alta', label: 'Alta' },
+    startedAt: now,
+  };
+
+  beforeEach(() => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now, demo });
+  });
+
+  afterEach(() => {
+    demoRevokedSignal.value = null;
+  });
+
+  it('con la demo revocada no corre push ni pull, ni pregunta /info', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    demoRevokedSignal.value = now;
+    setBackendCheckDue(true);
+    const calls = stubRestFetch();
+
+    await runPushThenPull();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('/SINCRONIZAR borra la marca y vuelve a probar', async () => {
+    demoRevokedSignal.value = now;
+    const calls = stubRestFetch();
+
+    await syncNow();
+
+    expect(demoRevokedSignal.value).toBeNull();
+    expect(calls).toContain('POST /sync/pull');
+  });
+
+  it('un 401 en el push con la terminal en demo marca la demo revocada', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          json: () => Promise.resolve({ error: 'La demo terminó' }),
+        } as Response),
+      ),
+    );
+
+    await runPushCycle();
+
+    expect(demoRevokedSignal.value).not.toBeNull();
   });
 });

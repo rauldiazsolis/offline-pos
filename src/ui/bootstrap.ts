@@ -5,6 +5,7 @@ import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
+import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { stripOnboardingParams } from '../sync/demo-link.ts';
@@ -100,6 +101,8 @@ export async function bootstrap(): Promise<void> {
   // arranca sin red los sabe.
   restoreBackendCapabilities();
   restoreBackendNotices();
+  // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
+  restoreDemoRevoked();
 
   if (onboarding.kind === 'review') {
     await openWizardWithCandidate(onboarding.candidate, onboarding.notice);
