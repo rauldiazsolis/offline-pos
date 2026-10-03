@@ -12,6 +12,8 @@ export type ProbeSnapshot = {
   cursors: { products?: string; customers?: string };
   /** Las del `getInfo` de la prueba de conexión (4.4.0, #128); ausente = no se consultaron. */
   capabilities?: string[];
+  /** La del `getInfo` de la prueba de conexión (4.5.0, #193); ausente = el backend no la manda. */
+  company?: { name: string };
   /** Los avisos vigentes que trajo el pull (4.4.0, #128); ausente = el backend no mandó. */
   notices?: BackendNotice[];
 };

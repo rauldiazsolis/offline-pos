@@ -55,6 +55,12 @@ export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
 export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(undefined);
 
 /**
+ * Empresa del backend según su último `getInfo` exitoso (4.5.0, #193), persistida por
+ * `sync/backend-company.ts`. `undefined` = el backend no la manda (o nunca se supo).
+ */
+export const backendCompanySignal = signal<string | undefined>(undefined);
+
+/**
  * Avisos vigentes del backend según el último pull aplicado (4.4.0, #128), persistidos por
  * `sync/backend-notices.ts`. Nunca bloquean nada.
  */

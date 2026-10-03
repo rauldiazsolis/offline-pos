@@ -26,6 +26,7 @@ const diagnostics: SyncDiagnostics = {
   pushLotIssues: null,
   backendStatus: { kind: 'unknown' },
   capabilities: undefined,
+  company: undefined,
   notices: [],
   deviceId: 'dev-1',
   log: [

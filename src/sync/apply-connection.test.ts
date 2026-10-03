@@ -9,6 +9,7 @@ import { fakeConnector } from '../test/fake-connector.ts';
 import {
   activeConnectorTypeSignal,
   backendCapabilitiesSignal,
+  backendCompanySignal,
   connectionStateSignal,
   demoRevokedSignal,
   syncStatusSignal,
@@ -123,6 +124,21 @@ describe('applyConnection', () => {
     await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
     expect(backendCapabilitiesSignal.value).toBeUndefined();
     expect(localStorage.getItem('offline-pos:backend-capabilities')).toBeNull();
+  });
+
+  it('guarda la empresa de la prueba; una foto sin ella la borra (4.5.0, #193)', async () => {
+    await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, company: { name: 'Kiosco Pepe' } },
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(backendCompanySignal.value).toBe('Kiosco Pepe');
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+    expect(backendCompanySignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:backend-company')).toBeNull();
   });
 
   it('deja atrás una demo revocada (#176)', async () => {

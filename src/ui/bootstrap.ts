@@ -4,6 +4,7 @@ import { loadDraftCart } from '../storage/draft-cart-repository.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
+import { restoreBackendCompany } from '../sync/backend-company.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
@@ -96,8 +97,9 @@ export async function bootstrap(): Promise<void> {
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   setDemoSession(state === 'active' && configResult.ok ? (configResult.value.demo ?? null) : null);
   // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
-  // arranca sin red los sabe.
+  // arranca sin red los sabe. 4.5.0 (#193): también la empresa.
   restoreBackendCapabilities();
+  restoreBackendCompany();
   restoreBackendNotices();
   // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
   restoreDemoRevoked();

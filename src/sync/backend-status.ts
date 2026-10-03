@@ -8,6 +8,7 @@ import {
   type BackendStatus,
 } from '../ui/state/sync.ts';
 import { saveBackendCapabilities } from './backend-capabilities.ts';
+import { saveBackendCompany } from './backend-company.ts';
 import { loadSyncConfig } from './config.ts';
 import type { BackendInfo, Connector } from './connector.ts';
 import { isDemoRevokedFailure, markDemoRevoked } from './demo-revoked.ts';
@@ -54,6 +55,8 @@ export async function refreshBackendStatus(
   if (result.ok) {
     // 4.4.0 (#128): lo que el backend declara, también si está incompatible o en mantenimiento.
     saveBackendCapabilities(result.value.capabilities ?? []);
+    // 4.5.0 (#193): la empresa de la key; sin ella, se deja de mostrar.
+    saveBackendCompany(result.value.company);
     const status = classifyBackendInfo(result.value);
     setBackendStatus(status);
     setBackendCheckDue(false);
