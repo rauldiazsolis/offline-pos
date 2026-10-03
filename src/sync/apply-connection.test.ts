@@ -13,6 +13,7 @@ import {
   connectionStateSignal,
   demoRevokedSignal,
   syncStatusSignal,
+  terminalIdentitySignal,
 } from '../ui/state/sync.ts';
 import {
   applyConnection,
@@ -139,6 +140,17 @@ describe('applyConnection', () => {
     await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
     expect(backendCompanySignal.value).toBeUndefined();
     expect(localStorage.getItem('offline-pos:backend-company')).toBeNull();
+  });
+
+  it('fija la sucursal y la caja de la conexión aplicada (#193)', async () => {
+    await applyConnection({
+      candidate: { ...candidate, branch: 'Central', pointOfSale: 'Caja 1' },
+      snapshot,
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(terminalIdentitySignal.value).toEqual({ branch: 'Central', pointOfSale: 'Caja 1' });
   });
 
   it('deja atrás una demo revocada (#176)', async () => {
@@ -349,6 +361,8 @@ describe('applyTerminalSettings', () => {
     });
     expect(connectionStateSignal.value).toBe('active');
     expect(activeConnectorTypeSignal.value).toBe('rest');
+    // #193: la barra y el título muestran la terminal nueva.
+    expect(terminalIdentitySignal.value).toEqual({ branch: 'Centro', pointOfSale: 'Caja 2' });
   });
 
   it('sin config guardada devuelve el error de lectura', () => {

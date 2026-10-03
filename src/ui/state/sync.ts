@@ -118,6 +118,20 @@ export function setDemoSession(demo: DemoSessionInfo | null): void {
   demoSessionSignal.value = demo;
 }
 
+/** Sucursal y punto de venta de la config activa (#193). */
+export type TerminalIdentity = { branch: string; pointOfSale: string };
+
+/**
+ * La sucursal y la caja de la config activa (`null` = sin conexión activa), para la barra de estado y
+ * el título de la pestaña (#193). Lo fijan `bootstrap` al arrancar, `applyConnection` al cambiar de
+ * conexión y `applyTerminalSettings` al cambiar la terminal desde `/CONFIG`.
+ */
+export const terminalIdentitySignal = signal<TerminalIdentity | null>(null);
+
+export function setTerminalIdentity(identity: TerminalIdentity | null): void {
+  terminalIdentitySignal.value = identity;
+}
+
 /**
  * Demo revocada (#176): cuándo un 401/403 con la terminal en demo mostró que su key ya no anda
  * (`null` = no). La persiste `sync/demo-revoked.ts`. Con la demo revocada no corre ningún push ni
