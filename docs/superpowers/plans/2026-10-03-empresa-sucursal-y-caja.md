@@ -18,6 +18,10 @@ demo-backend manda el nombre de la demo con una key de demo y el del alta con la
 
 **Spec:** `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md` (issue #193).
 
+> **Revisión posterior (2026-10-03):** con el PR abierto, la barra de dos líneas de la Tarea 4 se
+> reemplazó por un encabezado (`TerminalHeader.tsx`, `terminalHeading`) y la barra de estado pasó al
+> pie. Ver "Revisión: la barra de estado al pie" en la spec; este plan queda como se ejecutó.
+
 ## Restricciones globales
 
 - Contrato: `POS_CONTRACT_VERSION = '4.5.0'`; `MIN_BACKEND_CONTRACT` sigue en `'4.0.0'`.

@@ -66,6 +66,21 @@ En el POS no se ve en qué empresa, sucursal y caja está la terminal:
    del tenant). El puente de Google Sheets no se toca: sigue compatible por el piso, y la barra
    muestra `<caja> - <sucursal>`.
 
+## Revisión: la barra de estado al pie (2026-10-03)
+
+Con el PR abierto, el usuario pidió ver la barra de estado al pie, debajo de la barra de comandos, y
+el título más destacado. Se compararon tres bocetos: (A) el título solo arriba y el estado de sync al
+pie; (B) sin franja arriba, todo al pie en una línea; (C) un encabezado con la empresa como título y
+`<caja> - <sucursal>` debajo, y el sync al pie. Eligió **C** por más atractivo. Reemplaza la
+decisión 1:
+
+- **Encabezado** (arriba): la empresa como título grande y `<caja> - <sucursal>` debajo; sin empresa,
+  la caja es el título. La marca DEMO en un recuadro al lado del título y el botón de la demo a la
+  derecha. Información pasiva: solo el botón hace algo.
+- **Barra de estado** (al pie, debajo de la barra de comandos): una sola línea, la de sync, como era
+  antes de este trabajo, sin DEMO ni el botón de la demo. Un click sigue abriendo `/DIAGNOSTICO`.
+- El título de la pestaña no cambia (`<caja> - <sucursal>`).
+
 ## Fuera de alcance
 
 - La línea de contexto en las pantallas que no tienen barra de estado: ahí queda el título de la

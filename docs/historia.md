@@ -1051,7 +1051,10 @@ caja ya estaban en la config, pero solo se veían en `/CONFIG`; la empresa no vi
 opcional en `GET /info`, guardado como las capacidades para que se vea sin red. Se comparó en un boceto
 dónde ponerlo (a la izquierda o a la derecha de la barra de estado, o una línea propia en todas las
 pantallas); el usuario eligió una barra de dos líneas, con la de contexto arriba llevando DEMO y el
-botón de la demo, y el título de la pestaña `<caja> - <sucursal>` para las pantallas sin barra. En la
+botón de la demo, y el título de la pestaña `<caja> - <sucursal>` para las pantallas sin barra. Ya
+con el PR abierto pidió ver la barra de estado al pie y el título más destacado: de tres bocetos eligió
+un encabezado con la empresa como título y la caja debajo, con la barra de estado (solo sync) debajo
+de la barra de comandos; la barra de estado había estado arriba desde el pase de diseño. En la
 revisión del diseño el usuario aclaró que el demo-backend no es un backend "para demos" sino la
 referencia de un backend: después del alta la terminal ya no está en demo, así que la empresa sale de
 la key (la de la demo según la plantilla, o la que se cargó en el alta, que sumó el campo "Nombre del
