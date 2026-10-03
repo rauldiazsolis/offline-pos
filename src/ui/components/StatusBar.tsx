@@ -136,7 +136,7 @@ export function StatusBar() {
         color: 'var(--color-chrome-text-muted)',
         fontSize: 'var(--font-size-sm)',
         background: 'var(--color-chrome-bg)',
-        borderTop: '1px solid var(--color-chrome-surface)',
+        borderTop: '2px solid var(--color-chrome-border)',
       }}
     >
       <div
