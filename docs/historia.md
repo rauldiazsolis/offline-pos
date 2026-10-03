@@ -5,6 +5,8 @@ acá porque cuenta **cómo** se llegó a cada decisión: bugs reales encontrados
 propósito, desvíos de los planes y alternativas descartadas. Es un archivo: puede contener datos que
 ya no son ciertos (por ejemplo, turnos de caja, `/CUENTA` o el menú de "/" sin preselección). Para
 trabajar, manda `CLAUDE.md`; lo de más adelante sigue en git, en los PR y en `docs/superpowers/`.
+Los planes que se citan (`docs/superpowers/plans/…`) se borraron al cerrar cada etapa: están en el
+historial de git (`git log --all -- <ruta>`).
 
 Contenido:
 
