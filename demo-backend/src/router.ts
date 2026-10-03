@@ -8,6 +8,8 @@ export type RouteContext = {
   db: DatabaseSync;
   params: Record<string, string>;
   url: URL;
+  /** El token del `Authorization` (#193); `undefined` si falta. */
+  token: string | undefined;
 };
 
 export type RouteHandler = (
@@ -123,7 +125,12 @@ export async function handleRequest(
       }
     }
     try {
-      await route.handler(req, res, { db, params: { ...(match.groups ?? {}) }, url });
+      await route.handler(req, res, {
+        db,
+        params: { ...(match.groups ?? {}) },
+        url,
+        token: bearerToken(req),
+      });
     } catch (error) {
       sendJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
     }

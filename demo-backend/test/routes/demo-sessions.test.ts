@@ -6,7 +6,12 @@ import { registerRoutes } from '../../src/router.ts';
 import { demoSessionRoutes } from '../../src/routes/demo-sessions.ts';
 import { infoRoutes } from '../../src/routes/info.ts';
 import { seedIfEmpty } from '../../src/seed.ts';
-import { getDemoSettings, setDemoSettings } from '../../src/settings.ts';
+import {
+  getCompanyName,
+  getDemoSettings,
+  setCompanyName,
+  setDemoSettings,
+} from '../../src/settings.ts';
 
 beforeAll(() => {
   registerRoutes(demoSessionRoutes);
@@ -111,35 +116,65 @@ describe('POST /demo-sessions (4.4.0, #128)', () => {
   });
 });
 
-describe('GET /_demo/onboarding (4.4.0, #128)', () => {
-  function decodeConnect(html: string, label: string): unknown {
-    const match = new RegExp(`href="http://localhost:4173/#connect=([^"]+)">${label}<`).exec(html);
-    const encoded = match?.[1];
+describe('GET /_demo/onboarding (4.4.0, #128; formulario, #193)', () => {
+  function decodeLocation(response: Response): unknown {
+    const location = response.headers.get('location') ?? '';
+    const encoded = /#connect=(.+)$/.exec(location)?.[1];
     expect(encoded).toBeDefined();
     return encoded === undefined
       ? undefined
       : (JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8')) as unknown);
   }
 
-  it('arma la vuelta con #connect, con y sin el wipe_key', async () => {
+  function complete(params: Record<string, string>): Promise<Response> {
+    return fetch(`${baseUrl}/_demo/onboarding/complete?${new URLSearchParams(params).toString()}`, {
+      redirect: 'manual',
+    });
+  }
+
+  it('el formulario pide el nombre del comercio y lleva lo recibido', async () => {
     const response = await fetch(
       `${baseUrl}/_demo/onboarding?return_url=${encodeURIComponent('http://localhost:4173/')}&wipe_key=k1`,
     );
     expect(response.headers.get('content-type')).toContain('text/html');
     const html = await response.text();
+    expect(html).toContain('Nombre del comercio');
+    expect(html).toContain('action="/_demo/onboarding/complete"');
+    expect(html).toContain('value="http://localhost:4173/"');
+    expect(html).toContain('value="k1"');
+  });
 
+  it('completar guarda la empresa y vuelve con #connect, con y sin el wipe_key', async () => {
     const connection = {
       baseUrl,
       apiKey: 'demo-api-key',
       branch: 'CENTRAL',
       pointOfSale: 'Caja 1',
     };
-    expect(decodeConnect(html, 'Crear comercio y volver al POS')).toEqual({
-      ...connection,
-      wipeKey: 'k1',
-    });
-    expect(decodeConnect(html, 'Volver sin wipe_key')).toEqual(connection);
-    expect(html).toContain('k1');
+    const base = {
+      return_url: 'http://localhost:4173/',
+      wipe_key: 'k1',
+      company: ' Almacén Rosa ',
+    };
+
+    const withKey = await complete({ ...base, with_key: '1' });
+    expect(withKey.status).toBe(302);
+    expect(withKey.headers.get('location')).toMatch(/^http:\/\/localhost:4173\/#connect=/);
+    expect(decodeLocation(withKey)).toEqual({ ...connection, wipeKey: 'k1' });
+    expect(getCompanyName(db)).toBe('Almacén Rosa');
+
+    expect(decodeLocation(await complete({ ...base, with_key: '0' }))).toEqual(connection);
+  });
+
+  it('sin nombre, el comercio queda sin empresa', async () => {
+    setCompanyName(db, 'Viejo');
+    await complete({ return_url: 'http://localhost:4173/', company: '', with_key: '1' });
+    expect(getCompanyName(db)).toBeUndefined();
+  });
+
+  it('completar sin return_url no redirige', async () => {
+    const response = await complete({ company: 'x', with_key: '1' });
+    expect(response.status).toBe(400);
   });
 
   it('escapa lo que recibe', async () => {
@@ -155,7 +190,7 @@ describe('GET /_demo/onboarding (4.4.0, #128)', () => {
     const html = await (await fetch(`${baseUrl}/_demo/onboarding`)).text();
 
     expect(html).toContain('Falta return_url.');
-    expect(html).not.toContain('#connect=');
+    expect(html).not.toContain('<form');
   });
 });
 
@@ -169,6 +204,21 @@ async function createDemoKey(): Promise<string> {
   const body = (await (await createDemo({})).json()) as { apiKey: string };
   return body.apiKey;
 }
+
+describe('empresa de la demo en /info (4.5.0, #193)', () => {
+  it('con la key de una demo manda el nombre de la demo según la plantilla', async () => {
+    const created = await createDemo({ template: 'almacen' });
+    const { apiKey } = (await created.json()) as { apiKey: string };
+    const body = (await (await getInfo(apiKey)).json()) as { company?: { name: string } };
+    expect(body.company).toEqual({ name: 'Almacén de demo' });
+  });
+
+  it('una demo nueva borra la empresa del alta anterior', async () => {
+    setCompanyName(db, 'Almacén Rosa');
+    await createDemoKey();
+    expect(getCompanyName(db)).toBeUndefined();
+  });
+});
 
 describe('keys de demo y revocación (#176)', () => {
   it('cada demo emite una key propia que anda', async () => {

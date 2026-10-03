@@ -21,6 +21,14 @@ export function revokeDemoKeys(db: DatabaseSync, now: string): number {
   return Number(result.changes);
 }
 
+/** Una key emitida por `POST /demo-sessions` (#193: `/info` manda el nombre de la demo). */
+export function isDemoKey(db: DatabaseSync, key: string | undefined): boolean {
+  if (key === undefined) {
+    return false;
+  }
+  return db.prepare('SELECT 1 AS found FROM demo_keys WHERE key = ?').get(key) !== undefined;
+}
+
 export function isRevokedKey(db: DatabaseSync, key: string | undefined): boolean {
   if (key === undefined) {
     return false;
