@@ -34,7 +34,7 @@ describe('requestDemoSession (#128)', () => {
     expect(url).toBe('https://b.x/demo-sessions');
     expect(init.method).toBe('POST');
     const headers = init.headers as Record<string, string>;
-    expect(headers['X-POS-Contract-Version']).toBe('4.4.0');
+    expect(headers['X-POS-Contract-Version']).toBe('4.5.0');
     expect(headers).not.toHaveProperty('Authorization');
     expect(init.body).toBe('{"template":"almacen"}');
   });

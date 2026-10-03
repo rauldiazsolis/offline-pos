@@ -105,7 +105,7 @@ describe('pullBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pullBatch',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       payload: {
         deviceId: 'dev-1',
         cursors: { products: 'cursor-p', customers: 'cursor-c' },
@@ -235,7 +235,7 @@ describe('pushBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pushBatch',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       payload: batch,
       idempotencyKey: 'lot-1',
     });
@@ -295,7 +295,7 @@ describe('pushBatch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentEnvelope(fetchMock, 0)).toEqual({
       action: 'pushBatch',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       payload: { deviceId: 'dev-1', events: allEvents },
       idempotencyKey: 'lot-1',
     });
@@ -372,6 +372,6 @@ describe('getInfo (#99)', () => {
         backend: { name: 'pos-sheets-bridge', version: '4.2.0' },
       },
     });
-    expect(sentEnvelope(fetchMock, 0)).toMatchObject({ action: 'info', contractVersion: '4.4.0' });
+    expect(sentEnvelope(fetchMock, 0)).toMatchObject({ action: 'info', contractVersion: '4.5.0' });
   });
 });

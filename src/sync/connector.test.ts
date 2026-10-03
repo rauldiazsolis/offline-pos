@@ -131,6 +131,25 @@ describe('reglas de evolución (4.4.0, #128)', () => {
     expect(toBackendInfo(withCaps).capabilities).toEqual(['demo-sessions']);
   });
 
+  it('company opcional (4.5.0): se conserva; mal formada o con nombre vacío, ausente', () => {
+    const withCompany = backendInfoSchema.parse({
+      contractVersion: '4.5.0',
+      status: 'ok',
+      company: { name: 'Kiosco Pepe' },
+    });
+    expect(toBackendInfo(withCompany).company).toEqual({ name: 'Kiosco Pepe' });
+
+    const malformed = backendInfoSchema.parse({ contractVersion: '4.5.0', status: 'ok', company: 3 });
+    expect(toBackendInfo(malformed)).not.toHaveProperty('company');
+
+    const blank = backendInfoSchema.parse({
+      contractVersion: '4.5.0',
+      status: 'ok',
+      company: { name: '  ' },
+    });
+    expect(toBackendInfo(blank)).not.toHaveProperty('company');
+  });
+
   it('lo que el POS no entiende de un lote es "terminado con aviso", nunca processing', () => {
     const parsed = pullBatchResponseSchema.parse({
       ...basePull,

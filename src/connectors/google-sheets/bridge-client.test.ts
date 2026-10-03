@@ -48,7 +48,7 @@ describe('callBridge — request', () => {
     expect(init.headers).toEqual({ 'Content-Type': 'text/plain;charset=utf-8' });
     expect(JSON.parse(init.body as string)).toEqual({
       action: 'pushSale',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       payload: { sale: { id: 's1' } },
       idempotencyKey: 's1',
       sharedSecret: 's3cr3t',
@@ -64,7 +64,7 @@ describe('callBridge — request', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({
       action: 'pullProducts',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       payload: {},
     });
   });
@@ -187,7 +187,7 @@ describe('callBridge — contrato 4.0.0 (#99)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'sync/incompatible-contract',
-      meta: { backend: '3.0.0', pos: '4.4.0' },
+      meta: { backend: '3.0.0', pos: '4.5.0' },
     });
   });
 });

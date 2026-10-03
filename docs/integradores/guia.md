@@ -7,7 +7,7 @@ cuando vuelve la conexión. Se opera 100% con teclado (y también con mouse).
 El POS es **estático y genérico**: son archivos HTML, JS y CSS sin servidor propio, y no conoce
 ningún backend en particular. Se conecta a cualquier sistema (ERP, e-commerce, facturación,
 inventario) que implemente el **Connector API**, un contrato REST/JSON versionado. Esta guía
-acompaña a la versión del contrato **4.4.0**; el detalle de cada operación está en
+acompaña a la versión del contrato **4.5.0**; el detalle de cada operación está en
 [`connector-api.openapi.yaml`](../connector-api.openapi.yaml).
 
 ## Probarlo en 5 minutos
