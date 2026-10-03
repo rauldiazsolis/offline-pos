@@ -1025,7 +1025,7 @@ fijos a que Dexie abriera la base; pasó a esperar a que la escritura esté abie
 prueba otra carpeta del mismo origen sirviendo el mismo build con `context.route`, porque el sitio de
 `site:preview` tiene una sola carpeta de versión. Spec y plan en `docs/superpowers/` (2026-10-02).
 
-**Link de demo con confirmación y demo revocada (#176)**. Tercera etapa del MVP de mini contax (epic
+**Link de demo con confirmación y demo revocada (#176, PR #192)**. Tercera etapa del MVP de mini contax (epic
 #182), antes de M8 del mini-erp (demos v2: un comercio por rubro y una caja por visitante, que se
 revoca con el reinicio nocturno o a las 24 h sin uso). Hasta acá, el POS decidía solo qué hacer con un
 link de demo: con una conexión real o con datos lo ignoraba, y ya en demo lo aplicaba borrando aunque
