@@ -108,10 +108,10 @@ export async function bootstrap(): Promise<void> {
     await openWizardWithCandidate(onboarding.candidate, onboarding.notice);
   } else if (state !== 'active') {
     await openRequiredWizard();
-    if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+    if (onboarding.kind === 'failed') {
       configNoticeSignal.value = onboarding.notice;
     }
-  } else if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+  } else if (onboarding.kind === 'failed') {
     commandBarWarningSignal.value = onboarding.notice;
   } else if (onboarding.kind === 'applied' && onboarding.notice !== undefined) {
     commandBarNoticeSignal.value = onboarding.notice;
