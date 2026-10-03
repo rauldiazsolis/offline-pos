@@ -10,11 +10,13 @@ import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { stripOnboardingParams } from '../sync/demo-link.ts';
 import { openRequiredWizard, openWizardWithCandidate } from './keyboard/config-controller.ts';
+import { openDemoConfirm } from './keyboard/demo-confirm-controller.ts';
 import { runOnboardingFromUrl } from './onboarding.ts';
-import { cartSelectionIndexSignal, cartSignal } from './state/cart.ts';
+import { resetSessionAfterWipe } from './session-reset.ts';
+import { cartSignal } from './state/cart.ts';
 import { commandBarNoticeSignal, commandBarWarningSignal } from './state/command-bar.ts';
 import { setCatalogRepository } from './state/catalog.ts';
-import { attachedCustomerSignal, resetAttachedCustomer } from './state/customer.ts';
+import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
@@ -81,11 +83,7 @@ export async function bootstrap(): Promise<void> {
   if (onboarding.kind === 'applied') {
     // Lo local se borró: la venta en curso restaurada más arriba ya no existe, y el último arqueo
     // tampoco (aviso "Sin arqueo en 24 h").
-    cartSignal.value = { lines: [] };
-    cartSelectionIndexSignal.value = null;
-    resetAttachedCustomer();
-    identityResetSignal.value = false;
-    lastCashCountAtSignal.value = (await getCashBalance()).lastCountAt;
+    await resetSessionAfterWipe();
   }
 
   // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
@@ -115,6 +113,13 @@ export async function bootstrap(): Promise<void> {
     commandBarWarningSignal.value = onboarding.notice;
   } else if (onboarding.kind === 'applied' && onboarding.notice !== undefined) {
     commandBarNoticeSignal.value = onboarding.notice;
+  }
+
+  // #176: hay algo que perder, así que se confirma antes de pedir la demo. Sin conexión activa, el
+  // wizard requerido ya quedó abierto arriba, por si se cancela. `openDemoConfirm` pausa el sync
+  // antes de su primer `await`: `startSyncEngine` no corre nada mientras la pantalla esté abierta.
+  if (onboarding.kind === 'confirm') {
+    void openDemoConfirm(onboarding.entry);
   }
 
   startSyncEngine();

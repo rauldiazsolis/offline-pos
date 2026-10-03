@@ -4,6 +4,7 @@ import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
 import { CheckoutScreen } from './screens/checkout-screen.tsx';
 import { CollectionScreen } from './screens/collection-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
+import { DemoConfirmScreen } from './screens/demo-confirm-screen.tsx';
 import { DemoResetScreen } from './screens/demo-reset-screen.tsx';
 import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
 import { PrinterScreen } from './screens/printer-screen.tsx';
@@ -11,11 +12,16 @@ import { ReceiptScreen } from './screens/receipt-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
 import { VoidScreen } from './screens/void-screen.tsx';
+import { demoConfirmSignal } from './state/demo-confirm.ts';
 import { activeScreenSignal } from './state/screen.ts';
 import { connectionStateSignal } from './state/sync.ts';
 import { MIN_SUPPORTED_WIDTH_PX, viewportWidthSignal } from './state/viewport.ts';
 
 function ActiveScreen() {
+  // #176: un link de demo con algo que perder se confirma antes que nada, con o sin conexión activa.
+  if (demoConfirmSignal.value !== null) {
+    return <DemoConfirmScreen />;
+  }
   // Etapa 2b (#76): sin una conexión activa no hay ninguna otra pantalla
   // posible — ni venta ni barra de comandos. La única salida es probar una
   // conexión en `/CONFIG` (modo requerido: sin Cancelar y Esc no sale).
