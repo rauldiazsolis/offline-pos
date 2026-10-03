@@ -139,7 +139,11 @@ describe('reglas de evolución (4.4.0, #128)', () => {
     });
     expect(toBackendInfo(withCompany).company).toEqual({ name: 'Kiosco Pepe' });
 
-    const malformed = backendInfoSchema.parse({ contractVersion: '4.5.0', status: 'ok', company: 3 });
+    const malformed = backendInfoSchema.parse({
+      contractVersion: '4.5.0',
+      status: 'ok',
+      company: 3,
+    });
     expect(toBackendInfo(malformed)).not.toHaveProperty('company');
 
     const blank = backendInfoSchema.parse({

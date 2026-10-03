@@ -5,6 +5,7 @@ import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
 import { startNewDemo, startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
+  backendCompanySignal,
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
@@ -14,6 +15,7 @@ import {
   localCatalogCountsSignal,
   pendingOutboxCountSignal,
   setDemoSession,
+  setTerminalIdentity,
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
@@ -38,6 +40,8 @@ beforeEach(() => {
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
   backendNoticesSignal.value = [];
+  setTerminalIdentity(null);
+  backendCompanySignal.value = undefined;
   // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
   nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
   lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
@@ -230,6 +234,49 @@ describe('StatusBar — avisos del backend (4.4.0, #128)', () => {
     expect(button.style.color).toBe('var(--color-danger)');
     fireEvent.click(button);
 
+    expect(activeScreenSignal.value).toBe('diagnostico');
+  });
+});
+
+describe('StatusBar — empresa, sucursal y caja (#193)', () => {
+  it('línea de contexto: caja - sucursal - empresa', () => {
+    setTerminalIdentity({ branch: 'Central', pointOfSale: 'Caja 1' });
+    backendCompanySignal.value = 'Kiosco Pepe';
+    render(<StatusBar />);
+    expect(screen.getByText('Caja 1 - Central - Kiosco Pepe')).not.toBeNull();
+  });
+
+  it('sin empresa, caja - sucursal', () => {
+    setTerminalIdentity({ branch: 'Central', pointOfSale: 'Caja 1' });
+    render(<StatusBar />);
+    expect(screen.getByText('Caja 1 - Central')).not.toBeNull();
+  });
+
+  it('DEMO y el botón del alta van en la línea del contexto, no en la del estado', () => {
+    setTerminalIdentity({ branch: 'Central', pointOfSale: 'Caja 1' });
+    setDemoSession(demo);
+    try {
+      render(<StatusBar />);
+      const contextLine = screen.getByTestId('status-bar-context');
+      expect(contextLine.textContent).toContain('DEMO');
+      expect(contextLine.textContent).toContain('Caja 1 - Central');
+      expect(contextLine.textContent).toContain('Crear mi comercio (/ALTA)');
+      expect(screen.getByTestId('status-bar-sync').textContent).not.toContain('DEMO');
+    } finally {
+      setDemoSession(null);
+    }
+  });
+
+  it('sin identidad ni demo no hay línea de contexto', () => {
+    render(<StatusBar />);
+    expect(screen.queryByTestId('status-bar-context')).toBeNull();
+  });
+
+  it('un click en la línea de contexto abre /DIAGNOSTICO', () => {
+    setTerminalIdentity({ branch: 'Central', pointOfSale: 'Caja 1' });
+    activeScreenSignal.value = 'sale';
+    render(<StatusBar />);
+    fireEvent.click(screen.getByText('Caja 1 - Central'));
     expect(activeScreenSignal.value).toBe('diagnostico');
   });
 });
