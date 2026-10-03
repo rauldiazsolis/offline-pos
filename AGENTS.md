@@ -131,7 +131,7 @@ src/
     console/       # utilidades `pos.*` de DevTools
   workers/         # vacío: el service worker llega con la PWA (#54)
   test/            # helpers compartidos de tests (connector falso, planilla falsa, setup)
-demo-backend/      # minibackend de demo (Node + SQLite): la referencia ejecutable del contrato (`pnpm backend`)
+demo-backend/      # backend de referencia (Node + SQLite): la referencia ejecutable del contrato (`pnpm backend`)
 site/              # publicación (#148): carpeta por versión, /versions, docs; no es parte de la app
 e2e/               # Playwright
 docs/              # connector-api.openapi.yaml, integradores/ (guía y llms.txt), publicacion.md, specs y planes (superpowers/), historia.md
@@ -237,8 +237,9 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.4.0** desde #128, la última antes
-del MVP (spec `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`); la 4.3.0
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.5.0** desde #193 (`company`
+opcional en `GET /info`, spec `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`);
+la 4.4.0 es de #128, la última antes del MVP (spec `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`); la 4.3.0
 es de #125 (spec `docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`); la 4.2.0 es de la Etapa 6 del epic #94 —
 #101, spec `docs/superpowers/specs/2026-09-27-cobranza-y-saldo-del-cliente-design.md`; la 4.1.0 es de
 la Etapa 5, #120, spec `docs/superpowers/specs/2026-09-24-caja-sin-turnos-y-numeracion-design.md`; la 4.0.0 es de la
@@ -272,7 +273,11 @@ están en `src/sync/AGENTS.md`; las implementaciones y el registro de conectores
 `src/connectors/AGENTS.md`.
 
 **Qué backends acompañan un cambio de contrato**: el minibackend de demo (`demo-backend/`) sí, en el
-mismo trabajo — es la referencia ejecutable del contrato. Los backends externos, como el mini-erp,
+mismo trabajo — es la referencia ejecutable del contrato. Pese al nombre, **no es un backend para
+demos del POS**: es la referencia de lo que debe hacer un backend, y el circuito de demo y alta
+(`POST /demo-sessions`, la página de alta, la key del comercio que nace del alta) es una parte más de
+esa referencia. Después del alta, la terminal ya no está en demo aunque hable con el demo-backend. El
+nombre de la carpeta queda (decisión del 2026-10-03, #193). Los backends externos, como el mini-erp,
 no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (`bridge.gs` y
 `columnas.gs`, en `src/connectors/google-sheets/`) **se mantiene en este repo como un backend más, con
 piso** (decisión del 2026-09-29, epic #166, que revirtió el congelamiento de #127 y el puente aparte de
@@ -567,6 +572,7 @@ está en `docs/historia.md`; cada etapa desde #87 tiene su spec y su plan en `do
 | #174 | Impresión de tickets con `window.print()`: `/IMPRESORA` (58 mm, 80 mm, A6, "Al cobrar", encabezado y pie), reimprimir desde `/RESUMEN`, puerto `ReceiptPrinter` | PR #190 |
 | #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR #191 |
 | #176 | Link de demo con confirmación de lo que se pierde ("Abrir una demo"), demo revocada (401 en demo) y `/DEMO_NUEVA`; el demo-backend emite una key por demo y las revoca | PR #192 |
+| #193 | Caja, sucursal y empresa a la vista: encabezado con la empresa como título, barra de estado al pie y título de la pestaña; contrato 4.5.0 (`company` en `GET /info`) | PR #194 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a

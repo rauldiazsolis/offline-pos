@@ -36,6 +36,12 @@ export const TEMPLATES = {
   almacen: { products: almacenProducts, customers: almacenCustomers },
 } as const;
 export type TemplateName = keyof typeof TEMPLATES;
+
+/** Nombre de la empresa de cada demo, para `/info` (4.5.0, #193). */
+export const DEMO_COMPANY_NAMES: Record<TemplateName, string> = {
+  kiosco: 'Kiosco de demo',
+  almacen: 'Almacén de demo',
+};
 export const DEFAULT_TEMPLATE: TemplateName = 'kiosco';
 
 export function isTemplateName(value: string): value is TemplateName {

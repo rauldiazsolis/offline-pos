@@ -4,6 +4,7 @@ import { fakeConnector } from '../test/fake-connector.ts';
 import {
   backendCapabilitiesSignal,
   backendCheckDueSignal,
+  backendCompanySignal,
   backendStatusSignal,
   demoRevokedSignal,
   setBackendCheckDue,
@@ -71,6 +72,22 @@ describe('blocksSync', () => {
 });
 
 describe('refreshBackendStatus', () => {
+  it('guarda la empresa que manda el backend; sin ella, la borra (4.5.0, #193)', async () => {
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () =>
+          Promise.resolve(
+            ok({ contractVersion: '4.5.0', status: 'ok', company: { name: 'Kiosco Pepe' } }),
+          ),
+      }),
+      now,
+    );
+    expect(backendCompanySignal.value).toBe('Kiosco Pepe');
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendCompanySignal.value).toBeUndefined();
+  });
+
   it('con getInfo ok fija el estado, apaga el chequeo pendiente y lo registra en el log', async () => {
     await refreshBackendStatus(fakeConnector(), now);
 

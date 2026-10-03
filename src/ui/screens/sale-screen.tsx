@@ -1,6 +1,7 @@
 import { CartView } from '../components/CartView.tsx';
 import { CommandBarInput } from '../components/CommandBarInput.tsx';
 import { StatusBar } from '../components/StatusBar.tsx';
+import { TerminalHeader } from '../components/TerminalHeader.tsx';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { dismissCommandBarOverlay } from '../keyboard/command-bar-controller.ts';
 
@@ -24,10 +25,11 @@ function handleMouseDown(event: MouseEvent): void {
 }
 
 /**
- * Pantalla de venta: barra de estado arriba (info pasiva, "chrome" oscuro),
- * carrito en el medio (contenido claro, único que hace scroll — ver
- * `height`+`overflow` de abajo), barra de comandos abajo (siempre enfocada,
- * "chrome" oscuro) — ver "UX keyboard-first" en AGENTS.md.
+ * Pantalla de venta: encabezado arriba (en qué comercio y caja está la terminal,
+ * #193), carrito en el medio (contenido claro, único que hace scroll — ver
+ * `height`+`overflow` de abajo), barra de comandos abajo (siempre enfocada) y,
+ * al pie, la barra de estado (info pasiva). Encabezado, barra de comandos y
+ * barra de estado van sobre "chrome" oscuro — ver "UX keyboard-first" en AGENTS.md.
  *
  * El input queda cerca de las manos y de donde aparece la línea nueva
  * (`addProductLine` siempre agrega al final del carrito, o sea justo arriba
@@ -68,7 +70,7 @@ export function SaleScreen() {
         fontFamily: 'var(--font-sans)',
       }}
     >
-      <StatusBar />
+      <TerminalHeader />
       <main style={{ flex: 1, overflow: 'hidden', minHeight: 0, padding: 'var(--space-3)' }}>
         <CartView />
       </main>
@@ -82,6 +84,7 @@ export function SaleScreen() {
       >
         <CommandBarInput />
       </footer>
+      <StatusBar />
     </div>
   );
 }

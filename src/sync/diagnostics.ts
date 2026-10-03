@@ -3,6 +3,7 @@ import type { Failure, Result } from '../domain/result.ts';
 import { STORAGE_NAMESPACE } from '../storage/storage-namespace.ts';
 import {
   backendCapabilitiesSignal,
+  backendCompanySignal,
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
@@ -43,6 +44,8 @@ export type SyncDiagnostics = {
   backendStatus: BackendStatus;
   /** Capacidades del último `getInfo` exitoso (4.4.0, #128); `undefined` = nunca se supo. */
   capabilities: readonly string[] | undefined;
+  /** Empresa del último `getInfo` exitoso (4.5.0, #193); `undefined` = no informada. */
+  company: string | undefined;
   /** Avisos vigentes del backend según el último pull aplicado (4.4.0, #128). */
   notices: readonly BackendNotice[];
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
@@ -71,6 +74,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     pushLotIssues: pushLotIssuesSignal.value,
     backendStatus: backendStatusSignal.value,
     capabilities: backendCapabilitiesSignal.value,
+    company: backendCompanySignal.value,
     notices: backendNoticesSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,

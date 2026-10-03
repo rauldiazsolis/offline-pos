@@ -6,7 +6,7 @@ import { registerRoutes } from '../../src/router.ts';
 import { accountHoldRoutes } from '../../src/routes/account-holds.ts';
 import { infoRoutes } from '../../src/routes/info.ts';
 import { syncRoutes } from '../../src/routes/sync.ts';
-import { setDemoSettings } from '../../src/settings.ts';
+import { setCompanyName, setDemoSettings } from '../../src/settings.ts';
 
 beforeAll(() => {
   registerRoutes(infoRoutes);
@@ -65,13 +65,19 @@ async function push(version: string | undefined, id = 'lot-1'): Promise<Response
 }
 
 describe('GET /info (#99)', () => {
-  it('informa el contrato 4.4.0, el estado ok y sus capacidades (#128)', async () => {
+  it('informa el contrato 4.5.0, el estado ok y sus capacidades (#128, #193)', async () => {
+    // Sin empresa: la key no es de una demo y no se cargó ningún comercio en el alta.
     expect(await info()).toEqual({
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
       status: 'ok',
-      backend: { name: 'offline-pos-demo-backend', version: '4.4.0' },
+      backend: { name: 'offline-pos-demo-backend', version: '4.5.0' },
       capabilities: ['demo-sessions', 'customer-payment-void'],
     });
+  });
+
+  it('con la key del comercio manda la empresa del alta (4.5.0, #193)', async () => {
+    setCompanyName(db, 'Almacén Rosa');
+    expect(await info()).toMatchObject({ company: { name: 'Almacén Rosa' } });
   });
 
   it('pide autenticación', async () => {
@@ -106,7 +112,7 @@ describe('versión del contrato en cada request (#99)', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       code: 'incompatible-contract',
-      contractVersion: '4.4.0',
+      contractVersion: '4.5.0',
     });
   });
 

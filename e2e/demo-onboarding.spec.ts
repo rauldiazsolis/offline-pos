@@ -31,6 +31,12 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).toBeVisible();
   expect(page.url()).not.toContain('demo=');
+  // #193: la empresa de la demo como título del encabezado y la caja debajo; caja y sucursal en la
+  // pestaña.
+  const header = page.getByTestId('terminal-header');
+  await expect(header.getByText('Kiosco de demo')).toBeVisible();
+  await expect(header.getByText('Caja 1 - CENTRAL')).toBeVisible();
+  await expect(page).toHaveTitle('Caja 1 - CENTRAL');
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
@@ -40,7 +46,8 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   await commandBar.fill('/ALTA');
   await commandBar.press('Enter');
   await expect(page).toHaveURL(/localhost:4001\/_demo\/onboarding\?return_url=/);
-  await page.getByRole('link', { name: 'Crear comercio y volver al POS' }).click();
+  await page.getByLabel('Nombre del comercio').fill('Almacén Rosa');
+  await page.getByRole('button', { name: 'Crear comercio y volver al POS' }).click();
 
   await expect(page.getByLabel('Barra de comandos')).toBeVisible();
   await expect(page.getByText('DEMO', { exact: true })).toHaveCount(0);
@@ -49,6 +56,8 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   expect(config).toMatchObject({ type: 'rest', baseUrl: BACKEND, apiKey: 'demo-api-key' });
   expect(config).not.toHaveProperty('demo');
   await expect(page.getByText('Arroz 1kg')).toHaveCount(0); // la venta en curso se borró
+  // #193: ya no es una demo, la empresa es la del alta.
+  await expect(page.getByTestId('terminal-header').getByText('Almacén Rosa')).toBeVisible();
 });
 
 test('template desconocido: arranca con el default y avisa', async ({ page }) => {
@@ -76,7 +85,7 @@ test('vuelta sin wipe_key con datos: wizard precargado, nada borrado', async ({ 
   await commandBar.fill('/ALTA');
   await commandBar.press('Enter');
   await expect(page).toHaveURL(/localhost:4001\/_demo\/onboarding\?return_url=/);
-  await page.getByRole('link', { name: 'Volver sin wipe_key' }).click();
+  await page.getByRole('button', { name: 'Volver sin wipe_key' }).click();
 
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
   await expect(page.getByText(/Volviste del alta/)).toBeVisible();

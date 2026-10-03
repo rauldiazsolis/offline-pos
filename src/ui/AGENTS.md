@@ -95,7 +95,11 @@ La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decis
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
 carrito, así que con el input abajo la línea recién agregada aparece pegada a donde se está
 tipeando, en vez del salto largo de atención que había con el input arriba y el carrito creciendo
-hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
+hacia abajo. Desde #193 la barra de estado (info pasiva) va al pie, **debajo** de la barra de
+comandos, y arriba queda el encabezado con el comercio y la caja (ver "Encabezado y barra de estado").
+Antes la barra de estado ocupaba el extremo opuesto, arriba; se movió para que el título se lea solo,
+sin competir con el estado de sync. Los overlays de la barra de comandos se siguen abriendo hacia
+arriba, así que la barra de estado debajo no los toca.
 
 ## Cobro y advertencias (Etapa 4, #99)
 
@@ -112,9 +116,23 @@ hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
   próxima tecla; un error tiene precedencia). El stock sale de `ui/state/stock.ts::
   stockSnapshotSignal` (la tabla entera en memoria).
 
-## Barra de estado
+## Encabezado y barra de estado
 
-Barra de estado (extremo opuesto, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
+**Encabezado (#193, `ui/components/TerminalHeader.tsx`)**: arriba de la venta, en qué comercio y en
+qué caja está la terminal. La empresa (`backendCompanySignal`, de `GET /info` 4.5.0) es el título, en
+`--font-size-lg`, y `<caja> - <sucursal>` va debajo, en chico; sin empresa, la caja es el título
+(`ui/terminal-context.ts::terminalHeading`, con `terminalIdentitySignal`: la sucursal y la caja de la
+config activa, que fijan `bootstrap`, `applyConnection` y `applyTerminalSettings`). Con la terminal en
+demo, la marca **DEMO** (un recuadro ámbar al lado del título) y, a la derecha, el botón de la demo.
+Si falta lugar se recortan el título y el subtítulo con "…", nunca el botón. Es información pasiva:
+un click no hace nada salvo en el botón. Sin conexión activa ni demo, no se muestra. Se eligió entre
+tres bocetos (título solo arriba y sync al pie; todo al pie en una línea; la empresa como título):
+el usuario prefirió el último, por más atractivo. El **título de la pestaña** es `<caja> -
+<sucursal>`, sin la empresa (`terminal-context.ts::startTerminalTitle`, que arranca
+`main.tsx::startApp`): vale también para las pantallas sin encabezado (`/CAJA`, `/COBRAR`,
+`/RESUMEN`…); sin conexión activa queda el de siempre y la segunda pestaña (#175) conserva el suyo.
+
+Barra de estado (al pie, debajo de la barra de comandos desde #193, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
 propósito no interactiva; esa decisión se reabrió a propósito en la prueba manual de esa etapa: un
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
@@ -138,8 +156,8 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 (`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
 
 **Desde 4.4.0 (#128)**, además del estado de sync:
-- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): delante de
-  todo, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
+- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): en el
+  encabezado, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
   que llama a lo mismo que el comando (`ui/keyboard/onboarding-controller.ts::startOnboarding`: emite
   el `wipe_key` y navega al alta). No abre `/DIAGNOSTICO`. `/ALTA` solo aparece en el menú de "/" con
   la terminal en demo (`availableCommands`), igual que `/DEMO_NUEVA` (#176).
@@ -429,15 +447,17 @@ seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), 
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
 (`select`s, campos y botones), **`/CAJA`** (selector, campos,
 sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones) y la **barra de estado** (click =
-`/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta
-hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176).
+`/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
+**encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
+resto es pasivo, #193).
 
 ## Diseño visual
 
 Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 
-- **Chrome oscuro arriba y abajo, contenido claro en el medio**: la barra de comandos (abajo) y la de
-  estado (arriba) usan los tokens `--color-chrome-*` (`tokens.css`); el resto de la app, los claros.
+- **Chrome oscuro arriba y abajo, contenido claro en el medio**: el encabezado (arriba), la barra de
+  comandos y, debajo, la de estado (al pie, #193) usan los tokens `--color-chrome-*` (`tokens.css`);
+  el resto de la app, los claros.
   Es un contraste fijo, no un modo oscuro conmutable.
 - **Foco, selección y paso actual (#112)**: **solo el foco dibuja un contorno azul** — el anillo
   general de `tokens.css` (2 px por fuera, `--focus-ring-offset` de aire), igual en botones,

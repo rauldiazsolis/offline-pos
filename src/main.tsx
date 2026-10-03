@@ -11,6 +11,7 @@ import { SecondaryTabScreen } from './ui/screens/secondary-tab-screen.tsx';
 import { startViewportTracking } from './ui/state/viewport.ts';
 import { browserTabLeadershipDeps } from './ui/tab-browser.ts';
 import { claimTab } from './ui/tab-leadership.ts';
+import { startTerminalTitle } from './ui/terminal-context.ts';
 
 window.addEventListener('error', (event) => {
   // Issue #42: ver el porqué en `isBenignResizeObserverLoopError` —
@@ -37,6 +38,8 @@ function startApp(container: HTMLElement): void {
       // mientras `bootstrap` espera (el onboarding de demo puede tardar lo que tarde el backend).
       render(null, container);
       container.replaceChildren();
+      // #193: "<caja> - <sucursal>" en la pestaña, también en las pantallas sin barra de estado.
+      startTerminalTitle(APP_TITLE);
       render(
         <ErrorBoundary>
           <App />

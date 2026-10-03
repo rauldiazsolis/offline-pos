@@ -1,9 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
 import { activeScreenSignal } from '../state/screen.ts';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
-import { startNewDemo, startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
   backendNoticesSignal,
   backendStatusSignal,
@@ -17,11 +16,6 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
-
-vi.mock('../keyboard/onboarding-controller.ts', () => ({
-  startOnboarding: vi.fn(),
-  startNewDemo: vi.fn(),
-}));
 
 const demo = {
   template: 'kiosco',
@@ -61,64 +55,23 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
     render(<StatusBar />);
     expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
   });
-
-  it('convive con la marca DEMO y el botón de alta', () => {
-    lastCashCountAtSignal.value = undefined;
-    setDemoSession(demo);
-    try {
-      render(<StatusBar />);
-      expect(screen.getByRole('button', { name: 'Sin arqueo en 24 h' })).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).not.toBeNull();
-    } finally {
-      setDemoSession(null);
-    }
-  });
 });
 
-describe('StatusBar — terminal en demo (#128)', () => {
+describe('StatusBar — demo revocada (#176)', () => {
   afterEach(() => {
     setDemoSession(null);
     demoRevokedSignal.value = null;
   });
 
-  it('con la demo revocada: "La demo terminó" y el botón de una demo nueva en lugar del alta (#176)', () => {
-    vi.mocked(startNewDemo).mockClear();
+  it('dice "La demo terminó"; la marca y el botón viven en el encabezado (#193)', () => {
     syncStatusSignal.value = 'sync-error';
     setDemoSession(demo);
     demoRevokedSignal.value = '2026-10-02T10:00:00.000Z';
-    activeScreenSignal.value = 'sale';
     render(<StatusBar />);
 
-    expect(screen.getByText('DEMO')).not.toBeNull();
     expect(screen.getByText('La demo terminó')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Crear mi comercio (/ALTA)' })).toBeNull();
-    const button = screen.getByRole('button', { name: 'Empezar una demo nueva (/DEMO_NUEVA)' });
-    expect(button.tabIndex).toBe(-1);
-    fireEvent.click(button);
-
-    expect(startNewDemo).toHaveBeenCalledTimes(1);
-    expect(activeScreenSignal.value).toBe('sale');
-  });
-
-  it('sin demo no hay marca ni botón de alta', () => {
-    render(<StatusBar />);
     expect(screen.queryByText('DEMO')).toBeNull();
-    expect(screen.queryByRole('button', { name: /\(\/ALTA\)/ })).toBeNull();
-  });
-
-  it('con demo se ven DEMO y el botón; el click lleva al alta sin abrir /DIAGNOSTICO', () => {
-    vi.mocked(startOnboarding).mockClear();
-    setDemoSession(demo);
-    activeScreenSignal.value = 'sale';
-    render(<StatusBar />);
-
-    expect(screen.getByText('DEMO')).not.toBeNull();
-    const button = screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' });
-    expect(button.tabIndex).toBe(-1);
-    fireEvent.click(button);
-
-    expect(startOnboarding).toHaveBeenCalledTimes(1);
-    expect(activeScreenSignal.value).toBe('sale');
+    expect(screen.queryByRole('button', { name: /DEMO_NUEVA/ })).toBeNull();
   });
 });
 

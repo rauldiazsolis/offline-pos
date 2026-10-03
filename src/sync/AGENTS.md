@@ -132,7 +132,7 @@ incompatible, #99), el id de dispositivo, los lotes en espera con su último
 estado y su cantidad de eventos, el lote en curso "no recibido por el backend", cómo se aplicó el
 último pull y la última limpieza de datos locales con su ancla — de solo lectura, mismo patrón de
 teclado que `/RESUMEN`. Desde 4.4.0 (#128) también las capacidades del backend ("sin consultar",
-"ninguna" o la lista) y la sección "Avisos del backend" (severidad, mensaje y `ref` como "tipo id"). Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
+"ninguna" o la lista), desde 4.5.0 (#193) la empresa ("Empresa: …" o "no informada") y la sección "Avisos del backend" (severidad, mensaje y `ref` como "tipo id"). Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
 (ver "Barra de estado" en `src/ui/AGENTS.md`).
 
 ## Cadencias
@@ -176,6 +176,16 @@ antes de #87 se trataba aparte como "best-effort"; con push por lote deja de nec
 especial, es un evento más del lote, igual que documenta §6 para el vencimiento del lado del backend.
 
 ## Contrato: qué trajo cada versión
+
+**Contrato 4.5.0 (#193)** — aditivo (spec
+`docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`): `GET /info` suma
+`company: { name }` opcional, el comercio de la key. El POS la guarda como las capacidades
+(`sync/backend-company.ts`, `localStorage` por carpeta y `backendCompanySignal`): la actualiza con
+cada `/info` exitoso (`refreshBackendStatus`), la toma de la prueba al aplicar una conexión
+(`ProbeSnapshot.company`) y la borra si el backend deja de mandarla. Mal formada o con el nombre vacío
+cuenta como ausente (`backendInfoSchema` con `.catch`). No es una capacidad. El demo-backend la manda
+(el nombre de la demo según la plantilla con una key de demo, el del alta con la del comercio); el
+puente de Sheets no, y sigue compatible por el piso. La UI, en "Barra de estado" de `src/ui/AGENTS.md`.
 
 **Contrato 4.4.0 (#128)** — aditivo, la última versión antes del MVP (spec
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`):
@@ -316,8 +326,8 @@ los repositorios y guardan la config con `verifiedAt` **al final** — riesgo re
 guardado vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después
 del commit, el próximo arranque encontraría la config anterior con datos nuevos. Al terminar: vuelve a
 la venta, reanuda el sync y dispara `runPushThenPull()`. Los caminos 2 y 3 también reemplazan las
-capacidades y los avisos del backend por los de la prueba (4.4.0): nunca quedan los de la conexión
-anterior.
+capacidades y los avisos del backend por los de la prueba (4.4.0), y la empresa (4.5.0): nunca quedan
+los de la conexión anterior.
 
 ## Onboarding de demo (#128)
 

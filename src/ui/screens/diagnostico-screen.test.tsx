@@ -41,6 +41,7 @@ const diagnostics: SyncDiagnostics = {
     },
   },
   capabilities: ['demo-sessions', 'customer-payment-void'],
+  company: 'Kiosco Pepe',
   notices: [
     { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
     {
@@ -138,6 +139,20 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
     render(<DiagnosticoScreen />);
 
     expect(screen.getByText('Capacidades: demo-sessions, customer-payment-void')).not.toBeNull();
+  });
+
+  it('muestra la empresa del backend, o "no informada" (4.5.0, #193)', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText('Empresa: Kiosco Pepe')).not.toBeNull();
+    unmount();
+
+    diagnostics.company = undefined;
+    try {
+      render(<DiagnosticoScreen />);
+      expect(screen.getByText('Empresa: no informada')).not.toBeNull();
+    } finally {
+      diagnostics.company = 'Kiosco Pepe';
+    }
   });
 });
 

@@ -1,12 +1,19 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '4.4.0'
+  version: '4.5.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) implementa para conectarse al POS. La guía para integradores
     (`guia.md`, publicada junto a este archivo) explica cómo probarlo y por
     dónde empezar.
+
+    **4.5.0 respecto de 4.4.0** (aditivo):
+      - `GET /info` suma `company` opcional (`{ name }`): el comercio al que
+        pertenece la key, para que el POS muestre en qué empresa está la
+        terminal. Ausente, mal formado o con el nombre vacío, el POS no
+        muestra empresa. No es una capacidad: se declara mandándolo.
+      - El piso sigue en 4.0.0: un backend 4.4 sigue siendo compatible.
 
     **4.4.0 respecto de 4.3.0** (aditivo) — la última versión antes del
     MVP: desde acá el contrato casi no cambia de forma y lo nuevo entra como
@@ -112,7 +119,7 @@ info:
     ack, el lote sigue congelado en el outbox del POS con su mismo
     `idempotency_id` y sale cuando el backend se actualice.
 
-    **Compatibilidad del lado del POS (4.4.0)**: el POS habla 4.4.0 y
+    **Compatibilidad del lado del POS (desde 4.4.0)**: el POS habla 4.5.0 y
     considera compatible a un backend del **mismo major con minor igual o
     mayor que el piso 4.0.0** (hasta 4.3.0 exigía su mismo minor). Lo que un
     backend puede o no hacer más allá del piso lo declara como **capacidad**
@@ -424,9 +431,9 @@ components:
       required: false
       schema:
         type: string
-        example: '4.4.0'
+        example: '4.5.0'
       description: |
-        Versión del contrato que habla el POS (4.4.0). El POS la manda en
+        Versión del contrato que habla el POS (4.5.0). El POS la manda en
         todos los requests. Un backend que no soporta ese major responde 409
         `IncompatibleContract` sin procesar nada (salvo `/info`, que nunca
         responde 409). Sin el header (un POS anterior a 4.0.0) queda a
@@ -458,7 +465,7 @@ components:
       type: object
       required: [contractVersion, status]
       properties:
-        contractVersion: { type: string, example: '4.4.0' }
+        contractVersion: { type: string, example: '4.5.0' }
         status:
           type: string
           enum: [ok, maintenance]
@@ -481,6 +488,15 @@ components:
           properties:
             name: { type: string }
             version: { type: string }
+        company:
+          type: object
+          required: [name]
+          description: |
+            4.5.0: el comercio al que pertenece la key (por ejemplo, el nombre
+            de la empresa en el backend). El POS lo muestra junto a la sucursal
+            y la caja. Opcional.
+          properties:
+            name: { type: string, example: Kiosco Pepe }
 
     Blocked:
       type: object

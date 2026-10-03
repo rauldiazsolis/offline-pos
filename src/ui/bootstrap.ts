@@ -4,6 +4,7 @@ import { loadDraftCart } from '../storage/draft-cart-repository.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
+import { restoreBackendCompany } from '../sync/backend-company.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
@@ -24,7 +25,12 @@ import { refreshCustomerBalances } from './state/customer-balance.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
 import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
-import { setActiveConnectorType, setConnectionState, setDemoSession } from './state/sync.ts';
+import {
+  setActiveConnectorType,
+  setConnectionState,
+  setDemoSession,
+  setTerminalIdentity,
+} from './state/sync.ts';
 import { configNoticeSignal, identityResetSignal } from './state/sync-config.ts';
 
 /**
@@ -95,9 +101,19 @@ export async function bootstrap(): Promise<void> {
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   setDemoSession(state === 'active' && configResult.ok ? (configResult.value.demo ?? null) : null);
+  // #193: la sucursal y la caja de la barra de estado y del título.
+  setTerminalIdentity(
+    state === 'active' && configResult.ok
+      ? {
+          branch: configResult.value.branch ?? '',
+          pointOfSale: configResult.value.pointOfSale ?? '',
+        }
+      : null,
+  );
   // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
-  // arranca sin red los sabe.
+  // arranca sin red los sabe. 4.5.0 (#193): también la empresa.
   restoreBackendCapabilities();
+  restoreBackendCompany();
   restoreBackendNotices();
   // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
   restoreDemoRevoked();

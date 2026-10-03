@@ -193,6 +193,7 @@ export function DiagnosticoScreen() {
             </p>
           )}
           <p style={{ margin: 0 }}>Capacidades: {capabilitiesText(diagnostics.capabilities)}</p>
+          <p style={{ margin: 0 }}>Empresa: {diagnostics.company ?? 'no informada'}</p>
         </div>
 
         <div style={cardStyle}>
