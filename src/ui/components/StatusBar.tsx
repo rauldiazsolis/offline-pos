@@ -2,11 +2,9 @@ import { describeError } from '../errors.ts';
 import { enterDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import { contractRequirement, MIN_BACKEND_CONTRACT } from '../../domain/contract-version.ts';
 import {
-  backendCompanySignal,
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
-  demoSessionSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -14,12 +12,9 @@ import {
   pendingOutboxCountSignal,
   syncConfiguredSignal,
   syncStatusSignal,
-  terminalIdentitySignal,
 } from '../state/sync.ts';
-import { terminalContextText } from '../terminal-context.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
 import { enterCashScreen } from '../keyboard/cash-controller.ts';
-import { startNewDemo, startOnboarding } from '../keyboard/onboarding-controller.ts';
 import { cashCountOverdueSignal } from '../state/cash.ts';
 import { mostSevere } from '../../sync/backend-notices.ts';
 import type { NoticeSeverity } from '../../sync/connector.ts';
@@ -32,7 +27,8 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
 };
 
 /**
- * Barra de estado (extremo opuesto a la barra de comandos). Hasta la Etapa 2
+ * Barra de estado, al pie de la venta, debajo de la barra de comandos (#193; antes estaba arriba,
+ * en el extremo opuesto). Hasta la Etapa 2
  * de #94 era a propósito no interactiva; desde ahí un click abre
  * `/DIAGNOSTICO` — lo mismo que el comando, patrón teclado + mouse (ver
  * "Teclado y mouse" en AGENTS.md). No entra en el orden de Tab: el teclado
@@ -45,13 +41,8 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
  * 24 h" (Etapa 5 de #94, #100): un botón que abre `/CAJA` en Arqueo sin abrir `/DIAGNOSTICO` y
  * sin sacarle el foco a la barra de comandos. Antes, "Avisos (N)" (4.4.0, #128): los avisos
  * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
- * Con la terminal en demo (#128): la marca DEMO y el botón del alta (`<onboarding.label> (/ALTA)`),
- * que hace lo mismo que `/ALTA` y tampoco abre `/DIAGNOSTICO`. Con la demo revocada (#176), el estado
- * dice "La demo terminó" y el botón pasa a ser "Empezar una demo nueva (/DEMO_NUEVA)".
- *
- * Dos líneas (#193): arriba, la de contexto (DEMO, `<caja> - <sucursal> - <empresa>` y el botón de
- * la demo a la derecha); abajo, la de sync (el estado, "Avisos (N)" y "Sin arqueo en 24 h"). Sin
- * conexión activa ni demo, la de contexto no se muestra.
+ * Con la demo revocada (#176), el estado dice "La demo terminó". La marca DEMO y el botón de la
+ * demo viven en el encabezado (`TerminalHeader.tsx`, #193).
  */
 /** Color del punto de estado — misma info que el texto, reforzada visualmente (pase de diseño). */
 function statusColor(): string {
@@ -135,91 +126,19 @@ function statusText(): string {
 
 export function StatusBar() {
   const noticeColor = NOTICE_COLOR[mostSevere(backendNoticesSignal.value) ?? 'info'];
-  const demo = demoSessionSignal.value;
-  const revoked = demoRevokedSignal.value !== null;
-  const demoButtonLabel = revoked
-    ? 'Empezar una demo nueva (/DEMO_NUEVA)'
-    : `${demo?.onboarding.label ?? ''} (/ALTA)`;
-  const context = terminalContextText(terminalIdentitySignal.value, backendCompanySignal.value);
   return (
     <div
       class="status-bar"
       title="Ver diagnóstico de sincronización (/DIAGNOSTICO)"
       onClick={enterDiagnosticoScreen}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-1)',
         padding: 'var(--space-2) var(--space-3)',
         color: 'var(--color-chrome-text-muted)',
         fontSize: 'var(--font-size-sm)',
         background: 'var(--color-chrome-bg)',
-        borderBottom: '2px solid var(--color-chrome-border)',
+        borderTop: '1px solid var(--color-chrome-surface)',
       }}
     >
-      {(context !== null || demo !== null) && (
-        <div
-          data-testid="status-bar-context"
-          style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}
-        >
-          {demo !== null && (
-            <span
-              style={{
-                fontWeight: 'bold',
-                color: 'var(--color-chrome-warning)',
-                letterSpacing: '0.05em',
-                flexShrink: 0,
-              }}
-            >
-              DEMO
-            </span>
-          )}
-          {context !== null && (
-            <span
-              style={{
-                color: 'var(--color-chrome-text)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                minWidth: 0,
-              }}
-            >
-              {context}
-            </span>
-          )}
-          {/* El botón nunca parte su etiqueta (#111): si falta lugar, se recorta el contexto. */}
-          {demo !== null && (
-            <div style={{ marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              <button
-                type="button"
-                tabIndex={-1}
-                class="btn-primary"
-                onMouseDown={keepFocusOnMouseDown}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (revoked) {
-                    startNewDemo();
-                  } else {
-                    startOnboarding();
-                  }
-                }}
-                title={demoButtonLabel}
-                // `.btn-primary` pone el color; borde y tamaño, como los otros botones de la barra.
-                style={{
-                  border: '1px solid var(--color-accent)',
-                  borderRadius: 'var(--radius-sm, 6px)',
-                  padding: '2px 8px',
-                  fontSize: 'var(--font-size-sm)',
-                  cursor: 'pointer',
-                }}
-              >
-                {demoButtonLabel}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
       <div
         data-testid="status-bar-sync"
         style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}

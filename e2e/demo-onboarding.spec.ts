@@ -31,8 +31,11 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).toBeVisible();
   expect(page.url()).not.toContain('demo=');
-  // #193: caja, sucursal y empresa de la demo en la barra; caja y sucursal en la pestaña.
-  await expect(page.getByText('Caja 1 - CENTRAL - Kiosco de demo')).toBeVisible();
+  // #193: la empresa de la demo como título del encabezado y la caja debajo; caja y sucursal en la
+  // pestaña.
+  const header = page.getByTestId('terminal-header');
+  await expect(header.getByText('Kiosco de demo')).toBeVisible();
+  await expect(header.getByText('Caja 1 - CENTRAL')).toBeVisible();
   await expect(page).toHaveTitle('Caja 1 - CENTRAL');
 
   await commandBar.fill('arroz');
@@ -54,7 +57,7 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   expect(config).not.toHaveProperty('demo');
   await expect(page.getByText('Arroz 1kg')).toHaveCount(0); // la venta en curso se borró
   // #193: ya no es una demo, la empresa es la del alta.
-  await expect(page.getByText('Caja 1 - CENTRAL - Almacén Rosa')).toBeVisible();
+  await expect(page.getByTestId('terminal-header').getByText('Almacén Rosa')).toBeVisible();
 });
 
 test('template desconocido: arranca con el default y avisa', async ({ page }) => {

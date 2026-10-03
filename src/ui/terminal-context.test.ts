@@ -1,24 +1,28 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setTerminalIdentity } from './state/sync.ts';
-import { startTerminalTitle, terminalContextText, terminalTitle } from './terminal-context.ts';
+import { startTerminalTitle, terminalHeading, terminalTitle } from './terminal-context.ts';
 
 const identity = { branch: 'Central', pointOfSale: 'Caja 1' };
 
-describe('contexto de la terminal (#193)', () => {
-  it('caja - sucursal - empresa', () => {
-    expect(terminalContextText(identity, 'Kiosco Pepe')).toBe('Caja 1 - Central - Kiosco Pepe');
+describe('encabezado de la terminal (#193)', () => {
+  it('la empresa como título y la caja debajo', () => {
+    expect(terminalHeading(identity, 'Kiosco Pepe')).toEqual({
+      title: 'Kiosco Pepe',
+      subtitle: 'Caja 1 - Central',
+    });
   });
 
-  it('sin empresa, caja - sucursal', () => {
-    expect(terminalContextText(identity, undefined)).toBe('Caja 1 - Central');
+  it('sin empresa (o vacía), la caja es el título', () => {
+    expect(terminalHeading(identity, undefined)).toEqual({ title: 'Caja 1 - Central' });
+    expect(terminalHeading(identity, '  ')).toEqual({ title: 'Caja 1 - Central' });
   });
 
   it('sin identidad, nada', () => {
-    expect(terminalContextText(null, 'Kiosco Pepe')).toBeNull();
+    expect(terminalHeading(null, 'Kiosco Pepe')).toBeNull();
     expect(terminalTitle(null)).toBeNull();
   });
 
-  it('el título no lleva la empresa', () => {
+  it('el título de la pestaña no lleva la empresa', () => {
     expect(terminalTitle(identity)).toBe('Caja 1 - Central');
   });
 });
