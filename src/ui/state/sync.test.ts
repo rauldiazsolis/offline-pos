@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { appendSyncLogEntry, syncLogSignal, type SyncLogEntry } from './sync.ts';
+import { setTrainingModeForTests } from '../../storage/training-mode.ts';
+import {
+  appendSyncLogEntry,
+  pendingOutboxCountSignal,
+  setPendingOutboxCount,
+  syncLogSignal,
+  type SyncLogEntry,
+} from './sync.ts';
 
 function entry(at: string): SyncLogEntry {
   return { at, kind: 'pull', request: { cursors: {}, pendingLotIds: [] }, result: { ok: true } };
@@ -32,5 +39,17 @@ describe('syncLogSignal / appendSyncLogEntry (para /DIAGNOSTICO)', () => {
     expect(syncLogSignal.value).toHaveLength(20);
     expect(syncLogSignal.value[0]?.at).toBe('2026-01-01T00:00:24.000Z'); // la última agregada
     expect(syncLogSignal.value.at(-1)?.at).toBe('2026-01-01T00:00:05.000Z'); // se descartaron las 5 más viejas
+  });
+});
+
+describe('setPendingOutboxCount (#177)', () => {
+  it('en entrenamiento los pendientes se muestran en 0: nada se va a enviar', () => {
+    setTrainingModeForTests({ startedAt: '2026-10-04T12:00:00.000Z' });
+    setPendingOutboxCount(3);
+    expect(pendingOutboxCountSignal.value).toBe(0);
+
+    setTrainingModeForTests(null);
+    setPendingOutboxCount(3);
+    expect(pendingOutboxCountSignal.value).toBe(3);
   });
 });

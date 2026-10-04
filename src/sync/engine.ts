@@ -11,6 +11,7 @@ import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { applyPull } from '../storage/apply-pull.ts';
 import { newId } from '../storage/ids.ts';
 import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
@@ -146,6 +147,11 @@ export async function pushPendingLot(
   now: string,
   options: { ignoreBackoff?: boolean } = {},
 ): Promise<PushSummary> {
+  // #177: en entrenamiento nada viaja. Es el único que llama a `pushBatch` (el ciclo, /SINCRONIZAR
+  // y el envío antes de borrar), así que alcanza con cortar acá.
+  if (isTrainingMode()) {
+    return { attempted: 0, failed: false };
+  }
   const resumed = await buildOrResumeLot(now);
   if (resumed === undefined) {
     return { attempted: 0, failed: false };
@@ -466,9 +472,12 @@ export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): P
  * `BatchLotStatus` no distingue severidad — más conservador, nunca se autobloquea, solo adelanta
  * la reconciliación completa.
  */
-/** Limpieza a 7 días (#98): nunca con `/CONFIG` abierto; el cerrojo lo toma ella misma. */
+/**
+ * Limpieza a 7 días (#98): nunca con `/CONFIG` abierto; el cerrojo lo toma ella misma. Tampoco en
+ * entrenamiento (#177): la base de práctica es efímera.
+ */
 async function maybeRunCleanup(): Promise<void> {
-  if (syncPausedSignal.value) {
+  if (syncPausedSignal.value || isTrainingMode()) {
     return;
   }
   await runCleanupIfDue({ now: new Date().toISOString(), acquireLock: tryAcquireSyncLock });

@@ -4,6 +4,7 @@ import { ok, err } from '../domain/result.ts';
 import { buildOutboxEventsForStockMovements, markSynced } from '../domain/outbox.ts';
 import { markLotFailed as markLotFailedForTest, buildPushLot } from '../domain/push-lot.ts';
 import { db } from '../storage/db.ts';
+import { setTrainingModeForTests } from '../storage/training-mode.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
@@ -729,6 +730,25 @@ describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
     await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
 
     expect((await db.stock.get('p1'))?.quantity).toBe(8);
+  });
+
+  it('en entrenamiento el pull corre y reaplica lo de práctica sobre el stock del backend (#177)', async () => {
+    setTrainingModeForTests({ startedAt: now });
+    try {
+      await seedLocal();
+      await db.outbox.bulkAdd(
+        buildOutboxEventsForStockMovements(
+          [{ id: 'm1', productId: 'p1', delta: -2, reason: 'sale', createdAt: now }],
+          { now, origin: { branch: 'b', pointOfSale: 'p' } },
+        ),
+      );
+
+      await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
+
+      expect((await db.stock.get('p1'))?.quantity).toBe(8);
+    } finally {
+      setTrainingModeForTests(null);
+    }
   });
 
   it('manda el lote en curso en pendingLotIds; si el backend no lo conoce, lo marca no recibido y reaplica sus eventos', async () => {
@@ -1776,5 +1796,26 @@ describe('demo revocada (#176)', () => {
     await runPushCycle();
 
     expect(demoRevokedSignal.value).not.toBeNull();
+  });
+});
+
+describe('modo entrenamiento (#177)', () => {
+  afterEach(() => {
+    setTrainingModeForTests(null);
+  });
+
+  it('pushPendingLot no manda nada, ni ignorando el backoff, y no arma lote', async () => {
+    setTrainingModeForTests({ startedAt: now });
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+    const pushBatch = vi.fn();
+
+    const summary = await pushPendingLot(fakeConnector({ pushBatch }), now, {
+      ignoreBackoff: true,
+    });
+
+    expect(summary).toEqual({ attempted: 0, failed: false });
+    expect(pushBatch).not.toHaveBeenCalled();
+    expect(getCurrentPushLot()).toBeUndefined();
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
   });
 });

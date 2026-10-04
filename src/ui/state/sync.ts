@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
 import type { BackendInfo, BackendNotice, BackendPortal, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
@@ -23,7 +24,8 @@ export function setSyncStatus(status: SyncStatus): void {
 }
 
 export function setPendingOutboxCount(count: number): void {
-  pendingOutboxCountSignal.value = count;
+  // #177: en entrenamiento nada se va a enviar.
+  pendingOutboxCountSignal.value = isTrainingMode() ? 0 : count;
 }
 
 export function setLastSyncedAt(isoDate: string): void {

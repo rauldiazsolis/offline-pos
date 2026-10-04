@@ -7,6 +7,7 @@ import { calculateTotals } from '../../domain/totals.ts';
 import { releaseAccountHold } from '../../storage/customer-repository.ts';
 import { newId } from '../../storage/ids.ts';
 import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import { requestAccountHoldNow } from '../../sync/account-hold.ts';
 import { describeError } from '../errors.ts';
 import { showOrPrintReceipt } from '../print/after-close.ts';
@@ -129,9 +130,9 @@ export function cancelCheckout(): void {
 /**
  * Resuelve el pago de "Cuenta corriente" para `amount` (RF-17/18): reusa un
  * hold ya aprobado si el monto no cambió desde el intento anterior; si
- * cambió, libera ese hold (best-effort) y pide uno nuevo. Con red, pide un
- * hold síncrono contra el saldo real; sin red, evalúa el crédito disponible
- * cacheado. Nunca pasa por el outbox — la única operación de este tipo (ver
+ * cambió, libera ese hold (best-effort) y pide uno nuevo. Con red y fuera del
+ * entrenamiento (#177), pide un hold síncrono contra el saldo real; si no,
+ * evalúa el crédito disponible cacheado. Nunca pasa por el outbox — la única operación de este tipo (ver
  * §5 del diseño).
  */
 async function resolveAccountReference(amount: number): Promise<Result<string | undefined>> {
@@ -149,7 +150,8 @@ async function resolveAccountReference(amount: number): Promise<Result<string | 
     pendingHoldSignal.value = undefined;
   }
 
-  if (navigator.onLine) {
+  // #177: la reserva es una escritura en el backend; en entrenamiento se evalúa siempre offline.
+  if (navigator.onLine && !isTrainingMode()) {
     const holdResult = await requestAccountHoldNow({
       customerId: customer.id,
       amount,
