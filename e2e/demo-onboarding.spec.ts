@@ -185,3 +185,31 @@ test('demo revocada: la barra lo dice y "Empezar una demo nueva" arranca otra li
   expect(apiKey).toMatch(/^demo-/);
   expect(apiKey).not.toBe(oldKey);
 });
+
+test('portal (#179): el comando y el botón abren el backend en la caja de esta terminal', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+
+  // Comando: la pestaña se abre en el gesto del Enter y recibe el link de un solo uso.
+  await commandBar.fill('/PANEL');
+  const [fromCommand] = await Promise.all([
+    context.waitForEvent('page'),
+    commandBar.press('Enter'),
+  ]);
+  await expect(fromCommand.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromCommand.close();
+  await expect(commandBar).toHaveValue('');
+
+  // Botón: otro link (el anterior ya se usó); el foco sigue en la barra del POS.
+  const [fromButton] = await Promise.all([context.waitForEvent('page'), button.click()]);
+  await expect(fromButton.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromButton.close();
+  await expect(commandBar).toBeFocused();
+  await expect(page.getByText(/No se pudo abrir/)).toHaveCount(0);
+});
