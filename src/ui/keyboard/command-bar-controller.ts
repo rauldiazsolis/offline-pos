@@ -52,6 +52,7 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
+import { toggleTraining } from './training-controller.ts';
 import { openPortal } from './portal-controller.ts';
 import { enterPrinterScreen } from './printer-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
@@ -416,6 +417,11 @@ function runCommand(name: string, _args: string[]): void {
     case 'DIAGNOSTICO':
       enterDiagnosticoScreen();
       clearBuffer();
+      return;
+    case 'ENTRENAMIENTO':
+      // #177: entra o sale; la pantalla de entrenamiento confirma.
+      clearBuffer();
+      void toggleTraining();
       return;
     case 'ACTUALIZAR':
       // Solo existe con una versión nueva descargada (#54).

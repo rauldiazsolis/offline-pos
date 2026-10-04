@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setTrainingModeForTests } from '../../storage/training-mode.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { returnUrlFor } from '../../sync/demo-link.ts';
 import { consumeWipeKey } from '../../sync/wipe-key.ts';
+import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { setDemoSession } from '../state/sync.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
 
 afterEach(() => {
   setDemoSession(null);
+  setTrainingModeForTests(null);
+  commandBarWarningSignal.value = null;
   localStorage.clear();
 });
 
@@ -75,6 +79,29 @@ describe('startNewDemo (/DEMO_NUEVA, #176)', () => {
   it('sin demo no hace nada', () => {
     const navigate = vi.fn();
     startNewDemo(navigate);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('en entrenamiento (#177)', () => {
+  it('el botón del alta y el de la demo nueva no navegan: el motivo va a la barra', () => {
+    setDemoSession({
+      template: 'kiosco',
+      onboarding: { url: 'https://b.x/alta', label: 'Crear' },
+      startedAt: 'x',
+      backend: 'https://b.x',
+    });
+    setTrainingModeForTests({ startedAt: '2026-10-04T12:00:00.000Z' });
+    const navigate = vi.fn();
+
+    startOnboarding(navigate);
+    expect(commandBarWarningSignal.value).toBe(
+      '/ALTA no está disponible: en entrenamiento; salí con /ENTRENAMIENTO.',
+    );
+    startNewDemo(navigate);
+    expect(commandBarWarningSignal.value).toBe(
+      '/DEMO_NUEVA no está disponible: en entrenamiento; salí con /ENTRENAMIENTO.',
+    );
     expect(navigate).not.toHaveBeenCalled();
   });
 });

@@ -15,11 +15,11 @@ import { flushPendingBeforeWipe } from '../../sync/apply-connection.ts';
 import { loadSyncConfig } from '../../sync/config.ts';
 import { runPushThenPull } from '../../sync/engine.ts';
 import { commandBarWarningSignal } from '../state/command-bar.ts';
+import { saleInProgress } from '../state/sale-in-progress.ts';
 import { setSyncPaused } from '../state/sync.ts';
 import { trainingScreenSignal } from '../state/training.ts';
 import { RELEASE_WAIT_MS } from '../tab-leadership.ts';
 import { prepareTabRelease } from '../tab-release.ts';
-import { saleInProgress } from './app-update-controller.ts';
 import { describeTrainingDiscard } from './training-model.ts';
 
 /** "Saliste del entrenamiento." después de la recarga: de esta pestaña, sobrevive a su reload. */
