@@ -114,7 +114,7 @@ ${rows}
 <ul>
 ${channelList}
 </ul>
-<p>Una versión exacta del POS: <a href="${TAGS_URL}">tags del repo</a>. Índice para IA:
+<p>Una versión exacta del POS: <a href="${TAGS_URL}" target="_blank" rel="noopener">tags del repo</a>. Índice para IA:
 <a href="llms.txt">llms.txt</a>.</p>
 </main>
 </body>

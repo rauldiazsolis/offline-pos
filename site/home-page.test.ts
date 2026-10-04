@@ -46,7 +46,10 @@ describe('renderHomePage', () => {
     expect(html).toContain('href="v4/?demo=true&amp;backend=http%3A%2F%2Flocalhost%3A4000"');
     expect(html).toContain('Abrir demo');
     expect(html).toContain('href="v4/docs/"');
-    expect(html).toContain('href="https://github.com/rauldiazsolis/offline-pos/tags"');
+    // Afuera del sitio: en una pestaña nueva.
+    expect(html).toContain(
+      'href="https://github.com/rauldiazsolis/offline-pos/tags" target="_blank" rel="noopener"',
+    );
     expect(html).not.toContain('.zip');
     expect(html).not.toContain('../');
   });
