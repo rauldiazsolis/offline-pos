@@ -386,7 +386,7 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
 - **Almacenamiento por carpeta** (`storage/storage-namespace.ts`): cada carpeta tiene su base de
   IndexedDB, su prefijo de `localStorage` y sus cachés del service worker; en `/` sigue siendo
   `offline-pos` (detalle en `src/storage/AGENTS.md`). Cambiar de carpeta o de dominio es una
-  instalación nueva; pasar de `/v4/` a `/v5/` sin perder lo pendiente queda para un issue `backlog`.
+  instalación nueva; pasar de `/v4/` a `/v5/` sin perder lo pendiente queda para #197 (`backlog`).
   `/DIAGNOSTICO` muestra la versión, el almacenamiento y si abre sin red.
 - **Dominio** (#150): `https://pos.contax.ar`, dominio propio del proyecto de Pages con un CNAME en
   el DNS de DreamHost; `pos.contax.com.ar` redirige ahí con el Redirect de DreamHost (como todo
@@ -624,9 +624,10 @@ etiqueta antes de tomar un issue.
 - Config y accesibilidad: #41 (resize en DevTools).
 - MVP de mini contax: epic #182 (#177 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
-- Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
-  (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del
-  backend).
+- Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
+  autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
+  (iniciar la caja con datos del backend), #196 (ícono propio del POS en lugar del logo de Vite) y
+  #197 (pasar una terminal de `/v4/` a `/v5/` sin perder lo pendiente).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:
