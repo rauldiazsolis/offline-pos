@@ -35,14 +35,26 @@ los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 
 motivo; el de "datos sin enviar" (#176) usa el `test` de `fixtures.ts`, el resto el de Playwright a
 secas. El de la demo revocada la revoca con `POST /_demo/revoke-demos` del panel.
 
-**Sitio publicado** (#148): `e2e/published-site.spec.ts` corre contra `.site-out/` (`pnpm site:build`,
-con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4173`), servido por
-`pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`. Prueba `/versions`, que la
-carpeta de la versión arranca con rutas relativas y que su almacenamiento es
-`offline-pos@/<versión>/`. El resto de la suite sigue en `/`: prueba de paso que la raíz no cambió. El
-redirect de `/` y los headers son de Cloudflare: se verifican en la primera publicación.
-Se arma con `--only-local` (#147): `/versions` solo con el demo-backend local, así el e2e no
-depende de un backend publicado ni le crea una demo en cada corrida.
+**Sitio publicado** (#148, #54): `e2e/published-site.spec.ts` corre contra `.site-out/`
+(`pnpm site:build`, con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de
+`4173`), servido por `pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`.
+Prueba la home (el backend local con su link de demo al canal), que el canal `/v4/` arranca con rutas
+relativas y que su almacenamiento es `offline-pos@/v4/`, y las docs del canal con el puente de
+Sheets. El canal va fijo: si el contrato sube de major, que falle es lo que se quiere. El resto de la
+suite sigue en `/`: prueba de paso que la raíz no cambió. El redirect de `/versions` y los headers
+son de Cloudflare: se verifican en la primera publicación. Se arma con `--only-local` (#147): la home
+solo con el demo-backend local, así el e2e no depende de un backend publicado ni le crea una demo en
+cada corrida.
+
+**Service worker** (#54): `playwright.config.ts` pone `serviceWorkers: 'block'` para toda la suite,
+que así no depende de él. `e2e/pwa.spec.ts` lo habilita (`test.use({ serviceWorkers: 'allow' })`) y
+levanta su propio servidor en `4175`, que sirve el `dist/` de `4173` bajo `/v4/` (en `localhost`,
+contexto seguro) y puede agregarle bytes a `sw.js` para que el navegador vea una versión nueva sin
+un segundo build. Prueba abrir sin red con F5, el aviso y `/ACTUALIZAR` (que no actualiza con una
+venta en curso), `pos.reset()` (con una marca dentro de la caché: el nombre sale del contenido del
+build, así que al reinstalarse se repite) y el manifest. Como cada test tiene un contexto nuevo, la
+primera carga instala el service worker sin que controle la página: para probar una versión nueva
+hay que recargar una vez antes (`openControlled`).
 
 **Una sola pestaña** (#175): `e2e/single-tab.spec.ts` abre varias páginas en el **mismo contexto** de
 Playwright, que comparten `localStorage`, IndexedDB, `navigator.locks` y `BroadcastChannel` como dos

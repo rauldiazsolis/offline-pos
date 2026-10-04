@@ -343,6 +343,45 @@ Spec: `docs/superpowers/specs/2026-10-02-una-sola-pestana-design.md`; el princip
   `keepFocusOnMouseDown` en el contenedor. No hay link a la otra pestaña: Chromium no la deja traer al
   frente.
 
+## Service worker y versión nueva (#54)
+
+Spec: `docs/superpowers/specs/2026-10-03-service-worker-pwa-canal-design.md`; el canal y la
+publicación, en "Publicación" de la raíz.
+
+- **Registro** (`ui/service-worker.ts::startServiceWorker`, adaptador): lo llama `main.tsx::startApp`,
+  o sea solo la pestaña que manda (#175), y solo en el build (`import.meta.env.PROD`). Registra
+  `./sw.js` con el `scope` de su carpeta. Sin `navigator.serviceWorker` (contexto no seguro, como
+  `http://` a una IP) no hace nada; un registro que falla no rompe el arranque.
+- **Versiones nuevas**: busca al arrancar y cada hora (`UPDATE_CHECK_INTERVAL_MS`; el navegador solo
+  busca al navegar, y una pestaña de POS queda abierta días). Una versión que queda esperando
+  (`registration.waiting` al arrancar, o una instalación que termina con un controller activo) pasa
+  `ui/state/app-update.ts::appUpdateSignal` a `available`. `serviceWorkerStateSignal`
+  (`unsupported`, `installing`, `ready`) alimenta `/DIAGNOSTICO` y `pos.status()`
+  (`sync/diagnostics.ts::describeOffline`: "sin conexión: lista", "preparando el modo sin conexión",
+  "versión nueva descargada, falta aplicar" o "sin service worker").
+- **El aviso**: "Versión nueva (/ACTUALIZAR)" en la barra de estado, primero a la derecha
+  (`btn-primary`), y `/ACTUALIZAR` en el menú solo mientras `appUpdateSignal` no es `none` (como
+  `/ALTA` en demo). No dice qué versión es.
+- **`/ACTUALIZAR`** (`ui/keyboard/app-update-controller.ts::applyAppUpdate`, dependencias
+  inyectadas): con una venta en curso (líneas, cliente o ajuste global: lo que vacía `/DESCARTAR`) no
+  actualiza y avisa "Terminá o descartá la venta para actualizar.". Si no, pasa a `applying` (el
+  botón dice "Actualizando…", deshabilitado), suelta como el traspaso de #175
+  (`prepareTabRelease`, que devuelve con qué deshacer), le manda `skip-waiting` al service worker en
+  espera y recarga con `controllerchange`. Si no llega en `APPLY_TIMEOUT_MS` (10 s): deshace la
+  suelta (reanuda el sync), vuelve a `available` y avisa "No se pudo actualizar: cerrá y abrí el
+  POS.". Al abrir el POS sin ninguna pestaña abierta, el navegador ya activa la versión en espera.
+- **La regla de los `import()` dinámicos**: la app no tiene ninguno, un solo bundle. Por eso una
+  segunda pestaña que sigue con el código viejo después de un `/ACTUALIZAR` en la original puede
+  tomar el control y correr `startApp` sin que le falte nada aunque `assets/` ya no tenga los
+  archivos viejos. **Si algún día se suma un `import()` dinámico, la segunda pestaña tiene que
+  recargar al tomar el control en vez de correr `startApp`.**
+- **El service worker** (`src/workers/sw.ts`, lógica pura en `sw-logic.ts`, sin nada de la app)
+  guarda todo el build al instalarse (todo o nada), atiende las navegaciones con el `index.html` de
+  la caché (la query, como `?demo=…`, la lee la app) y los archivos del build desde la caché; todo lo
+  demás (el backend, `version.json`) va a la red. Nunca hace `skipWaiting` solo. Lo compila
+  `build/sw-plugin.ts` en un segundo build (`iife`, sin hash), con la lista de archivos y su hash
+  inyectados (`build/precache.ts`).
+
 ## "Abrir una demo" (#176)
 
 Spec: `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`; el principio, en
@@ -428,7 +467,9 @@ todas las claves `offline-pos:*` de `localStorage` (por prefijo, nunca una lista
 `export()` descarga un JSON para soporte con las credenciales reemplazadas por `"***"` — cada
 conector marca las suyas con `ConfigField.secret`. `reset()` borra **también la config de
 `/CONFIG`** (a diferencia de `/DEMO_RESET`): equivale a perder el id de dispositivo, y sin él la
-terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync y recarga.
+terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync, da de baja el
+service worker de esta carpeta y borra sus cachés (#54, `ui/service-worker.ts::removeOwnServiceWorker`,
+nunca los de otro canal; si eso falla, igual recarga) y recarga.
 `pos.deviceId()` (Etapa 1 de #94, #96) devuelve el id de dispositivo de la terminal
 (`sync/terminal-identity.ts::peekDeviceId`), el mismo que muestra `/DIAGNOSTICO` y que viaja en cada
 push/pull — `null` antes de que `bootstrap()` lo resuelva (la consola se instala antes del arranque).

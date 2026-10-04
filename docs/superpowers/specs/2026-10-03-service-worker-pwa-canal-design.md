@@ -1,7 +1,7 @@
 # Service worker, PWA y canal por major del contrato (`/v4/`)
 
 Fecha: 2026-10-03
-Estado: diseño aprobado en el brainstorming; falta el plan.
+Estado: implementado (ver los desvíos al final); falta la primera publicación (`0.3.0`).
 Issues: #54 (etapa del epic #182, antes del hito 1). Relacionados: #148 (publicación, que este diseño
 reemplaza en parte), #175 (una sola pestaña), #143 (pasar de demo a producción sin repetir el
 onboarding). Fuera de alcance: el mini-erp (desarrollo separado: se le avisa con un issue).
@@ -318,3 +318,40 @@ issue aparte).
 
 La primera publicación (`0.3.0`, que además hace la limpieza) va **después del merge**, con el issue
 del mini-erp ya abierto; la verificación de instalar, abrir offline y actualizar se hace ahí.
+
+## Desvíos aprobados durante la implementación
+
+- **Task 2 — `zod` dentro de `sw.js`**: `sw-logic.ts::parseSwMessage` valida el mensaje con Zod
+  (regla del repo para todo dato externo), así que `sw.js` pesa unos 64 KB sin comprimir en vez de
+  unos pocos. No cambia nada observable: el service worker se baja una vez por versión.
+- **Task 5 — `tab-browser.ts`**: `prepareTabRelease` ahora devuelve con qué deshacer la suelta, y el
+  puerto `TabLeadershipDeps.prepareRelease` de #175 sigue devolviendo `Promise<void>`: el adaptador
+  lo envuelve (el traspaso nunca deshace, después se recarga) en vez de cambiar el puerto.
+- **Task 5 — test de `tab-release.test.ts`** (aclaración, no desvío): "pausa el sync, espera a que
+  termine el ciclo en curso…" (de #175, con una espera fija de 60 ms) falló una vez con la suite
+  completa en paralelo y pasó solo y en las corridas siguientes. Es un flake de carga del test viejo,
+  no de este cambio.
+- **Task 6 — `pos.reset()` con el service worker que falla**: si dar de baja el registro o borrar las
+  cachés falla, lo dice en la consola y **recarga igual** (los datos ya se borraron). Tiene su test.
+- **Task 6 — cuarto estado en `/DIAGNOSTICO`**: además de los tres de la sección 3, `installing`
+  ("preparando el modo sin conexión"), para no decir "lista" mientras se instala el primer service
+  worker (ya anotado en el plan).
+- **Task 7 — link de la guía publicada**: `site/templates/guide.html` tenía "Todas las versiones"
+  (`../../versions/`); pasa a "Backends y canales" (`../../`, la home).
+- **Task 9 — la página tiene que estar controlada antes de una versión nueva**: cada test de
+  Playwright tiene un contexto nuevo, y en la primera carga el service worker se instala sin
+  controlar la página (no hay `clients.claim()`, a propósito). Así, una versión nueva no espera (no
+  hay ninguna pestaña controlada) y no se avisa. `pwa.spec.ts` recarga una vez hasta tener
+  `controller` (`openControlled`) antes de simular la versión nueva. En producción es lo mismo: la
+  primera visita a `/v4/` no ve el aviso de una versión que sale en ese mismo momento, y la siguiente
+  carga ya arranca con la nueva.
+- **Task 9 — `pos.reset()` en el e2e**: el nombre de la caché sale del contenido del build, así que
+  al reinstalarse el service worker vuelve a ser el mismo y "ese nombre ya no existe" no prueba nada.
+  El test guarda una marca dentro de la caché antes del reset y verifica que después ya no esté.
+  `waitForURL` no sirve para esperar la recarga (la URL no cambia): espera el evento `load`.
+- **Task 9 — Prettier**: el código copiado del plan no estaba formateado; un commit aparte
+  (`style: prettier en los archivos nuevos de #54`) formatea solo los archivos de esta etapa (el CI
+  no corre `format:check`, y hay otros archivos del repo sin formatear que no se tocaron).
+- **Rama**: la rama de la spec y el plan (`claude/etapa-54-service-worker-pwa-051e50`) estaba tomada
+  por otro worktree; se trabajó en una rama local sobre el mismo commit y se publicó con el nombre de
+  esa rama.
