@@ -56,6 +56,24 @@ describe('describeError', () => {
     ).toBe('No se encontró esa cobranza.');
   });
 
+  it('demo/rate-limited dice cuándo volver a probar, en minutos (#173)', () => {
+    expect(
+      describeError({ ok: false, error: 'demo/rate-limited', meta: { retryAfterSeconds: 600 } }),
+    ).toBe('se pidieron demasiadas demos desde esta conexión; probá de nuevo en 10 minutos');
+    expect(
+      describeError({ ok: false, error: 'demo/rate-limited', meta: { retryAfterSeconds: 30 } }),
+    ).toBe('se pidieron demasiadas demos desde esta conexión; probá de nuevo en 1 minuto');
+    expect(describeError({ ok: false, error: 'demo/rate-limited', meta: {} })).toBe(
+      'se pidieron demasiadas demos desde esta conexión; probá de nuevo en unos minutos',
+    );
+  });
+
+  it('demo/capacity (#173)', () => {
+    expect(describeError({ ok: false, error: 'demo/capacity', meta: undefined })).toBe(
+      'hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos',
+    );
+  });
+
   it('demo/unavailable-for-connector', () => {
     const message = describeError({
       ok: false,

@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '../domain/result.ts';
 import { requestDemoSession } from './demo-session.ts';
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return {
     ok: status >= 200 && status < 300,
     status,
     statusText: 'status text',
+    headers: new Headers(headers),
     json: () => Promise.resolve(body),
   } as Response;
 }
@@ -66,6 +67,58 @@ describe('requestDemoSession (#128)', () => {
   it('404 → demo/not-offered', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({}, 404)));
     expect(await requestDemoSession('https://b.x')).toEqual(err('demo/not-offered', undefined));
+  });
+
+  it('429 → demo/rate-limited con los segundos de Retry-After (4.6.0)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(jsonResponse({ code: 'rate-limited' }, 429, { 'Retry-After': '600' })),
+    );
+    expect(await requestDemoSession('https://b.x')).toEqual(
+      err('demo/rate-limited', { retryAfterSeconds: 600 }),
+    );
+  });
+
+  it('429 sin Retry-After, o con una fecha HTTP → demo/rate-limited sin segundos', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(undefined, 429)));
+    expect(await requestDemoSession('https://b.x')).toEqual(err('demo/rate-limited', {}));
+
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(undefined, 429, { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' }),
+        ),
+    );
+    expect(await requestDemoSession('https://b.x')).toEqual(err('demo/rate-limited', {}));
+  });
+
+  it('503 demo-capacity → demo/capacity', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ code: 'demo-capacity', message: 'lleno' }, 503)),
+    );
+    expect(await requestDemoSession('https://b.x')).toEqual(err('demo/capacity', undefined));
+  });
+
+  it('503 maintenance → sync/backend-maintenance con su mensaje; sin cuerpo, sin mensaje', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ code: 'maintenance', message: 'Migrando' }, 503, { 'Retry-After': '30' }),
+        ),
+    );
+    expect(await requestDemoSession('https://b.x')).toEqual(
+      err('sync/backend-maintenance', { message: 'Migrando' }),
+    );
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(undefined, 503)));
+    expect(await requestDemoSession('https://b.x')).toEqual(err('sync/backend-maintenance', {}));
   });
 
   it('500 → sync/request-failed con status; fetch que rechaza → sin status', async () => {

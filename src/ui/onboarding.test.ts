@@ -174,6 +174,22 @@ describe('runOnboardingFromUrl — entrada con link de demo (#128)', () => {
     expect(deps.applyConnection).not.toHaveBeenCalled();
   });
 
+  it('backend con el tope de demos (503) → failed con el motivo, sin reintentar', async () => {
+    deps.requestDemoSession.mockResolvedValue(err('demo/capacity', undefined));
+    const outcome = await runOnboardingFromUrl(
+      entry,
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+    expect(outcome).toEqual({
+      kind: 'failed',
+      notice:
+        'No se pudo iniciar la demo: hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos.',
+    });
+    expect(deps.requestDemoSession).toHaveBeenCalledTimes(1);
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+  });
+
   it('link inválido → failed', async () => {
     const outcome = await runOnboardingFromUrl(
       'https://pos.x/?demo=true&backend=http://b.x',
