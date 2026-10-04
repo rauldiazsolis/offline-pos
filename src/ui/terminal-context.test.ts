@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setTerminalIdentity } from './state/sync.ts';
-import { startTerminalTitle, terminalHeading, terminalTitle } from './terminal-context.ts';
+import {
+  startTerminalTitle,
+  terminalHeading,
+  terminalTitle,
+  trainingTitle,
+} from './terminal-context.ts';
 
 const identity = { branch: 'Central', pointOfSale: 'Caja 1' };
 
@@ -44,5 +49,12 @@ describe('título de la pestaña (#193)', () => {
 
     setTerminalIdentity(null);
     expect(document.title).toBe('offline-pos');
+  });
+});
+
+describe('título en entrenamiento (#177)', () => {
+  it('lleva el prefijo solo en entrenamiento', () => {
+    expect(trainingTitle('Caja 1 - Central', true)).toBe('ENTRENAMIENTO · Caja 1 - Central');
+    expect(trainingTitle('Caja 1 - Central', false)).toBe('Caja 1 - Central');
   });
 });
