@@ -627,6 +627,7 @@ en el historial de git).
 | #54 | Service worker propio y PWA en el canal `/v4/`, `/ACTUALIZAR`, home de backends; sin carpetas por versión ni zips; ícono propio (#196) | PR #198 |
 | #178 + #173 | Contrato 4.6.0: capacidad `portal` (`POST /portal-links`; el demo-backend con `/PANEL`), 503 de mantenimiento, 429 y 503 de las demos con mensajes claros en el POS | PR #201 |
 | #179 | El portal en el POS: el comando y el botón que manda el backend (`portal` de `GET /info`), `POST /portal-links` y la pestaña nueva recién con el link | PR #206 |
+| #177 | Modo entrenamiento: base de Dexie aparte, nada se empuja, franja, ENTRENAMIENTO en el ticket y aviso al salir con lo que se descarta | PR #208 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
