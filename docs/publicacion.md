@@ -25,12 +25,15 @@ carpetas por versión.
   `pnpm build`).
 - La GitHub Action **Publicación** (`.github/workflows/publish.yml`) es la única que escribe en
   `publish`. Corre:
-  - con un **tag `vX.Y.Z`**: reemplaza el canal entero con esa versión, borra lo que quedó de las
-    carpetas por versión (ver §2) y regenera la home;
+  - con un **tag `vX.Y.Z`**: chequea que el tag coincida con `package.json`, corre el **CI entero**
+    (el mismo `ci.yml` de los PR, con el e2e) y, solo si pasa, reemplaza el canal entero con esa
+    versión, borra lo que quedó de las carpetas por versión (ver §2) y regenera la home. Tarda lo que
+    el CI (unos 4 o 5 minutos);
   - con un **push a `main` que toca `site/`** (por ejemplo, un backend nuevo en `site/backends.json`):
     solo regenera la home y `/llms.txt`;
   - **todos los días** (cron) y **a mano** (Run workflow): igual, solo regenera. Si nada cambió más
-    que la fecha de consulta, no commitea.
+    que la fecha de consulta, no commitea. Sin tag no corre el CI: si el código de `site/` estuviera
+    roto, la home falla igual y no se publica nada.
 - La home se genera consultando en vivo cada backend de `site/backends.json`
   (`POST /demo-sessions` y, con esa conexión, `GET /info`). El demo-backend local no se consulta en
   la máquina de nadie: la Action levanta el del commit, en memoria. Si un backend no contesta, la
@@ -57,7 +60,8 @@ carpetas por versión.
    Antes verifica que estés en `main`, sin cambios sin commitear, igual que `origin/main`, y que el
    tag no exista; si algo falla, dice qué hacer y no toca nada.
 
-3. En GitHub → pestaña **Actions** → **Publicación**, mirá que la corrida del tag termine en verde.
+3. En GitHub → pestaña **Actions** → **Publicación**, mirá que la corrida del tag termine en verde
+   (los jobs `version`, `ci` y `publish`, en ese orden).
 4. Verificá en producción (§5).
 
 **Volver atrás es siempre hacia adelante**: un revert en `main`, un tag de parche (`0.3.1`) y
@@ -145,10 +149,15 @@ ofrecer demos (capacidad `demo-sessions` en `GET /info`). Al mergear, la Action 
 
 ## 7. Si la Action falla
 
-Abrí la corrida en **Actions** y mirá el paso que falló:
+Abrí la corrida en **Actions** y mirá el job y el paso que fallaron:
 
-- **"El tag … no coincide con package.json"**: borrá el tag remoto y local, corregí y volvé a
-  taggear:
+- **Falló el job `ci`** (con un tag): no se publicó nada. Arreglalo con un PR y publicá un tag de
+  parche (`0.4.1`); el tag que falló queda en el repo sin publicar, y el canal nunca lo va a tener
+  (el siguiente siempre es más nuevo). Si fue un flake del e2e, abrí la corrida y usá **Re-run
+  failed jobs**: vuelve a correr el CI y, si pasa, publica.
+
+- **"El tag … no coincide con package.json"** (job `version`, antes del CI): borrá el tag remoto y
+  local, corregí y volvé a taggear (`pnpm release:tag` ya no deja crear uno así):
 
   ```sh
   git push origin :refs/tags/v0.1.0
