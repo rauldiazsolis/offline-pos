@@ -17,8 +17,11 @@ export type AppUpdateDeps = {
   reload: () => void;
 };
 
-/** Venta en curso: líneas, cliente o ajuste global (lo que `/DESCARTAR` vacía). */
-function saleInProgress(): boolean {
+/**
+ * Venta en curso: líneas, cliente o ajuste global (lo que `/DESCARTAR` vacía). También la usa
+ * `/ENTRENAMIENTO` (#177), que tampoco entra con una venta a medias.
+ */
+export function saleInProgress(): boolean {
   const cart = cartSignal.value;
   return (
     cart.lines.length > 0 ||
