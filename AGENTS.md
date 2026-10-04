@@ -246,7 +246,9 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.5.0** desde #193 (`company`
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.6.0** desde #178 (capacidad
+`portal` con `POST /portal-links`, `ErrorBody`, el 503 de mantenimiento y el 429/503 de las demos,
+spec `docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`); la 4.5.0 es de #193 (`company`
 opcional en `GET /info`, spec `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`);
 la 4.4.0 es de #128, la última antes del MVP (spec `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`); la 4.3.0
 es de #125 (spec `docs/superpowers/specs/2026-09-28-anular-cobranzas-design.md`); la 4.2.0 es de la Etapa 6 del epic #94 —
@@ -260,7 +262,8 @@ batch** (`POST /sync/push`, `POST /sync/pull`) más una excepción síncrona, la
 `GET /account-balance/{customerId}`, que nunca se implementó: el saldo viaja en el pull). `sync/connector.ts::Connector` tiene, en
 consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. 4.4.0 suma
 `POST /demo-sessions`, opcional y sin autenticación, que a propósito no pasa por el puerto (no es
-sync y solo existe en backends REST: `sync/demo-session.ts`). Principio central del contrato: **el backend nunca
+sync y solo existe en backends REST: `sync/demo-session.ts`); 4.6.0 suma `POST /portal-links`, que
+tampoco va a pasar por el puerto (lo usa P6, #179). Principio central del contrato: **el backend nunca
 evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
 movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
 y audita, y cualquier inconsistencia se resuelve de su lado o a mano. Para avisarle al humano de una
@@ -598,6 +601,7 @@ en el historial de git).
 | #176 | Link de demo con confirmación de lo que se pierde ("Abrir una demo"), demo revocada (401 en demo) y `/DEMO_NUEVA`; el demo-backend emite una key por demo y las revoca | PR #192 |
 | #193 | Caja, sucursal y empresa a la vista: encabezado con la empresa como título, barra de estado al pie y título de la pestaña; contrato 4.5.0 (`company` en `GET /info`) | PR #194 |
 | #54 | Service worker propio y PWA en el canal `/v4/`, `/ACTUALIZAR`, home de backends; sin carpetas por versión ni zips; ícono propio (#196) | PR #198 |
+| #178 + #173 | Contrato 4.6.0: capacidad `portal` (`POST /portal-links`; el demo-backend con `/PANEL`), 503 de mantenimiento, 429 y 503 de las demos con mensajes claros en el POS | PR #201 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -606,8 +610,8 @@ punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: lo de antes del hito 1 (un comercio conocido que
 paga) ya está — la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54);
-antes del hito 2, modo entrenamiento (#177) y el portal al backend (contrato #178, comando #179) — el link
-de demo con confirmación (#176) ya está. Google Sheets pasa a su epic, #180, después del hito 1. Después del
+antes del hito 2, modo entrenamiento (#177) y el comando del portal (#179) — el link de demo con
+confirmación (#176) y el contrato del portal (#178) ya están. Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -617,12 +621,12 @@ etiqueta antes de tomar un issue.
   velocidad de tecleo), #24 (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
 - Anulación: #137 (comprobante de la anulación).
 - Caja: #57 (usabilidad del modal de `/CAJA`).
-- Clientes y cuenta corriente: #102 (comandos de consulta); `backlog`: #37 (documento y teléfono),
-  #104.
+- Clientes y cuenta corriente: #102 (comandos de consulta), #187 (la reserva de crédito con 503 o en
+  mantenimiento cae a la evaluación offline); `backlog`: #37 (documento y teléfono), #104.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#177 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+- MVP de mini contax: epic #182 (#177 y #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181

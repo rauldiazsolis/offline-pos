@@ -3,9 +3,11 @@
  * la Etapa 5 (#120: `Sale.ticket`), 4.2.0 desde la Etapa 6 (#101: `CustomerPayment.receipt` y
  * saldo sin cuenta corriente), 4.3.0 desde #125 (`CustomerPayment.voidsPaymentId`: anular cobranzas),
  * 4.4.0 desde #128 (`POST /demo-sessions`, capacidades en `GET /info`, `notices` en el pull, reglas
- * de evolución), 4.5.0 desde #193 (`company` opcional en `GET /info`).
+ * de evolución), 4.5.0 desde #193 (`company` opcional en `GET /info`), 4.6.0 desde #178 (capacidad
+ * `portal` con `POST /portal-links`, `ErrorBody`, el 503 de mantenimiento y el 429/503 de
+ * `/demo-sessions`).
  */
-export const POS_CONTRACT_VERSION = '4.5.0';
+export const POS_CONTRACT_VERSION = '4.6.0';
 
 /**
  * Piso de compatibilidad (4.4.0, #128): desde acá un agregado nuevo entra como capacidad

@@ -76,12 +76,13 @@ describe('POST /demo-sessions (4.4.0, #128)', () => {
 
   it('re-siembra la base: cada demo pisa la anterior, incluidos los ajustes del panel', async () => {
     db.prepare('DELETE FROM products').run();
-    setDemoSettings(db, { maintenance: { enabled: true, message: 'x' } });
+    // El aviso de prueba (con mantenimiento, 4.6.0, la demo responde 503 y no re-siembra nada).
+    setDemoSettings(db, { notice: { enabled: true, severity: 'warning', message: 'x' } });
 
     await createDemo({});
 
     expect(listProductNames()).toContain('Arroz 1kg');
-    expect(getDemoSettings(db).maintenance.enabled).toBe(false);
+    expect(getDemoSettings(db).notice.enabled).toBe(false);
   });
 
   it('otro template siembra otro catálogo', async () => {
@@ -204,6 +205,24 @@ async function createDemoKey(): Promise<string> {
   const body = (await (await createDemo({})).json()) as { apiKey: string };
   return body.apiKey;
 }
+
+describe('POST /demo-sessions simulando límites (4.6.0, #173)', () => {
+  it('rate-limited → 429 con Retry-After: 600, sin crear la demo', async () => {
+    setDemoSettings(db, { demoSessions: 'rate-limited' });
+    const response = await createDemo({});
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('600');
+    expect(await response.json()).toMatchObject({ code: 'rate-limited' });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM demo_keys').get()).toEqual({ n: 0 });
+  });
+
+  it('capacity → 503 demo-capacity', async () => {
+    setDemoSettings(db, { demoSessions: 'capacity' });
+    const response = await createDemo({});
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ code: 'demo-capacity' });
+  });
+});
 
 describe('empresa de la demo en /info (4.5.0, #193)', () => {
   it('con la key de una demo manda el nombre de la demo según la plantilla', async () => {

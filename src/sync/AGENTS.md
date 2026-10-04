@@ -177,6 +177,20 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 
 ## Contrato: qué trajo cada versión
 
+**Contrato 4.6.0 (#178)** — aditivo (spec
+`docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`):
+- **Capacidad `portal`**: `GET /info` la declara con `portal: { command, label }` y
+  `POST /portal-links` devuelve `{ url, expiresAt? }`, la URL que el backend decide según la key (link
+  con autorización de un uso o de varios, o su login); la key nunca va en la URL y el link nunca viaja
+  en el pull. El POS todavía no la usa: el comando y el botón son de P6 (#179). El demo-backend la
+  implementa con `/PANEL` (link de un solo uso, 60 s, `GET /_demo/portal/<token>`).
+- **Errores** (`ErrorBody { code, message? }`, `Retry-After`, que el backend expone por CORS):
+  `503 maintenance` en push, pull, holds, demo-sessions y portal-links (el sync ya lo manejaba: no es
+  fallo de red, consulta `/info`); en `/demo-sessions`, `429 rate-limited` y `503 demo-capacity`.
+  `sync/demo-session.ts` los traduce a `demo/rate-limited` (con los segundos de `Retry-After`, solo
+  enteros), `demo/capacity` y `sync/backend-maintenance`, sin reintentar. El demo-backend los simula
+  desde el panel. Que `/account-holds` con 503 caiga a la evaluación offline sigue en #187.
+
 **Contrato 4.5.0 (#193)** — aditivo (spec
 `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`): `GET /info` suma
 `company: { name }` opcional, el comercio de la key. El POS la guarda como las capacidades
@@ -337,7 +351,7 @@ del `AGENTS.md` de la raíz. Módulos:
 | Módulo | Qué hace |
 |---|---|
 | `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `buildDemoLink` (el link para `/DEMO_NUEVA`, #176), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
-| `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, y los errores de red de siempre). No pasa por el puerto `Connector`. |
+| `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, `demo/rate-limited` y `demo/capacity` desde 4.6.0, y los errores de red de siempre). No pasa por el puerto `Connector`. |
 | `sync/wipe-key.ts` | `issueWipeKey`/`consumeWipeKey`: token de un solo uso en `offline-pos:pending-wipe-key` (con su fecha), vence a las 2 h. Se consume siempre que vuelva, haga falta o no. |
 | `sync/demo-revoked.ts` | Demo revocada (#176): `isDemoRevokedFailure` (puro: 401/403 con la config en demo), `markDemoRevoked`/`clearDemoRevoked`/`restoreDemoRevoked`, en `demoRevokedSignal` y best-effort en `storageKey('demo-revoked')`. La marca `noteSyncFailure` (por donde pasa todo fallo de `getInfo`, push y pull); con ella `withConnectorCycle` no corre nada, ni el `getInfo`; la borran `syncNow` (vuelve a probar) y `applyConnection`; la restaura `bootstrap`. |
 | `ui/onboarding.ts` | `runOnboardingFromUrl`: la orquestación, con dependencias inyectadas. Devuelve `none`/`applied`/`failed`/`review`/`confirm` y `bootstrap` decide qué mostrar. `confirm` (#176) es un link de demo con algo que perder: no pide la demo, la pide la pantalla "Abrir una demo" con `startDemo` (exportada; también la usa el camino directo), que guarda `demo.backend`. |

@@ -156,6 +156,17 @@ export function describeError(failure: Failure): string {
       return `La plantilla ${failure.meta.template} no existe (hay: ${failure.meta.templates.join(', ')}).`;
     case 'demo/not-offered':
       return 'este backend no ofrece demos';
+    case 'demo/rate-limited': {
+      const seconds = failure.meta.retryAfterSeconds;
+      const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));
+      const when =
+        minutes === undefined
+          ? 'en unos minutos'
+          : `en ${String(minutes)} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+      return `se pidieron demasiadas demos desde esta conexión; probá de nuevo ${when}`;
+    }
+    case 'demo/capacity':
+      return 'hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos';
     case 'terminal/reset-failed':
       return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
     default: {

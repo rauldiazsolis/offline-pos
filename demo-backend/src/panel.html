@@ -20,6 +20,15 @@
     <span id="reset-status"></span>
     <button id="revoke-btn">Revocar las demos</button>
     <span id="revoke-status"></span>
+    <p>
+      <label>POST /demo-sessions responde
+        <select id="demo-sessions-mode">
+          <option value="normal">normal (201)</option>
+          <option value="rate-limited">429 rate-limited (Retry-After: 600)</option>
+          <option value="capacity">503 demo-capacity</option>
+        </select>
+      </label>
+    </p>
 
     <section>
       <h2>Lotes de push</h2>
@@ -125,6 +134,8 @@
       maintenanceMessage.addEventListener('change', saveMaintenance);
       const simulateContract3 = document.getElementById('simulate-contract3');
       simulateContract3.addEventListener('change', () => post('/_demo/api/settings', { simulateContract3: simulateContract3.checked }, 'PUT'));
+      const demoSessionsMode = document.getElementById('demo-sessions-mode');
+      demoSessionsMode.addEventListener('change', () => post('/_demo/api/settings', { demoSessions: demoSessionsMode.value }, 'PUT'));
       const notice = document.getElementById('notice');
       const noticeSeverity = document.getElementById('notice-severity');
       const noticeMessage = document.getElementById('notice-message');
@@ -165,6 +176,7 @@
         notice.checked = settings.notice.enabled;
         if (document.activeElement !== noticeSeverity) noticeSeverity.value = settings.notice.severity;
         if (document.activeElement !== noticeMessage) noticeMessage.value = settings.notice.message;
+        if (document.activeElement !== demoSessionsMode) demoSessionsMode.value = settings.demoSessions;
         loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
         loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));

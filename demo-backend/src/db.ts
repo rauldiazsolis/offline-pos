@@ -13,7 +13,8 @@ import { DatabaseSync } from 'node:sqlite';
  * `queued` y se procesa aparte, ver `lots.ts`) y `demo_settings` (la demora
  * de lotes, el modo mantenimiento y "simular contrato 3.0.0" del panel —
  * `settings.ts`) y `demo_keys` (las keys emitidas por `POST /demo-sessions`, #176, que
- * `resetToSeed` no borra — `demo-keys.ts`). Una anulación es una venta más (`voidsSaleId`, 4.0.0 — #99),
+ * `resetToSeed` no borra — `demo-keys.ts`) y `portal_links` (los links de un solo uso de
+ * `POST /portal-links`, 4.6.0 — #178, que `resetToSeed` tampoco borra — `portal-links.ts`). Una anulación es una venta más (`voidsSaleId`, 4.0.0 — #99),
  * sin tabla propia. Cada evento guarda el dispositivo del lote y la
  * sucursal/punto de venta de su origen. El payload de cada recurso se guarda
  * como JSON crudo (`payload TEXT`) en vez de columnas por campo — este es un
@@ -114,10 +115,17 @@ CREATE TABLE IF NOT EXISTS demo_keys (
   created_at TEXT NOT NULL,
   revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS portal_links (
+  token TEXT PRIMARY KEY,
+  api_key TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
 `;
 
 /** Subir cuando cambia el schema: una base vieja se recrea vacía (es una demo) y el arranque resiembra. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Abre (creando el directorio del archivo si hace falta) y aplica el schema — idempotente. Una base

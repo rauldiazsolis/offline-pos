@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 import { isRevokedKey } from './demo-keys.ts';
 import { sendJson } from './http-helpers.ts';
-import { backendContractVersion, contractMajor } from './settings.ts';
+import { backendContractVersion, contractMajor, getDemoSettings } from './settings.ts';
 
 export type RouteContext = {
   db: DatabaseSync;
@@ -28,6 +28,12 @@ export type RouteDef = {
    * (un POS anterior a 4.0.0) se procesa.
    */
   checksContract?: boolean;
+  /**
+   * Cerrada con el modo mantenimiento prendido (4.6.0, #178): responde
+   * `503 { code: 'maintenance', message? }` con `Retry-After` sin procesar nada. `/info` nunca
+   * cierra: es cómo el POS se entera.
+   */
+  closedInMaintenance?: boolean;
   handler: RouteHandler;
 };
 
@@ -63,13 +69,19 @@ function bearerToken(req: IncomingMessage): string | undefined {
  * porque todo `POST` de eventos de negocio lo manda (ver
  * `connectors/rest/rest-fetch-connector.ts::buildHeaders`), y
  * `X-POS-Contract-Version` porque el POS la manda en todo request (4.0.0).
+ * `Retry-After` se expone (4.6.0, #178): no es un header de respuesta que el
+ * navegador deje leer desde otro origen sin eso.
  */
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
     'Content-Type, Authorization, Idempotency-Key, X-POS-Contract-Version',
+  'Access-Control-Expose-Headers': 'Retry-After',
 };
+
+/** Segundos del `Retry-After` en mantenimiento (4.6.0), como mini. */
+export const MAINTENANCE_RETRY_AFTER = '30';
 
 export async function handleRequest(
   db: DatabaseSync,
@@ -121,6 +133,21 @@ export async function handleRequest(
         contractMajor(declared) !== contractMajor(backendVersion)
       ) {
         sendJson(res, 409, { code: 'incompatible-contract', contractVersion: backendVersion });
+        return;
+      }
+    }
+    if (route.closedInMaintenance === true) {
+      const { maintenance } = getDemoSettings(db);
+      if (maintenance.enabled) {
+        sendJson(
+          res,
+          503,
+          {
+            code: 'maintenance',
+            ...(maintenance.message !== '' ? { message: maintenance.message } : {}),
+          },
+          { 'Retry-After': MAINTENANCE_RETRY_AFTER },
+        );
         return;
       }
     }
