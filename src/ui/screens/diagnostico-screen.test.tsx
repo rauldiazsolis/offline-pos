@@ -56,12 +56,17 @@ const diagnostics: SyncDiagnostics = {
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos@/0.1.0/',
   demoRevokedAt: null,
+  offline: 'ready',
 };
 
-vi.mock('../../sync/diagnostics.ts', () => ({ collectDiagnostics: () => diagnostics }));
+vi.mock('../../sync/diagnostics.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  collectDiagnostics: () => diagnostics,
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();
+  diagnostics.offline = 'ready';
 });
 
 describe('DiagnosticoScreen (contrato v3)', () => {
@@ -69,6 +74,21 @@ describe('DiagnosticoScreen (contrato v3)', () => {
     render(<DiagnosticoScreen />);
     expect(screen.getByText(/POS 0\.1\.0/)).not.toBeNull();
     expect(screen.getByText('offline-pos@/0.1.0/')).not.toBeNull();
+  });
+
+  it('muestra si el POS abre sin red, según el service worker (#54)', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText(/sin conexión: lista/)).not.toBeNull();
+    unmount();
+
+    diagnostics.offline = 'update-waiting';
+    const second = render(<DiagnosticoScreen />);
+    expect(screen.getByText(/versión nueva descargada, falta aplicar/)).not.toBeNull();
+    second.unmount();
+
+    diagnostics.offline = 'unsupported';
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText(/sin service worker/)).not.toBeNull();
   });
 
   it('muestra el dispositivo, el estado de cada lote en espera y los avisos con su evento', () => {
