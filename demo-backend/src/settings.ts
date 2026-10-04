@@ -7,8 +7,10 @@ import type { DatabaseSync } from 'node:sqlite';
  * `company` en `GET /info`. 4.6.0 desde #178: capacidad `portal` y el 503 de mantenimiento.
  */
 export const CONTRACT_VERSION = '4.6.0';
-/** Lo opcional del contrato que implementa (4.4.0, #128): lo informa `GET /info`. */
-export const CAPABILITIES = ['demo-sessions', 'customer-payment-void'];
+/** Lo opcional del contrato que implementa (4.4.0, #128; `portal` desde 4.6.0, #178): lo informa `GET /info`. */
+export const CAPABILITIES = ['demo-sessions', 'customer-payment-void', 'portal'];
+/** El comando y el botón que el POS inyecta con la capacidad `portal` (4.6.0, #178). */
+export const PORTAL = { command: 'PANEL', label: 'Panel del backend' };
 /** Lo que informa con "Simular contrato 3.0.0" prendido en el panel. */
 export const SIMULATED_OLD_CONTRACT = '3.0.0';
 

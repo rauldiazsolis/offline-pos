@@ -65,13 +65,14 @@ async function push(version: string | undefined, id = 'lot-1'): Promise<Response
 }
 
 describe('GET /info (#99)', () => {
-  it('informa el contrato 4.6.0, el estado ok y sus capacidades (#128, #193)', async () => {
+  it('informa el contrato 4.6.0, el estado ok, sus capacidades y el portal (#128, #193, #178)', async () => {
     // Sin empresa: la key no es de una demo y no se cargó ningún comercio en el alta.
     expect(await info()).toEqual({
       contractVersion: '4.6.0',
       status: 'ok',
       backend: { name: 'offline-pos-demo-backend', version: '4.6.0' },
-      capabilities: ['demo-sessions', 'customer-payment-void'],
+      capabilities: ['demo-sessions', 'customer-payment-void', 'portal'],
+      portal: { command: 'PANEL', label: 'Panel del backend' },
     });
   });
 

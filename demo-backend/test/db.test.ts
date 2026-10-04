@@ -25,6 +25,7 @@ describe('openDb', () => {
         'demo_keys',
         'demo_settings',
         'idempotency_keys',
+        'portal_links',
         'products',
         'push_lots',
         'sales',

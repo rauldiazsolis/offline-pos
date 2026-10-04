@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
-import type { IncomingMessage } from 'node:http';
 import { fileURLToPath } from 'node:url';
-import { readJsonBody, sendJson } from '../http-helpers.ts';
+import { escapeHtml, readJsonBody, requestOrigin, sendJson } from '../http-helpers.ts';
 import { issueDemoKey, revokeDemoKeys } from '../demo-keys.ts';
 import type { RouteDef } from '../router.ts';
 import { DEFAULT_TEMPLATE, isTemplateName, resetToSeed, TEMPLATES } from '../seed.ts';
@@ -11,24 +10,12 @@ const onboardingHtmlPath = fileURLToPath(new URL('../onboarding.html', import.me
 const onboardingHtml = readFileSync(onboardingHtmlPath, 'utf-8');
 
 /** Sucursal y punto de venta de una demo. La key es propia de cada demo (#176). */
-const DEMO_TERMINAL = { branch: 'CENTRAL', pointOfSale: 'Caja 1' };
+export const DEMO_TERMINAL = { branch: 'CENTRAL', pointOfSale: 'Caja 1' };
 /**
  * La conexión que devuelve la página falsa de alta: la del comercio "real" que nace del alta, con
  * la key fija (el minibackend acepta cualquier token no revocado), que nunca se revoca.
  */
 const DEMO_CONNECTION = { apiKey: 'demo-api-key', ...DEMO_TERMINAL };
-
-function requestOrigin(req: IncomingMessage): string {
-  return `http://${req.headers.host ?? 'localhost:4000'}`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 /** La conexión del comercio "real" en base64url, con el `wipe_key` si se vuelve con él. */
 function connectFragment(origin: string, wipeKey: string | null): string {

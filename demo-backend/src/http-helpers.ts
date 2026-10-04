@@ -11,6 +11,19 @@ export function sendJson(
   res.end(payload);
 }
 
+/** El origen con el que llegó el request: para armar URLs absolutas hacia este mismo servidor. */
+export function requestOrigin(req: IncomingMessage): string {
+  return `http://${req.headers.host ?? 'localhost:4000'}`;
+}
+
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /** Lee y parsea el body como JSON. Body vacío (GET, DELETE) → `undefined`. */
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
