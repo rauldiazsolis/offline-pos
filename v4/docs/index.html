@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guía para integradores · offline-pos 0.2.0</title>
+    <title>Guía para integradores · offline-pos 0.3.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -58,9 +58,9 @@
   <body>
     <main>
       <header>
-        offline-pos 0.2.0 · <a href="guia.md">Markdown</a> ·
+        offline-pos 0.3.0 · <a href="guia.md">Markdown</a> ·
         <a href="connector-api.openapi.yaml">OpenAPI</a> · <a href="llms.txt">llms.txt</a> ·
-        <a href="../../versions/">Todas las versiones</a>
+        <a href="../../">Backends y canales</a>
       </header>
       <h1>Guía para integradores</h1>
 <p>offline-pos es un punto de venta web para comercios minoristas (kiosco, tienda). Funciona <strong>offline
@@ -69,7 +69,7 @@ cuando vuelve la conexión. Se opera 100% con teclado (y también con mouse).</p
 <p>El POS es <strong>estático y genérico</strong>: son archivos HTML, JS y CSS sin servidor propio, y no conoce
 ningún backend en particular. Se conecta a cualquier sistema (ERP, e-commerce, facturación,
 inventario) que implemente el <strong>Connector API</strong>, un contrato REST/JSON versionado. Esta guía
-acompaña a la versión del contrato <strong>4.4.0</strong>; el detalle de cada operación está en
+acompaña a la versión del contrato <strong>4.5.0</strong>; el detalle de cada operación está en
 <a href="connector-api.openapi.yaml"><code>connector-api.openapi.yaml</code></a>.</p>
 <h2>Probarlo en 5 minutos</h2>
 <p>El repo incluye un <strong>demo-backend</strong>: la implementación de referencia del contrato, en Node y
@@ -84,11 +84,12 @@ pnpm install
 <li><p>Levantá el demo-backend (queda en <code>http://localhost:4000</code>):</p>
 <pre><code class="language-sh">pnpm backend
 </code></pre>
-<p>Usá el demo-backend del mismo tag que la versión del POS que vas a probar (<code>git checkout v0.1.0</code>
-antes de levantarlo).</p>
+<p>Usá el demo-backend del último tag del repo (<code>git checkout</code> del tag más nuevo antes de
+levantarlo): es el que acompaña al POS publicado.</p>
 </li>
-<li><p>Abrí la página <code>/versions</code> del sitio publicado y hacé click en <strong>Abrir demo</strong> en la columna del
-demo-backend local, en la fila de la versión que quieras probar.</p>
+<li><p>Abrí la home del sitio publicado (<code>https://pos.contax.ar/</code>) y hacé click en <strong>Abrir demo</strong> en la
+fila del demo-backend local. El link abre el POS en su <strong>canal</strong> (<code>/v4/</code>, el del major del
+contrato que habla el backend), que siempre tiene la última versión del POS para ese major.</p>
 </li>
 <li><p>Chrome te va a pedir permiso de <strong>acceso a la red local</strong>: la página es <code>https</code> y el backend es
 <code>http://localhost</code>. Aceptalo. Si lo rechazaste: ícono a la izquierda de la dirección →
@@ -105,7 +106,12 @@ Chromium (Chrome, Edge); el POS anda en Firefox y Safari, pero se prueba en Chro
 nueva (sin conexión configurada y sin datos), el POS llama a <code>POST /demo-sessions</code> en ese backend: es
 el <strong>único endpoint sin autenticación</strong>. La respuesta trae la API key de la demo, la sucursal, el
 punto de venta y la página de alta (<code>onboarding.url</code> y el texto de su botón). El POS prueba la
-conexión, la aplica y entra a la venta.</p>
+conexión, la aplica y entra a la venta. Si la terminal ya tiene datos o una conexión real, el POS
+primero le muestra al operador qué se pierde y llama a <code>POST /demo-sessions</code> recién si confirma.</p>
+<p>Para <strong>revocar una demo</strong> (por ejemplo, al reiniciar sus datos o tras un tiempo sin uso), el backend
+responde <code>401</code> a todo request con su API key. El POS en demo lo toma como &quot;la demo terminó&quot;: deja de
+sincronizar y ofrece empezar una demo nueva, que es otro <code>POST /demo-sessions</code> al mismo backend y con
+la misma plantilla. Fuera de una demo, un <code>401</code> es una credencial inválida.</p>
 <p>Una terminal en demo muestra la marca <strong>DEMO</strong> y un botón para darse de alta. Ese botón lleva a
 <code>onboarding.url</code> con <code>?return_url=&lt;url del POS&gt;&amp;wipe_key=&lt;token&gt;</code>. Cuando el alta termina, el backend
 devuelve al usuario a:</p>
@@ -191,25 +197,32 @@ piso 4.0.0</strong>. Un agregado nuevo del contrato no obliga a todos los backen
 evolución (campos y valores desconocidos, fotos completas, numeración con huecos) están en la sección
 &quot;Reglas de evolución&quot; del OpenAPI.</p>
 <h2>Servir el POS desde tu propio servidor</h2>
-<p>Cada versión publicada se puede descargar como zip desde <code>/versions</code>. Para servirla en tu
-infraestructura:</p>
+<p>El POS es un build estático. Una versión exacta sale de los
+<a href="https://github.com/rauldiazsolis/offline-pos/tags">tags del repo</a>: <code>git checkout vX.Y.Z</code>,
+<code>pnpm install</code> y <code>pnpm build</code>, y el resultado queda en <code>dist/</code>. Para servirlo en tu infraestructura:</p>
 <ul>
-<li>Descomprimí el zip y serví su carpeta como archivos estáticos, en <strong>una carpeta propia</strong> (por
-ejemplo <code>/pos/</code>).</li>
+<li>Serví <code>dist/</code> como archivos estáticos, en <strong>una carpeta propia</strong> (por ejemplo <code>/pos/</code>).</li>
 <li>Abrila <strong>siempre con barra final</strong> (<code>/pos/</code>, no <code>/pos</code>): el build usa rutas relativas, y sin la
 barra los archivos no cargan.</li>
-<li>Cada carpeta tiene su <strong>propio almacenamiento</strong> en el navegador (IndexedDB y <code>localStorage</code>).
-Cambiar de carpeta, de versión o de dominio es una <strong>instalación nueva</strong>: lo que no se llegó a
-sincronizar queda en la carpeta anterior. Antes de cambiar, sincronizá.</li>
+<li>Con <code>https</code> (o en <code>localhost</code>) el POS trae un <strong>service worker</strong>: abre sin red y se instala como
+app. Una versión nueva que sirvas en la misma carpeta llega sola a las terminales, que la aplican
+con <code>/ACTUALIZAR</code> (nunca con una venta en curso). Sin <code>https</code> anda igual, pero sin red no abre.</li>
+<li>No sirvas en la misma carpeta una versión <strong>más vieja</strong> que la que ya usaron las terminales: una
+versión vieja no abre una base ya migrada. Para volver atrás, publicá una versión nueva con el
+arreglo.</li>
+<li>Cada carpeta tiene su <strong>propio almacenamiento</strong> en el navegador (IndexedDB y <code>localStorage</code>) y su
+propio service worker. Cambiar de carpeta o de dominio es una <strong>instalación nueva</strong>: lo que no se
+llegó a sincronizar queda en la carpeta anterior. Antes de cambiar, sincronizá.</li>
 </ul>
-<h2>Aparecer en /versions</h2>
-<p>La página <code>/versions</code> lista cada versión publicada del POS contra los backends conocidos, con su
-link de demo o el motivo de la incompatibilidad. Para sumar el tuyo, abrí un PR a
+<h2>Aparecer en la home</h2>
+<p>La home del sitio publicado lista los backends conocidos, cada uno con su contrato, sus capacidades
+y su link de demo al canal de su major (o el motivo de la incompatibilidad). Para sumar el tuyo,
+abrí un PR a
 <a href="https://github.com/rauldiazsolis/offline-pos/blob/main/site/backends.json"><code>site/backends.json</code></a> con
 <code>name</code>, <code>url</code> (<code>https</code>) y, si querés, <code>notes</code>.</p>
-<p>El backend tiene que ofrecer demos (capacidad <code>demo-sessions</code>): la página se genera todos los días
+<p>El backend tiene que ofrecer demos (capacidad <code>demo-sessions</code>): la home se genera todos los días
 consultando en vivo <code>POST /demo-sessions</code> y, con esa conexión, <code>GET /info</code>. Si tu backend no
-contesta, la página no se publica hasta que vuelva.</p>
+contesta, la home no se publica hasta que vuelva.</p>
 
     </main>
   </body>

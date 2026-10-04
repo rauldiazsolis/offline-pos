@@ -2,6 +2,11 @@
 
 > POS web offline-first y genérico que se conecta a cualquier backend que implemente el Connector API (REST/JSON versionado). Cada canal (`/v4/`) sirve el último POS de ese major del contrato y se actualiza solo; una versión exacta está en los tags del repo (https://github.com/rauldiazsolis/offline-pos/tags).
 
+## Docs
+
+- [Guía para integradores (/v4/, POS 0.3.0)](v4/docs/guia.md): cómo probar el POS y cómo implementar el Connector API.
+- [Connector API 4.5.0 (OpenAPI)](v4/docs/connector-api.openapi.yaml): el contrato completo.
+
 ## Canales
 
-
+- [/v4/](v4/docs/llms.txt): contrato 4.5.0
