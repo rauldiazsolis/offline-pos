@@ -335,7 +335,7 @@ describe('probeConnection — estado del backend (#99)', () => {
     expect(result).toEqual({
       ok: false,
       error: 'sync/incompatible-contract',
-      meta: { backend: '3.0.0', pos: '4.5.0' },
+      meta: { backend: '3.0.0', pos: '4.6.0' },
     });
     expect(pullBatch).not.toHaveBeenCalled();
   });
