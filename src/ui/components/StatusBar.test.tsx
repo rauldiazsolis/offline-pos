@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
@@ -32,6 +33,7 @@ beforeEach(() => {
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
   backendNoticesSignal.value = [];
+  appUpdateSignal.value = 'none';
   // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
   nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
   lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
@@ -54,6 +56,28 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
   it('con un arqueo reciente no aparece', () => {
     render(<StatusBar />);
     expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
+  });
+});
+
+describe('botón "Versión nueva (/ACTUALIZAR)" (#54)', () => {
+  it('sin versión nueva no aparece', () => {
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: 'Versión nueva (/ACTUALIZAR)' })).toBeNull();
+  });
+
+  it('con una versión descargada aparece, fuera del orden de Tab', () => {
+    appUpdateSignal.value = 'available';
+    render(<StatusBar />);
+    const button = screen.getByRole('button', { name: 'Versión nueva (/ACTUALIZAR)' });
+    expect(button.tabIndex).toBe(-1);
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('mientras se aplica dice "Actualizando…" y está deshabilitado', () => {
+    appUpdateSignal.value = 'applying';
+    render(<StatusBar />);
+    const button = screen.getByRole('button', { name: 'Actualizando…' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

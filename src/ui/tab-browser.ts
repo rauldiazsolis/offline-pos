@@ -43,7 +43,10 @@ export function browserTabLeadershipDeps(): TabLeadershipDeps {
   return {
     locks: browserLocks(),
     channel: browserChannel(),
-    prepareRelease: prepareTabRelease,
+    // El traspaso nunca deshace la suelta: después se recarga (#175).
+    prepareRelease: async (timeoutMs) => {
+      await prepareTabRelease(timeoutMs);
+    },
     markDisplaced: markTabDisplaced,
     reload: () => {
       window.location.reload();

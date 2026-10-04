@@ -14,7 +14,9 @@ import {
   syncStatusSignal,
 } from '../state/sync.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
+import { applyAppUpdate } from '../keyboard/app-update-controller.ts';
 import { enterCashScreen } from '../keyboard/cash-controller.ts';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { cashCountOverdueSignal } from '../state/cash.ts';
 import { mostSevere } from '../../sync/backend-notices.ts';
 import type { NoticeSeverity } from '../../sync/connector.ts';
@@ -41,6 +43,8 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
  * 24 h" (Etapa 5 de #94, #100): un botón que abre `/CAJA` en Arqueo sin abrir `/DIAGNOSTICO` y
  * sin sacarle el foco a la barra de comandos. Antes, "Avisos (N)" (4.4.0, #128): los avisos
  * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
+ * Primero de todos, "Versión nueva (/ACTUALIZAR)" (#54) cuando el service worker ya descargó una:
+ * el click la aplica como el comando ("Actualizando…" y deshabilitado mientras tanto).
  * Con la demo revocada (#176), el estado dice "La demo terminó". La marca DEMO y el botón de la
  * demo viven en el encabezado (`TerminalHeader.tsx`, #193).
  */
@@ -168,6 +172,29 @@ export function StatusBar() {
             whiteSpace: 'nowrap',
           }}
         >
+          {appUpdateSignal.value !== 'none' && (
+            <button
+              type="button"
+              tabIndex={-1}
+              class="btn-primary"
+              disabled={appUpdateSignal.value === 'applying'}
+              onMouseDown={keepFocusOnMouseDown}
+              onClick={(event) => {
+                event.stopPropagation();
+                void applyAppUpdate();
+              }}
+              title="Aplicar la versión nueva del POS (/ACTUALIZAR)"
+              style={{
+                border: '1px solid var(--color-accent)',
+                borderRadius: 'var(--radius-sm, 6px)',
+                padding: '2px 8px',
+                fontSize: 'var(--font-size-sm)',
+                cursor: 'pointer',
+              }}
+            >
+              {appUpdateSignal.value === 'applying' ? 'Actualizando…' : 'Versión nueva (/ACTUALIZAR)'}
+            </button>
+          )}
           {backendNoticesSignal.value.length > 0 && (
             <button
               type="button"

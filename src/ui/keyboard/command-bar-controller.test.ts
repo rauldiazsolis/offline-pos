@@ -12,6 +12,7 @@ import {
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal } from '../state/demo-reset.ts';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { activeConnectorTypeSignal, setDemoSession } from '../state/sync.ts';
 import {
@@ -24,6 +25,7 @@ import {
   updateCommandBarBuffer,
 } from './command-bar-controller.ts';
 import { syncNow } from '../../sync/engine.ts';
+import { applyAppUpdate } from './app-update-controller.ts';
 import { availableCommands } from './commands.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
 
@@ -35,6 +37,9 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
 
 // /ALTA navega fuera de la app: se espía en vez de dejar que jsdom intente navegar.
 vi.mock('./onboarding-controller.ts', () => ({ startOnboarding: vi.fn(), startNewDemo: vi.fn() }));
+
+// /ACTUALIZAR suelta la pestaña y recarga: se espía (su lógica está en app-update-controller.test.ts).
+vi.mock('./app-update-controller.ts', () => ({ applyAppUpdate: vi.fn(() => Promise.resolve()) }));
 
 beforeEach(async () => {
   await db.open();
@@ -281,6 +286,38 @@ describe('/ALTA (terminal en demo, #128)', () => {
     submitCommandBar();
 
     expect(startOnboarding).toHaveBeenCalledTimes(1);
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(commandBarBufferSignal.value).toBe('');
+  });
+});
+
+describe('/ACTUALIZAR (versión nueva descargada, #54)', () => {
+  beforeEach(() => {
+    vi.mocked(applyAppUpdate).mockClear();
+  });
+
+  afterEach(() => {
+    appUpdateSignal.value = 'none';
+  });
+
+  it('sin versión nueva no está en la lista y da "Comando desconocido"', () => {
+    expect(availableCommands().map((command) => command.name)).not.toContain('ACTUALIZAR');
+
+    updateCommandBarBuffer('/ACTUALIZAR');
+    submitCommandBar();
+
+    expect(commandBarErrorSignal.value).toBe('Comando desconocido: /ACTUALIZAR');
+    expect(applyAppUpdate).not.toHaveBeenCalled();
+  });
+
+  it('con una versión nueva está en la lista y la aplica', () => {
+    appUpdateSignal.value = 'available';
+    expect(availableCommands().map((command) => command.name)).toContain('ACTUALIZAR');
+
+    updateCommandBarBuffer('/ACTUALIZAR');
+    submitCommandBar();
+
+    expect(applyAppUpdate).toHaveBeenCalledTimes(1);
     expect(commandBarErrorSignal.value).toBeNull();
     expect(commandBarBufferSignal.value).toBe('');
   });
