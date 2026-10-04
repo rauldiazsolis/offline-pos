@@ -61,7 +61,9 @@ botón en el POS) y M10 en el mini-erp (rauldiazsolis/mini-erp#26).
 ### 2. Errores comunes (contrato)
 
 - Esquema nuevo `ErrorBody { code, message? }` y el header `Retry-After` (segundos enteros)
-  documentado como componente.
+  documentado como componente. El backend tiene que exponerlo por CORS
+  (`Access-Control-Expose-Headers: Retry-After`): no es un header que el navegador deje leer desde
+  otro origen sin eso, y el POS siempre corre en otro origen (detalle encontrado al planificar).
 - **`503 Maintenance`** (`code: maintenance`, con `Retry-After`) en `/sync/push`, `/sync/pull`,
   `/account-holds`, `/demo-sessions` y `/portal-links`: "backend en mantenimiento, consultá
   `/info`". El POS no procesó nada y no hubo ack: el lote sigue congelado. El POS no adelanta nada
@@ -103,7 +105,7 @@ botón en el POS) y M10 en el mini-erp (rauldiazsolis/mini-erp#26).
   no tiene login; la sesión real es de mini.
 - Una key revocada da `401` en `/portal-links`, como en el resto.
 - Con el mantenimiento prendido (panel), los cinco endpoints del punto 2 responden
-  `503 { code: 'maintenance', message }` con `Retry-After: 30`.
+  `503 { code: 'maintenance', message }` con `Retry-After: 30`, y los CORS exponen `Retry-After`.
 - Control nuevo en el panel para `POST /demo-sessions`: normal, `429` (`Retry-After: 600`) o
   `503 demo-capacity`. El límite real por IP no se implementa (es de un backend público).
 
