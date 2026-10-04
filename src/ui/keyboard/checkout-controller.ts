@@ -19,6 +19,7 @@ import {
   resetCheckout,
   TENDERABLE_METHODS,
 } from '../state/checkout.ts';
+import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { activeScreenSignal } from '../state/screen.ts';
@@ -248,6 +249,9 @@ export async function submitCheckout(): Promise<void> {
   // Sin esto la selección seguía apuntando a una línea que ya no existe, y el
   // próximo código de barras (todo dígitos) se tomaba como su cantidad.
   cartSelectionIndexSignal.value = null;
+  // Una advertencia era de la venta que se cerró (stock, o "Terminá o descartá la venta para
+  // actualizar" de /ACTUALIZAR, #54): ya no aplica, y taparía el aviso de la venta registrada.
+  commandBarWarningSignal.value = null;
   resetAttachedCustomer();
   resetCheckout();
   showOrPrintReceipt({ kind: 'sale', sale: result.value, copy: false });
