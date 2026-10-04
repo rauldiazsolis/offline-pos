@@ -112,9 +112,9 @@ limpia el próximo arranque.
 ### 5. Bordes
 
 - **Deshabilitados en entrenamiento** (`CommandInfo.availability`, fila atenuada con el motivo):
-  `/CONFIG` ("Salí del entrenamiento para cambiar la configuración."), `/ALTA`, `/DEMO_NUEVA` y
-  `/DEMO_RESET` ("Salí del entrenamiento para …"). El botón del encabezado (alta o demo nueva) muestra
-  el motivo en la barra en vez de navegar.
+  `/CONFIG`, `/ALTA`, `/DEMO_NUEVA` y `/DEMO_RESET`, con el motivo "en entrenamiento; salí con
+  /ENTRENAMIENTO" ("/CONFIG no está disponible: en entrenamiento; salí con /ENTRENAMIENTO."). El
+  botón del encabezado (alta o demo nueva) muestra el mismo mensaje en la barra en vez de navegar.
 - **Link de demo o `#connect` al arrancar en entrenamiento**: no se procesan; la URL se limpia como
   siempre y la barra avisa "Salí del entrenamiento y volvé a abrir el link.".
 - **`/ACTUALIZAR`**: se permite; la marca sigue y se vuelve al entrenamiento con la versión nueva
@@ -124,7 +124,8 @@ limpia el próximo arranque.
   descarta al salir.
 - **Identidad perdida** (sin device-id) con la marca: antes de generar un id, se apaga la marca y se
   recarga; el borrado de siempre corre sobre la base real.
-- **`pos.reset()`**: borra también la base de entrenamiento (la marca ya cae con el prefijo).
+- **`pos.reset()`**: borra también la base de entrenamiento (la marca ya cae con el prefijo; en
+  entrenamiento la base abierta es la de práctica y la borra el próximo arranque).
   **`pos.export()`**: indica `training: true` y exporta la base abierta.
 - **Una sola pestaña (#175)**: sin cambios; la marca es por almacenamiento, como todo.
 
