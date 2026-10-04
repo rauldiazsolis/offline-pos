@@ -5,6 +5,7 @@ import {
   backendCapabilitiesSignal,
   backendCheckDueSignal,
   backendCompanySignal,
+  backendPortalSignal,
   backendStatusSignal,
   demoRevokedSignal,
   setBackendCheckDue,
@@ -86,6 +87,20 @@ describe('refreshBackendStatus', () => {
 
     await refreshBackendStatus(fakeConnector(), now);
     expect(backendCompanySignal.value).toBeUndefined();
+  });
+
+  it('guarda el portal que manda el backend; sin él, lo borra (4.6.0, #179)', async () => {
+    const portal = { command: 'PANEL', label: 'Panel' };
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () => Promise.resolve(ok({ contractVersion: '4.6.0', status: 'ok', portal })),
+      }),
+      now,
+    );
+    expect(backendPortalSignal.value).toEqual(portal);
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendPortalSignal.value).toBeUndefined();
   });
 
   it('con getInfo ok fija el estado, apaga el chequeo pendiente y lo registra en el log', async () => {
