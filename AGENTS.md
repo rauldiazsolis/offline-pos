@@ -21,7 +21,8 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 |---|---|
 | Outbox: identidad de eventos y del dispositivo, push y pull por lotes, reaplicación, limpieza a 7 días, cadencias, foto completa, log de sync y `/DIAGNOSTICO` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) (también rige su código en `domain/` y `storage/`) |
 | Cuenta corriente: la reserva de crédito síncrona | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
-| Contrato: qué trajo cada versión (v3, 4.0.0 a 4.4.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Contrato: qué trajo cada versión (v3, 4.0.0 a 4.6.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Portal (#179): la capacidad, `POST /portal-links` y sus errores | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el comando, el botón y la pestaña en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado, demo revocada | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA`, `/DEMO_NUEVA`, "Abrir una demo" y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns`), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
@@ -263,7 +264,7 @@ batch** (`POST /sync/push`, `POST /sync/pull`) más una excepción síncrona, la
 consecuencia, cuatro métodos: `getInfo`, `pushBatch`, `pullBatch` y `requestAccountHold`. 4.4.0 suma
 `POST /demo-sessions`, opcional y sin autenticación, que a propósito no pasa por el puerto (no es
 sync y solo existe en backends REST: `sync/demo-session.ts`); 4.6.0 suma `POST /portal-links`, que
-tampoco va a pasar por el puerto (lo usa P6, #179). Principio central del contrato: **el backend nunca
+tampoco pasa por el puerto (`sync/portal-link.ts`, #179). Principio central del contrato: **el backend nunca
 evalúa el contenido de lo que el POS manda** — no hay forma de que una venta, un cliente, un
 movimiento de stock o un cierre de caja sea "rechazado" de forma síncrona; el backend registra todo
 y audita, y cualquier inconsistencia se resuelve de su lado o a mano. Para avisarle al humano de una
@@ -477,6 +478,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/DEMO_NUEVA` | Solo con la terminal en demo: empieza una demo nueva con el backend y la plantilla de la actual (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
 | `/ACTUALIZAR` | Solo con una versión nueva descargada: la aplica y recarga, nunca con una venta en curso (ver `src/ui/AGENTS.md`) |
+| `/<el del backend>` | Solo si el backend declara la capacidad `portal` (4.6.0, #179): abre el backend en una pestaña nueva con un link de `POST /portal-links`; el nombre (`/PANEL` en el demo-backend) y el botón del encabezado los manda el backend (ver `src/ui/AGENTS.md`) |
 
 `/DESCARTAR` es a propósito distinto de `/ANULAR`, que anula una venta ya cerrada (con auditoría), y
 no pide confirmación: decisión explícita del usuario, perder un carrito no guardado es barato de
@@ -611,8 +613,8 @@ punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: lo de antes del hito 1 (un comercio conocido que
 paga) ya está — la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54);
-antes del hito 2, modo entrenamiento (#177) y el comando del portal (#179) — el link de demo con
-confirmación (#176) y el contrato del portal (#178) ya están. Google Sheets pasa a su epic, #180, después del hito 1. Después del
+antes del hito 2, modo entrenamiento (#177) — el link de demo con confirmación (#176), el contrato
+del portal (#178) y su comando y botón (#179) ya están. Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -627,7 +629,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#177 y #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
+- MVP de mini contax: epic #182 (#177); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
@@ -635,7 +637,7 @@ etiqueta antes de tomar un issue.
   lo pendiente) y #199 (repensar la home: arrancar desde las cajas configuradas).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
-  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:
-  `.gitattributes` con `eol=lf`).
+  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`), #205 (flake de
+  `e2e/mouse.spec.ts`) y #135 (fines de línea: `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
   su repo.
