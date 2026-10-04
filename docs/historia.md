@@ -1063,6 +1063,21 @@ la key (la de la demo según la plantilla, o la que se cargó en el alta, que su
 comercio"). El nombre de la carpeta quedó; se aclaró en `AGENTS.md`. Spec y plan en
 `docs/superpowers/` (2026-10-03).
 
+**Contrato 4.6.0: portal, 429 y 503 (#178 y #173, etapa P5 del epic #182)**. El MVP de mini contax
+quiere que el cajero entre al backend desde el POS sin contraseña, y #173 y el punto 2 de #187 pedían
+documentar las respuestas que mini ya daba (el 429 y el 503 de las demos, el 503 de mantenimiento).
+En el brainstorming se evaluaron dos modalidades para el portal, un link de un solo uso y una URL
+fija declarada en `/info`; el usuario aclaró que qué enlace corresponde (un usuario real o un acceso
+anónimo a la caja) y si sirve una o varias veces lo decide el backend según la credencial, así que
+quedó **un solo endpoint**, `POST /portal-links`, y la URL fija pasó a ser una respuesta posible más.
+Se descartó traer el link en el pull: sería un secreto guardado en la terminal, y uno de un solo uso
+ya no serviría al usarlo. El POS solo sumó los mensajes de las demos (sin reintentos) y subió a
+4.6.0; el comando y el botón quedan para P6 (#179). Al planificar apareció que el navegador no deja
+leer `Retry-After` desde otro origen sin `Access-Control-Expose-Headers`, así que el contrato lo
+pide. En el demo-backend, el 503 de mantenimiento hizo cambiar un test que usaba el mantenimiento
+como ejemplo de ajuste del panel que una demo nueva borra (ya no se crea la demo). Spec y plan en
+`docs/superpowers/` (2026-10-04).
+
 ---
 
 ## Patrones establecidos en Fase 1 a 4 y los ciclos de mejoras posteriores
