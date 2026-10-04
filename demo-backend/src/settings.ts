@@ -4,9 +4,9 @@ import type { DatabaseSync } from 'node:sqlite';
  * Versión del Connector API que habla este minibackend (4.4.0 desde #128: `POST /demo-sessions`,
  * capacidades y `notices`; 4.3.0, #125: anulación de una cobranza con `voidsPaymentId`; 4.2.0, #101:
  * recibo de cobranza y saldo de cualquier cliente; 4.1.0, #120; 4.0.0, #99). 4.5.0 desde #193:
- * `company` en `GET /info`.
+ * `company` en `GET /info`. 4.6.0 desde #178: capacidad `portal` y el 503 de mantenimiento.
  */
-export const CONTRACT_VERSION = '4.5.0';
+export const CONTRACT_VERSION = '4.6.0';
 /** Lo opcional del contrato que implementa (4.4.0, #128): lo informa `GET /info`. */
 export const CAPABILITIES = ['demo-sessions', 'customer-payment-void'];
 /** Lo que informa con "Simular contrato 3.0.0" prendido en el panel. */

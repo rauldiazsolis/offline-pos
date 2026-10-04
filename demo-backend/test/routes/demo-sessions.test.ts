@@ -76,12 +76,13 @@ describe('POST /demo-sessions (4.4.0, #128)', () => {
 
   it('re-siembra la base: cada demo pisa la anterior, incluidos los ajustes del panel', async () => {
     db.prepare('DELETE FROM products').run();
-    setDemoSettings(db, { maintenance: { enabled: true, message: 'x' } });
+    // El aviso de prueba (con mantenimiento, 4.6.0, la demo responde 503 y no re-siembra nada).
+    setDemoSettings(db, { notice: { enabled: true, severity: 'warning', message: 'x' } });
 
     await createDemo({});
 
     expect(listProductNames()).toContain('Arroz 1kg');
-    expect(getDemoSettings(db).maintenance.enabled).toBe(false);
+    expect(getDemoSettings(db).notice.enabled).toBe(false);
   });
 
   it('otro template siembra otro catálogo', async () => {

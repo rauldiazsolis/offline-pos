@@ -71,6 +71,7 @@ export const demoSessionRoutes: RouteDef[] = [
     pattern: /^\/demo-sessions$/,
     requiresAuth: false,
     checksContract: true,
+    closedInMaintenance: true,
     handler: async (req, res, ctx) => {
       const body = (await readJsonBody(req)) as { template?: unknown } | undefined;
       const requested = typeof body?.template === 'string' ? body.template : DEFAULT_TEMPLATE;

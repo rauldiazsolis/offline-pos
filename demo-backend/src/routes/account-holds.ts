@@ -50,6 +50,7 @@ export const accountHoldRoutes: RouteDef[] = [
     method: 'POST',
     pattern: /^\/account-holds$/,
     checksContract: true,
+    closedInMaintenance: true,
     requiresAuth: true,
     handler: async (req, res, ctx) => {
       const idempotencyKey = req.headers['idempotency-key'];
