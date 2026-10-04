@@ -5,7 +5,7 @@ import { readJsonBody, sendJson } from '../http-helpers.ts';
 import { issueDemoKey, revokeDemoKeys } from '../demo-keys.ts';
 import type { RouteDef } from '../router.ts';
 import { DEFAULT_TEMPLATE, isTemplateName, resetToSeed, TEMPLATES } from '../seed.ts';
-import { setCompanyName, setDemoTemplate } from '../settings.ts';
+import { getDemoSettings, setCompanyName, setDemoTemplate } from '../settings.ts';
 
 const onboardingHtmlPath = fileURLToPath(new URL('../onboarding.html', import.meta.url));
 const onboardingHtml = readFileSync(onboardingHtmlPath, 'utf-8');
@@ -73,6 +73,21 @@ export const demoSessionRoutes: RouteDef[] = [
     checksContract: true,
     closedInMaintenance: true,
     handler: async (req, res, ctx) => {
+      // 4.6.0 (#173): límites simulados desde el panel; un backend público los tendría de verdad.
+      const { demoSessions } = getDemoSettings(ctx.db);
+      if (demoSessions === 'rate-limited') {
+        sendJson(
+          res,
+          429,
+          { code: 'rate-limited', message: 'Demasiadas demos pedidas desde esta conexión' },
+          { 'Retry-After': '600' },
+        );
+        return;
+      }
+      if (demoSessions === 'capacity') {
+        sendJson(res, 503, { code: 'demo-capacity', message: 'No hay lugar para más demos' });
+        return;
+      }
       const body = (await readJsonBody(req)) as { template?: unknown } | undefined;
       const requested = typeof body?.template === 'string' ? body.template : DEFAULT_TEMPLATE;
       if (!isTemplateName(requested)) {

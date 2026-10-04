@@ -21,11 +21,16 @@ export type NoticeSetting = {
   message: string;
 };
 
+/** Cómo responde `POST /demo-sessions` (4.6.0, #173): para ver los mensajes del POS sin un límite real. */
+export type DemoSessionsMode = 'normal' | 'rate-limited' | 'capacity';
+const DEMO_SESSIONS_MODES: readonly DemoSessionsMode[] = ['normal', 'rate-limited', 'capacity'];
+
 /** Ajustes del panel `/_demo` para probar el estado del backend en el POS (4.0.0, #99; aviso, #128). */
 export type DemoSettings = {
   maintenance: MaintenanceSetting;
   simulateContract3: boolean;
   notice: NoticeSetting;
+  demoSessions: DemoSessionsMode;
 };
 
 function readSetting(db: DatabaseSync, key: string): string | undefined {
@@ -44,6 +49,7 @@ function writeSetting(db: DatabaseSync, key: string, value: string): void {
 export function getDemoSettings(db: DatabaseSync): DemoSettings {
   const maintenance = readSetting(db, 'maintenance');
   const notice = readSetting(db, 'notice');
+  const demoSessions = readSetting(db, 'demoSessions');
   return {
     maintenance:
       maintenance === undefined
@@ -54,6 +60,7 @@ export function getDemoSettings(db: DatabaseSync): DemoSettings {
       notice === undefined
         ? { enabled: false, severity: 'warning', message: '' }
         : (JSON.parse(notice) as NoticeSetting),
+    demoSessions: DEMO_SESSIONS_MODES.find((mode) => mode === demoSessions) ?? 'normal',
   };
 }
 
@@ -66,6 +73,9 @@ export function setDemoSettings(db: DatabaseSync, partial: Partial<DemoSettings>
   }
   if (partial.notice !== undefined) {
     writeSetting(db, 'notice', JSON.stringify(partial.notice));
+  }
+  if (partial.demoSessions !== undefined) {
+    writeSetting(db, 'demoSessions', partial.demoSessions);
   }
 }
 

@@ -371,12 +371,17 @@ describe('panel — estado del backend (#99)', () => {
       method: 'PUT',
       body: JSON.stringify({ notice: { enabled: true, severity: 'critical', message: 'Cuota' } }),
     });
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ demoSessions: 'capacity' }),
+    });
 
     expect(await getJson('/_demo/api/settings')).toEqual({
       delayLots: true,
       maintenance: { enabled: true, message: 'Cierre de mes' },
       simulateContract3: true,
       notice: { enabled: true, severity: 'critical', message: 'Cuota' },
+      demoSessions: 'capacity',
     });
   });
 
