@@ -12,6 +12,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${String(PORT)}`,
     trace: 'on-first-retry',
+    // #54: la suite no depende del service worker; lo prueba `pwa.spec.ts`, que lo habilita.
+    serviceWorkers: 'block',
   },
   // Solo Chromium — es el navegador de referencia del proyecto (ver AGENTS.md).
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
