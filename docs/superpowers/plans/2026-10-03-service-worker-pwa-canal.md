@@ -1933,7 +1933,8 @@ git commit -m "docs: canal /v4/, service worker y /ACTUALIZAR; versión 0.3.0 (#
   "Pasar una terminal de /v4/ a /v5/ sin perder lo pendiente", con el contexto (canal por major,
   almacenamiento por carpeta, 409 con un backend que deja de hablar 4), la idea (vaciar el outbox en
   `/v4/` y reconectar en `/v5/` sin repetir el onboarding) y la relación con #143.
-- [ ] **Step 3:** Sumar el número del issue `backlog` a "Issues abiertas" de `AGENTS.md`, commit
+- [ ] **Step 3:** Sumar el número del issue `backlog` y #196 (ícono propio del POS en lugar del
+  logo de Vite, ya creado) a "Issues abiertas" de `AGENTS.md`, commit
   "docs: issue de la transición entre canales (#54)".
 
 ---
