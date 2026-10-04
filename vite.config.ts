@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import preact from '@preact/preset-vite';
 import { defaultExclude, defineConfig } from 'vitest/config';
+import { serviceWorkerPlugin } from './build/sw-plugin.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
@@ -11,7 +12,7 @@ export default defineConfig({
   // Rutas relativas (#148): el mismo build anda en /, en /0.1.0/ o en cualquier carpeta de quien
   // copie el zip. Revisa la decisión de #128 de dejar '/'.
   base: './',
-  plugins: [preact()],
+  plugins: [preact(), serviceWorkerPlugin()],
   // Versión visible en /DIAGNOSTICO (#148). Vitest usa el mismo `define`.
   define: { __POS_VERSION__: JSON.stringify(version) },
   test: {
