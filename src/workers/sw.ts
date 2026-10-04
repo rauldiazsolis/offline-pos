@@ -15,16 +15,40 @@ const precacheUrls = __PRECACHE_FILES__.map((file) => new URL(file, self.locatio
 const precached = new Set(precacheUrls);
 const indexUrl = new URL('index.html', self.location.href).href;
 
-self.addEventListener('install', (event) => {
-  // Todo o nada: si falla un archivo, falla la instalación y queda la versión anterior. `reload`
-  // saltea la caché HTTP, así nunca se guarda un archivo viejo con el nombre de uno nuevo.
-  event.waitUntil(
-    caches
-      .open(cacheName)
-      .then((cache) =>
-        cache.addAll(precacheUrls.map((url) => new Request(url, { cache: 'reload' }))),
-      ),
+/**
+ * Una copia con el contenido ya leído y sin la marca de redirección. Cloudflare Pages redirige
+ * `index.html` a la carpeta, y Chrome rechaza (`ERR_FAILED`) una respuesta redirigida para una
+ * navegación: guardada tal cual, el POS no abría (0.3.0). Leer el contenido enseguida, y no recién al
+ * guardar, también importa: con HTTP/1.1 un cuerpo sin leer retiene la conexión, y con más archivos
+ * que conexiones la instalación quedaba colgada.
+ */
+async function readCopy(response: Response): Promise<Response> {
+  return new Response(await response.blob(), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+async function precache(): Promise<void> {
+  // Todo o nada: se baja todo antes de guardar nada; si falla un archivo, falla la instalación y
+  // queda la versión anterior. `reload` saltea la caché HTTP, así nunca se guarda un archivo viejo
+  // con el nombre de uno nuevo.
+  const responses = await Promise.all(
+    precacheUrls.map(async (url) => {
+      const response = await fetch(new Request(url, { cache: 'reload' }));
+      if (!response.ok) {
+        throw new Error(`No se pudo guardar ${url}: ${String(response.status)}`);
+      }
+      return [url, await readCopy(response)] as const;
+    }),
   );
+  const cache = await caches.open(cacheName);
+  await Promise.all(responses.map(([url, response]) => cache.put(url, response)));
+}
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(precache());
 });
 
 self.addEventListener('activate', (event) => {

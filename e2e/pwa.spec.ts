@@ -36,6 +36,12 @@ test.beforeAll(async () => {
       res.writeHead(404).end();
       return;
     }
+    // Como Cloudflare Pages, que saca el `.html` de las URLs: `index.html` redirige a la carpeta.
+    // Sin esto el e2e no veía que el service worker guardaba una respuesta redirigida (#54, 0.3.0).
+    if (path === '/v4/index.html') {
+      res.writeHead(308, { location: '/v4/' }).end();
+      return;
+    }
     // Las docs del canal (`/v4/docs/`, que arma site/ y no están en dist/): una página propia.
     if (path === '/v4/docs/') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });

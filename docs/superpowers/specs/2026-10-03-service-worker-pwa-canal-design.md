@@ -375,3 +375,13 @@ del mini-erp ya abierto; la verificación de instalar, abrir offline y actualiza
   declara `charset` para `.txt`, y Chrome lo lee como Latin-1. Cloudflare Pages lo sirve como
   `text/plain; charset=utf-8` (verificado en `pos.contax.ar/llms.txt`), así que en producción se ve
   bien; ya pasaba antes de #54.
+- **Después de publicar `0.3.0` — el POS no abría en producción (`ERR_FAILED`), arreglado en
+  `0.3.1`**: Cloudflare Pages redirige `/v4/index.html` a `/v4/` (308) y `cache.addAll` guardaba esa
+  respuesta marcada como redirigida; Chrome rechaza una respuesta redirigida para una navegación, así
+  que `/v4/` no cargaba después de la primera visita. Ni `vite preview` ni el servidor de
+  `pwa.spec.ts` redirigían, por eso no lo vio ningún test. El service worker ahora baja cada archivo,
+  lee su contenido enseguida (con HTTP/1.1 un cuerpo sin leer retiene la conexión y la instalación
+  quedaba colgada) y guarda una copia sin la marca. El servidor de `pwa.spec.ts` redirige
+  `index.html` como Pages. Una terminal que quedó con el service worker de `0.3.0` se recupera sola:
+  la navegación que falla igual dispara la búsqueda de `sw.js`, el nuevo se activa (no hay ninguna
+  pestaña controlada que esperar) y la próxima recarga abre el POS.
