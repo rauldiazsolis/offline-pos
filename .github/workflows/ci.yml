@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Publicación lo llama con un tag y publica solo si pasa entero.
+  workflow_call:
 
 jobs:
   build:
