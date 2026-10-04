@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { isAllowedBackendUrl } from '../src/sync/demo-link.ts';
 
 /**
- * Backends conocidos de `/versions` (#148): un dato del sitio, no de una versión del POS (la app
+ * Backends conocidos de la home (#148, #54): un dato del sitio, no de una versión del POS (la app
  * nunca lo lee). Solo lo que no se puede averiguar solo; el contrato y las capacidades se consultan
  * en vivo (`query-backend.ts`). `local: 'demo-backend'`: la Action no llega a la máquina de nadie,
  * así que levanta el demo-backend del commit y lo consulta a él.

@@ -42,10 +42,10 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      // Sitio publicado armado en local (#148): la versión actual en /<versión>/ más /versions,
+      // Sitio publicado armado en local (#148, #54): el canal actual (`/v4/`) más la home,
       // solo con el demo-backend local para no depender de un backend publicado (#147).
       command: 'pnpm site:build --only-local && pnpm site:preview',
-      url: 'http://localhost:4174/versions/',
+      url: 'http://localhost:4174/',
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },
