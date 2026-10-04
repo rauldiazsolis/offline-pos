@@ -355,3 +355,23 @@ del mini-erp ya abierto; la verificación de instalar, abrir offline y actualiza
 - **Rama**: la rama de la spec y el plan (`claude/etapa-54-service-worker-pwa-051e50`) estaba tomada
   por otro worktree; se trabajó en una rama local sobre el mismo commit y se publicó con el nombre de
   esa rama.
+- **Prueba manual — las docs del canal mostraban el POS**: el service worker atendía cualquier
+  navegación dentro del `scope` con el `index.html`, así que `/v4/docs/` quedaba en "Preparando…".
+  Ahora solo la carpeta (o su `index.html`) es el POS; otra navegación (las docs) va a la red, o a la
+  caché si es un archivo del build. Lo cubren `sw-logic.test.ts` y un test de `pwa.spec.ts` con el
+  service worker activo (el de `published-site.spec.ts` corre con los service workers bloqueados, por
+  eso no lo vio).
+- **Prueba manual — la advertencia de `/ACTUALIZAR` quedaba después de cobrar**: una advertencia de
+  la barra se borra con la próxima tecla, y cerrar la venta con Enter o Ctrl+Enter no tipea nada.
+  `submitCheckout` ahora borra la advertencia al cerrar la venta (también la de stock, que era de esa
+  venta).
+- **Prueba manual — los tags del repo en una pestaña nueva** (`target="_blank" rel="noopener"`).
+- **Prueba manual — ícono propio (#196)**: en vez del logo de Vite, la marca de mini contax con una
+  "p" en lugar de la "c", con sus dos variantes, como en mini: `public/favicon.svg` (el ticket grande,
+  que se lee a 16 px) y `scripts/pwa-icon.svg` (el ticket angosto con la línea) para los PNG de 192 y
+  512 y el maskable, este con fondo índigo lleno. `theme_color` sigue siendo el de la barra de la app
+  (`--color-chrome-bg`).
+- **Prueba manual — acentos de `llms.txt` en local** (aclaración, no desvío): `pnpm site:preview` no
+  declara `charset` para `.txt`, y Chrome lo lee como Latin-1. Cloudflare Pages lo sirve como
+  `text/plain; charset=utf-8` (verificado en `pos.contax.ar/llms.txt`), así que en producción se ve
+  bien; ya pasaba antes de #54.

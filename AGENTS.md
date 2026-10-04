@@ -597,7 +597,7 @@ en el historial de git).
 | #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR #191 |
 | #176 | Link de demo con confirmación de lo que se pierde ("Abrir una demo"), demo revocada (401 en demo) y `/DEMO_NUEVA`; el demo-backend emite una key por demo y las revoca | PR #192 |
 | #193 | Caja, sucursal y empresa a la vista: encabezado con la empresa como título, barra de estado al pie y título de la pestaña; contrato 4.5.0 (`company` en `GET /info`) | PR #194 |
-| #54 | Service worker propio y PWA en el canal `/v4/`, `/ACTUALIZAR`, home de backends; sin carpetas por versión ni zips | PR #198 |
+| #54 | Service worker propio y PWA en el canal `/v4/`, `/ACTUALIZAR`, home de backends; sin carpetas por versión ni zips; ícono propio (#196) | PR #198 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -626,8 +626,8 @@ etiqueta antes de tomar un issue.
   directo, corte y cajón, cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
-  (iniciar la caja con datos del backend), #196 (ícono propio del POS en lugar del logo de Vite) y
-  #197 (pasar una terminal de `/v4/` a `/v5/` sin perder lo pendiente).
+  (iniciar la caja con datos del backend), #197 (pasar una terminal de `/v4/` a `/v5/` sin perder
+  lo pendiente) y #199 (repensar la home: arrancar desde las cajas configuradas).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:

@@ -364,7 +364,8 @@ publicación, en "Publicación" de la raíz.
   `/ALTA` en demo). No dice qué versión es.
 - **`/ACTUALIZAR`** (`ui/keyboard/app-update-controller.ts::applyAppUpdate`, dependencias
   inyectadas): con una venta en curso (líneas, cliente o ajuste global: lo que vacía `/DESCARTAR`) no
-  actualiza y avisa "Terminá o descartá la venta para actualizar.". Si no, pasa a `applying` (el
+  actualiza y avisa "Terminá o descartá la venta para actualizar." (como toda advertencia de la
+  barra, se borra con la próxima tecla o al cerrar la venta: `submitCheckout`). Si no, pasa a `applying` (el
   botón dice "Actualizando…", deshabilitado), suelta como el traspaso de #175
   (`prepareTabRelease`, que devuelve con qué deshacer), le manda `skip-waiting` al service worker en
   espera y recarga con `controllerchange`. Si no llega en `APPLY_TIMEOUT_MS` (10 s): deshace la
@@ -378,7 +379,8 @@ publicación, en "Publicación" de la raíz.
 - **El service worker** (`src/workers/sw.ts`, lógica pura en `sw-logic.ts`, sin nada de la app)
   guarda todo el build al instalarse (todo o nada), atiende las navegaciones con el `index.html` de
   la caché (la query, como `?demo=…`, la lee la app) y los archivos del build desde la caché; todo lo
-  demás (el backend, `version.json`) va a la red. Nunca hace `skipWaiting` solo. Lo compila
+  demás (el backend, `version.json`, las docs de `docs/`) va a la red: solo la carpeta (o su
+  `index.html`) es el POS, la app no tiene rutas propias. Nunca hace `skipWaiting` solo. Lo compila
   `build/sw-plugin.ts` en un segundo build (`iife`, sin hash), con la lista de archivos y su hash
   inyectados (`build/precache.ts`).
 
