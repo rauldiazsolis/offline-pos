@@ -50,9 +50,12 @@ carpetas por versión.
    ```sh
    git switch main
    git pull
-   git tag v0.3.0
-   git push origin v0.3.0
+   pnpm release:tag
    ```
+
+   `pnpm release:tag` (`site/tag-release.ts`) crea el tag `v<versión de package.json>` y lo sube.
+   Antes verifica que estés en `main`, sin cambios sin commitear, igual que `origin/main`, y que el
+   tag no exista; si algo falla, dice qué hacer y no toca nada.
 
 3. En GitHub → pestaña **Actions** → **Publicación**, mirá que la corrida del tag termine en verde.
 4. Verificá en producción (§5).
