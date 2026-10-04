@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>offline-pos</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #999; --line: #333; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 64px; }
+  .muted { color: var(--muted); font-weight: normal; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+<h1>offline-pos</h1>
+<p>POS web offline-first para comercios, que se conecta a cualquier backend que implemente el
+Connector API. Elegí un backend y abrí una demo: el POS se instala en su canal y se actualiza solo.</p>
+<h2>Backends</h2>
+<div class="scroll">
+<table>
+<thead><tr><th>Backend</th><th>Contrato</th><th>Capacidades</th><th>Demo</th></tr></thead>
+<tbody>
+<tr><th scope="row">demo-backend local<br><code>http://localhost:4000</code><br><span class="muted">Levantalo con el demo-backend/ del último tag del repo: pnpm backend.</span></th>
+        <td>4.5.0</td>
+        <td>demo-sessions, customer-payment-void</td>
+        <td class="muted">Incompatible: no hay POS para el contrato 4.x</td></tr>
+<tr><th scope="row">mini contax<br><code>https://mini.contax.ar/connector</code><br><span class="muted">El backend de mini contax. Cada demo es un comercio aparte que vence a las 24 h sin uso; «Crear mi comercio» da de alta uno real.</span></th>
+        <td>4.4.0</td>
+        <td>customer-payment-void, demo-sessions</td>
+        <td class="muted">Incompatible: no hay POS para el contrato 4.x</td></tr>
+</tbody>
+</table>
+</div>
+<p class="muted">Consultados el <time data-generated datetime="2026-10-04T12:43:24.435Z">2026-10-04T12:43:24.435Z</time>.</p>
+<h2>Para integradores</h2>
+<ul>
+
+</ul>
+<p>Una versión exacta del POS: <a href="https://github.com/rauldiazsolis/offline-pos/tags" target="_blank" rel="noopener">tags del repo</a>. Índice para IA:
+<a href="llms.txt">llms.txt</a>.</p>
+</main>
+</body>
+</html>
