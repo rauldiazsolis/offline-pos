@@ -36,6 +36,12 @@ test.beforeAll(async () => {
       res.writeHead(404).end();
       return;
     }
+    // Las docs del canal (`/v4/docs/`, que arma site/ y no están en dist/): una página propia.
+    if (path === '/v4/docs/') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end('<!doctype html><title>Docs</title><h1>Guía para integradores</h1>');
+      return;
+    }
     const relative = path.slice('/v4/'.length) || 'index.html';
     const file = join(DIST, normalize(relative));
     readFile(file)
@@ -157,6 +163,13 @@ test('pos.reset() da de baja el service worker y las cachés de su carpeta', asy
     .toBe(true);
   const names = await page.evaluate(() => caches.keys());
   expect(names.every((name) => name.startsWith('offline-pos@/v4/:sw:'))).toBe(true);
+});
+
+test('con el service worker activo, /v4/docs/ muestra las docs y no el POS', async ({ page }) => {
+  await openControlled(page);
+  await page.goto(`${CHANNEL}docs/`);
+  await expect(page.getByRole('heading', { name: 'Guía para integradores' })).toBeVisible();
+  await expect(page.getByText('Preparando…')).toBeHidden();
 });
 
 test('el manifest y sus íconos cargan', async ({ page }) => {

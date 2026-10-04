@@ -45,6 +45,18 @@ describe('routeRequest', () => {
     expect(
       routeRequest(get('https://pos.x/v4/?demo=true&backend=x', 'navigate'), SCOPE, PRECACHED),
     ).toEqual({ kind: 'navigation' });
+    expect(routeRequest(get('https://pos.x/v4/index.html', 'navigate'), SCOPE, PRECACHED)).toEqual({
+      kind: 'navigation',
+    });
+  });
+
+  it('una navegación a otra página de la carpeta (las docs) no recibe el POS', () => {
+    for (const url of ['https://pos.x/v4/docs/', 'https://pos.x/v4/docs/guia.md']) {
+      expect(routeRequest(get(url, 'navigate'), SCOPE, PRECACHED)).toEqual({ kind: 'network' });
+    }
+    expect(
+      routeRequest(get('https://pos.x/v4/assets/app-1.js', 'navigate'), SCOPE, PRECACHED),
+    ).toEqual({ kind: 'precached', url: 'https://pos.x/v4/assets/app-1.js' });
   });
 
   it('un archivo de la lista sale de la caché, sin la query', () => {

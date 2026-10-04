@@ -19,9 +19,10 @@ export type SwRoute =
   { kind: 'navigation' } | { kind: 'precached'; url: string } | { kind: 'network' };
 
 /**
- * Solo GET del mismo origen y dentro del `scope`. Una navegación recibe el `index.html` (la query,
- * como `?demo=…`, la lee la app); un archivo del build, su copia; todo lo demás (el backend,
- * `version.json`, otra carpeta) va a la red sin tocarlo.
+ * Solo GET del mismo origen y dentro del `scope`. Una navegación a la carpeta (o a su `index.html`)
+ * recibe el `index.html` (la query, como `?demo=…`, la lee la app); un archivo del build, su copia;
+ * todo lo demás (el backend, `version.json`, las docs de `docs/`, otra carpeta) va a la red sin
+ * tocarlo. La app no tiene rutas propias: una navegación a otra página de la carpeta nunca es el POS.
  */
 export function routeRequest(
   request: { method: string; url: string; mode: string },
@@ -36,7 +37,9 @@ export function routeRequest(
   if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) {
     return { kind: 'network' };
   }
-  if (request.mode === 'navigate') {
+  const isAppPage =
+    url.pathname === scope.pathname || url.pathname === `${scope.pathname}index.html`;
+  if (request.mode === 'navigate' && isAppPage) {
     return { kind: 'navigation' };
   }
   const bare = `${url.origin}${url.pathname}`;
