@@ -1,4 +1,5 @@
-import { storageKey } from '../storage/storage-namespace.ts';
+// #177: en entrenamiento, claves propias (training:…).
+import { operationalKey } from '../storage/training-mode.ts';
 /**
  * Cursor de pull del catálogo (`since`) — estado operativo interno del
  * motor, nunca tocado por la pantalla `/CONFIG`. Separado de `config.ts` a
@@ -9,9 +10,9 @@ import { storageKey } from '../storage/storage-namespace.ts';
  * próximo ciclo — no es un error de negocio que valga la pena modelar con
  * Result, perder el cursor no rompe nada, solo hace el próximo pull más caro.
  */
-const PRODUCTS_CURSOR_KEY = storageKey('sync-cursor:products');
-const CUSTOMERS_CURSOR_KEY = storageKey('sync-cursor:customers');
-const LAST_FULL_SYNC_KEY = storageKey('sync:last-full');
+const PRODUCTS_CURSOR_KEY = operationalKey('sync-cursor:products');
+const CUSTOMERS_CURSOR_KEY = operationalKey('sync-cursor:customers');
+const LAST_FULL_SYNC_KEY = operationalKey('sync:last-full');
 
 export function getProductsCursor(): string | undefined {
   try {

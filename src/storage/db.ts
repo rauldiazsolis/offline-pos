@@ -11,6 +11,7 @@ import type { Product } from '../domain/product.ts';
 import type { Sale } from '../domain/sale.ts';
 import type { StockItem, StockMovement } from '../domain/stock.ts';
 import { STORAGE_NAMESPACE } from './storage-namespace.ts';
+import { isTrainingMode, trainingDatabaseName } from './training-mode.ts';
 import { trackWriteTransactions } from './transaction-tracker.ts';
 
 /**
@@ -24,9 +25,10 @@ export type DraftCart = { id: 'current'; cart: Cart; customer?: Customer };
  * Schema de IndexedDB. `outbox` (Fase 2, motor de sync) se agrega en su
  * propia versión — nunca se toca el `.stores()` de una versión ya publicada,
  * Dexie migra automáticamente las instalaciones existentes a la última. El
- * nombre de la base depende de la carpeta (#148, `storage-namespace.ts`).
+ * nombre de la base depende de la carpeta (#148, `storage-namespace.ts`) y del modo entrenamiento
+ * (#177, `training-mode.ts`): por eso la clase recibe el nombre.
  */
-class PosDatabase extends Dexie {
+export class PosDatabase extends Dexie {
   products!: EntityTable<Product, 'id'>;
   stock!: EntityTable<StockItem, 'productId'>;
   sales!: EntityTable<Sale, 'id'>;
@@ -46,8 +48,8 @@ class PosDatabase extends Dexie {
   cashCounts!: EntityTable<CashCount, 'id'>;
   cashConcepts!: Table<CashConcept, [CashConcept['direction'], string]>;
 
-  constructor() {
-    super(STORAGE_NAMESPACE);
+  constructor(name: string) {
+    super(name);
     this.version(1).stores({
       products: 'id, sku, *barcodes, category',
       stock: 'productId',
@@ -116,7 +118,12 @@ class PosDatabase extends Dexie {
   }
 }
 
-export const db = new PosDatabase();
+/** #177: con la marca de entrenamiento, la base aparte (se borra al salir). */
+export const DATABASE_NAME = isTrainingMode()
+  ? trainingDatabaseName(STORAGE_NAMESPACE)
+  : STORAGE_NAMESPACE;
+
+export const db = new PosDatabase(DATABASE_NAME);
 
 // #175: la pestaña que suelta el control espera a que no quede ninguna escritura abierta.
 trackWriteTransactions(db);

@@ -1,5 +1,6 @@
 import type { PushLot } from '../domain/push-lot.ts';
-import { storageKey } from '../storage/storage-namespace.ts';
+// #177: en entrenamiento, claves propias (training:…).
+import { operationalKey } from '../storage/training-mode.ts';
 
 /**
  * Persistencia del lote de push en curso y de los lotes ya enviados que
@@ -9,8 +10,8 @@ import { storageKey } from '../storage/storage-namespace.ts';
  * lote con un id nuevo — el backend "se arregla como puede" (ver spec), no
  * es un error de negocio que valga la pena modelar con Result.
  */
-const CURRENT_LOT_KEY = storageKey('sync:push-lot');
-const AWAITING_LOTS_KEY = storageKey('sync:push-lot-awaiting');
+const CURRENT_LOT_KEY = operationalKey('sync:push-lot');
+const AWAITING_LOTS_KEY = operationalKey('sync:push-lot-awaiting');
 
 export function getCurrentPushLot(): PushLot | undefined {
   try {
