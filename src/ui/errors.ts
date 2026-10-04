@@ -156,6 +156,8 @@ export function describeError(failure: Failure): string {
       return `La plantilla ${failure.meta.template} no existe (hay: ${failure.meta.templates.join(', ')}).`;
     case 'demo/not-offered':
       return 'este backend no ofrece demos';
+    case 'portal/not-offered':
+      return 'este backend no ofrece el portal';
     case 'demo/rate-limited': {
       const seconds = failure.meta.retryAfterSeconds;
       const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));

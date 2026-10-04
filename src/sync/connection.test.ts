@@ -97,6 +97,18 @@ describe('probeConnection', () => {
     expect(result.ok && result.value.company).toEqual({ name: 'Kiosco Pepe' });
   });
 
+  it('suma el portal del getInfo de la prueba (4.6.0, #179)', async () => {
+    const portal = { command: 'PANEL', label: 'Panel' };
+    const connector = fakeConnector({
+      getInfo: () =>
+        Promise.resolve(ok({ contractVersion: '4.6.0', status: 'ok' as const, portal })),
+    });
+
+    const result = await probeConnection(config, { connector });
+
+    expect(result.ok && result.value.portal).toEqual(portal);
+  });
+
   it('sin cursores en la respuesta, no los inventa', async () => {
     const result = await probeConnection(config, { connector: fakeConnector() });
 

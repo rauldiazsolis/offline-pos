@@ -18,7 +18,8 @@ import {
 } from '../../sync/connector.ts';
 import type { RestConnectionConfig } from './config.ts';
 
-function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): HeadersInit {
+/** Headers de todo request REST: la versión del contrato y, si hay, la key (también `portal-link.ts`). */
+export function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): HeadersInit {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     [CONTRACT_VERSION_HEADER]: POS_CONTRACT_VERSION,
@@ -37,7 +38,7 @@ function buildHeaders(config: RestConnectionConfig, idempotencyKey?: string): He
  * habla esta versión del contrato; cualquier otro error sigue siendo
  * `sync/request-failed` con su status.
  */
-async function failedResponse(response: Response): Promise<Result<never>> {
+export async function failedResponse(response: Response): Promise<Result<never>> {
   if (response.status === 409) {
     let body: unknown;
     try {

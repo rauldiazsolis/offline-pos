@@ -10,6 +10,7 @@ import {
   activeConnectorTypeSignal,
   backendCapabilitiesSignal,
   backendCompanySignal,
+  backendPortalSignal,
   connectionStateSignal,
   demoRevokedSignal,
   syncStatusSignal,
@@ -140,6 +141,22 @@ describe('applyConnection', () => {
     await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
     expect(backendCompanySignal.value).toBeUndefined();
     expect(localStorage.getItem('offline-pos:backend-company')).toBeNull();
+  });
+
+  it('guarda el portal de la prueba; una foto sin él lo borra (4.6.0, #179)', async () => {
+    const portal = { command: 'PANEL', label: 'Panel' };
+    await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, portal },
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(backendPortalSignal.value).toEqual(portal);
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+    expect(backendPortalSignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:backend-portal')).toBeNull();
   });
 
   it('fija la sucursal y la caja de la conexión aplicada (#193)', async () => {

@@ -185,3 +185,61 @@ test('demo revocada: la barra lo dice y "Empezar una demo nueva" arranca otra li
   expect(apiKey).toMatch(/^demo-/);
   expect(apiKey).not.toBe(oldKey);
 });
+
+test('portal (#179): el comando y el botón abren el backend en la caja de esta terminal', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+
+  // Comando: la pestaña se abre en el gesto del Enter y recibe el link de un solo uso.
+  await commandBar.fill('/PANEL');
+  const [fromCommand] = await Promise.all([
+    context.waitForEvent('page'),
+    commandBar.press('Enter'),
+  ]);
+  await expect(fromCommand.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromCommand.close();
+  await expect(commandBar).toHaveValue('');
+
+  // Botón: otro link (el anterior ya se usó); el foco sigue en la barra del POS.
+  const [fromButton] = await Promise.all([context.waitForEvent('page'), button.click()]);
+  await expect(fromButton.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromButton.close();
+  await expect(commandBar).toBeFocused();
+  await expect(page.getByText(/No se pudo abrir/)).toHaveCount(0);
+});
+
+test('portal (#179): con el backend en mantenimiento, el botón no abre pestaña y lo dice en la barra', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+  let openedTabs = 0;
+  context.on('page', () => {
+    openedTabs += 1;
+  });
+
+  const settings = `${BACKEND}/_demo/api/settings`;
+  await page.request.put(settings, {
+    data: { maintenance: { enabled: true, message: 'Volvemos enseguida' } },
+  });
+  try {
+    await button.click();
+    // El click del botón cierra el overlay de la barra (#28): el mensaje tiene que verse igual.
+    await expect(
+      page.getByText(
+        'No se pudo abrir Panel del backend: El backend está en mantenimiento: Volvemos enseguida.',
+      ),
+    ).toBeVisible();
+    expect(openedTabs).toBe(0);
+  } finally {
+    await page.request.put(settings, { data: { maintenance: { enabled: false, message: '' } } });
+  }
+});

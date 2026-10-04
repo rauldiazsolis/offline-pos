@@ -24,6 +24,7 @@ import {
 } from '../ui/state/sync.ts';
 import { saveBackendCapabilities } from './backend-capabilities.ts';
 import { saveBackendCompany } from './backend-company.ts';
+import { saveBackendPortal } from './backend-portal.ts';
 import { saveBackendNotices } from './backend-notices.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { connectionState } from './connection-state.ts';
@@ -159,6 +160,8 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     saveBackendCapabilities(params.snapshot.capabilities);
     // 4.5.0 (#193): la empresa de esta conexión, nunca la de la anterior.
     saveBackendCompany(params.snapshot.company);
+    // 4.6.0 (#179): el portal de esta conexión.
+    saveBackendPortal(params.snapshot.portal);
     saveBackendNotices(params.snapshot.notices ?? []);
 
     setConnectionState('active');

@@ -5,6 +5,7 @@ import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
 import { restoreBackendCompany } from '../sync/backend-company.ts';
+import { restoreBackendPortal } from '../sync/backend-portal.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
@@ -111,9 +112,10 @@ export async function bootstrap(): Promise<void> {
       : null,
   );
   // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
-  // arranca sin red los sabe. 4.5.0 (#193): también la empresa.
+  // arranca sin red los sabe. 4.5.0 (#193): también la empresa; 4.6.0 (#179), el portal.
   restoreBackendCapabilities();
   restoreBackendCompany();
+  restoreBackendPortal();
   restoreBackendNotices();
   // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
   restoreDemoRevoked();

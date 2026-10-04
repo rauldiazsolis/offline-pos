@@ -52,9 +52,10 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
+import { openPortal } from './portal-controller.ts';
 import { enterPrinterScreen } from './printer-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
-import { commandAvailability, disabledCommandMessage } from './commands.ts';
+import { commandAvailability, currentPortalOffer, disabledCommandMessage } from './commands.ts';
 import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { syncNow } from '../../sync/engine.ts';
@@ -444,6 +445,14 @@ function runCommand(name: string, _args: string[]): void {
       startNewDemo();
       return;
     default: {
+      // El comando del portal (4.6.0, #179): el nombre lo da el backend. La barra se limpia antes:
+      // `openPortal` abre la pestaña sincrónico, todavía dentro del gesto del Enter.
+      const portal = currentPortalOffer();
+      if (portal !== null && portal.command === name) {
+        clearBuffer();
+        void openPortal(portal.label);
+        return;
+      }
       // Comandos que declara el conector activo (Etapa 2c, #77).
       const declared = connectorCommands(activeConnectorTypeSignal.value).find(
         (command) => command.name === name,

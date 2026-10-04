@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
-import type { BackendInfo, BackendNotice, LotIssue } from '../../sync/connector.ts';
+import type { BackendInfo, BackendNotice, BackendPortal, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 import type { DemoSessionInfo } from '../../sync/config.ts';
 import type { PullApplication } from '../../sync/pull-rule.ts';
@@ -59,6 +59,12 @@ export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(u
  * `sync/backend-company.ts`. `undefined` = el backend no la manda (o nunca se supo).
  */
 export const backendCompanySignal = signal<string | undefined>(undefined);
+
+/**
+ * Portal del backend según su último `getInfo` exitoso (4.6.0, #179), persistido por
+ * `sync/backend-portal.ts`. `undefined` = el backend no lo manda (o nunca se supo).
+ */
+export const backendPortalSignal = signal<BackendPortal | undefined>(undefined);
 
 /**
  * Avisos vigentes del backend según el último pull aplicado (4.4.0, #128), persistidos por

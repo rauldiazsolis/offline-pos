@@ -74,6 +74,12 @@ describe('describeError', () => {
     );
   });
 
+  it('portal/not-offered (#179)', () => {
+    expect(describeError({ ok: false, error: 'portal/not-offered', meta: undefined })).toBe(
+      'este backend no ofrece el portal',
+    );
+  });
+
   it('demo/unavailable-for-connector', () => {
     const message = describeError({
       ok: false,

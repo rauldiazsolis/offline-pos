@@ -9,6 +9,7 @@ import {
 } from '../ui/state/sync.ts';
 import { saveBackendCapabilities } from './backend-capabilities.ts';
 import { saveBackendCompany } from './backend-company.ts';
+import { saveBackendPortal } from './backend-portal.ts';
 import { loadSyncConfig } from './config.ts';
 import type { BackendInfo, Connector } from './connector.ts';
 import { isDemoRevokedFailure, markDemoRevoked } from './demo-revoked.ts';
@@ -57,6 +58,8 @@ export async function refreshBackendStatus(
     saveBackendCapabilities(result.value.capabilities ?? []);
     // 4.5.0 (#193): la empresa de la key; sin ella, se deja de mostrar.
     saveBackendCompany(result.value.company);
+    // 4.6.0 (#179): el portal; sin él, se deja de ofrecer.
+    saveBackendPortal(result.value.portal);
     const status = classifyBackendInfo(result.value);
     setBackendStatus(status);
     setBackendCheckDue(false);

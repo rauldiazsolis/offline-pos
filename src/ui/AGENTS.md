@@ -171,6 +171,35 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   el del aviso más grave (`critical` → error, `warning` → ámbar, `info` → neutro) y el click abre
   `/DIAGNOSTICO`, donde está el detalle. Sin avisos no se muestra. Nunca bloquea nada.
 
+## Portal (#179)
+
+Spec: `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`; lo de `sync/`, en "Contrato
+4.6.0" de `src/sync/AGENTS.md`.
+
+- **Qué se ofrece** (`ui/keyboard/commands.ts`): `currentPortalOffer()` = `portalOffer` con las
+  capacidades, el portal guardado y `RESERVED_COMMAND_NAMES` (todos los nombres del POS, estén
+  disponibles o no ahora: el núcleo, `ACTUALIZAR`, `ALTA`, `DEMO_NUEVA` y los de todos los
+  conectores, así el nombre no cambia según el estado). Nada con la demo revocada (la key ya no
+  sirve y el encabezado ofrece `/DEMO_NUEVA`); sí sin red, en mantenimiento o incompatible: al usarlo,
+  el error dice por qué no abre. Lo usan `availableCommands` (el comando, con la etiqueta como
+  descripción), `runCommand` (antes que los comandos del conector), el encabezado y `/DIAGNOSTICO`
+  ("Portal: /PANEL (Panel del backend)" o "no ofrecido").
+- **`openPortal(label)`** (`ui/keyboard/portal-controller.ts`, dependencias inyectadas), lo mismo
+  para el comando y el botón: **pide el link primero** y recién con él abre la pestaña
+  (`window.open(url, '_blank', 'noopener')`), mientras el gesto siga vigente
+  (`navigator.userActivation.isActive`, unos 5 s en Chromium). Un error no abre nada: abrir la
+  pestaña en blanco en el gesto y cerrarla al fallar hacía parpadear la pantalla (prueba manual).
+  Si el backend tardó más que el gesto, no se intenta abrir (el bloqueador la frenaría sin avisar) y
+  la barra dice "…: el backend tardó en contestar; probá de nuevo.". Los errores: "No se pudo abrir
+  <label>: <motivo>." (`describeError`); con la terminal en demo, un 401/403 marca la demo revocada
+  (como un ciclo de sync) y el motivo es "la demo terminó". Todo mensaje reabre el overlay de la
+  barra (`overlayDismissedSignal`): el `mousedown` del botón lo cierra como un click afuera (#28), y
+  si no, el error quedaba oculto (como `/CAJA` desde la barra de estado). Un pedido a la vez. El
+  comando limpia la barra antes de llamarla.
+- **El botón** (`TerminalHeader`): `.btn` con `<label> (/<command>)`, a la derecha, `tabIndex={-1}`
+  y `keepFocusOnMouseDown`; con la demo activa va antes del de `/ALTA`, que sigue siendo el primario.
+  Nunca parte su etiqueta.
+
 ## `/CAJA` y `/RESUMEN` (Etapa 5, #100 y #120)
 
 - **`/CAJA` como modal** (`ui/screens/cash-screen.tsx`, `ui/keyboard/cash-controller.ts`, reglas en
@@ -492,7 +521,7 @@ seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), 
 sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones) y la **barra de estado** (click =
 `/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
 **encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
-resto es pasivo, #193).
+del portal hace su comando, #179; el resto es pasivo, #193).
 
 ## Diseño visual
 

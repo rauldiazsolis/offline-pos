@@ -154,6 +154,30 @@ describe('reglas de evolución (4.4.0, #128)', () => {
     expect(toBackendInfo(blank)).not.toHaveProperty('company');
   });
 
+  it('portal opcional (4.6.0, #179): se conserva; mal formado, ausente', () => {
+    const base = { contractVersion: '4.6.0', status: 'ok' };
+    const withPortal = backendInfoSchema.parse({
+      ...base,
+      portal: { command: 'PANEL', label: 'Panel del backend' },
+    });
+    expect(toBackendInfo(withPortal).portal).toEqual({
+      command: 'PANEL',
+      label: 'Panel del backend',
+    });
+    for (const portal of [
+      { command: 'panel', label: 'x' },
+      { command: '/PANEL', label: 'x' },
+      { command: 'P', label: 'x' },
+      { command: 'A'.repeat(17), label: 'x' },
+      { command: 'PANEL', label: '  ' },
+      'PANEL',
+    ]) {
+      expect(toBackendInfo(backendInfoSchema.parse({ ...base, portal }))).not.toHaveProperty(
+        'portal',
+      );
+    }
+  });
+
   it('lo que el POS no entiende de un lote es "terminado con aviso", nunca processing', () => {
     const parsed = pullBatchResponseSchema.parse({
       ...basePull,

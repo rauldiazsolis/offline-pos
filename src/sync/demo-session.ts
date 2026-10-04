@@ -4,6 +4,7 @@ import { err, ok, type Result } from '../domain/result.ts';
 import { toZodIssues } from '../domain/zod-issues.ts';
 import { CONTRACT_VERSION_HEADER } from './connector.ts';
 import { isAllowedBackendUrl } from './demo-link.ts';
+import { errorBodySchema, readJson } from './http-body.ts';
 
 /** Lo que devuelve `POST /demo-sessions` (4.4.0, #128). `baseUrl` ausente = la misma del link. */
 export type DemoSession = {
@@ -34,22 +35,10 @@ const unknownTemplateSchema = z.object({
   templates: z.array(z.string()),
 });
 
-/** Cuerpo de error del contrato (4.6.0): `{ code, message? }`. */
-const errorBodySchema = z.object({ code: z.string(), message: z.string().optional() });
-
 /** `Retry-After` en segundos enteros (4.6.0); una fecha HTTP o un valor inválido cuentan como ausente. */
 export function parseRetryAfter(value: string | null): number | undefined {
   const trimmed = value?.trim();
   return trimmed !== undefined && /^\d+$/.test(trimmed) ? Number(trimmed) : undefined;
-}
-
-/** Cuerpo JSON de la respuesta, o `undefined` si no es JSON (borde: `json()` lanza). */
-async function readJson(response: Response): Promise<unknown> {
-  try {
-    return (await response.json()) as unknown;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

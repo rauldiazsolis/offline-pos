@@ -182,8 +182,23 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 - **Capacidad `portal`**: `GET /info` la declara con `portal: { command, label }` y
   `POST /portal-links` devuelve `{ url, expiresAt? }`, la URL que el backend decide según la key (link
   con autorización de un uso o de varios, o su login); la key nunca va en la URL y el link nunca viaja
-  en el pull. El POS todavía no la usa: el comando y el botón son de P6 (#179). El demo-backend la
-  implementa con `/PANEL` (link de un solo uso, 60 s, `GET /_demo/portal/<token>`).
+  en el pull. El demo-backend la implementa con `/PANEL` (link de un solo uso, 60 s,
+  `GET /_demo/portal/<token>`).
+- **El portal en el POS (#179**, spec `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`):
+  `backendInfoSchema.portal` (`command` `^[A-Z0-9_]{2,16}$`, `label` no vacío; mal formado cuenta
+  como ausente, con `.catch`) y `ProbeSnapshot.portal`. `sync/backend-portal.ts` lo guarda como la
+  empresa (`localStorage` por carpeta y `backendPortalSignal`; lo escriben `applyConnection` y
+  `refreshBackendStatus`, si deja de venir se borra, lo restaura `bootstrap`), así el botón se ve
+  aunque se arranque sin red. `portalOffer` (pura) decide qué se ofrece: hacen falta la capacidad
+  **y** el objeto; un nombre que choca con uno del POS pasa a `PORTAL` (los nombres reservados los
+  pasa la UI). `sync/portal-link.ts::requestPortalLink` hace el `POST /portal-links` fuera del puerto
+  (solo `rest` y `rest-demo`; otro conector es `portal/not-offered` sin pedir nada), con
+  `buildHeaders` y `failedResponse` del conector REST y `sync/http-body.ts` (el `ErrorBody` y la
+  lectura del JSON, compartidos con `demo-session.ts`): 404 → `portal/not-offered`, 503 →
+  `sync/backend-maintenance` con su `message`, 409 → incompatible, 401/403 → `sync/request-failed`
+  con su status (la UI decide si es la demo que terminó), sin red → `sync/request-failed` sin status.
+  La URL tiene que pasar `isAllowedBackendUrl`; `expiresAt` mal formado se ignora. Sin reintentos;
+  la URL no se guarda ni entra al log de sync. La UI, en "Portal" de `src/ui/AGENTS.md`.
 - **Errores** (`ErrorBody { code, message? }`, `Retry-After`, que el backend expone por CORS):
   `503 maintenance` en push, pull, holds, demo-sessions y portal-links (el sync ya lo manejaba: no es
   fallo de red, consulta `/info`); en `/demo-sessions`, `429 rate-limited` y `503 demo-capacity`.
