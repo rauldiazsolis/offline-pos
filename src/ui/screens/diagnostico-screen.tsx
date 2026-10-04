@@ -13,6 +13,7 @@ import {
 } from '../format-lot.ts';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
+import { currentPortalOffer } from '../keyboard/commands.ts';
 import { exitDiagnosticoScreen } from '../keyboard/diagnostico-controller.ts';
 import type { BackendStatus, SyncLogEntry } from '../state/sync.ts';
 
@@ -100,6 +101,8 @@ function capabilitiesText(capabilities: readonly string[] | undefined): string {
 
 export function DiagnosticoScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
+  // Lo mismo que ofrecen el comando y el botón del portal (4.6.0, #179).
+  const portal = currentPortalOffer();
 
   const handleKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape') {
@@ -195,6 +198,9 @@ export function DiagnosticoScreen() {
           )}
           <p style={{ margin: 0 }}>Capacidades: {capabilitiesText(diagnostics.capabilities)}</p>
           <p style={{ margin: 0 }}>Empresa: {diagnostics.company ?? 'no informada'}</p>
+          <p style={{ margin: 0 }}>
+            Portal: {portal !== null ? `/${portal.command} (${portal.label})` : 'no ofrecido'}
+          </p>
         </div>
 
         <div style={cardStyle}>

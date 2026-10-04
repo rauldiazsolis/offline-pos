@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '../../domain/result.ts';
 import type { SyncDiagnostics } from '../../sync/diagnostics.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { backendCapabilitiesSignal, backendPortalSignal } from '../state/sync.ts';
 import { DiagnosticoScreen } from './diagnostico-screen.tsx';
 
 const diagnostics: SyncDiagnostics = {
@@ -173,6 +174,24 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
     } finally {
       diagnostics.company = 'Kiosco Pepe';
     }
+  });
+});
+
+describe('DiagnosticoScreen — portal (4.6.0, #179)', () => {
+  afterEach(() => {
+    backendCapabilitiesSignal.value = undefined;
+    backendPortalSignal.value = undefined;
+  });
+
+  it('muestra el comando y la etiqueta del portal, o "no ofrecido"', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText('Portal: no ofrecido')).not.toBeNull();
+    unmount();
+
+    backendCapabilitiesSignal.value = ['portal'];
+    backendPortalSignal.value = { command: 'PANEL', label: 'Panel del backend' };
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Portal: /PANEL (Panel del backend)')).not.toBeNull();
   });
 });
 

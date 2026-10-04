@@ -14,7 +14,13 @@ import { attachedCustomerSignal } from '../state/customer.ts';
 import { demoResetErrorSignal } from '../state/demo-reset.ts';
 import { appUpdateSignal } from '../state/app-update.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { activeConnectorTypeSignal, setDemoSession } from '../state/sync.ts';
+import {
+  activeConnectorTypeSignal,
+  backendCapabilitiesSignal,
+  backendPortalSignal,
+  demoRevokedSignal,
+  setDemoSession,
+} from '../state/sync.ts';
 import {
   activateCommandBarRow,
   moveSelection,
@@ -28,6 +34,7 @@ import { syncNow } from '../../sync/engine.ts';
 import { applyAppUpdate } from './app-update-controller.ts';
 import { availableCommands } from './commands.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
+import { openPortal } from './portal-controller.ts';
 
 // /SINCRONIZAR dispara un ciclo real en background: se neutraliza para no dejarlo corriendo tras cerrar la base.
 vi.mock('../../sync/engine.ts', async (importOriginal) => ({
@@ -37,6 +44,9 @@ vi.mock('../../sync/engine.ts', async (importOriginal) => ({
 
 // /ALTA navega fuera de la app: se espía en vez de dejar que jsdom intente navegar.
 vi.mock('./onboarding-controller.ts', () => ({ startOnboarding: vi.fn(), startNewDemo: vi.fn() }));
+
+// El portal abre una pestaña nueva: se espía (su lógica está en portal-controller.test.ts).
+vi.mock('./portal-controller.ts', () => ({ openPortal: vi.fn(() => Promise.resolve()) }));
 
 // /ACTUALIZAR suelta la pestaña y recarga: se espía (su lógica está en app-update-controller.test.ts).
 vi.mock('./app-update-controller.ts', () => ({ applyAppUpdate: vi.fn(() => Promise.resolve()) }));
@@ -472,5 +482,61 @@ describe('selectCartLine (click en el carrito, #99)', () => {
 
     selectCartLine(5);
     expect(cartSelectionIndexSignal.value).toBe(1);
+  });
+});
+
+describe('comando del portal (4.6.0, #179)', () => {
+  beforeEach(() => {
+    vi.mocked(openPortal).mockClear();
+    backendCapabilitiesSignal.value = ['portal'];
+    backendPortalSignal.value = { command: 'PANEL', label: 'Panel del backend' };
+  });
+
+  afterEach(() => {
+    backendCapabilitiesSignal.value = undefined;
+    backendPortalSignal.value = undefined;
+    demoRevokedSignal.value = null;
+  });
+
+  it('con la oferta está en la lista con la etiqueta del backend y abre el portal', () => {
+    expect(availableCommands().find((command) => command.name === 'PANEL')?.description).toBe(
+      'Panel del backend',
+    );
+
+    updateCommandBarBuffer('/PANEL');
+    submitCommandBar();
+
+    expect(openPortal).toHaveBeenCalledWith('Panel del backend');
+    expect(commandBarErrorSignal.value).toBeNull();
+    expect(commandBarBufferSignal.value).toBe('');
+  });
+
+  it('sin la capacidad no aparece y da "Comando desconocido"', () => {
+    backendCapabilitiesSignal.value = [];
+    expect(availableCommands().map((command) => command.name)).not.toContain('PANEL');
+
+    updateCommandBarBuffer('/PANEL');
+    submitCommandBar();
+
+    expect(commandBarErrorSignal.value).toBe('Comando desconocido: /PANEL');
+    expect(openPortal).not.toHaveBeenCalled();
+  });
+
+  it('con la demo revocada no aparece', () => {
+    demoRevokedSignal.value = '2026-10-04T12:00:00.000Z';
+
+    expect(availableCommands().map((command) => command.name)).not.toContain('PANEL');
+  });
+
+  it('un nombre del POS, aunque no esté disponible ahora, pasa a /PORTAL', () => {
+    backendPortalSignal.value = { command: 'ALTA', label: 'Mi panel' };
+    const names = availableCommands().map((command) => command.name);
+    expect(names).toContain('PORTAL');
+    expect(names).not.toContain('ALTA');
+
+    updateCommandBarBuffer('/PORTAL');
+    submitCommandBar();
+
+    expect(openPortal).toHaveBeenCalledWith('Mi panel');
   });
 });

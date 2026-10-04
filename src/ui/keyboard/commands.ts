@@ -1,8 +1,16 @@
-import { connectorCommands } from '../../sync/connector-registry.ts';
+import { portalOffer } from '../../sync/backend-portal.ts';
+import type { BackendPortal } from '../../sync/connector.ts';
+import { CONNECTOR_TYPES, connectorCommands } from '../../sync/connector-registry.ts';
 import { appUpdateSignal } from '../state/app-update.ts';
 import { cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
-import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
+import {
+  activeConnectorTypeSignal,
+  backendCapabilitiesSignal,
+  backendPortalSignal,
+  demoRevokedSignal,
+  demoSessionSignal,
+} from '../state/sync.ts';
 
 export type CommandAvailability = { enabled: true } | { enabled: false; reason: string };
 
@@ -56,10 +64,38 @@ export const CORE_COMMANDS: CommandInfo[] = [
 ];
 
 /**
+ * Todos los nombres del POS, estén disponibles o no ahora (#179): el comando del portal que choca
+ * con uno pasa a `/PORTAL`, así no cambia de nombre según el estado de la terminal.
+ */
+export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
+  ...CORE_COMMANDS.map((command) => command.name),
+  'ACTUALIZAR',
+  'ALTA',
+  'DEMO_NUEVA',
+  ...CONNECTOR_TYPES.flatMap((info) => info.commands.map((command) => command.name)),
+]);
+
+/**
+ * El portal que ofrece el POS ahora (4.6.0, #179): el comando y el botón. Nada con la demo revocada
+ * (la key ya no sirve y el encabezado ofrece `/DEMO_NUEVA`). Lee signals: dentro de un `computed` o
+ * de un componente se recalcula solo.
+ */
+export function currentPortalOffer(): BackendPortal | null {
+  if (demoRevokedSignal.value !== null) {
+    return null;
+  }
+  return portalOffer(
+    backendCapabilitiesSignal.value,
+    backendPortalSignal.value,
+    RESERVED_COMMAND_NAMES,
+  );
+}
+
+/**
  * Los del núcleo, `/ACTUALIZAR` (#54) si hay una versión nueva descargada, `/ALTA` (#128) y
- * `/DEMO_NUEVA` (#176) si la terminal está en demo, y los que declara el conector activo (Etapa 2c,
- * #77). Lee `appUpdateSignal`, `activeConnectorTypeSignal` y `demoSessionSignal`, así que dentro de
- * un `computed` se recalcula solo cuando cambian.
+ * `/DEMO_NUEVA` (#176) si la terminal está en demo, el del portal (#179) si el backend lo ofrece y
+ * los que declara el conector activo (Etapa 2c, #77). Lee signals, así que dentro de un `computed`
+ * se recalcula solo cuando cambian.
  */
 export function availableCommands(): CommandInfo[] {
   const demo = demoSessionSignal.value;
@@ -74,10 +110,14 @@ export function availableCommands(): CommandInfo[] {
     appUpdateSignal.value !== 'none'
       ? [{ name: 'ACTUALIZAR', description: 'Aplicar la versión nueva del POS (recarga)' }]
       : [];
+  const portal = currentPortalOffer();
+  const portalCommands: CommandInfo[] =
+    portal !== null ? [{ name: portal.command, description: portal.label }] : [];
   return [
     ...CORE_COMMANDS,
     ...updateCommands,
     ...demoCommands,
+    ...portalCommands,
     ...connectorCommands(activeConnectorTypeSignal.value),
   ];
 }
