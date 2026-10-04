@@ -17,7 +17,11 @@ export function collectPrecache(outDir: string): { files: string[]; hash: string
     .sort();
   const hash = createHash('sha256');
   for (const path of files) {
-    hash.update(path).update('\0').update(readFileSync(join(outDir, path))).update('\0');
+    hash
+      .update(path)
+      .update('\0')
+      .update(readFileSync(join(outDir, path)))
+      .update('\0');
   }
   return { files, hash: hash.digest('hex').slice(0, 16) };
 }

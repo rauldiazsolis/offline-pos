@@ -192,7 +192,9 @@ export function StatusBar() {
                 cursor: 'pointer',
               }}
             >
-              {appUpdateSignal.value === 'applying' ? 'Actualizando…' : 'Versión nueva (/ACTUALIZAR)'}
+              {appUpdateSignal.value === 'applying'
+                ? 'Actualizando…'
+                : 'Versión nueva (/ACTUALIZAR)'}
             </button>
           )}
           {backendNoticesSignal.value.length > 0 && (

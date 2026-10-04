@@ -112,9 +112,7 @@ export async function removeOwnServiceWorker({
 } = {}): Promise<void> {
   if (container !== undefined) {
     const registrations = await container.getRegistrations();
-    await Promise.all(
-      registrations.filter((r) => r.scope === scopeUrl).map((r) => r.unregister()),
-    );
+    await Promise.all(registrations.filter((r) => r.scope === scopeUrl).map((r) => r.unregister()));
   }
   if (cacheStorage !== undefined) {
     const prefix = swCachePrefix(scopeUrl);

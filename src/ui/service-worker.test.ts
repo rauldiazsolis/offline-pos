@@ -56,7 +56,10 @@ beforeEach(() => {
 describe('startServiceWorker (#54)', () => {
   it('sin service worker o fuera del build no hace nada', async () => {
     await startServiceWorker({ enabled: true, container: undefined });
-    await startServiceWorker({ enabled: false, container: fakeContainer(fakeRegistration({}), null) });
+    await startServiceWorker({
+      enabled: false,
+      container: fakeContainer(fakeRegistration({}), null),
+    });
     expect(serviceWorkerStateSignal.value).toBe('unsupported');
   });
 
@@ -74,13 +77,21 @@ describe('startServiceWorker (#54)', () => {
 
   it('una versión que ya espera al arrancar es una versión nueva', async () => {
     const registration = fakeRegistration({ active: {}, waiting: fakeWorker('installed') });
-    await startServiceWorker({ enabled: true, container: fakeContainer(registration, {}), setInterval: vi.fn() });
+    await startServiceWorker({
+      enabled: true,
+      container: fakeContainer(registration, {}),
+      setInterval: vi.fn(),
+    });
     expect(appUpdateSignal.value).toBe('available');
   });
 
   it('una que termina de instalarse con otra andando también; la primera instalación no', async () => {
     const first = fakeRegistration({});
-    await startServiceWorker({ enabled: true, container: fakeContainer(first, null), setInterval: vi.fn() });
+    await startServiceWorker({
+      enabled: true,
+      container: fakeContainer(first, null),
+      setInterval: vi.fn(),
+    });
     expect(serviceWorkerStateSignal.value).toBe('installing');
     const worker = fakeWorker('installing');
     first.found(worker);
@@ -90,7 +101,11 @@ describe('startServiceWorker (#54)', () => {
     expect(serviceWorkerStateSignal.value).toBe('ready');
 
     const second = fakeRegistration({ active: {} });
-    await startServiceWorker({ enabled: true, container: fakeContainer(second, {}), setInterval: vi.fn() });
+    await startServiceWorker({
+      enabled: true,
+      container: fakeContainer(second, {}),
+      setInterval: vi.fn(),
+    });
     const next = fakeWorker('installing');
     second.found(next);
     next.become('installed');
@@ -110,7 +125,11 @@ describe('requestSkipWaiting', () => {
   it('le manda skip-waiting al que espera', async () => {
     const waiting = fakeWorker('installed');
     const registration = fakeRegistration({ active: {}, waiting });
-    await startServiceWorker({ enabled: true, container: fakeContainer(registration, {}), setInterval: vi.fn() });
+    await startServiceWorker({
+      enabled: true,
+      container: fakeContainer(registration, {}),
+      setInterval: vi.fn(),
+    });
     expect(requestSkipWaiting()).toBe(true);
     expect(waiting.postMessage).toHaveBeenCalledWith({ type: 'skip-waiting' });
   });
@@ -125,7 +144,8 @@ describe('removeOwnServiceWorker (pos.reset)', () => {
     } as unknown as ServiceWorkerContainer;
     const deleted: string[] = [];
     const cacheStorage = {
-      keys: () => Promise.resolve(['offline-pos@/v4/:sw:a', 'offline-pos:sw:b', 'offline-pos@/v5/:sw:c']),
+      keys: () =>
+        Promise.resolve(['offline-pos@/v4/:sw:a', 'offline-pos:sw:b', 'offline-pos@/v5/:sw:c']),
       delete: (name: string) => {
         deleted.push(name);
         return Promise.resolve(true);

@@ -59,7 +59,9 @@ export function renderHomePage(
 ): string {
   const rows = backends
     .map(
-      (backend) => `<tr><th scope="row">${escape(backend.entry.name)}<br><code>${escape(backend.entry.url)}</code>${
+      (
+        backend,
+      ) => `<tr><th scope="row">${escape(backend.entry.name)}<br><code>${escape(backend.entry.url)}</code>${
         backend.entry.notes !== undefined
           ? `<br><span class="muted">${escape(backend.entry.notes)}</span>`
           : ''

@@ -21,7 +21,9 @@ for (const { file, size, padding } of ICONS) {
   await page.setContent(`<body style="margin:0;width:${String(size)}px;height:${String(size)}px;
     background:${BACKGROUND};display:grid;place-items:center">
     <img src="data:image/svg+xml;base64,${svg}" style="width:${String(Math.round(size * (1 - 2 * padding)))}px"></body>`);
-  await page.screenshot({ path: new URL(`../public/${file}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1') });
+  await page.screenshot({
+    path: new URL(`../public/${file}`, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+  });
 }
 await browser.close();
 console.log('Íconos generados en public/');

@@ -3,7 +3,12 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { MIN_BACKEND_CONTRACT, POS_CONTRACT_VERSION } from '../src/domain/contract-version.ts';
-import { channelFor, compareVersionsDesc, readChannelInfo, type VersionInfo } from './channel-info.ts';
+import {
+  channelFor,
+  compareVersionsDesc,
+  readChannelInfo,
+  type VersionInfo,
+} from './channel-info.ts';
 import { isMain } from './cli.ts';
 import { renderGuidePage } from './guide-page.ts';
 

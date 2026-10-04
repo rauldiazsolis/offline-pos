@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseSwMessage, routeRequest, staleCaches, swCacheName, swCachePrefix } from './sw-logic.ts';
+import {
+  parseSwMessage,
+  routeRequest,
+  staleCaches,
+  swCacheName,
+  swCachePrefix,
+} from './sw-logic.ts';
 
 const SCOPE = 'https://pos.x/v4/';
 const PRECACHED = new Set(['https://pos.x/v4/index.html', 'https://pos.x/v4/assets/app-1.js']);

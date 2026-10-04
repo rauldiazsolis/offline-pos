@@ -15,7 +15,8 @@ export function swCacheName(scopeUrl: string, hash: string): string {
   return `${swCachePrefix(scopeUrl)}${hash}`;
 }
 
-export type SwRoute = { kind: 'navigation' } | { kind: 'precached'; url: string } | { kind: 'network' };
+export type SwRoute =
+  { kind: 'navigation' } | { kind: 'precached'; url: string } | { kind: 'network' };
 
 /**
  * Solo GET del mismo origen y dentro del `scope`. Una navegación recibe el `index.html` (la query,
