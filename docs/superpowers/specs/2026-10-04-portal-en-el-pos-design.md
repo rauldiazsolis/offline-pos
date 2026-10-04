@@ -74,20 +74,28 @@ Issue: #179 (etapa P6 del epic #182). Usa lo que trajo P5 (#178, contrato 4.6.0,
 ### 3. Abrir la pestaña y la UI
 
 `ui/keyboard/portal-controller.ts::openPortal`, con dependencias inyectadas (abrir la pestaña, el
-pedido, la hora). La usan el comando y el botón; el comando limpia la barra antes.
+pedido, si el gesto sigue vigente, la hora). La usan el comando y el botón; el comando limpia la
+barra antes.
 
-1. Con un pedido en curso, no hace nada: un doble click o un Enter repetido no abren dos pestañas.
-2. **En el gesto**, sincrónico: `window.open('', '_blank')` sin `noopener` (devolvería `null` y no
-   se le podría cargar la URL) y enseguida `tab.opener = null`. La pestaña muestra
-   "Abriendo <label>…" como título y texto.
-3. Si `window.open` devuelve `null` (bloqueador igual): no pide el link (gastaría uno de un solo uso
-   sin dónde abrirlo) y la barra dice "El navegador bloqueó la pestaña nueva: permití las ventanas
-   emergentes para este sitio."
-4. Éxito → `tab.location.replace(url)`. Fallo → `tab.close()` y `commandBarErrorSignal` =
-   "No se pudo abrir <label>: <motivo>", con el motivo de `ui/errors.ts`. Con 401/403 en demo, el
-   motivo es "la demo terminó".
-5. Si el operador cerró la pestaña antes de la respuesta (`tab.closed`), el link se descarta en
-   silencio.
+**Cambio de la prueba manual**: el diseño aprobado abría la pestaña en blanco en el gesto y le
+cargaba la URL al llegar la respuesta (la nota de P5 por el bloqueador de pop-ups). Con el backend
+detenido o en mantenimiento, la pestaña se abría y se cerraba enseguida: la pantalla parpadeaba. Se
+cambió a pedir el link primero y abrir la pestaña recién con él, aprovechando que el navegador
+considera vigente el gesto durante unos segundos (en Chromium, 5 s).
+
+1. Con un pedido en curso, no hace nada: un doble click o un Enter repetido no piden dos links.
+2. Pide el link, sin abrir nada.
+3. Éxito, con el gesto todavía vigente (`navigator.userActivation.isActive`; sin esa API se intenta
+   igual) → `window.open(url, '_blank', 'noopener')`: la página del backend no puede tocar la
+   pestaña del POS.
+4. Éxito con el gesto vencido (el backend tardó más de lo que el navegador espera) → no se intenta
+   (el bloqueador la frenaría sin avisar) y la barra dice "No se pudo abrir <label>: el backend tardó
+   en contestar; probá de nuevo." Ese link de un solo uso se pierde; el próximo intento pide otro.
+5. Fallo → ninguna pestaña, y `commandBarErrorSignal` = "No se pudo abrir <label>: <motivo>.", con
+   el motivo de `ui/errors.ts`. Con 401/403 en demo, el motivo es "la demo terminó".
+6. Todo mensaje reabre el overlay de la barra (`overlayDismissedSignal = false`): el `mousedown` del
+   botón del encabezado cuenta como un click fuera del overlay y lo cierra (#28), y el error quedaba
+   oculto (prueba manual; el mismo caso que `/CAJA` abierto desde la barra de estado).
 
 El foco nunca sale de la barra del POS.
 
@@ -109,21 +117,22 @@ decide el release aparte).
   objeto, con choque (→ `PORTAL`) y con un nombre libre.
 - `sync/portal-link.test.ts` (`vi.stubGlobal('fetch')`): 201 válido, URL `http:` remota, 401, 404,
   409, 503 con y sin `message`, sin red; los headers y que no manda cuerpo.
-- `ui/keyboard/portal-controller.test.ts`: éxito carga la URL; fallo cierra la pestaña y deja el
-  mensaje; 401 en demo marca la demo revocada; bloqueador sin pedir el link; doble uso ignorado;
-  pestaña cerrada antes de la respuesta.
+- `ui/keyboard/portal-controller.test.ts`: éxito abre la URL; un fallo no abre nada y deja el
+  mensaje, aunque el overlay estuviera cerrado; 401 en demo marca la demo revocada; gesto vencido;
+  doble uso ignorado.
 - Comandos y `TerminalHeader`: aparecen con la oferta, no sin ella ni con la demo revocada; el botón
   y el comando llaman a lo mismo.
 - `apply-connection` y `backend-status`: guardan y borran el portal.
-- E2E `e2e/portal.spec.ts`, contra el demo-backend que ya levanta Playwright: abrir una demo, usar
-  `/PANEL` y después el botón; cada uno abre una pestaña que muestra la sucursal y la caja de esta
-  terminal. "Sin la capacidad no aparecen" queda en los unitarios: el demo-backend siempre la
+- E2E en `e2e/demo-onboarding.spec.ts` (va en serie contra el demo-backend del `4001`): abrir una
+  demo, usar `/PANEL` y después el botón; cada uno abre una pestaña que muestra la sucursal y la caja
+  de esta terminal. Con el backend en mantenimiento, el botón no abre ninguna pestaña y el motivo se
+  ve en la barra. "Sin la capacidad no aparecen" queda en los unitarios: el demo-backend siempre la
   declara y no se le agrega un interruptor solo para esto.
 
 ## Docs
 
 - `src/sync/AGENTS.md`: en "Contrato 4.6.0", los módulos nuevos en vez de "el POS todavía no la usa".
-- `src/ui/AGENTS.md`: el comando, el botón, la pestaña en el gesto y los errores.
+- `src/ui/AGENTS.md`: el comando, el botón, cuándo se abre la pestaña y los errores.
 - `AGENTS.md` raíz: el comando del portal en la tabla de comandos, la fila de #179 en "Estado del
   proyecto", #179 fuera de "Siguiente" y de "Issues abiertas", y #205 (flake de
   `e2e/mouse.spec.ts`) en "Transversal".

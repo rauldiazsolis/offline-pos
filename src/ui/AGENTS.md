@@ -185,14 +185,17 @@ Spec: `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`; lo de `syn
   descripción), `runCommand` (antes que los comandos del conector), el encabezado y `/DIAGNOSTICO`
   ("Portal: /PANEL (Panel del backend)" o "no ofrecido").
 - **`openPortal(label)`** (`ui/keyboard/portal-controller.ts`, dependencias inyectadas), lo mismo
-  para el comando y el botón: abre la pestaña **en el gesto**, antes de cualquier `await`
-  (`window.open('', '_blank')` sin `noopener`, que devolvería `null`; el `opener` se corta a mano), con
-  "Abriendo <label>…"; pide el link y la carga con `location.replace`. Si falla, la cierra y la barra
-  dice "No se pudo abrir <label>: <motivo>." (`describeError`); con la terminal en demo, un 401/403 marca la
-  demo revocada (como un ciclo de sync) y el motivo es "la demo terminó". Si el navegador bloquea la
-  pestaña, no pide el link (gastaría uno de un solo uso) y avisa que hay que permitir las ventanas
-  emergentes. Un pedido a la vez; si el operador cerró la pestaña antes de la respuesta, el link se
-  descarta. El comando limpia la barra antes de llamarla.
+  para el comando y el botón: **pide el link primero** y recién con él abre la pestaña
+  (`window.open(url, '_blank', 'noopener')`), mientras el gesto siga vigente
+  (`navigator.userActivation.isActive`, unos 5 s en Chromium). Un error no abre nada: abrir la
+  pestaña en blanco en el gesto y cerrarla al fallar hacía parpadear la pantalla (prueba manual).
+  Si el backend tardó más que el gesto, no se intenta abrir (el bloqueador la frenaría sin avisar) y
+  la barra dice "…: el backend tardó en contestar; probá de nuevo.". Los errores: "No se pudo abrir
+  <label>: <motivo>." (`describeError`); con la terminal en demo, un 401/403 marca la demo revocada
+  (como un ciclo de sync) y el motivo es "la demo terminó". Todo mensaje reabre el overlay de la
+  barra (`overlayDismissedSignal`): el `mousedown` del botón lo cierra como un click afuera (#28), y
+  si no, el error quedaba oculto (como `/CAJA` desde la barra de estado). Un pedido a la vez. El
+  comando limpia la barra antes de llamarla.
 - **El botón** (`TerminalHeader`): `.btn` con `<label> (/<command>)`, a la derecha, `tabIndex={-1}`
   y `keepFocusOnMouseDown`; con la demo activa va antes del de `/ALTA`, que sigue siendo el primario.
   Nunca parte su etiqueta.

@@ -213,3 +213,33 @@ test('portal (#179): el comando y el botón abren el backend en la caja de esta 
   await expect(commandBar).toBeFocused();
   await expect(page.getByText(/No se pudo abrir/)).toHaveCount(0);
 });
+
+test('portal (#179): con el backend en mantenimiento, el botón no abre pestaña y lo dice en la barra', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+  let openedTabs = 0;
+  context.on('page', () => {
+    openedTabs += 1;
+  });
+
+  const settings = `${BACKEND}/_demo/api/settings`;
+  await page.request.put(settings, {
+    data: { maintenance: { enabled: true, message: 'Volvemos enseguida' } },
+  });
+  try {
+    await button.click();
+    // El click del botón cierra el overlay de la barra (#28): el mensaje tiene que verse igual.
+    await expect(
+      page.getByText(
+        'No se pudo abrir Panel del backend: El backend está en mantenimiento: Volvemos enseguida.',
+      ),
+    ).toBeVisible();
+    expect(openedTabs).toBe(0);
+  } finally {
+    await page.request.put(settings, { data: { maintenance: { enabled: false, message: '' } } });
+  }
+});
