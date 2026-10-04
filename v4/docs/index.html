@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guía para integradores · offline-pos 0.3.1</title>
+    <title>Guía para integradores · offline-pos 0.4.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -58,7 +58,7 @@
   <body>
     <main>
       <header>
-        offline-pos 0.3.1 · <a href="guia.md">Markdown</a> ·
+        offline-pos 0.4.0 · <a href="guia.md">Markdown</a> ·
         <a href="connector-api.openapi.yaml">OpenAPI</a> · <a href="llms.txt">llms.txt</a> ·
         <a href="../../">Backends y canales</a>
       </header>
@@ -69,7 +69,7 @@ cuando vuelve la conexión. Se opera 100% con teclado (y también con mouse).</p
 <p>El POS es <strong>estático y genérico</strong>: son archivos HTML, JS y CSS sin servidor propio, y no conoce
 ningún backend en particular. Se conecta a cualquier sistema (ERP, e-commerce, facturación,
 inventario) que implemente el <strong>Connector API</strong>, un contrato REST/JSON versionado. Esta guía
-acompaña a la versión del contrato <strong>4.5.0</strong>; el detalle de cada operación está en
+acompaña a la versión del contrato <strong>4.6.0</strong>; el detalle de cada operación está en
 <a href="connector-api.openapi.yaml"><code>connector-api.openapi.yaml</code></a>.</p>
 <h2>Probarlo en 5 minutos</h2>
 <p>El repo incluye un <strong>demo-backend</strong>: la implementación de referencia del contrato, en Node y
@@ -124,6 +124,11 @@ con él, el POS borra los datos de la demo y aplica la conexión real; sin él, 
 configuración para que el operador decida.</p>
 <p>Un backend que no ofrece demos no implementa <code>POST /demo-sessions</code>; el operador carga la conexión a
 mano en <code>/CONFIG</code> (URL y API key).</p>
+<p><strong>Proteger las demos</strong>: <code>POST /demo-sessions</code> no lleva autenticación, así que un backend público que
+ofrece demos conviene que limite los pedidos por IP (<code>429</code> con <code>Retry-After</code> y
+<code>{ &quot;code&quot;: &quot;rate-limited&quot; }</code>) y la cantidad de demos abiertas (<code>503</code> con
+<code>{ &quot;code&quot;: &quot;demo-capacity&quot; }</code>). El POS muestra un mensaje claro (&quot;probá de nuevo en 10 minutos&quot;) y no
+reintenta solo.</p>
 <h2>Implementar el contrato</h2>
 <p>Principio central: <strong>el backend nunca rechaza el contenido de lo que manda el POS</strong>. No hay forma de
 que una venta, un cliente o un movimiento de caja sea &quot;rechazado&quot; de forma síncrona: el backend
@@ -157,6 +162,10 @@ humano, el backend manda avisos (<code>notices</code>) en el pull.</p>
 <td><code>POST /demo-sessions</code></td>
 <td>Opcional: arranca una demo (ver la sección anterior).</td>
 </tr>
+<tr>
+<td><code>POST /portal-links</code></td>
+<td>Opcional: la URL para abrir el backend desde el POS (capacidad <code>portal</code>, ver más abajo).</td>
+</tr>
 </tbody></table>
 <p>Todo request del POS lleva:</p>
 <ul>
@@ -169,9 +178,18 @@ sin procesar nada; nada se pierde, el lote queda en la terminal hasta que el bac
 <code>Authorization</code>, <code>Idempotency-Key</code> y <code>X-POS-Contract-Version</code> en los headers permitidos). Si el
 backend corre en la red local o en <code>localhost</code> y el POS está publicado en <code>https</code>, conviene además
 contestar el preflight de red privada (<code>Access-Control-Allow-Private-Network: true</code> cuando llega
-<code>Access-Control-Request-Private-Network: true</code>), como hace el demo-backend.</p>
+<code>Access-Control-Request-Private-Network: true</code>), como hace el demo-backend. Si el backend manda
+<code>Retry-After</code> (en un <code>429</code> o un <code>503</code>), tiene que exponerlo con
+<code>Access-Control-Expose-Headers: Retry-After</code>: si no, el navegador no se lo deja leer al POS.</p>
 <p>El detalle de cada operación, sus esquemas y ejemplos está en
 <a href="connector-api.openapi.yaml"><code>connector-api.openapi.yaml</code></a>.</p>
+<h2>Mantenimiento</h2>
+<p>Mientras el backend no puede atender (por ejemplo, migrando su base), <code>GET /info</code> responde <code>200</code> con
+<code>status: maintenance</code> (y un <code>message</code> opcional), y los demás endpoints responden <code>503</code> con
+<code>{ &quot;code&quot;: &quot;maintenance&quot;, &quot;message&quot;: &quot;…&quot; }</code> y <code>Retry-After</code>. El POS no pierde nada: sin ack, el lote
+sigue en la terminal con su mismo <code>Idempotency-Key</code>. Deja de sincronizar, muestra el mantenimiento en
+la barra de estado y vuelve a consultar <code>/info</code> hasta que el backend vuelva a <code>ok</code>. La venta nunca se
+bloquea.</p>
 <h2>Compatibilidad y capacidades</h2>
 <p>Un backend es compatible con el POS si habla el <strong>mismo major</strong> y un <strong>minor igual o mayor que el
 piso 4.0.0</strong>. Un agregado nuevo del contrato no obliga a todos los backends a actualizarse.</p>
@@ -192,10 +210,34 @@ piso 4.0.0</strong>. Un agregado nuevo del contrato no obliga a todos los backen
 <td><code>customer-payment-void</code></td>
 <td>El POS puede anular cobranzas.</td>
 </tr>
+<tr>
+<td><code>portal</code></td>
+<td>El POS muestra un comando y un botón para abrir el backend.</td>
+</tr>
 </tbody></table>
 <p>El POS nunca deduce una capacidad de la versión, e ignora una capacidad que no conoce. Las reglas de
 evolución (campos y valores desconocidos, fotos completas, numeración con huecos) están en la sección
 &quot;Reglas de evolución&quot; del OpenAPI.</p>
+<h2>Portal: entrar al backend desde el POS</h2>
+<p>Con la capacidad <code>portal</code>, el cajero abre el backend en una pestaña nueva con un comando y un botón
+del POS. El backend los declara en <code>GET /info</code>:</p>
+<pre><code class="language-json">&quot;capabilities&quot;: [&quot;demo-sessions&quot;, &quot;portal&quot;],
+&quot;portal&quot;: { &quot;command&quot;: &quot;MINI&quot;, &quot;label&quot;: &quot;Abrir mini&quot; }
+</code></pre>
+<p><code>command</code> va en mayúsculas, dígitos y <code>_</code> (de 2 a 16 caracteres, sin la <code>/</code>); el POS lo muestra como
+<code>/MINI</code> y el botón como <code>Abrir mini (/MINI)</code>. Al usarlos, el POS pide <code>POST /portal-links</code> con su
+API key y abre la <code>url</code> de la respuesta (<code>201 { &quot;url&quot;: &quot;…&quot;, &quot;expiresAt&quot;: &quot;…&quot; }</code>, <code>expiresAt</code>
+opcional). <strong>El backend decide qué URL devolver según la credencial</strong>: un link con autorización (de
+un solo uso o de varios) que abre una sesión acotada a esa caja, o su página de login para que entre
+un usuario con su cuenta.</p>
+<ul>
+<li>La URL <strong>nunca lleva la API key</strong>: si lleva autorización, es un token opaco del backend. Se
+recomienda un solo uso y un vencimiento corto (60 segundos).</li>
+<li>El POS no guarda la URL ni la trae en el pull: la pide cada vez que se usa el comando.</li>
+<li>La sesión y sus permisos los decide el backend; el contrato no define roles.</li>
+</ul>
+<p>El demo-backend lo implementa con <code>/PANEL</code>: un link de un solo uso que vence a los 60 segundos y
+muestra con qué caja se entró.</p>
 <h2>Servir el POS desde tu propio servidor</h2>
 <p>El POS es un build estático. Una versión exacta sale de los
 <a href="https://github.com/rauldiazsolis/offline-pos/tags">tags del repo</a>: <code>git checkout vX.Y.Z</code>,
