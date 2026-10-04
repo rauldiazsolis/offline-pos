@@ -20,7 +20,7 @@ import { setSyncPaused } from '../state/sync.ts';
 import { trainingScreenSignal } from '../state/training.ts';
 import { RELEASE_WAIT_MS } from '../tab-leadership.ts';
 import { prepareTabRelease } from '../tab-release.ts';
-import { describeTrainingDiscard } from './training-model.ts';
+import { describeTrainingDiscard, describeTrainingPending } from './training-model.ts';
 
 /** "Saliste del entrenamiento." después de la recarga: de esta pestaña, sobrevive a su reload. */
 export const TRAINING_EXITED_KEY = storageKey('training-exited');
@@ -124,9 +124,13 @@ export async function toggleTraining(deps: TrainingDeps = browserDeps): Promise<
     };
     return;
   }
-  trainingScreenSignal.value = { mode: 'enter', phase: 'checking', pending: 0 };
-  const summary = await deps.summarize();
-  trainingScreenSignal.value = { mode: 'enter', phase: 'ready', pending: summary.pendingOutbox };
+  trainingScreenSignal.value = { mode: 'enter', phase: 'checking' };
+  const pending = describeTrainingPending(await deps.summarize());
+  trainingScreenSignal.value = {
+    mode: 'enter',
+    phase: 'ready',
+    ...(pending !== undefined ? { pending } : {}),
+  };
 }
 
 /** Esc, "Cancelar" o "Seguir entrenando": no toca nada. */

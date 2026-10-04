@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LocalDataSummary } from '../../storage/local-data.ts';
-import { describeTrainingDiscard } from './training-model.ts';
+import { describeTrainingDiscard, describeTrainingPending } from './training-model.ts';
 
 const empty: LocalDataSummary = {
   products: 10,
@@ -59,5 +59,23 @@ describe('lo que se descarta al salir del entrenamiento (#177)', () => {
       '1 movimiento de caja o arqueo',
       '1 cliente creado',
     ]);
+  });
+});
+
+describe('lo real pendiente al entrar (#177)', () => {
+  it('sin nada pendiente no dice nada', () => {
+    expect(describeTrainingPending(empty)).toBeUndefined();
+  });
+
+  it('una venta con su movimiento de stock', () => {
+    expect(describeTrainingPending({ ...empty, pendingOutbox: 2, pendingSales: 1 })).toBe(
+      'Sin enviar: 1 venta y 1 movimiento más. Se intenta mandarlo ahora; si no se puede, sale al terminar el entrenamiento.',
+    );
+  });
+
+  it('solo movimientos, en plural', () => {
+    expect(describeTrainingPending({ ...empty, pendingOutbox: 3 })).toBe(
+      'Sin enviar: 3 movimientos. Se intenta mandarlo ahora; si no se puede, sale al terminar el entrenamiento.',
+    );
   });
 });

@@ -30,3 +30,22 @@ export function describeTrainingDiscard(
   ].filter((line): line is string => line !== undefined);
   return { lines: lines.length > 0 ? lines : ['No hiciste nada en el entrenamiento.'] };
 }
+
+/**
+ * Lo real que todavía no se envió, al entrar (#177), como lo cuenta "Abrir una demo": las ventas
+ * aparte y el resto como movimientos (una venta deja también su movimiento de stock). Sin nada
+ * pendiente, `undefined`. Pura.
+ */
+export function describeTrainingPending(summary: LocalDataSummary): string | undefined {
+  const others = summary.pendingOutbox - summary.pendingSales;
+  const parts = [
+    count(summary.pendingSales, 'venta', 'ventas'),
+    others > 0
+      ? `${String(others)} ${others === 1 ? 'movimiento' : 'movimientos'}${summary.pendingSales > 0 ? ' más' : ''}`
+      : undefined,
+  ].filter((part): part is string => part !== undefined);
+  if (parts.length === 0) {
+    return undefined;
+  }
+  return `Sin enviar: ${parts.join(' y ')}. Se intenta mandarlo ahora; si no se puede, sale al terminar el entrenamiento.`;
+}

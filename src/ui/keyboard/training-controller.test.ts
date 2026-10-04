@@ -90,7 +90,12 @@ describe('entrar al entrenamiento (#177)', () => {
 
     await toggleTraining(deps);
 
-    expect(trainingScreenSignal.value).toEqual({ mode: 'enter', phase: 'ready', pending: 3 });
+    expect(trainingScreenSignal.value).toEqual({
+      mode: 'enter',
+      phase: 'ready',
+      pending:
+        'Sin enviar: 2 ventas y 1 movimiento más. Se intenta mandarlo ahora; si no se puede, sale al terminar el entrenamiento.',
+    });
     expect(deps.calls).toEqual(['pause']);
   });
 

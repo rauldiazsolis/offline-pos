@@ -13,29 +13,28 @@ function button(name: string): HTMLButtonElement {
 
 describe('pantalla de entrenamiento (#177)', () => {
   it('al entrar explica el modo, avisa lo pendiente y ofrece entrar', () => {
-    trainingScreenSignal.value = { mode: 'enter', phase: 'ready', pending: 2 };
+    trainingScreenSignal.value = {
+      mode: 'enter',
+      phase: 'ready',
+      pending: 'Sin enviar: 1 venta y 1 movimiento más.',
+    };
     render(<TrainingScreen />);
 
     expect(screen.getByRole('heading', { name: 'Entrar al entrenamiento' })).not.toBeNull();
     expect(screen.getByText(/Nada se envía al backend/)).not.toBeNull();
-    expect(screen.getByText(/Hay 2 operaciones sin enviar/)).not.toBeNull();
+    expect(screen.getByText('Sin enviar: 1 venta y 1 movimiento más.')).not.toBeNull();
     expect(button('Entrar al entrenamiento (Enter)').disabled).toBe(false);
     expect(button('Cancelar (Esc)').disabled).toBe(false);
   });
 
-  it('con una sola operación pendiente, en singular; sin pendientes, no dice nada', () => {
-    trainingScreenSignal.value = { mode: 'enter', phase: 'ready', pending: 1 };
-    const { unmount } = render(<TrainingScreen />);
-    expect(screen.getByText(/Hay 1 operación sin enviar/)).not.toBeNull();
-    unmount();
-
-    trainingScreenSignal.value = { mode: 'enter', phase: 'ready', pending: 0 };
+  it('sin pendientes no dice nada de lo sin enviar', () => {
+    trainingScreenSignal.value = { mode: 'enter', phase: 'ready' };
     render(<TrainingScreen />);
-    expect(screen.queryByText(/sin enviar/)).toBeNull();
+    expect(screen.queryByText(/Sin enviar/)).toBeNull();
   });
 
   it('mientras prepara, los botones quedan deshabilitados', () => {
-    trainingScreenSignal.value = { mode: 'enter', phase: 'starting', pending: 0 };
+    trainingScreenSignal.value = { mode: 'enter', phase: 'starting' };
     render(<TrainingScreen />);
 
     expect(screen.getByText('Preparando…')).not.toBeNull();

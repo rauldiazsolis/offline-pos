@@ -7,11 +7,6 @@ import { trainingScreenSignal } from '../state/training.ts';
 
 const paragraph = { margin: 0 };
 
-function pendingText(pending: number): string {
-  const what = pending === 1 ? '1 operación' : `${String(pending)} operaciones`;
-  return `Hay ${what} sin enviar: se intenta mandarlas ahora; si no se puede, salen al terminar el entrenamiento.`;
-}
-
 /** Lo que se descarta al salir, en rojo como en "Abrir una demo". */
 function DiscardList(props: { discard: TrainingDiscard }) {
   return (
@@ -95,7 +90,7 @@ export function TrainingScreen() {
           {state.phase === 'checking' ? (
             <p style={paragraph}>Revisando los datos de esta terminal…</p>
           ) : (
-            state.pending > 0 && <p style={paragraph}>{pendingText(state.pending)}</p>
+            state.pending !== undefined && <p style={paragraph}>{state.pending}</p>
           )}
         </>
       ) : (

@@ -7,7 +7,8 @@ import type { TrainingDiscard } from '../keyboard/training-model.ts';
  * (borra las claves y recarga). `App` la muestra delante de la pantalla activa.
  */
 export type TrainingScreenState =
-  | { mode: 'enter'; phase: 'checking' | 'ready' | 'starting'; pending: number }
+  /** `pending`: lo real sin enviar, ya redactado (`describeTrainingPending`); ausente si no hay. */
+  | { mode: 'enter'; phase: 'checking' | 'ready' | 'starting'; pending?: string }
   | { mode: 'exit'; phase: 'ready' | 'leaving'; discard: TrainingDiscard };
 
 export const trainingScreenSignal = signal<TrainingScreenState | null>(null);
