@@ -64,6 +64,11 @@ su almacenamiento. La tercera página prueba **otra carpeta del mismo origen**: 
 `site:preview` tiene una sola carpeta de versión, así que `context.route` sirve el build de 4173 en
 `/otra-carpeta/` (la app usa rutas relativas) y la página arranca con su propio almacenamiento.
 
+**Modo entrenamiento** (#177): `e2e/training.spec.ts` usa el `test` de `fixtures.ts` y anota y
+corta con `page.route` todo request al backend inalcanzable, así ve si hubo un push. Lee las dos bases
+con `getAllFromStore(page, tabla, 'offline-pos#entrenamiento')` (`dbName`, por defecto la real).
+Siembra el catálogo recién con la barra visible: abrir IndexedDB mientras Dexie la crea se bloquea.
+
 **Flakes en CI** (#169): `playwright.config.ts` reintenta una vez solo con `CI`, así
 `trace: 'on-first-retry'` deja la traza; un test que pasa al reintentar sale como "flaky" en el log.
 El workflow sube `test-results/` (artefacto `playwright-test-results`, 14 días) si falla el e2e o si

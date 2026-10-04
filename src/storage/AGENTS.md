@@ -26,9 +26,9 @@ es todo hasta la última `/`), con las reglas puras de `namespace-rules.ts` (`st
 - En `/v4/`: `offline-pos@/v4/` y `offline-pos@/v4/:`. El `:` final del prefijo evita que una
   carpeta abarque las claves de otra.
 
-`db.ts` abre `new Dexie(STORAGE_NAMESPACE)`. Toda clave de `localStorage` pasa por
-`storageKey('<nombre>')`, nunca un literal con el prefijo escrito a mano: lo vigila
-`storage-keys.test.ts`, que además fija los nombres de antes de #148. El borrado y el volcado por
+`db.ts` abre la base `STORAGE_NAMESPACE` (o la de entrenamiento, ver abajo). Toda clave de
+`localStorage` pasa por `storageKey('<nombre>')`, nunca un literal con el prefijo escrito a mano: lo
+vigila `storage-keys.test.ts`, que además fija los nombres de antes de #148. El borrado y el volcado por
 prefijo (`pos.reset()`, `pos.export()`, `LOCAL_STORAGE_PREFIX`) nunca tocan otra carpeta. Sin barra
 final (`/v4`) los assets relativos dan 404 y la app no arranca: nunca abre con el almacenamiento de
 la carpeta de arriba.
@@ -47,6 +47,27 @@ manda se llaman `TAB_LOCK_NAME` (`storageKey('tab')`: `offline-pos:tab` en `/`,
 La marca de pestaña desplazada (`tab-displaced.ts`) va en `sessionStorage`, que es de la pestaña y
 sobrevive a su propio reload, con la clave `storageKey('tab-displaced')`. El resto, en
 [`src/ui/AGENTS.md`](../ui/AGENTS.md).
+
+## Modo entrenamiento (#177)
+
+Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`; el principio, en la raíz.
+
+- **La marca** (`training-mode.ts`): `storageKey('training')` con `{ startedAt }`, validada con Zod
+  (rota = apagada), que se lee **una vez al cargar**, como el namespace (`isTrainingMode`,
+  `trainingMark`; en los tests, `setTrainingModeForTests`). Con ella, `db.ts` abre
+  `trainingDatabaseName(STORAGE_NAMESPACE)` = `<namespace>#entrenamiento` (`PosDatabase` recibe el
+  nombre; mismo esquema y mismas migraciones).
+- **Claves operativas**: el estado del motor que no se puede mezclar con el real pasa por
+  `operationalKey('<nombre>')`, que en entrenamiento es `storageKey('training:<nombre>')`: los
+  cursores, `sync:last-full`, el estado de lotes, `cleanup:last-run` y los contadores de ticket y
+  recibo (así la numeración real no se consume). Lo demás (config, device-id, capacidades, empresa,
+  avisos, portal, demo revocada, impresora) se comparte. `storage-keys.test.ts` acepta las dos formas.
+- **Entrar y salir** (`training-copy.ts`): `prepareTrainingDatabase` borra una base de entrenamiento
+  vieja y copia, en una transacción, `TRAINING_COPIED_TABLES` (catálogo, stock, clientes, cuentas,
+  saldos y conceptos; nunca ventas, cobranzas, movimientos, caja, outbox ni venta en curso);
+  `copyOperationalStateToTraining` copia los cursores (el primer pull es un delta);
+  `clearTrainingKeys` borra la marca y las `training:*`. El arranque fuera del modo borra la base de
+  entrenamiento si quedó (`deleteTrainingDatabase`): cubre un corte a mitad de entrar o de salir.
 
 ## Contador de escrituras (#175)
 

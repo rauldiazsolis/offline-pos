@@ -1,8 +1,8 @@
 # Modo entrenamiento
 
 Fecha: 2026-10-04
-Estado: diseño aprobado en el brainstorming del 2026-10-04; plan en
-`docs/superpowers/plans/2026-10-04-modo-entrenamiento.md`.
+Estado: implementada (diseño aprobado en el brainstorming del 2026-10-04; el plan quedó en el
+historial de git).
 Issue: #177 (etapa P4 del epic #182, la última del MVP de mini contax; spec del MVP en
 rauldiazsolis/mini-erp, `docs/superpowers/specs/2026-10-01-mvp-mini-contax-design.md`).
 
@@ -86,9 +86,10 @@ limpia el próximo arranque.
 - **Pantalla de entrenamiento** (`ui/screens/training-screen.tsx`, estado en
   `ui/state/training.ts`, patrón de "Abrir una demo"), dos modos:
   - **Entrar**: qué es (se vende, se cobra y se usa la caja con el catálogo y los clientes reales;
-    nada se envía al backend; al salir se borra todo lo hecho). Con pendientes reales: "Hay N
-    operaciones sin enviar: se intenta mandarlas ahora; si no se puede, salen al terminar el
-    entrenamiento.". Enter = "Entrar al entrenamiento" (`.btn-primary`), Esc = "Cancelar". Mientras
+    nada se envía al backend; al salir se borra todo lo hecho). Con pendientes reales, contados como
+    en "Abrir una demo" (ventas aparte, el resto como movimientos): "Sin enviar: 1 venta y 1
+    movimiento más. Se intenta mandarlo ahora; si no se puede, sale al terminar el entrenamiento.".
+    Enter = "Entrar al entrenamiento" (`.btn-primary`), Esc = "Cancelar". Mientras
     envía y copia, "Preparando…" y los botones deshabilitados.
   - **Salir**: lo que se descarta, contado sobre la base de entrenamiento ("N ventas, M cobranzas, K
     movimientos de caja y arqueos", y si hay, "la venta en curso" y "N clientes creados") y lo que

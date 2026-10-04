@@ -44,6 +44,11 @@ solo que lo recibió, no que ya terminó de procesarlo. `domain/push-lot.ts` tie
 exponencial (mismo esquema que antes, ahora por lote en vez de por evento);
 `sync/push-lot.ts` lo persiste en `localStorage` (mismo criterio best-effort que
 `sync/cursor.ts`) junto con la lista de lotes ya enviados que todavía no confirmaron `ok`/`issues`.
+**En entrenamiento (#177) `pushPendingLot` no hace nada**: es el único que llama a `pushBatch` (el
+ciclo, `/SINCRONIZAR` y `flushPendingBeforeWipe`), así que es el único corte. El pull corre igual
+sobre la base de práctica, con sus propias claves (`storage/training-mode.ts::operationalKey`, sin
+lotes reales), y lo de entrenamiento, `pending` para siempre, se reaplica en cada pull; el conteo de
+pendientes de la barra se muestra en 0 (`setPendingOutboxCount`).
 
 ## Pull
 
@@ -107,7 +112,7 @@ estadística de conceptos (`cashConcepts`), ni lo que sostiene el saldo de efect
 **el ancla es el último arqueo** y todo lo creado desde su `createdAt` se conserva aunque tenga más
 de 7 días (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo); **sin ningún
 arqueo** no se borran ventas ni movimientos de caja (son la base 0 del saldo). Un arqueo viejo con
-ajuste espera a que el evento de ese ajuste no esté pendiente. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
+ajuste espera a que el evento de ese ajuste no esté pendiente. En entrenamiento (#177) no corre: la base de práctica es efímera. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
 exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, validado con Zod al leerse — un
 registro de la forma anterior, con turnos, se ignora y la limpieza vuelve a correr —, que guarda
 también los conteos y la fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
@@ -162,7 +167,8 @@ dentro de la transacción de `storage/apply-pull.ts`, todo o nada, nunca toca ve
 
 Cuenta corriente (Fase 3) es el único flujo que a propósito puede requerir red síncrona: al confirmar
 un cobro con monto en el campo Cuenta corriente, `ui/keyboard/checkout-controller.ts` llama `sync/account-hold.ts::requestAccountHoldNow`
-directo — la **única** operación del `Connector` que no pasa por el outbox ni se reintenta con
+directo (salvo en entrenamiento, #177: la reserva es una escritura en el backend, así que se evalúa
+siempre offline) — la **única** operación del `Connector` que no pasa por el outbox ni se reintenta con
 backoff, porque necesita una respuesta ya para decidir el flujo (§5). Si se aprueba, el `holdId`
 viaja como `Payment.reference` y se confirma con un evento `'account-hold-confirm'` propio, encolado
 en la **misma transacción** que la venta (`storage/sale-repository.ts`) — así sobrevive a que la red

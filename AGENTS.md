@@ -35,6 +35,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
 | Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
+| Modo entrenamiento: la base aparte y las claves operativas | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); el push, la reserva y la limpieza cortados en [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); `/ENTRENAMIENTO`, las pantallas, la franja, el ticket y los bordes en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 
 ## Qué es esto
@@ -429,6 +430,25 @@ cerrojo. **No hay forma de traer la original al frente** en Chromium (`window.fo
 `window.open('', nombre)` y `alert()` no lo hacen, verificado en la spec): solo el texto y el título.
 Sin `navigator.locks` (contexto no seguro) la app arranca como antes. Detalle en `src/ui/AGENTS.md`.
 
+## Modo entrenamiento (#177)
+
+Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`. Para practicar con el
+catálogo, el stock y los clientes reales sin que nada llegue al backend (en mini, sin cargos). No toca
+el contrato.
+
+- **Una base aparte, con recarga**: `/ENTRENAMIENTO` copia lo maestro (catálogo, stock, clientes,
+  cuentas, saldos, conceptos) a la base `<almacenamiento>#entrenamiento`, prende una marca y recarga;
+  todo lo demás (venta, cobro, `/CAJA`, `/RESUMEN`, `/ANULAR`, numeración, reaplicación del pull) anda
+  igual sobre esa base. Salir borra la marca y recarga: la base real nunca se tocó, así que vuelven el
+  stock, los saldos, el resumen, la venta en curso y lo pendiente real tal cual estaban.
+- **Nada sale al backend**: el push se corta en un solo lugar y la reserva de crédito se evalúa
+  offline; el pull sigue, sobre la base de práctica, y le descuenta lo de entrenamiento. Lo real
+  pendiente espera a la salida (al entrar se intenta un último envío).
+- **Contra olvidarlo prendido**: franja de rayas arriba de todas las pantallas, "ENTRENAMIENTO" en el
+  título de la pestaña y en todo comprobante, y aviso al salir con lo que se descarta.
+- **Cortado en entrenamiento**: `/CONFIG`, `/ALTA`, `/DEMO_NUEVA`, `/DEMO_RESET` y los links de
+  demo, que tocarían la conexión real o borrarían datos reales. No se entra con una venta en curso.
+
 ## UX keyboard-first
 
 Principio central: **un único input siempre enfocado** (la barra de comandos) — se elimina el
@@ -477,6 +497,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |
 | `/DEMO_NUEVA` | Solo con la terminal en demo: empieza una demo nueva con el backend y la plantilla de la actual (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
+| `/ENTRENAMIENTO` | Entra o sale del modo entrenamiento: nada se envía al backend y al salir se descarta (ver "Modo entrenamiento") |
 | `/ACTUALIZAR` | Solo con una versión nueva descargada: la aplica y recarga, nunca con una venta en curso (ver `src/ui/AGENTS.md`) |
 | `/<el del backend>` | Solo si el backend declara la capacidad `portal` (4.6.0, #179): abre el backend en una pestaña nueva con un link de `POST /portal-links`; el nombre (`/PANEL` en el demo-backend) y el botón del encabezado los manda el backend (ver `src/ui/AGENTS.md`) |
 
@@ -612,11 +633,11 @@ en el historial de git).
 worker; `0.4.0` con el contrato 4.6.0 el 2026-10-04; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
-del mini-erp. La parte del POS es el epic #182: lo de antes del hito 1 (un comercio conocido que
-paga) ya está — la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54);
-antes del hito 2, modo entrenamiento (#177) — el link de demo con confirmación (#176), el contrato
-del portal (#178) y su comando y botón (#179) ya están. Google Sheets pasa a su epic, #180, después del hito 1. Después del
-MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
+del mini-erp. La parte del POS es el epic #182, completo: antes del hito 1 (un comercio conocido que
+paga), la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54); antes del
+hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
+(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, después del hito 1.
+Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
 etiqueta antes de tomar un issue.
@@ -630,8 +651,8 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: epic #182 (#177); Sheets en el epic #180. Impresión: #188 (ESC/POS
-  directo, corte y cajón, cuando haya una impresora con qué probar).
+- MVP de mini contax: Sheets en el epic #180. Impresión: #188 (ESC/POS directo, corte y cajón,
+  cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
   (iniciar la caja con datos del backend), #197 (pasar una terminal de `/v4/` a `/v5/` sin perder
@@ -639,6 +660,7 @@ etiqueta antes de tomar un issue.
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`), #205 (flake de
-  `e2e/mouse.spec.ts`) y #135 (fines de línea: `.gitattributes` con `eol=lf`).
+  `e2e/mouse.spec.ts`), #207 (concurrency del CI: cancelar la corrida vieja de un PR) y #135 (fines
+  de línea: `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
   su repo.
