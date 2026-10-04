@@ -82,6 +82,7 @@ async function checkThenPull(connector: Connector): Promise<Result<ProbeSnapshot
         ...snapshot.value,
         capabilities: info.value.capabilities ?? [],
         ...(info.value.company !== undefined ? { company: info.value.company } : {}),
+        ...(info.value.portal !== undefined ? { portal: info.value.portal } : {}),
       })
     : snapshot;
 }
