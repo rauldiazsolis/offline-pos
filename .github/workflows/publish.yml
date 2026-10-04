@@ -1,7 +1,8 @@
 name: Publicación
 
-# #148. Con un tag vX.Y.Z publica una carpeta nueva; en los demás casos solo regenera /versions y
-# /llms.txt (backends conocidos consultados en vivo). Cloudflare Pages sirve la rama `publish`.
+# #54. Con un tag vX.Y.Z publica el POS en su canal (/v<major del contrato>/) y limpia lo que quedó
+# de las carpetas por versión (#148); en los demás casos solo regenera la home y /llms.txt (backends
+# conocidos consultados en vivo). Cloudflare Pages sirve la rama `publish`.
 on:
   push:
     tags: ['v*.*.*']
@@ -42,7 +43,8 @@ jobs:
             git worktree add --orphan -b publish publish-tree
           fi
 
-      - name: Carpeta de la versión y zip
+      # La guardia de "nunca bajar ni repetir la versión del canal" vive en build-channel.ts.
+      - name: Canal y limpieza
         if: github.ref_type == 'tag'
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -50,18 +52,12 @@ jobs:
             echo "::error::El tag $GITHUB_REF_NAME no coincide con package.json ($VERSION)"
             exit 1
           fi
-          if [ -e "publish-tree/$VERSION" ]; then
-            echo "::error::La versión $VERSION ya está publicada: las carpetas son inmutables"
-            exit 1
-          fi
           pnpm build
-          node site/build-version.ts --dist dist --site publish-tree
-          STAGE=$(mktemp -d)
-          cp -r "publish-tree/$VERSION" "$STAGE/offline-pos-$VERSION"
-          (cd "$STAGE" && zip -qr "$GITHUB_WORKSPACE/publish-tree/$VERSION.zip" "offline-pos-$VERSION")
+          node site/build-channel.ts --dist dist --site publish-tree
+          node site/cleanup.ts --site publish-tree
 
-      - name: /versions y /llms.txt
-        run: node site/build-versions-page.ts --site publish-tree
+      - name: Home y /llms.txt
+        run: node site/build-home-page.ts --site publish-tree
 
       - name: Commit y push a publish
         run: |
@@ -73,6 +69,6 @@ jobs:
             echo 'Sin cambios: nada que publicar'
             exit 0
           fi
-          if [ "$GITHUB_REF_TYPE" = tag ]; then MSG="publish: $GITHUB_REF_NAME"; else MSG='publish: /versions'; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then MSG="publish: $GITHUB_REF_NAME"; else MSG='publish: home'; fi
           git commit -m "$MSG"
           git push origin publish
