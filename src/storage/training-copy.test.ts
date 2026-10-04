@@ -15,7 +15,14 @@ const REAL = 'test-real';
 const TARGET = 'test-real#entrenamiento';
 const real = new PosDatabase(REAL);
 
-const sale: Sale = { id: 's1', lines: [], payments: [], total: 0, status: 'closed', createdAt: now };
+const sale: Sale = {
+  id: 's1',
+  lines: [],
+  payments: [],
+  total: 0,
+  status: 'closed',
+  createdAt: now,
+};
 
 afterEach(async () => {
   real.close();
