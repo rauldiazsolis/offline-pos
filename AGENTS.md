@@ -375,7 +375,8 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
 
 - **Un canal por major del contrato** (`/v<major>/`, hoy `/v4/`) en Cloudflare Pages, que sirve la
   rama huérfana `publish`. La escribe solo la Action `publish.yml`: con un tag `vX.Y.Z` (que tiene
-  que coincidir con `package.json`) reemplaza el canal entero con el build, su `version.json` (hechos
+  que coincidir con `package.json`; lo crea y lo sube `pnpm release:tag` desde un `main` al día)
+  reemplaza el canal entero con el build, su `version.json` (hechos
   del POS: versión, contrato y piso) y sus docs. El canal sale de `POS_CONTRACT_VERSION`, no se
   configura. Siempre tiene el último POS de ese major; uno nuevo (`/v5/`) nace solo con un major nuevo
   del contrato y el anterior queda congelado. Las terminales se instalan en `pos.contax.ar/v4/`.
@@ -605,7 +606,7 @@ en el historial de git).
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
-worker; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+worker; `0.4.0` con el contrato 4.6.0 el 2026-10-04; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182: lo de antes del hito 1 (un comercio conocido que
