@@ -92,7 +92,8 @@ export async function exportLocalData(
  * escribir en el medio, y si sale bien pausa el sync (`syncPausedSignal`,
  * mismo mecanismo que `/CONFIG`): quien llama recarga la página a
  * continuación, y hasta entonces ningún ciclo tiene que arrancar sobre una
- * base vacía.
+ * base vacía. Antes de recargar, la consola además da de baja el service worker y las cachés de
+ * esta carpeta (#54, `ui/service-worker.ts::removeOwnServiceWorker`): viven en la UI, no acá.
  */
 export async function resetTerminal(): Promise<Result<void>> {
   const release = await acquireSyncLockWaiting(RESET_LOCK_WAIT_MS);

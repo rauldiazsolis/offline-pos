@@ -8,6 +8,7 @@ import { ErrorBoundary } from './ui/error-boundary.tsx';
 import { isBenignResizeObserverLoopError, renderFatalError } from './ui/fatal-error.ts';
 import { App } from './ui/app.tsx';
 import { SecondaryTabScreen } from './ui/screens/secondary-tab-screen.tsx';
+import { startServiceWorker } from './ui/service-worker.ts';
 import { startViewportTracking } from './ui/state/viewport.ts';
 import { browserTabLeadershipDeps } from './ui/tab-browser.ts';
 import { claimTab } from './ui/tab-leadership.ts';
@@ -32,6 +33,8 @@ const SECONDARY_TITLE = 'POS en otra pestaña';
 /** Lo de siempre: la consola `pos.*` antes de `bootstrap()` (sirve aunque el arranque falle) y el render. */
 function startApp(container: HTMLElement): void {
   installPosConsole();
+  // #54: el POS abre sin red y recibe las versiones nuevas. Solo la pestaña que manda.
+  void startServiceWorker();
   bootstrap()
     .then(() => {
       // "Preparando…" de `index.html` (#128), o la pantalla de la segunda pestaña (#175): se ve

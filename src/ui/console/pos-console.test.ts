@@ -41,6 +41,7 @@ const diagnostics: SyncDiagnostics = {
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos',
   demoRevokedAt: null,
+  offline: 'ready',
 };
 
 const pendingEvent: OutboxEvent = {
@@ -66,6 +67,7 @@ function fakeDeps(overrides: Partial<PosConsoleDeps> = {}): PosConsoleDeps {
     getDeviceId: () => 'dev-1',
     download: vi.fn(),
     reload: vi.fn(),
+    removeServiceWorker: vi.fn(() => Promise.resolve()),
     console: { log: vi.fn(), info: vi.fn(), error: vi.fn(), table: vi.fn() },
     ...overrides,
   };
@@ -101,6 +103,7 @@ describe('pos.status', () => {
     });
     expect(JSON.stringify(status)).not.toContain('secreta');
     expect(status.cerrojo).toBe('libre');
+    expect(status.sinConexion).toBe('sin conexión: lista');
     expect(status.dispositivo).toBe('dev-1');
     expect(status.lotesEnEspera).toEqual([
       { id: 'LOT1', enviado: '2026-09-23T11:00:00.000Z', estado: 'sin informar' },
@@ -237,5 +240,44 @@ describe('pos.reset', () => {
     expect(deps.console.error).toHaveBeenCalledWith(
       expect.stringContaining('sincronización en curso'),
     );
+  });
+});
+
+describe('pos.reset (#54)', () => {
+  it('después de borrar lo local da de baja el service worker de esta carpeta y recarga', async () => {
+    const calls: string[] = [];
+    const deps = fakeDeps({
+      resetTerminal: () => {
+        calls.push('datos');
+        return Promise.resolve(ok(undefined));
+      },
+      removeServiceWorker: () => {
+        calls.push('sw');
+        return Promise.resolve();
+      },
+      reload: () => calls.push('reload'),
+    });
+    await createPosConsole(deps).reset();
+    expect(calls).toEqual(['datos', 'sw', 'reload']);
+  });
+
+  it('si borrar el service worker falla, igual recarga', async () => {
+    const reload = vi.fn();
+    const deps = fakeDeps({
+      removeServiceWorker: () => Promise.reject(new Error('no')),
+      reload,
+    });
+    await createPosConsole(deps).reset();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('si borrar lo local falla, no toca el service worker', async () => {
+    const removeServiceWorker = vi.fn(() => Promise.resolve());
+    const deps = fakeDeps({
+      resetTerminal: () => Promise.resolve(err('connection/sync-busy', undefined)),
+      removeServiceWorker,
+    });
+    await createPosConsole(deps).reset();
+    expect(removeServiceWorker).not.toHaveBeenCalled();
   });
 });

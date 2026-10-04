@@ -29,11 +29,12 @@ SQLite, sin dependencias externas.
    pnpm backend
    ```
 
-   Usá el demo-backend del mismo tag que la versión del POS que vas a probar (`git checkout v0.1.0`
-   antes de levantarlo).
+   Usá el demo-backend del último tag del repo (`git checkout` del tag más nuevo antes de
+   levantarlo): es el que acompaña al POS publicado.
 
-3. Abrí la página `/versions` del sitio publicado y hacé click en **Abrir demo** en la columna del
-   demo-backend local, en la fila de la versión que quieras probar.
+3. Abrí la home del sitio publicado (`https://pos.contax.ar/`) y hacé click en **Abrir demo** en la
+   fila del demo-backend local. El link abre el POS en su **canal** (`/v4/`, el del major del
+   contrato que habla el backend), que siempre tiene la última versión del POS para ese major.
 
 4. Chrome te va a pedir permiso de **acceso a la red local**: la página es `https` y el backend es
    `http://localhost`. Aceptalo. Si lo rechazaste: ícono a la izquierda de la dirección →
@@ -131,24 +132,31 @@ evolución (campos y valores desconocidos, fotos completas, numeración con huec
 
 ## Servir el POS desde tu propio servidor
 
-Cada versión publicada se puede descargar como zip desde `/versions`. Para servirla en tu
-infraestructura:
+El POS es un build estático. Una versión exacta sale de los
+[tags del repo](https://github.com/rauldiazsolis/offline-pos/tags): `git checkout vX.Y.Z`,
+`pnpm install` y `pnpm build`, y el resultado queda en `dist/`. Para servirlo en tu infraestructura:
 
-- Descomprimí el zip y serví su carpeta como archivos estáticos, en **una carpeta propia** (por
-  ejemplo `/pos/`).
+- Serví `dist/` como archivos estáticos, en **una carpeta propia** (por ejemplo `/pos/`).
 - Abrila **siempre con barra final** (`/pos/`, no `/pos`): el build usa rutas relativas, y sin la
   barra los archivos no cargan.
-- Cada carpeta tiene su **propio almacenamiento** en el navegador (IndexedDB y `localStorage`).
-  Cambiar de carpeta, de versión o de dominio es una **instalación nueva**: lo que no se llegó a
-  sincronizar queda en la carpeta anterior. Antes de cambiar, sincronizá.
+- Con `https` (o en `localhost`) el POS trae un **service worker**: abre sin red y se instala como
+  app. Una versión nueva que sirvas en la misma carpeta llega sola a las terminales, que la aplican
+  con `/ACTUALIZAR` (nunca con una venta en curso). Sin `https` anda igual, pero sin red no abre.
+- No sirvas en la misma carpeta una versión **más vieja** que la que ya usaron las terminales: una
+  versión vieja no abre una base ya migrada. Para volver atrás, publicá una versión nueva con el
+  arreglo.
+- Cada carpeta tiene su **propio almacenamiento** en el navegador (IndexedDB y `localStorage`) y su
+  propio service worker. Cambiar de carpeta o de dominio es una **instalación nueva**: lo que no se
+  llegó a sincronizar queda en la carpeta anterior. Antes de cambiar, sincronizá.
 
-## Aparecer en /versions
+## Aparecer en la home
 
-La página `/versions` lista cada versión publicada del POS contra los backends conocidos, con su
-link de demo o el motivo de la incompatibilidad. Para sumar el tuyo, abrí un PR a
+La home del sitio publicado lista los backends conocidos, cada uno con su contrato, sus capacidades
+y su link de demo al canal de su major (o el motivo de la incompatibilidad). Para sumar el tuyo,
+abrí un PR a
 [`site/backends.json`](https://github.com/rauldiazsolis/offline-pos/blob/main/site/backends.json) con
 `name`, `url` (`https`) y, si querés, `notes`.
 
-El backend tiene que ofrecer demos (capacidad `demo-sessions`): la página se genera todos los días
+El backend tiene que ofrecer demos (capacidad `demo-sessions`): la home se genera todos los días
 consultando en vivo `POST /demo-sessions` y, con esa conexión, `GET /info`. Si tu backend no
-contesta, la página no se publica hasta que vuelva.
+contesta, la home no se publica hasta que vuelva.

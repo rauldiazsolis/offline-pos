@@ -15,25 +15,35 @@ que rigen archivos de esta carpeta viven donde está el grueso del tema:
 
 ## Almacenamiento por carpeta (#148)
 
-Carpetas del mismo origen comparten IndexedDB y `localStorage`, y cada versión publicada vive en la
-suya (`/0.1.0/`), así que el nombre del almacenamiento sale de la ruta. `storage-namespace.ts` lo
-calcula **una vez al cargar**, desde `location.pathname` (la carpeta es todo hasta la última `/`):
+Carpetas del mismo origen comparten IndexedDB y `localStorage`, y cada canal publicado vive en la
+suya (`/v4/`, #54; antes, una carpeta por versión), así que el nombre del almacenamiento sale de la
+ruta. `storage-namespace.ts` lo calcula **una vez al cargar**, desde `location.pathname` (la carpeta
+es todo hasta la última `/`), con las reglas puras de `namespace-rules.ts` (`storageNamespaceFor`,
+`localStoragePrefixFor`): sin `window`, porque también las usa el service worker.
 
 - En `/`: la base de Dexie es `offline-pos` y el prefijo de `localStorage`, `offline-pos:`, como
   antes de #148 (las terminales servidas en la raíz no se enteran).
-- En `/0.1.0/`: `offline-pos@/0.1.0/` y `offline-pos@/0.1.0/:`. El `:` final del prefijo evita que
-  una carpeta abarque las claves de otra.
+- En `/v4/`: `offline-pos@/v4/` y `offline-pos@/v4/:`. El `:` final del prefijo evita que una
+  carpeta abarque las claves de otra.
 
 `db.ts` abre `new Dexie(STORAGE_NAMESPACE)`. Toda clave de `localStorage` pasa por
 `storageKey('<nombre>')`, nunca un literal con el prefijo escrito a mano: lo vigila
 `storage-keys.test.ts`, que además fija los nombres de antes de #148. El borrado y el volcado por
 prefijo (`pos.reset()`, `pos.export()`, `LOCAL_STORAGE_PREFIX`) nunca tocan otra carpeta. Sin barra
-final (`/0.1.0`) los assets relativos dan 404 y la app no arranca: nunca abre con el almacenamiento de
+final (`/v4`) los assets relativos dan 404 y la app no arranca: nunca abre con el almacenamiento de
 la carpeta de arriba.
+
+**Cachés del service worker (#54)**: la Cache Storage también es una sola por origen, así que el
+service worker nombra la suya con el mismo criterio, `<namespace>:sw:<hash del build>`
+(`offline-pos@/v4/:sw:…`; `offline-pos:sw:…` en `/`; `workers/sw-logic.ts::swCachePrefix`). Al
+activarse borra solo las de su prefijo que no son la actual. `pos.reset()` borra, de cada cosa, lo
+de esta carpeta: las tablas de su base, las claves de su prefijo, el registro del service worker
+cuyo `scope` es **exactamente** esta carpeta (nunca el de una de arriba) y las cachés de su prefijo
+(`ui/service-worker.ts::removeOwnServiceWorker`).
 
 **Una sola pestaña (#175)**: el cerrojo de `navigator.locks` y el `BroadcastChannel` de la pestaña que
 manda se llaman `TAB_LOCK_NAME` (`storageKey('tab')`: `offline-pos:tab` en `/`,
-`offline-pos@/0.1.0/:tab` en `/0.1.0/`), así dos carpetas del mismo origen nunca se bloquean entre sí.
+`offline-pos@/v4/:tab` en `/v4/`), así dos carpetas del mismo origen nunca se bloquean entre sí.
 La marca de pestaña desplazada (`tab-displaced.ts`) va en `sessionStorage`, que es de la pestaña y
 sobrevive a su propio reload, con la clave `storageKey('tab-displaced')`. El resto, en
 [`src/ui/AGENTS.md`](../ui/AGENTS.md).

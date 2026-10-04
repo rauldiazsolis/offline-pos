@@ -1,4 +1,5 @@
 import { connectorCommands } from '../../sync/connector-registry.ts';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { cartSignal } from '../state/cart.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
@@ -55,9 +56,10 @@ export const CORE_COMMANDS: CommandInfo[] = [
 ];
 
 /**
- * Los del núcleo, `/ALTA` (#128) y `/DEMO_NUEVA` (#176) si la terminal está en demo, y los que
- * declara el conector activo (Etapa 2c, #77). Lee `activeConnectorTypeSignal` y
- * `demoSessionSignal`, así que dentro de un `computed` se recalcula solo cuando cambian.
+ * Los del núcleo, `/ACTUALIZAR` (#54) si hay una versión nueva descargada, `/ALTA` (#128) y
+ * `/DEMO_NUEVA` (#176) si la terminal está en demo, y los que declara el conector activo (Etapa 2c,
+ * #77). Lee `appUpdateSignal`, `activeConnectorTypeSignal` y `demoSessionSignal`, así que dentro de
+ * un `computed` se recalcula solo cuando cambian.
  */
 export function availableCommands(): CommandInfo[] {
   const demo = demoSessionSignal.value;
@@ -68,7 +70,16 @@ export function availableCommands(): CommandInfo[] {
           { name: 'DEMO_NUEVA', description: 'Empezar una demo nueva (se borra lo de esta)' },
         ]
       : [];
-  return [...CORE_COMMANDS, ...demoCommands, ...connectorCommands(activeConnectorTypeSignal.value)];
+  const updateCommands: CommandInfo[] =
+    appUpdateSignal.value !== 'none'
+      ? [{ name: 'ACTUALIZAR', description: 'Aplicar la versión nueva del POS (recarga)' }]
+      : [];
+  return [
+    ...CORE_COMMANDS,
+    ...updateCommands,
+    ...demoCommands,
+    ...connectorCommands(activeConnectorTypeSignal.value),
+  ];
 }
 
 /** Disponibilidad actual de un comando por nombre (para Ctrl+Enter, que no pasa por el menú). */

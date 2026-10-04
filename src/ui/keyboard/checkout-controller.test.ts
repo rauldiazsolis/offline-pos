@@ -12,6 +12,7 @@ import {
   pendingHoldSignal,
 } from '../state/checkout.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
+import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
@@ -116,6 +117,17 @@ describe('submitCheckout', () => {
     expect(printed).toEqual(['58mm']);
     expect(await db.sales.count()).toBe(1);
     expect(cartSignal.value.lines).toEqual([]);
+    printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
+  });
+
+  it('una advertencia de la venta que se cerró no queda en la barra (#54)', async () => {
+    commandBarWarningSignal.value = 'Terminá o descartá la venta para actualizar.';
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, onCheckout: 'skip' };
+    checkoutBuffersSignal.value = { ...emptyBuffers(), cash: '200' };
+
+    await submitCheckout();
+
+    expect(commandBarWarningSignal.value).toBeNull();
     printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
   });
 

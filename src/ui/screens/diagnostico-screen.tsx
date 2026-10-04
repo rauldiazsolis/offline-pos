@@ -3,7 +3,7 @@ import type { Failure } from '../../domain/result.ts';
 import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
 import type { NoticeSeverity } from '../../sync/connector.ts';
-import { collectDiagnostics } from '../../sync/diagnostics.ts';
+import { collectDiagnostics, describeOffline } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
 import {
   formatAwaitingLotStatus,
@@ -138,7 +138,8 @@ export function DiagnosticoScreen() {
           </h1>
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
             POS {diagnostics.posVersion} · almacenamiento{' '}
-            <span style={monoStyle}>{diagnostics.storageNamespace}</span>
+            <span style={monoStyle}>{diagnostics.storageNamespace}</span> ·{' '}
+            {describeOffline(diagnostics.offline)}
           </p>
         </div>
         <button type="button" class="btn" onClick={exitDiagnosticoScreen}>

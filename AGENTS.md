@@ -29,7 +29,8 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/CAJA`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Cobranza y saldo del cliente | Persistencia en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); pantalla, comprobante, saldo en la venta y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
-| Almacenamiento por carpeta: base de Dexie y claves de `localStorage` según la ruta (#148) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
+| Almacenamiento por carpeta: base de Dexie, claves de `localStorage` y cachés del service worker según la ruta (#148, #54) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
+| Service worker y versión nueva: registro, `/ACTUALIZAR`, el aviso, la regla de los `import()` dinámicos (#54) | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el canal, en "Publicación" más abajo |
 | Barra de comandos, overlays, selección, scroll, barra de estado, `pos.*`, diseño visual, patrones de UI | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
 | Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
@@ -37,7 +38,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 
 ## Qué es esto
 
-POS web offline-first para retail (kiosco/tienda), pensado para instalarse como PWA (pendiente, #54),
+POS web offline-first para retail (kiosco/tienda), instalable como PWA en su canal (`pos.contax.ar/v4/`, #54),
 100% operable con teclado y también con mouse (ver "Teclado y mouse"), que se integra con cualquier
 backend externo (ERP, e-commerce, facturación) vía un contrato de API propio versionado — el POS no
 conoce ningún backend específico.
@@ -104,7 +105,7 @@ en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 | Validación de contrato | Zod |
 | Build | Vite |
 | Testing | Vitest + Testing Library (preact) + Playwright |
-| PWA / service worker | `vite-plugin-pwa` (Workbox) — **pendiente** (#54) |
+| PWA / service worker | Service worker propio (`src/workers/`, compilado por `build/sw-plugin.ts`) y manifest estático (#54) |
 | Impresión / hardware | `window.print()` en un iframe (#174); Web Serial / WebUSB / Web Bluetooth para ESC/POS — **pendiente** (#188) |
 
 Navegador de referencia: Chromium (Chrome/Edge). La app anda en Firefox/Safari; el hardware, cuando
@@ -114,6 +115,10 @@ exista, va a depender de Web Serial/WebUSB (solo Chromium).
 catálogo. Se decidió no sumarla: el motor de sync ya necesita reintentos/backoff para el push del
 outbox, y esa misma lógica se reusa para el pull (`sync/engine.ts`) — traer una librería aparte para
 algo que el propio motor ya resuelve no se justificaba, dado que se prefiere minimizar dependencias.
+
+**Nota (#54)**: el stack decía `vite-plugin-pwa` (Workbox). Se descartó: `workbox-build` arrastra
+Babel, Rollup, ajv, terser y unas 35 dependencias más para usar solo precache y fallback de
+navegación, que el service worker propio resuelve en unas 60 líneas.
 
 ## Estructura de proyecto
 
@@ -131,10 +136,12 @@ src/
     state/         # signals agrupados por concern
     hooks/         # foco, selección, scroll
     console/       # utilidades `pos.*` de DevTools
-  workers/         # vacío: el service worker llega con la PWA (#54)
+  workers/         # el service worker (sw.ts) y su lógica pura (sw-logic.ts), sin nada de la app (#54)
   test/            # helpers compartidos de tests (connector falso, planilla falsa, setup)
 demo-backend/      # backend de referencia (Node + SQLite): la referencia ejecutable del contrato (`pnpm backend`)
-site/              # publicación (#148): carpeta por versión, /versions, docs; no es parte de la app
+build/             # plugin de Vite que compila sw.js con la lista de archivos del build (#54)
+scripts/           # los íconos de la PWA desde favicon.svg (se corre a mano, #54)
+site/              # publicación (#148, #54): canal por major del contrato, home de backends, docs; no es parte de la app
 e2e/               # Playwright
 docs/              # connector-api.openapi.yaml, integradores/ (guía y llms.txt), publicacion.md, specs y planes (superpowers/), historia.md
 ```
@@ -333,7 +340,7 @@ backend). Spec:
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`.
 
 1. **Link de demo**: `<pos>/?demo=true&backend=<base URL>&template=<opcional>` (`backend` `https:`, o
-   `http:` a localhost). Si no se pierde nada (sin config o ya en demo, sin datos del usuario), el POS
+   `http:` a localhost; el de la home del sitio va al canal, `v4/?demo=…`, #54). Si no se pierde nada (sin config o ya en demo, sin datos del usuario), el POS
    pide `POST /demo-sessions`, prueba y aplica la conexión (`rest` con `SyncConfig.demo`) borrando lo
    local, y entra a la venta. Si se pierde algo (datos del usuario, una conexión real u otra demo con
    datos), primero muestra **"Abrir una demo"** con lo que se pierde, después de un último envío de lo
@@ -356,40 +363,53 @@ Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar
 sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
 sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.
 
-## Publicación (#148)
+## Publicación (#148, #54)
 
-Spec: `docs/superpowers/specs/2026-09-29-deploy-mvp-design.md`; guía del mantenedor (tag, Cloudflare,
-qué hacer si falla) en `docs/publicacion.md`.
+Specs: `docs/superpowers/specs/2026-09-29-deploy-mvp-design.md` (#148) y
+`docs/superpowers/specs/2026-10-03-service-worker-pwa-canal-design.md` (#54, que reemplaza las
+carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si falla, qué verificar) en
+`docs/publicacion.md`.
 
-- **Carpetas inmutables** `/<x.y.z>/` en Cloudflare Pages, que sirve la rama huérfana `publish`. La
-  escribe solo la Action `publish.yml`: con un tag `vX.Y.Z` (que tiene que coincidir con
-  `package.json`) arma la carpeta, su `version.json` (hechos del POS: versión, contrato y piso), sus
-  docs y un zip; una carpeta ya publicada nunca se pisa. Primera versión: `0.1.0` (el `1.0.0` queda
-  para el primer comercio real).
+- **Un canal por major del contrato** (`/v<major>/`, hoy `/v4/`) en Cloudflare Pages, que sirve la
+  rama huérfana `publish`. La escribe solo la Action `publish.yml`: con un tag `vX.Y.Z` (que tiene
+  que coincidir con `package.json`) reemplaza el canal entero con el build, su `version.json` (hechos
+  del POS: versión, contrato y piso) y sus docs. El canal sale de `POS_CONTRACT_VERSION`, no se
+  configura. Siempre tiene el último POS de ese major; uno nuevo (`/v5/`) nace solo con un major nuevo
+  del contrato y el anterior queda congelado. Las terminales se instalan en `pos.contax.ar/v4/`.
+- **Nunca baja ni repite** (`site/build-channel.ts`): volver atrás es un revert y un tag de parche
+  (además, una versión vieja no abre una base de Dexie ya migrada). Sin carpetas por versión ni zips:
+  una versión exacta sale de los tags del repo. La primera publicación del canal (`0.3.0`) borra
+  `0.1.0/`, `0.2.0/`, sus zips y `/versions` (`site/cleanup.ts`).
+- **La versión del POS es interna**: llega sola por el service worker, en la misma URL y con el mismo
+  almacenamiento; el operador la aplica con `/ACTUALIZAR` (ver `src/ui/AGENTS.md`). Lo que decide
+  dónde instalar es el major del contrato.
 - **Almacenamiento por carpeta** (`storage/storage-namespace.ts`): cada carpeta tiene su base de
-  IndexedDB y su prefijo de `localStorage`; en `/` sigue siendo `offline-pos` (detalle en
-  `src/storage/AGENTS.md`). Cambiar de carpeta, de versión o de dominio es una instalación nueva (un
-  canal estable llega con #54). `/DIAGNOSTICO` muestra la versión y el almacenamiento.
+  IndexedDB, su prefijo de `localStorage` y sus cachés del service worker; en `/` sigue siendo
+  `offline-pos` (detalle en `src/storage/AGENTS.md`). Cambiar de carpeta o de dominio es una
+  instalación nueva; pasar de `/v4/` a `/v5/` sin perder lo pendiente queda para #197 (`backlog`).
+  `/DIAGNOSTICO` muestra la versión, el almacenamiento y si abre sin red.
 - **Dominio** (#150): `https://pos.contax.ar`, dominio propio del proyecto de Pages con un CNAME en
   el DNS de DreamHost; `pos.contax.com.ar` redirige ahí con el Redirect de DreamHost (como todo
   `*.contax.com.ar` → `*.contax.ar`). `offline-pos.pages.dev` sigue sirviendo, sin redirigir: es otro
   origen con sus propias terminales, y el mini-erp todavía baja de ahí su copia del POS y el contrato.
-  Una terminal real se instala solo en `pos.contax.ar`. Pasos en `docs/publicacion.md`.
-- **`/versions`** cruza todas las carpetas publicadas con `site/backends.json`, que es un dato del
-  **sitio** (la app nunca lo lee) y cambia por PR. El contrato y las capacidades de cada backend se
-  consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de contrato; `/info` público
-  quedó en #151), así que la lista solo admite backends con demo. Se regenera con el tag, con un push
-  a `main` que toca `site/`, todos los días y a mano; si un backend no contesta, no se publica nada
-  (con un tag, ni la carpeta). Lista el demo-backend local y mini contax
-  (`https://mini.contax.ar/connector`, #147).
+  Una terminal real se instala solo en `pos.contax.ar/v4/`. Pasos en `docs/publicacion.md`.
+- **La home** (`/`, `site/home-page.ts`; `/versions` redirige ahí) lista los backends de
+  `site/backends.json`, que es un dato del **sitio** (la app nunca lo lee) y cambia por PR: cada uno
+  con su contrato, sus capacidades y "Abrir demo" en el canal de su major (o por qué es incompatible),
+  y para integradores las docs de cada canal. Quien entra elige el backend, no la versión del POS. El
+  contrato y las capacidades se consultan en vivo (`POST /demo-sessions` → `GET /info`, sin cambio de
+  contrato; `/info` público quedó en #151), así que la lista solo admite backends con demo. Se
+  regenera con el tag, con un push a `main` que toca `site/`, todos los días y a mano; si un backend
+  no contesta, no se publica nada (con un tag, ni el canal). Lista el demo-backend local y mini contax
+  (`https://mini.contax.ar/connector`, #147). El mini-erp abre `/v4/` por convención.
 - **`site/`** es tooling de publicación en TypeScript que Node 24 corre sin compilar; puede importar
   módulos puros de `src/`, nunca al revés. Sus errores se lanzan (una publicación con datos malos
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
-  arman y sirven el sitio en local (`4174`); con `--only-local`, `/versions` consulta solo los
-  backends locales (lo usa el e2e, para no depender de uno publicado).
-- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
-  cada `/<versión>/docs/`. El OpenAPI no lleva referencias internas (issues, specs, `AGENTS.md`): lo
-  vigila `site/docs.test.ts`.
+  arman y sirven el sitio en local (`4174`); con `--only-local`, la home consulta solo los backends
+  locales (lo usa el e2e, para no depender de uno publicado).
+- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI y
+  el puente de Google Sheets en `/v4/docs/`. El OpenAPI no lleva referencias internas (issues, specs,
+  `AGENTS.md`): lo vigila `site/docs.test.ts`.
 
 ## Una sola pestaña (#175)
 
@@ -452,6 +472,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/ALTA` | Solo con la terminal en demo: va al alta del backend (ver "Onboarding de demo") |
 | `/DEMO_NUEVA` | Solo con la terminal en demo: empieza una demo nueva con el backend y la plantilla de la actual (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
+| `/ACTUALIZAR` | Solo con una versión nueva descargada: la aplica y recarga, nunca con una venta en curso (ver `src/ui/AGENTS.md`) |
 
 `/DESCARTAR` es a propósito distinto de `/ANULAR`, que anula una venta ya cerrada (con auditoría), y
 no pide confirmación: decisión explícita del usuario, perder un carrito no guardado es barato de
@@ -576,14 +597,16 @@ en el historial de git).
 | #175 | Una sola pestaña por almacenamiento: cerrojo con `navigator.locks`, "Usar esta pestaña", la original suelta sin cortar a medias | PR #191 |
 | #176 | Link de demo con confirmación de lo que se pierde ("Abrir una demo"), demo revocada (401 en demo) y `/DEMO_NUEVA`; el demo-backend emite una key por demo y las revoca | PR #192 |
 | #193 | Caja, sucursal y empresa a la vista: encabezado con la empresa como título, barra de estado al pie y título de la pestaña; contrato 4.5.0 (`company` en `GET /info`) | PR #194 |
+| #54 | Service worker propio y PWA en el canal `/v4/`, `/ACTUALIZAR`, home de backends; sin carpetas por versión ni zips; ícono propio (#196) | PR #198 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
-2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
+worker; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
-del mini-erp. La parte del POS es el epic #182: antes del hito 1 (un comercio conocido que paga),
-#54 (service worker) — la impresión (#174) y una sola pestaña (#175) ya están; antes
-del hito 2, modo entrenamiento (#177) y el portal al backend (contrato #178, comando #179) — el link
+del mini-erp. La parte del POS es el epic #182: lo de antes del hito 1 (un comercio conocido que
+paga) ya está — la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54);
+antes del hito 2, modo entrenamiento (#177) y el portal al backend (contrato #178, comando #179) — el link
 de demo con confirmación (#176) ya está. Google Sheets pasa a su epic, #180, después del hito 1. Después del
 MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
@@ -601,10 +624,10 @@ etiqueta antes de tomar un issue.
 - Config y accesibilidad: #41 (resize en DevTools).
 - MVP de mini contax: epic #182 (#177 a #179); Sheets en el epic #180. Impresión: #188 (ESC/POS
   directo, corte y cajón, cuando haya una impresora con qué probar).
-- Pantallas y publicación: #49 (tracking de modales), #54 (service worker, PWA y lanzamiento);
-  `backlog`: #151 (`GET /info` sin autenticación), #52 (Historial), #143
-  (pasar de demo a producción sin repetir el onboarding), #181 (iniciar la caja con datos del
-  backend).
+- Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
+  autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
+  (iniciar la caja con datos del backend), #197 (pasar una terminal de `/v4/` a `/v5/` sin perder
+  lo pendiente) y #199 (repensar la home: arrancar desde las cajas configuradas).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`) y #135 (fines de línea:

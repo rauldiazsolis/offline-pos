@@ -15,6 +15,7 @@ import {
   type BackendStatus,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
+import { appUpdateSignal, serviceWorkerStateSignal } from '../ui/state/app-update.ts';
 import { getLastCleanup, type CleanupRecord } from './cleanup-schedule.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import type { BackendNotice, LotIssue } from './connector.ts';
@@ -59,7 +60,29 @@ export type SyncDiagnostics = {
   storageNamespace: string;
   /** Desde cuándo la demo está revocada (#176); `null` = no lo está. */
   demoRevokedAt: string | null;
+  /** Si el POS abre sin red: el estado del service worker (#54). */
+  offline: OfflineStatus;
 };
+
+/** Si el POS abre sin red (#54), para `/DIAGNOSTICO` y `pos.status()`. */
+export type OfflineStatus = 'ready' | 'installing' | 'update-waiting' | 'unsupported';
+
+export function describeOffline(status: OfflineStatus): string {
+  switch (status) {
+    case 'ready':
+      return 'sin conexión: lista';
+    case 'installing':
+      return 'preparando el modo sin conexión';
+    case 'update-waiting':
+      return 'versión nueva descargada, falta aplicar';
+    case 'unsupported':
+      return 'sin service worker';
+  }
+}
+
+function currentOfflineStatus(): OfflineStatus {
+  return appUpdateSignal.value !== 'none' ? 'update-waiting' : serviceWorkerStateSignal.value;
+}
 
 export function collectDiagnostics(): SyncDiagnostics {
   return {
@@ -82,5 +105,6 @@ export function collectDiagnostics(): SyncDiagnostics {
     posVersion: __POS_VERSION__,
     storageNamespace: STORAGE_NAMESPACE,
     demoRevokedAt: demoRevokedSignal.value,
+    offline: currentOfflineStatus(),
   };
 }

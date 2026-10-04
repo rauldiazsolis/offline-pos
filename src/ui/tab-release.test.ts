@@ -71,4 +71,14 @@ describe('prepareTabRelease (#175)', () => {
     await prepareTabRelease(80);
     expect(Date.now() - started).toBeLessThan(1000);
   });
+
+  it('lo que devuelve reanuda el sync y suelta el cerrojo (#54, /ACTUALIZAR que falla)', async () => {
+    const { engine, syncState, prepareTabRelease } = await load();
+    const undo = await prepareTabRelease(80);
+    expect(syncState.syncPausedSignal.value).toBe(true);
+    expect(engine.isSyncLockHeld()).toBe(true);
+    undo();
+    expect(syncState.syncPausedSignal.value).toBe(false);
+    expect(engine.isSyncLockHeld()).toBe(false);
+  });
 });

@@ -1,17 +1,17 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadBackends, selectBackends } from './backends.ts';
+import { readChannels } from './channel-info.ts';
 import { isMain } from './cli.ts';
-import { withLocalDemoBackend } from './local-demo-backend.ts';
-import { queryBackend } from './query-backend.ts';
-import { readPublishedVersions } from './version-info.ts';
 import {
+  renderHomePage,
   renderRootLlms,
-  renderVersionsPage,
   sameIgnoringGeneratedAt,
   type KnownBackend,
-} from './versions-page.ts';
+} from './home-page.ts';
+import { withLocalDemoBackend } from './local-demo-backend.ts';
+import { queryBackend } from './query-backend.ts';
 
 /** Escribe `content` salvo que lo publicado sea igual ignorando la fecha: el cron no hace commits vacíos. */
 function writeIfChanged(path: string, content: string): void {
@@ -22,15 +22,15 @@ function writeIfChanged(path: string, content: string): void {
 }
 
 /**
- * Regenera `/versions/index.html`, `/llms.txt`, `_headers` y `_redirects` del sitio (#148),
+ * Regenera la home (`/index.html`), `/llms.txt`, `_headers` y `_redirects` del sitio (#54),
  * consultando cada backend conocido. Falla si alguno no contesta.
  */
-export async function buildVersionsPage(
+export async function buildHomePage(
   siteDir: string,
   now: Date,
   { onlyLocal = false }: { onlyLocal?: boolean } = {},
 ): Promise<void> {
-  const versions = readPublishedVersions(siteDir);
+  const channels = readChannels(siteDir);
   const backends: KnownBackend[] = [];
   for (const entry of selectBackends(loadBackends(), { onlyLocal })) {
     const facts =
@@ -39,12 +39,11 @@ export async function buildVersionsPage(
         : await queryBackend(entry.url, now);
     backends.push({ entry, facts });
   }
-  mkdirSync(join(siteDir, 'versions'), { recursive: true });
   writeIfChanged(
-    join(siteDir, 'versions', 'index.html'),
-    renderVersionsPage(versions, backends, now.toISOString()),
+    join(siteDir, 'index.html'),
+    renderHomePage(channels, backends, now.toISOString()),
   );
-  writeIfChanged(join(siteDir, 'llms.txt'), renderRootLlms(versions));
+  writeIfChanged(join(siteDir, 'llms.txt'), renderRootLlms(channels));
   for (const file of ['_headers', '_redirects']) {
     cpSync(new URL(`./templates/${file}`, import.meta.url), join(siteDir, file));
   }
@@ -53,8 +52,8 @@ export async function buildVersionsPage(
 if (isMain(import.meta.url)) {
   const { values } = parseArgs({ options: { site: { type: 'string' } } });
   if (values.site === undefined) {
-    throw new Error('Uso: node site/build-versions-page.ts --site <dir>');
+    throw new Error('Uso: node site/build-home-page.ts --site <dir>');
   }
-  await buildVersionsPage(values.site, new Date());
-  console.log(`/versions regenerada en ${values.site}`);
+  await buildHomePage(values.site, new Date());
+  console.log(`Home regenerada en ${values.site}`);
 }

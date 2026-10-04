@@ -37,12 +37,14 @@ import {
   type CustomerOrClear,
   type UnifiedSearchResult,
 } from '../state/command-bar.ts';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
+import { applyAppUpdate } from './app-update-controller.ts';
 import { enterCashScreen } from './cash-controller.ts';
 import { enterCheckout } from './checkout-controller.ts';
 import { enterCollection } from './collection-controller.ts';
@@ -413,6 +415,15 @@ function runCommand(name: string, _args: string[]): void {
     case 'DIAGNOSTICO':
       enterDiagnosticoScreen();
       clearBuffer();
+      return;
+    case 'ACTUALIZAR':
+      // Solo existe con una versión nueva descargada (#54).
+      if (appUpdateSignal.value === 'none') {
+        commandBarErrorSignal.value = `Comando desconocido: /${name}`;
+        return;
+      }
+      clearBuffer();
+      void applyAppUpdate();
       return;
     case 'ALTA':
       // Solo existe con la terminal en demo (#128).
