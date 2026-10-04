@@ -1,6 +1,8 @@
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { loadDraftCart } from '../storage/draft-cart-repository.ts';
+import { deleteTrainingDatabase } from '../storage/training-copy.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
@@ -10,9 +12,10 @@ import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
-import { stripOnboardingParams } from '../sync/demo-link.ts';
+import { hasOnboardingParams, stripOnboardingParams } from '../sync/demo-link.ts';
 import { openRequiredWizard, openWizardWithCandidate } from './keyboard/config-controller.ts';
 import { openDemoConfirm } from './keyboard/demo-confirm-controller.ts';
+import { consumeTrainingExited } from './keyboard/training-controller.ts';
 import { runOnboardingFromUrl } from './onboarding.ts';
 import { resetSessionAfterWipe } from './session-reset.ts';
 import { cartSignal } from './state/cart.ts';
@@ -55,7 +58,17 @@ export async function bootstrap(): Promise<void> {
   // Etapa 2 (#97): antes que nada — sin id, lo local se borra y no hay que
   // cargar repositorios ni la venta en curso de datos que ya no sirven.
   const identity = await resolveDeviceIdentity();
+  if (identity.status === 'training-exited') {
+    // #177: se perdió el id en entrenamiento y ya se salió del modo; al recargar, el borrado de
+    // siempre corre sobre la base real. No hay nada más que arrancar.
+    window.location.reload();
+    return new Promise<void>(() => undefined);
+  }
   identityResetSignal.value = identity.status === 'created' && identity.wipedLocalData;
+  // #177: fuera del entrenamiento, una base de práctica que quedó (salida o entrada a medias) se borra.
+  if (!isTrainingMode()) {
+    await deleteTrainingDatabase();
+  }
 
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
@@ -80,10 +93,14 @@ export async function bootstrap(): Promise<void> {
 
   // Onboarding de demo (#128): un link de demo o la vuelta del alta. Antes de leer la config:
   // puede haberla cambiado. La URL se limpia siempre, así un F5 no lo repite.
-  const onboarding = await runOnboardingFromUrl(window.location.href, {
-    config: loadSyncConfig(),
-    hasUserData: hasUserData(await summarizeLocalData()),
-  });
+  // #177: en entrenamiento un link de demo o la vuelta del alta no se procesan: borrarían o
+  // cambiarían la conexión real desde la base de práctica. La URL se limpia igual y se avisa.
+  const onboarding = isTrainingMode()
+    ? skipOnboardingInTraining(window.location.href)
+    : await runOnboardingFromUrl(window.location.href, {
+        config: loadSyncConfig(),
+        hasUserData: hasUserData(await summarizeLocalData()),
+      });
   if (onboarding.kind !== 'none') {
     window.history.replaceState(null, '', stripOnboardingParams(window.location.href));
   }
@@ -140,5 +157,19 @@ export async function bootstrap(): Promise<void> {
     void openDemoConfirm(onboarding.entry);
   }
 
+  // #177: la salida del entrenamiento recargó; se avisa una sola vez.
+  if (consumeTrainingExited()) {
+    commandBarNoticeSignal.value = 'Saliste del entrenamiento.';
+  }
+
   startSyncEngine();
+}
+
+/** En entrenamiento (#177): un link en la URL se limpia y se avisa; nunca se aplica. */
+function skipOnboardingInTraining(href: string): { kind: 'none' } {
+  if (hasOnboardingParams(href)) {
+    window.history.replaceState(null, '', stripOnboardingParams(href));
+    commandBarWarningSignal.value = 'Salí del entrenamiento y volvé a abrir el link.';
+  }
+  return { kind: 'none' };
 }

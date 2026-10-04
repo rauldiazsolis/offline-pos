@@ -57,6 +57,7 @@ const diagnostics: SyncDiagnostics = {
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos@/0.1.0/',
   demoRevokedAt: null,
+  trainingSince: null,
   offline: 'ready',
 };
 
@@ -173,6 +174,26 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
       expect(screen.getByText('Empresa: no informada')).not.toBeNull();
     } finally {
       diagnostics.company = 'Kiosco Pepe';
+    }
+  });
+});
+
+describe('DiagnosticoScreen — entrenamiento (#177)', () => {
+  it('dice desde cuándo está prendido; apagado no dice nada', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.queryByText(/Modo entrenamiento desde/)).toBeNull();
+    unmount();
+
+    diagnostics.trainingSince = '2026-10-04T12:00:00.000Z';
+    try {
+      render(<DiagnosticoScreen />);
+      expect(
+        screen.getByText(
+          `Modo entrenamiento desde ${new Date('2026-10-04T12:00:00.000Z').toLocaleString()}`,
+        ),
+      ).not.toBeNull();
+    } finally {
+      diagnostics.trainingSince = null;
     }
   });
 });

@@ -4,6 +4,7 @@ import {
   buildDemoLink,
   buildOnboardingUrl,
   readConnectReturn,
+  hasOnboardingParams,
   readDemoEntry,
   returnUrlFor,
   stripOnboardingParams,
@@ -77,6 +78,11 @@ describe('links de ida y limpieza', () => {
   });
   it('returnUrlFor usa origin + pathname (anda en una subruta)', () => {
     expect(returnUrlFor('https://pos.x/app/?demo=true#connect=a')).toBe('https://pos.x/app/');
+  });
+  it('hasOnboardingParams: un link de demo o la vuelta del alta (#177)', () => {
+    expect(hasOnboardingParams('https://pos.x/app/?demo=true&backend=b')).toBe(true);
+    expect(hasOnboardingParams('https://pos.x/app/#connect=a')).toBe(true);
+    expect(hasOnboardingParams('https://pos.x/app/?otro=1#x=2')).toBe(false);
   });
   it('stripOnboardingParams saca solo lo del onboarding', () => {
     expect(
