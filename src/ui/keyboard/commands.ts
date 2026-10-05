@@ -1,3 +1,4 @@
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import { portalOffer } from '../../sync/backend-portal.ts';
 import type { BackendPortal } from '../../sync/connector.ts';
 import { CONNECTOR_TYPES, connectorCommands } from '../../sync/connector-registry.ts';
@@ -63,12 +64,43 @@ export const CORE_COMMANDS: CommandInfo[] = [
   { name: 'DIAGNOSTICO', description: 'Ver el estado y el historial reciente de sincronización' },
 ];
 
+/** #177: lo que en entrenamiento tocaría la conexión real o borraría datos reales. */
+export const TRAINING_BLOCKED_COMMANDS: ReadonlySet<string> = new Set([
+  'CONFIG',
+  'ALTA',
+  'DEMO_NUEVA',
+  'DEMO_RESET',
+]);
+
+export const TRAINING_BLOCKED_REASON = 'en entrenamiento; salí con /ENTRENAMIENTO';
+
+/** `/ENTRENAMIENTO` (#177): siempre está; la descripción dice qué va a hacer. */
+function trainingCommand(): CommandInfo {
+  return {
+    name: 'ENTRENAMIENTO',
+    description: isTrainingMode()
+      ? 'Salir del entrenamiento'
+      : 'Practicar sin enviar nada al backend',
+  };
+}
+
+function guardForTraining(command: CommandInfo): CommandInfo {
+  if (!isTrainingMode() || !TRAINING_BLOCKED_COMMANDS.has(command.name)) {
+    return command;
+  }
+  return {
+    ...command,
+    availability: () => ({ enabled: false, reason: TRAINING_BLOCKED_REASON }),
+  };
+}
+
 /**
  * Todos los nombres del POS, estén disponibles o no ahora (#179): el comando del portal que choca
  * con uno pasa a `/PORTAL`, así no cambia de nombre según el estado de la terminal.
  */
 export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   ...CORE_COMMANDS.map((command) => command.name),
+  'ENTRENAMIENTO',
   'ACTUALIZAR',
   'ALTA',
   'DEMO_NUEVA',
@@ -92,10 +124,11 @@ export function currentPortalOffer(): BackendPortal | null {
 }
 
 /**
- * Los del núcleo, `/ACTUALIZAR` (#54) si hay una versión nueva descargada, `/ALTA` (#128) y
- * `/DEMO_NUEVA` (#176) si la terminal está en demo, el del portal (#179) si el backend lo ofrece y
- * los que declara el conector activo (Etapa 2c, #77). Lee signals, así que dentro de un `computed`
- * se recalcula solo cuando cambian.
+ * Los del núcleo, `/ENTRENAMIENTO` (#177), `/ACTUALIZAR` (#54) si hay una versión nueva
+ * descargada, `/ALTA` (#128) y `/DEMO_NUEVA` (#176) si la terminal está en demo, el del portal (#179)
+ * si el backend lo ofrece y los que declara el conector activo (Etapa 2c, #77). En entrenamiento, los
+ * de `TRAINING_BLOCKED_COMMANDS` quedan deshabilitados con su motivo. Lee signals, así que dentro de
+ * un `computed` se recalcula solo cuando cambian.
  */
 export function availableCommands(): CommandInfo[] {
   const demo = demoSessionSignal.value;
@@ -115,11 +148,12 @@ export function availableCommands(): CommandInfo[] {
     portal !== null ? [{ name: portal.command, description: portal.label }] : [];
   return [
     ...CORE_COMMANDS,
+    trainingCommand(),
     ...updateCommands,
     ...demoCommands,
     ...portalCommands,
     ...connectorCommands(activeConnectorTypeSignal.value),
-  ];
+  ].map(guardForTraining);
 }
 
 /** Disponibilidad actual de un comando por nombre (para Ctrl+Enter, que no pasa por el menú). */

@@ -121,6 +121,13 @@ export function buildDemoLink(href: string, backend: string, template?: string):
 
 const ONBOARDING_PARAMS = ['demo', 'backend', 'template'];
 
+/** ¿La URL trae un link de demo o la vuelta del alta? En entrenamiento no se procesan (#177). */
+export function hasOnboardingParams(href: string): boolean {
+  const url = new URL(href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  return ONBOARDING_PARAMS.some((name) => url.searchParams.has(name)) || hashParams.has('connect');
+}
+
 /** Ruta relativa (para `history.replaceState`) sin lo del onboarding; el resto queda igual. */
 export function stripOnboardingParams(href: string): string {
   const url = new URL(href);

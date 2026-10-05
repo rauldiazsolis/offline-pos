@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CustomerAccount } from '../../domain/customer.ts';
 import { db } from '../../storage/db.ts';
 import { DEFAULT_PRINTER_CONFIG } from '../../storage/printer-config.ts';
+import { setTrainingModeForTests } from '../../storage/training-mode.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import { setCatalogRepository } from '../state/catalog.ts';
@@ -312,6 +313,31 @@ describe('cuenta corriente', () => {
 
     expect(checkoutErrorSignal.value).toContain('100');
     expect(activeScreenSignal.value).toBe('checkout');
+  });
+
+  it('en entrenamiento, con red, no pide el hold al backend: evalúa offline (#177)', async () => {
+    setTrainingModeForTests({ startedAt: '2026-10-04T12:00:00.000Z' });
+    try {
+      attachedCustomerSignal.value = customer;
+      saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+      setOnline(true);
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      fakeCustomerRepository({
+        customerId: 'c1',
+        creditLimit: 1000,
+        margin: 0,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+      await submitCheckout();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(receiptSale()?.payments).toEqual([{ method: 'account', amount: 200 }]);
+    } finally {
+      setTrainingModeForTests(null);
+    }
   });
 
   it('sin red y sin cuenta, un saldo a favor no habilita fiado (#101)', async () => {

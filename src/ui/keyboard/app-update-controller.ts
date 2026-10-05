@@ -1,8 +1,7 @@
 import { requestSkipWaiting, waitForControllerChange } from '../service-worker.ts';
 import { appUpdateSignal } from '../state/app-update.ts';
-import { cartSignal } from '../state/cart.ts';
 import { commandBarWarningSignal } from '../state/command-bar.ts';
-import { attachedCustomerSignal } from '../state/customer.ts';
+import { saleInProgress } from '../state/sale-in-progress.ts';
 import { RELEASE_WAIT_MS } from '../tab-leadership.ts';
 import { prepareTabRelease } from '../tab-release.ts';
 
@@ -16,16 +15,6 @@ export type AppUpdateDeps = {
   waitForControllerChange: (timeoutMs: number) => Promise<boolean>;
   reload: () => void;
 };
-
-/** Venta en curso: líneas, cliente o ajuste global (lo que `/DESCARTAR` vacía). */
-function saleInProgress(): boolean {
-  const cart = cartSignal.value;
-  return (
-    cart.lines.length > 0 ||
-    cart.globalAdjustmentPercentage !== undefined ||
-    attachedCustomerSignal.value !== undefined
-  );
-}
 
 const browserDeps: AppUpdateDeps = {
   hasSaleInProgress: saleInProgress,

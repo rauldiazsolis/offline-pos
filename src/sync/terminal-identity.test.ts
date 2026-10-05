@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../storage/db.ts';
+import { TRAINING_MARK_KEY, setTrainingModeForTests } from '../storage/training-mode.ts';
 import { loadSyncConfig, saveSyncConfig } from './config.ts';
 import { getProductsCursor, setProductsCursor } from './cursor.ts';
 import {
@@ -19,6 +20,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  setTrainingModeForTests(null);
   db.close();
   await db.delete();
 });
@@ -109,5 +111,30 @@ describe('currentEventOrigin', () => {
   it('toma sucursal y punto de venta de la config', () => {
     saveSyncConfig({ type: 'rest', baseUrl: 'http://x', branch: 'Centro', pointOfSale: 'Caja 1' });
     expect(currentEventOrigin()).toEqual({ branch: 'Centro', pointOfSale: 'Caja 1' });
+  });
+});
+
+describe('resolveDeviceIdentity en entrenamiento (#177)', () => {
+  it('sin id, primero sale del entrenamiento: no genera id ni borra nada', async () => {
+    const startedAt = '2026-10-04T12:00:00.000Z';
+    setTrainingModeForTests({ startedAt });
+    localStorage.setItem(TRAINING_MARK_KEY, JSON.stringify({ startedAt }));
+    localStorage.setItem('offline-pos:training:ticket-counter', '{}');
+    await db.sales.put({
+      id: 's1',
+      lines: [],
+      payments: [],
+      total: 0,
+      status: 'closed',
+      createdAt: 'x',
+    });
+
+    expect(await resolveDeviceIdentity()).toEqual({ status: 'training-exited' });
+
+    expect(localStorage.getItem(TRAINING_MARK_KEY)).toBeNull();
+    expect(localStorage.getItem('offline-pos:training:ticket-counter')).toBeNull();
+    expect(localStorage.getItem(DEVICE_ID_KEY)).toBeNull();
+    expect(peekDeviceId()).toBeNull();
+    expect(await db.sales.count()).toBe(1);
   });
 });

@@ -41,6 +41,7 @@ const diagnostics: SyncDiagnostics = {
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos',
   demoRevokedAt: null,
+  trainingSince: null,
   offline: 'ready',
 };
 
@@ -60,6 +61,7 @@ function fakeDeps(overrides: Partial<PosConsoleDeps> = {}): PosConsoleDeps {
     exportLocalData: () =>
       Promise.resolve<LocalDataDump>({
         exportedAt: '2026-09-23T12:00:00.000Z',
+        training: false,
         indexedDb: {},
         localStorage: {},
       }),

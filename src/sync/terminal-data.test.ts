@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../domain/product.ts';
-import { db } from '../storage/db.ts';
+import { PosDatabase, db } from '../storage/db.ts';
+import { setTrainingModeForTests } from '../storage/training-mode.ts';
 import { setSyncPaused, syncPausedSignal } from '../ui/state/sync.ts';
 import { tryAcquireSyncLock } from './engine.ts';
 import { exportLocalData, RESET_LOCK_WAIT_MS, resetTerminal } from './terminal-data.ts';
@@ -24,6 +26,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  setTrainingModeForTests(null);
   localStorage.clear();
 });
 
@@ -128,5 +131,31 @@ describe('almacenamiento por carpeta (#148)', () => {
     expect((await resetTerminal()).ok).toBe(true);
     expect(localStorage.getItem('offline-pos@/0.1.0/:sync-config')).toBe('{"x":1}');
     expect(localStorage.getItem('offline-pos:ticket-counter')).toBeNull();
+  });
+});
+
+describe('modo entrenamiento (#177)', () => {
+  const TRAINING_DB = 'offline-pos#entrenamiento';
+
+  afterEach(async () => {
+    await Dexie.delete(TRAINING_DB);
+  });
+
+  it('el volcado dice si es de entrenamiento', async () => {
+    expect((await exportLocalData()).training).toBe(false);
+    setTrainingModeForTests({ startedAt: '2026-10-04T12:00:00.000Z' });
+    expect((await exportLocalData()).training).toBe(true);
+  });
+
+  it('pos.reset() borra también la base de entrenamiento', async () => {
+    const training = new PosDatabase(TRAINING_DB);
+    await training.open();
+    await training.products.add(product);
+    training.close();
+
+    const result = await resetTerminal();
+
+    expect(result.ok).toBe(true);
+    expect(await Dexie.exists(TRAINING_DB)).toBe(false);
   });
 });

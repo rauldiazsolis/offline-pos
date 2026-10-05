@@ -3,13 +3,18 @@ import type { Page } from '@playwright/test';
 /**
  * Lee todas las filas de una tabla de la base local (IndexedDB), sin pasar
  * por Dexie/el código de la app — así el test no depende de módulos internos
- * y puede correr contra el build real servido por `pnpm preview`.
+ * y puede correr contra el build real servido por `pnpm preview`. `dbName`: la
+ * de entrenamiento es `offline-pos#entrenamiento` (#177).
  */
-export function getAllFromStore<T>(page: Page, storeName: string): Promise<T[]> {
+export function getAllFromStore<T>(
+  page: Page,
+  storeName: string,
+  dbName = 'offline-pos',
+): Promise<T[]> {
   return page.evaluate(
-    (name) =>
+    ({ name, database }) =>
       new Promise<unknown[]>((resolve, reject) => {
-        const request = indexedDB.open('offline-pos');
+        const request = indexedDB.open(database);
         request.onerror = () => {
           reject(new Error(request.error?.message ?? 'No se pudo abrir IndexedDB'));
         };
@@ -25,7 +30,7 @@ export function getAllFromStore<T>(page: Page, storeName: string): Promise<T[]> 
           };
         };
       }),
-    storeName,
+    { name: storeName, database: dbName },
   ) as Promise<T[]>;
 }
 

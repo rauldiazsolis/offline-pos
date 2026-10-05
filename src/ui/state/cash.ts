@@ -1,6 +1,7 @@
 import { computed, signal } from '@preact/signals';
 import { isCashCountOverdue } from '../../domain/cash-count.ts';
 import type { CashBalance } from '../../storage/cash-repository.ts';
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import type { CashField, CashKind } from '../keyboard/cash-form-model.ts';
 
 /**
@@ -45,7 +46,10 @@ export function startCashClock(): () => void {
   };
 }
 
-/** "Sin arqueo en 24 h" (spec de #100, §6): no hay arqueo, o el último tiene más de 24 h. */
-export const cashCountOverdueSignal = computed(() =>
-  isCashCountOverdue(lastCashCountAtSignal.value, nowMinuteSignal.value),
+/**
+ * "Sin arqueo en 24 h" (spec de #100, §6): no hay arqueo, o el último tiene más de 24 h. En
+ * entrenamiento no (#177): la caja de práctica arranca en 0 y un arqueo real no tiene sentido.
+ */
+export const cashCountOverdueSignal = computed(
+  () => !isTrainingMode() && isCashCountOverdue(lastCashCountAtSignal.value, nowMinuteSignal.value),
 );

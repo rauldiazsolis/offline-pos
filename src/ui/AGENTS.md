@@ -413,6 +413,44 @@ publicación, en "Publicación" de la raíz.
   `build/sw-plugin.ts` en un segundo build (`iife`, sin hash), con la lista de archivos y su hash
   inyectados (`build/precache.ts`).
 
+## Modo entrenamiento (#177)
+
+Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`; el principio, en la raíz; la
+base y las claves, en `src/storage/AGENTS.md`; el sync, en `src/sync/AGENTS.md`.
+
+- **`/ENTRENAMIENTO`** (`commands.ts::trainingCommand`, siempre en el menú; nombre reservado para el
+  portal): apagado, "Practicar sin enviar nada al backend"; prendido, "Salir del entrenamiento". Lo
+  mismo hace el botón de la franja (`ui/keyboard/training-controller.ts::toggleTraining`).
+- **Entrar**: con una venta en curso (`ui/state/sale-in-progress.ts::saleInProgress`, la misma de
+  `/ACTUALIZAR`) no entra y avisa "Terminá o descartá la venta para entrar al entrenamiento.". Si no,
+  pausa el sync y abre la pantalla (`ui/screens/training-screen.tsx`, estado en
+  `ui/state/training.ts`, patrón de "Abrir una demo"): qué es el modo y lo real sin enviar
+  (`training-model.ts::describeTrainingPending`, "Sin enviar: 1 venta y 1 movimiento más…").
+  Enter = "Entrar al entrenamiento" (`.btn-primary`): último envío de lo real (si falla, entra igual),
+  copia, marca, `prepareTabRelease` y recarga. Esc = "Cancelar" (reanuda el sync).
+- **Salir**: se puede con una venta de práctica a medias. La pantalla lista lo que se descarta
+  (`describeTrainingDiscard`: ventas, cobranzas, movimientos de caja y arqueos, la venta en curso y
+  los clientes creados, o "No hiciste nada en el entrenamiento.") y lo que vuelve. Enter = "Descartar
+  y salir" (`.btn-danger`): borra las claves, deja la marca `training-exited` en `sessionStorage` y
+  recarga; `bootstrap` la consume y la barra dice "Saliste del entrenamiento.". Esc = "Seguir
+  entrenando".
+- **La franja** (`ui/components/TrainingBanner.tsx`): arriba de todas las pantallas, dentro de
+  `.app-zoom-wrapper`; con `.app-zoom-wrapper--training` (`tokens.css`) la pantalla activa toma
+  `--app-height` menos `--training-banner-h`. Rayas ámbar y negro (`--color-training-*`), el texto en
+  negrita que se recorta con "…" si falta lugar (nunca el botón) y la tipografía propia (vive afuera
+  de las pantallas, que fijan la suya). El botón: `tabIndex={-1}` y `keepFocusOnMouseDown`.
+- **El resto**: el título de la pestaña lleva "ENTRENAMIENTO · " (`terminal-context.ts::trainingTitle`);
+  todo comprobante, la marca "ENTRENAMIENTO" (`print/resolve-receipt.ts`); el aviso "Sin arqueo en
+  24 h" no se muestra (la caja de práctica arranca en 0); `/DIAGNOSTICO` y `pos.status()` dicen "Modo
+  entrenamiento desde …"; `pos.export()` lleva `training`.
+- **Cortado** (`commands.ts::TRAINING_BLOCKED_COMMANDS`): `/CONFIG`, `/ALTA`, `/DEMO_NUEVA` y
+  `/DEMO_RESET` quedan deshabilitados con el motivo "en entrenamiento; salí con /ENTRENAMIENTO"; el
+  botón del encabezado (alta o demo nueva) deja el mismo mensaje en la barra. Un link de demo o la
+  vuelta del alta al arrancar no se procesan: se limpia la URL y la barra dice "Salí del entrenamiento
+  y volvé a abrir el link." (`sync/demo-link.ts::hasOnboardingParams`). Sin id de dispositivo, primero
+  se sale del entrenamiento y se recarga. `/ACTUALIZAR`, `/SINCRONIZAR` (solo el pull), el portal,
+  `/RESUMEN` y `/ANULAR` andan igual, sobre la base de práctica.
+
 ## "Abrir una demo" (#176)
 
 Spec: `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`; el principio, en
@@ -518,7 +556,8 @@ mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y b
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
 (`select`s, campos y botones), **`/CAJA`** (selector, campos,
-sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones) y la **barra de estado** (click =
+sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la pantalla y la franja
+de entrenamiento** (#177, botones) y la **barra de estado** (click =
 `/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
 **encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
 del portal hace su comando, #179; el resto es pasivo, #193).

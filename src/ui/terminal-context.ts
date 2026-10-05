@@ -1,4 +1,5 @@
 import { effect } from '@preact/signals';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { terminalIdentitySignal, type TerminalIdentity } from './state/sync.ts';
 
 /** Encabezado de la venta (#193): la empresa como título y la caja debajo; sin empresa, la caja. */
@@ -33,12 +34,20 @@ export function terminalTitle(identity: TerminalIdentity | null): string | null 
   return identityText(identity);
 }
 
+/** En entrenamiento (#177) la pestaña lo dice primero, también si queda en segundo plano. Pura. */
+export function trainingTitle(title: string, training: boolean): string {
+  return training ? `ENTRENAMIENTO · ${title}` : title;
+}
+
 /**
- * Mantiene `document.title` al día con la terminal (#193); sin conexión activa, `baseTitle`.
- * Devuelve la función que lo detiene (tests).
+ * Mantiene `document.title` al día con la terminal (#193); sin conexión activa, `baseTitle`. En
+ * entrenamiento, con el prefijo (#177). Devuelve la función que lo detiene (tests).
  */
 export function startTerminalTitle(baseTitle: string): () => void {
   return effect(() => {
-    document.title = terminalTitle(terminalIdentitySignal.value) ?? baseTitle;
+    document.title = trainingTitle(
+      terminalTitle(terminalIdentitySignal.value) ?? baseTitle,
+      isTrainingMode(),
+    );
   });
 }

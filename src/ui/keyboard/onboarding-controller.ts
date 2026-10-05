@@ -1,7 +1,10 @@
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import { loadSyncConfig } from '../../sync/config.ts';
 import { buildDemoLink, buildOnboardingUrl, returnUrlFor } from '../../sync/demo-link.ts';
 import { issueWipeKey } from '../../sync/wipe-key.ts';
+import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { demoSessionSignal } from '../state/sync.ts';
+import { TRAINING_BLOCKED_REASON, disabledCommandMessage } from './commands.ts';
 
 /**
  * `/ALTA` y el botón de la barra de estado (#128): emite el `wipe_key` y lleva al alta del backend,
@@ -13,6 +16,11 @@ export function startOnboarding(
     window.location.assign(url);
   },
 ): void {
+  // #177: el botón del encabezado no pasa por el menú, así que el motivo va a la barra.
+  if (isTrainingMode()) {
+    commandBarWarningSignal.value = disabledCommandMessage('ALTA', TRAINING_BLOCKED_REASON);
+    return;
+  }
   const demo = demoSessionSignal.value;
   if (demo === null) {
     return;
@@ -31,6 +39,10 @@ export function startNewDemo(
     window.location.assign(url);
   },
 ): void {
+  if (isTrainingMode()) {
+    commandBarWarningSignal.value = disabledCommandMessage('DEMO_NUEVA', TRAINING_BLOCKED_REASON);
+    return;
+  }
   const demo = demoSessionSignal.value;
   if (demo === null) {
     return;

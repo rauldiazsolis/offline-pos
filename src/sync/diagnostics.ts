@@ -1,6 +1,7 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
 import { STORAGE_NAMESPACE } from '../storage/storage-namespace.ts';
+import { trainingMark } from '../storage/training-mode.ts';
 import {
   backendCapabilitiesSignal,
   backendCompanySignal,
@@ -60,6 +61,8 @@ export type SyncDiagnostics = {
   storageNamespace: string;
   /** Desde cuándo la demo está revocada (#176); `null` = no lo está. */
   demoRevokedAt: string | null;
+  /** Desde cuándo está prendido el modo entrenamiento (#177); `null` = apagado. */
+  trainingSince: string | null;
   /** Si el POS abre sin red: el estado del service worker (#54). */
   offline: OfflineStatus;
 };
@@ -105,6 +108,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     posVersion: __POS_VERSION__,
     storageNamespace: STORAGE_NAMESPACE,
     demoRevokedAt: demoRevokedSignal.value,
+    trainingSince: trainingMark()?.startedAt ?? null,
     offline: currentOfflineStatus(),
   };
 }

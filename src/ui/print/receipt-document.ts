@@ -17,7 +17,7 @@ export type ReceiptBlock =
 export type ReceiptDocument = {
   header: string[];
   title: string;
-  /** "COPIA" al reimprimir, "PRUEBA" en la prueba de impresión (y "ENTRENAMIENTO" con #177). */
+  /** "COPIA" al reimprimir, "PRUEBA" en la prueba de impresión, "ENTRENAMIENTO" en entrenamiento (#177). */
   marks: string[];
   meta: string[];
   blocks: ReceiptBlock[];

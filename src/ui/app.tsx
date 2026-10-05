@@ -1,4 +1,6 @@
 import './tokens.css';
+import { isTrainingMode } from '../storage/training-mode.ts';
+import { TrainingBanner } from './components/TrainingBanner.tsx';
 import { CashScreen } from './screens/cash-screen.tsx';
 import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
 import { CheckoutScreen } from './screens/checkout-screen.tsx';
@@ -10,10 +12,12 @@ import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
 import { PrinterScreen } from './screens/printer-screen.tsx';
 import { ReceiptScreen } from './screens/receipt-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
+import { TrainingScreen } from './screens/training-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
 import { VoidScreen } from './screens/void-screen.tsx';
 import { demoConfirmSignal } from './state/demo-confirm.ts';
 import { activeScreenSignal } from './state/screen.ts';
+import { trainingScreenSignal } from './state/training.ts';
 import { connectionStateSignal } from './state/sync.ts';
 import { MIN_SUPPORTED_WIDTH_PX, viewportWidthSignal } from './state/viewport.ts';
 
@@ -27,6 +31,10 @@ function ActiveScreen() {
   // conexión en `/CONFIG` (modo requerido: sin Cancelar y Esc no sale).
   if (connectionStateSignal.value !== 'active') {
     return <ConfigScreen />;
+  }
+  // #177: entrar o salir del entrenamiento se confirma delante de la pantalla activa.
+  if (trainingScreenSignal.value !== null) {
+    return <TrainingScreen />;
   }
   switch (activeScreenSignal.value) {
     case 'checkout':
@@ -66,8 +74,11 @@ export function App() {
   if (viewportWidthSignal.value < MIN_SUPPORTED_WIDTH_PX) {
     return <UnsupportedScreen />;
   }
+  // #177: la franja va arriba de todas las pantallas; la activa toma el alto que queda.
+  const training = isTrainingMode();
   return (
-    <div class="app-zoom-wrapper">
+    <div class={training ? 'app-zoom-wrapper app-zoom-wrapper--training' : 'app-zoom-wrapper'}>
+      {training && <TrainingBanner />}
       <ActiveScreen />
     </div>
   );

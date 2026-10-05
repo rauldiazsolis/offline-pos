@@ -170,6 +170,11 @@ export function DiagnosticoScreen() {
                     ` · revocada desde ${new Date(diagnostics.demoRevokedAt).toLocaleString()}`}
                 </p>
               )}
+              {diagnostics.trainingSince !== null && (
+                <p style={{ margin: 0, fontWeight: 'bold' }}>
+                  {`Modo entrenamiento desde ${new Date(diagnostics.trainingSince).toLocaleString()}`}
+                </p>
+              )}
               <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
                 {configResult.value.verifiedAt !== undefined
                   ? `Probada: ${new Date(configResult.value.verifiedAt).toLocaleString()}`
