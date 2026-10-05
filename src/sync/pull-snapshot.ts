@@ -1,7 +1,13 @@
 import type { Product } from '../domain/product.ts';
 import { err, ok, type Result } from '../domain/result.ts';
 import type { StockItem } from '../domain/stock.ts';
-import type { BackendNotice, Connector, ConnectorCustomer, PullBatchResult } from './connector.ts';
+import type {
+  BackendNotice,
+  BackendPortal,
+  Connector,
+  ConnectorCustomer,
+  PullBatchResult,
+} from './connector.ts';
 import { getDeviceId } from './terminal-identity.ts';
 
 /** Lo que trae un pull completo (la prueba de conexión y el refresco periódico): todo en memoria, nada tocó IndexedDB todavía. */
@@ -12,6 +18,10 @@ export type ProbeSnapshot = {
   cursors: { products?: string; customers?: string };
   /** Las del `getInfo` de la prueba de conexión (4.4.0, #128); ausente = no se consultaron. */
   capabilities?: string[];
+  /** La del `getInfo` de la prueba de conexión (4.5.0, #193); ausente = el backend no la manda. */
+  company?: { name: string };
+  /** El del `getInfo` de la prueba de conexión (4.6.0, #179); ausente = el backend no lo manda. */
+  portal?: BackendPortal;
   /** Los avisos vigentes que trajo el pull (4.4.0, #128); ausente = el backend no mandó. */
   notices?: BackendNotice[];
 };

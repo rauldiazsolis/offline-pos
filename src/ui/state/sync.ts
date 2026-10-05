@@ -1,7 +1,8 @@
 import { signal } from '@preact/signals';
 import type { ErrorCode, Failure } from '../../domain/result.ts';
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import type { ConnectionState } from '../../sync/connection-state.ts';
-import type { BackendInfo, BackendNotice, LotIssue } from '../../sync/connector.ts';
+import type { BackendInfo, BackendNotice, BackendPortal, LotIssue } from '../../sync/connector.ts';
 import type { ConnectorType } from '../../sync/connector-registry.ts';
 import type { DemoSessionInfo } from '../../sync/config.ts';
 import type { PullApplication } from '../../sync/pull-rule.ts';
@@ -23,7 +24,8 @@ export function setSyncStatus(status: SyncStatus): void {
 }
 
 export function setPendingOutboxCount(count: number): void {
-  pendingOutboxCountSignal.value = count;
+  // #177: en entrenamiento nada se va a enviar.
+  pendingOutboxCountSignal.value = isTrainingMode() ? 0 : count;
 }
 
 export function setLastSyncedAt(isoDate: string): void {
@@ -53,6 +55,18 @@ export const backendStatusSignal = signal<BackendStatus>({ kind: 'unknown' });
  * `sync/backend-capabilities.ts`. `undefined` = nunca se supo.
  */
 export const backendCapabilitiesSignal = signal<readonly string[] | undefined>(undefined);
+
+/**
+ * Empresa del backend según su último `getInfo` exitoso (4.5.0, #193), persistida por
+ * `sync/backend-company.ts`. `undefined` = el backend no la manda (o nunca se supo).
+ */
+export const backendCompanySignal = signal<string | undefined>(undefined);
+
+/**
+ * Portal del backend según su último `getInfo` exitoso (4.6.0, #179), persistido por
+ * `sync/backend-portal.ts`. `undefined` = el backend no lo manda (o nunca se supo).
+ */
+export const backendPortalSignal = signal<BackendPortal | undefined>(undefined);
 
 /**
  * Avisos vigentes del backend según el último pull aplicado (4.4.0, #128), persistidos por
@@ -110,6 +124,31 @@ export const demoSessionSignal = signal<DemoSessionInfo | null>(null);
 
 export function setDemoSession(demo: DemoSessionInfo | null): void {
   demoSessionSignal.value = demo;
+}
+
+/** Sucursal y punto de venta de la config activa (#193). */
+export type TerminalIdentity = { branch: string; pointOfSale: string };
+
+/**
+ * La sucursal y la caja de la config activa (`null` = sin conexión activa), para la barra de estado y
+ * el título de la pestaña (#193). Lo fijan `bootstrap` al arrancar, `applyConnection` al cambiar de
+ * conexión y `applyTerminalSettings` al cambiar la terminal desde `/CONFIG`.
+ */
+export const terminalIdentitySignal = signal<TerminalIdentity | null>(null);
+
+export function setTerminalIdentity(identity: TerminalIdentity | null): void {
+  terminalIdentitySignal.value = identity;
+}
+
+/**
+ * Demo revocada (#176): cuándo un 401/403 con la terminal en demo mostró que su key ya no anda
+ * (`null` = no). La persiste `sync/demo-revoked.ts`. Con la demo revocada no corre ningún push ni
+ * pull; la barra de estado ofrece `/DEMO_NUEVA`. La venta sigue.
+ */
+export const demoRevokedSignal = signal<string | null>(null);
+
+export function setDemoRevoked(at: string | null): void {
+  demoRevokedSignal.value = at;
 }
 
 /**

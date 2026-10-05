@@ -3,11 +3,16 @@ import type { Failure, Result } from '../../domain/result.ts';
 import { listPendingOutbox } from '../../storage/local-data.ts';
 import { originKey } from '../../sync/connection.ts';
 import { connectorLabel } from '../../sync/connector-registry.ts';
-import { collectDiagnostics, type SyncDiagnostics } from '../../sync/diagnostics.ts';
+import {
+  collectDiagnostics,
+  describeOffline,
+  type SyncDiagnostics,
+} from '../../sync/diagnostics.ts';
 import { syncNow } from '../../sync/engine.ts';
 import { peekDeviceId } from '../../sync/terminal-identity.ts';
 import { exportLocalData, resetTerminal, type LocalDataDump } from '../../sync/terminal-data.ts';
 import { describeError } from '../errors.ts';
+import { removeOwnServiceWorker } from '../service-worker.ts';
 import {
   formatAwaitingLotStatus,
   formatCleanup,
@@ -32,6 +37,8 @@ export type PosConsoleDeps = {
   getDeviceId: () => string | null;
   download: (filename: string, content: string) => void;
   reload: () => void;
+  /** El service worker y las cachés de esta carpeta (#54, `ui/service-worker.ts`). */
+  removeServiceWorker: () => Promise<void>;
   console: Pick<Console, 'log' | 'info' | 'error' | 'table'>;
 };
 
@@ -58,6 +65,8 @@ export type PosStatus = {
   /** Última limpieza de datos locales y ancla del arqueo (#98). */
   limpieza: { ultima: string; ancla: string };
   log: { hora: string; tipo: SyncLogEntry['kind']; request: unknown; resultado: string }[];
+  /** Si el POS abre sin red (#54). */
+  sinConexion: string;
 };
 
 export type PosConsole = {
@@ -94,7 +103,8 @@ const HELP: { metodo: string; descripcion: string }[] = [
   },
   {
     metodo: 'pos.reset()',
-    descripcion: 'Borra TODO lo local, incluida la config de /CONFIG, y recarga. Sin confirmación.',
+    descripcion:
+      'Borra TODO lo local, incluida la config de /CONFIG, el service worker y las cachés de esta carpeta, y recarga. Sin confirmación.',
   },
 ];
 
@@ -150,6 +160,7 @@ export function formatStatus(diagnostics: SyncDiagnostics): PosStatus {
       request: entry.request,
       resultado: describeLogResult(entry.result),
     })),
+    sinConexion: describeOffline(diagnostics.offline),
   };
 }
 
@@ -194,6 +205,10 @@ export function createPosConsole(deps: PosConsoleDeps): PosConsole {
         deps.console.error(describeError(result));
         return;
       }
+      // #54: también el service worker y las cachés de esta carpeta (nunca los de otro canal).
+      await deps.removeServiceWorker().catch((error: unknown) => {
+        deps.console.error('No se pudo borrar el service worker:', error);
+      });
       deps.console.info('Datos locales borrados. Recargando…');
       deps.reload();
     },
@@ -233,6 +248,7 @@ export function installPosConsole(): void {
     reload: () => {
       window.location.reload();
     },
+    removeServiceWorker: () => removeOwnServiceWorker(),
     console,
   });
 }

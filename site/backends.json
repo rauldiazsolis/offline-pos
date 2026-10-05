@@ -3,6 +3,11 @@
     "name": "demo-backend local",
     "url": "http://localhost:4000",
     "local": "demo-backend",
-    "notes": "Levantalo con el demo-backend/ del mismo tag que la versión del POS: pnpm backend."
+    "notes": "Levantalo con el demo-backend/ del último tag del repo: pnpm backend."
+  },
+  {
+    "name": "mini contax",
+    "url": "https://mini.contax.ar/connector",
+    "notes": "El backend de mini contax. Cada demo es un comercio aparte que vence a las 24 h sin uso; «Crear mi comercio» da de alta uno real."
   }
 ]

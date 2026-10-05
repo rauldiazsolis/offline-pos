@@ -1,9 +1,13 @@
 import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { db } from '../storage/db.ts';
+import { PosDatabase, db } from '../storage/db.ts';
+import { setTrainingModeForTests } from '../storage/training-mode.ts';
 import { saveSyncConfig } from '../sync/config.ts';
 import { DEVICE_ID_KEY, setDeviceIdForTests } from '../sync/terminal-identity.ts';
 import { bootstrap } from './bootstrap.ts';
+import { TRAINING_EXITED_KEY } from './keyboard/training-controller.ts';
+import { commandBarNoticeSignal, commandBarWarningSignal } from './state/command-bar.ts';
 import { activeConnectorTypeSignal, connectionStateSignal } from './state/sync.ts';
 import {
   configFieldValuesSignal,
@@ -114,5 +118,65 @@ describe('bootstrap', () => {
     });
     await bootstrap();
     expect(activeConnectorTypeSignal.value).toBe('rest-demo');
+  });
+});
+
+describe('bootstrap y el modo entrenamiento (#177)', () => {
+  const TRAINING_DB = 'offline-pos#entrenamiento';
+  const activeConfig = {
+    type: 'rest' as const,
+    baseUrl: 'https://api.example.com',
+    verifiedAt: '2026-01-01T00:00:00.000Z',
+    branch: 'Centro',
+    pointOfSale: 'Caja 1',
+  };
+
+  afterEach(async () => {
+    setTrainingModeForTests(null);
+    commandBarNoticeSignal.value = null;
+    commandBarWarningSignal.value = null;
+    window.history.replaceState(null, '', '/');
+    sessionStorage.clear();
+    await Dexie.delete(TRAINING_DB);
+  });
+
+  it('fuera del entrenamiento borra una base de práctica que haya quedado', async () => {
+    const leftover = new PosDatabase(TRAINING_DB);
+    await leftover.open();
+    await leftover.sales.put({
+      id: 's1',
+      lines: [],
+      payments: [],
+      total: 0,
+      status: 'closed',
+      createdAt: 'x',
+    });
+    leftover.close();
+
+    await bootstrap();
+
+    expect(await Dexie.exists(TRAINING_DB)).toBe(false);
+  });
+
+  it('en entrenamiento un link de demo no se procesa: se limpia la URL y se avisa', async () => {
+    saveSyncConfig(activeConfig);
+    setTrainingModeForTests({ startedAt: '2026-10-04T12:00:00.000Z' });
+    window.history.replaceState(null, '', '/?demo=true&backend=https://b.x');
+
+    await bootstrap();
+
+    expect(window.location.search).toBe('');
+    expect(commandBarWarningSignal.value).toBe('Salí del entrenamiento y volvé a abrir el link.');
+    expect(connectionStateSignal.value).toBe('active');
+  });
+
+  it('después de salir, la barra dice "Saliste del entrenamiento." una sola vez', async () => {
+    saveSyncConfig(activeConfig);
+    sessionStorage.setItem(TRAINING_EXITED_KEY, '1');
+
+    await bootstrap();
+
+    expect(commandBarNoticeSignal.value).toBe('Saliste del entrenamiento.');
+    expect(sessionStorage.getItem(TRAINING_EXITED_KEY)).toBeNull();
   });
 });

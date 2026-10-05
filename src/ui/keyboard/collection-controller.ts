@@ -9,6 +9,7 @@ import { roundAmount } from '../../domain/rounding.ts';
 import { collectAndPersist } from '../../storage/customer-payment-repository.ts';
 import { describeError } from '../errors.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
+import { showOrPrintReceipt } from '../print/after-close.ts';
 import {
   collectionBuffersSignal,
   collectionErrorSignal,
@@ -16,7 +17,6 @@ import {
 } from '../state/collection.ts';
 import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
-import { receiptCollectionSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 /** Al abrir la cobranza (#101): todos los campos vacíos, sin precarga — no hay un total que cubrir. */
@@ -81,7 +81,8 @@ export function cancelCollection(): void {
 }
 
 /**
- * Ctrl+Enter (spec de #101, §1): registra la cobranza con su recibo y pasa al comprobante. Como
+ * Ctrl+Enter (spec de #101, §1): registra la cobranza con su recibo y sigue según "Al cobrar" de
+ * `/IMPRESORA` (#174: imprime, muestra el comprobante o vuelve a la venta). Como
  * después de cobrar una venta, el cliente queda desadjuntado ("Consumidor Final").
  */
 export async function submitCollection(): Promise<void> {
@@ -107,8 +108,14 @@ export async function submitCollection(): Promise<void> {
     return;
   }
   await refreshCustomerBalances();
-  receiptCollectionSignal.value = { ...result.value, customerName: customer.name };
+  const record = result.value;
   resetAttachedCustomer();
   resetCollection();
-  activeScreenSignal.value = 'receipt';
+  showOrPrintReceipt({
+    kind: 'collection',
+    payment: record.payment,
+    customerName: customer.name,
+    balances: { before: record.balanceBefore, after: record.balanceAfter },
+    copy: false,
+  });
 }

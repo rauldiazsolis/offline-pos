@@ -17,3 +17,8 @@ export const paymentFilterSignal = signal('');
 export const selectedEntryIndexSignal = signal(0);
 export const selectedProductIndexSignal = signal<number | null>(null);
 export const selectedPaymentIndexSignal = signal<number | null>(null);
+/**
+ * Aviso de `/RESUMEN` (#174): "Copia del Ticket #4 enviada a imprimir." después de reimprimir. Se
+ * borra con la próxima tecla, al cambiar de día o de pestaña y al salir.
+ */
+export const cashSummaryNoticeSignal = signal<string | null>(null);

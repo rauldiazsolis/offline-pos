@@ -5,6 +5,8 @@ acá porque cuenta **cómo** se llegó a cada decisión: bugs reales encontrados
 propósito, desvíos de los planes y alternativas descartadas. Es un archivo: puede contener datos que
 ya no son ciertos (por ejemplo, turnos de caja, `/CUENTA` o el menú de "/" sin preselección). Para
 trabajar, manda `CLAUDE.md`; lo de más adelante sigue en git, en los PR y en `docs/superpowers/`.
+Los planes que se citan (`docs/superpowers/plans/…`) se borraron al cerrar cada etapa: están en el
+historial de git (`git log --all -- <ruta>`).
 
 Contenido:
 
@@ -989,6 +991,92 @@ anchos fijos que envuelven texto crecen con él (`scaledPx`). El e2e nuevo (`e2e
 encontró un caso que las capturas del brainstorming no mostraban: el botón "Sin arqueo en 24 h" de la
 barra de estado se partía en dos renglones; los botones de las franjas pasaron a `nowrap`. Desvíos
 del plan en `docs/superpowers/plans/2026-09-29-foco-seleccion-y-texto.md`.
+
+**Impresión de tickets (#174, PR #190)**. Primera etapa del MVP de mini contax (epic #182). Hasta
+acá, Enter en el comprobante llamaba a `window.print()` sobre la pantalla entera con un `@media print`.
+Se descartó extender eso (no imprimía sin pasar por la pantalla y arrastraba los estilos de la app) y
+el texto de ancho fijo en `<pre>`. Quedó un modelo del comprobante (`ReceiptDocument`) que dibuja un
+solo componente, en la pantalla y en un iframe aparte para imprimir, detrás de un puerto
+(`ReceiptPrinter`) donde va a entrar ESC/POS (#188, afuera por no tener una impresora con qué
+probarlo). La config es un comando propio, `/IMPRESORA`, y no `/CONFIG`: la impresora es del equipo,
+no de la conexión. "Al cobrar" tiene tres opciones, porque usar el POS solo para registrar ("Nada") se
+espera común. Lo que se encontró en el camino: el ticket en pantalla, dibujado en mm y pt, quedaba en
+7,8 px a 600 px (debajo del piso de #111), así que el papel se muestra a tamaño real cancelando el zoom
+de la app, y `text-size.spec.ts` pasó a medir con el zoom acumulado; el botón de Reimprimir hacía
+desbordar la franja de `/RESUMEN` a 600 px (parecía un test inestable). En la prueba manual, los
+grupos tipo radio de `/IMPRESORA` dejaban la pantalla muy alta y cambiaba de forma con el formato: se
+pasó a `select`s con columnas fijas, y se sumaron avisos después de cobrar y de reimprimir, porque con
+"Nada" no quedaba ninguna señal de que la venta se había registrado. Enter para anular en `/RESUMEN`
+quedó en #140. Spec y plan en `docs/superpowers/` (2026-10-02).
+
+**Una sola pestaña (#175, PR #191)**. Segunda etapa del MVP de mini contax (epic #182). Hasta acá, dos pestañas
+del mismo almacenamiento corrían las dos completas: dos motores de sync con cerrojos en memoria que no
+se veían, dos ventas en curso pisándose en `draftCart`. Ahora manda la que tiene el cerrojo de
+`navigator.locks` (`BroadcastChannel` solo lleva el pedido de traspaso), y la otra muestra un aviso. El
+issue pedía, si se podía, un link a la pestaña original; se verificó en Chrome estable con dos
+pestañas en la misma ventana y no se puede: `window.focus()` pedido desde la otra (incluso justo
+después de un click real), `window.open('', nombre)` (abre una pestaña nueva) y `alert()` (abre el
+diálogo sin traer la pestaña, y le bloquea el JS) no la traen al frente; solo `clients.focus()` desde
+un service worker en el click de una notificación, que queda para después de #54. La medición tuvo su
+trampa: con Playwright conectado, su emulación de foco hacía que las dos pestañas dijeran `visible`;
+hubo que manejar Chrome por CDP crudo. Dos decisiones: la segunda **nunca toma el control sola** (con
+toma automática, un F5 en la original le pasaba el control a la otra) y la original **suelta sin
+cortar a medias** (termina el sync y las escrituras en curso, contadas por un middleware de Dexie) y
+se recarga como segunda. Un test de esa espera resultó inestable con la suite completa: esperaba 30 ms
+fijos a que Dexie abriera la base; pasó a esperar a que la escritura esté abierta de verdad. El e2e
+prueba otra carpeta del mismo origen sirviendo el mismo build con `context.route`, porque el sitio de
+`site:preview` tiene una sola carpeta de versión. Spec y plan en `docs/superpowers/` (2026-10-02).
+
+**Link de demo con confirmación y demo revocada (#176, PR #192)**. Tercera etapa del MVP de mini contax (epic
+#182), antes de M8 del mini-erp (demos v2: un comercio por rubro y una caja por visitante, que se
+revoca con el reinicio nocturno o a las 24 h sin uso). Hasta acá, el POS decidía solo qué hacer con un
+link de demo: con una conexión real o con datos lo ignoraba, y ya en demo lo aplicaba borrando aunque
+hubiera ventas de práctica sin enviar. Pasó a una sola regla: se aplica directo si no se pierde nada y,
+si no, una pantalla propia ("Abrir una demo", no el wizard: no hay nada que elegir) muestra lo que se
+pierde después de un último envío a la conexión actual. Se confirma **antes** de pedir la demo, así
+cancelar nunca le crea una caja al backend; Enter borra, como la confirmación del wizard, porque la
+pantalla ya es la confirmación. Para la demo revocada se descartó tocar el contrato: la key de una demo
+nunca la tipea nadie (la dio `POST /demo-sessions` y se probó con un pull), así que con la terminal en
+demo un 401 no puede ser una key mal cargada; queda como aclaración en el OpenAPI, sin cambio de forma.
+El POS la ofrece, nunca arranca otra sola, y para pedirla guarda el `backend` del link, que puede no
+ser la `baseUrl` de la sesión. El demo-backend pasó a emitir una key por demo, con "Revocar las demos"
+en el panel. Dos desvíos chicos del plan: `/DIAGNOSTICO` lee la revocación de `collectDiagnostics`
+(así `pos.status()` dice lo mismo) en vez del signal, y el OpenAPI y la guía también cambiaron cuándo
+el POS llama a `/demo-sessions`. El e2e de la demo revocada falló la primera vez por una carrera del
+test: al aplicar la demo arrancan ciclos de sync, y un `/SINCRONIZAR` que llega con el cerrojo tomado
+no corre; repite hasta ver el aviso. Spec y plan en `docs/superpowers/` (2026-10-02).
+
+**Caja, sucursal y empresa a la vista (#193, PR #194)**. Pedido "de pasada" antes de seguir con el
+epic #182: en el POS no se veía en qué caja, sucursal y empresa estaba la terminal. La sucursal y la
+caja ya estaban en la config, pero solo se veían en `/CONFIG`; la empresa no viajaba en ningún lado
+(`backend.name` es el producto, no el comercio), así que el contrato pasó a 4.5.0 con `company`
+opcional en `GET /info`, guardado como las capacidades para que se vea sin red. Se comparó en un boceto
+dónde ponerlo (a la izquierda o a la derecha de la barra de estado, o una línea propia en todas las
+pantallas); el usuario eligió una barra de dos líneas, con la de contexto arriba llevando DEMO y el
+botón de la demo, y el título de la pestaña `<caja> - <sucursal>` para las pantallas sin barra. Ya
+con el PR abierto pidió ver la barra de estado al pie y el título más destacado: de tres bocetos eligió
+un encabezado con la empresa como título y la caja debajo, con la barra de estado (solo sync) debajo
+de la barra de comandos; la barra de estado había estado arriba desde el pase de diseño. En la
+revisión del diseño el usuario aclaró que el demo-backend no es un backend "para demos" sino la
+referencia de un backend: después del alta la terminal ya no está en demo, así que la empresa sale de
+la key (la de la demo según la plantilla, o la que se cargó en el alta, que sumó el campo "Nombre del
+comercio"). El nombre de la carpeta quedó; se aclaró en `AGENTS.md`. Spec y plan en
+`docs/superpowers/` (2026-10-03).
+
+**Contrato 4.6.0: portal, 429 y 503 (#178 y #173, etapa P5 del epic #182)**. El MVP de mini contax
+quiere que el cajero entre al backend desde el POS sin contraseña, y #173 y el punto 2 de #187 pedían
+documentar las respuestas que mini ya daba (el 429 y el 503 de las demos, el 503 de mantenimiento).
+En el brainstorming se evaluaron dos modalidades para el portal, un link de un solo uso y una URL
+fija declarada en `/info`; el usuario aclaró que qué enlace corresponde (un usuario real o un acceso
+anónimo a la caja) y si sirve una o varias veces lo decide el backend según la credencial, así que
+quedó **un solo endpoint**, `POST /portal-links`, y la URL fija pasó a ser una respuesta posible más.
+Se descartó traer el link en el pull: sería un secreto guardado en la terminal, y uno de un solo uso
+ya no serviría al usarlo. El POS solo sumó los mensajes de las demos (sin reintentos) y subió a
+4.6.0; el comando y el botón quedan para P6 (#179). Al planificar apareció que el navegador no deja
+leer `Retry-After` desde otro origen sin `Access-Control-Expose-Headers`, así que el contrato lo
+pide. En el demo-backend, el 503 de mantenimiento hizo cambiar un test que usaba el mantenimiento
+como ejemplo de ajuste del panel que una demo nueva borra (ya no se crea la demo). Spec y plan en
+`docs/superpowers/` (2026-10-04).
 
 ---
 

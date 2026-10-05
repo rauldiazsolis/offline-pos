@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../../storage/db.ts';
+import { DEFAULT_PRINTER_CONFIG } from '../../storage/printer-config.ts';
 import { cartSignal } from '../state/cart.ts';
 import {
   collectionBuffersSignal,
@@ -9,7 +10,8 @@ import {
 } from '../state/collection.ts';
 import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
-import { receiptCollectionSignal } from '../state/receipt.ts';
+import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
+import { receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import {
   cancelCollection,
@@ -28,7 +30,7 @@ beforeEach(async () => {
   cartSignal.value = { lines: [] };
   attachedCustomerSignal.value = ana;
   customerBalancesSignal.value = new Map();
-  receiptCollectionSignal.value = null;
+  receiptSignal.value = null;
   activeScreenSignal.value = 'collection';
   enterCollection();
 });
@@ -98,13 +100,36 @@ describe('collection-controller (#101)', () => {
     await submitCollection();
 
     expect(activeScreenSignal.value).toBe('receipt');
-    const receipt = receiptCollectionSignal.value;
-    expect(receipt?.payment.receipt.number).toBe(1);
+    const source = receiptSignal.value?.source;
+    const receipt = source?.kind === 'collection' ? source : null;
+    expect(receipt?.payment.receipt?.number).toBe(1);
     expect(receipt?.customerName).toBe('Ana');
-    expect(receipt?.balanceAfter).toBe(-500);
+    expect(receipt?.balances?.after).toBe(-500);
     expect(attachedCustomerSignal.value).toBeUndefined();
     expect(customerBalancesSignal.value.get('c1')).toBe(-500);
     expect(collectionBuffersSignal.value).toEqual(emptyCollectionBuffers());
+  });
+
+  it('con "Al cobrar: Imprimir", registra, imprime el recibo con sus saldos y vuelve a la venta (#174)', async () => {
+    const printed: string[] = [];
+    setReceiptPrinter({
+      print: (document, format) => {
+        printed.push(
+          `${format}:${document.title}:${String(document.blocks.filter((b) => b.kind === 'text').length)}`,
+        );
+        return Promise.resolve();
+      },
+    });
+    printerConfigSignal.value = { ...DEFAULT_PRINTER_CONFIG, format: '80mm', onCheckout: 'print' };
+    collectionBuffersSignal.value = { ...emptyCollectionBuffers(), cash: '500' };
+
+    await submitCollection();
+
+    expect(activeScreenSignal.value).toBe('sale');
+    expect(receiptSignal.value).toBeNull();
+    expect(printed).toEqual(['80mm:Recibo de cobranza:2']);
+    expect(await db.customerPayments.count()).toBe(1);
+    printerConfigSignal.value = DEFAULT_PRINTER_CONFIG;
   });
 
   it('cancelar vuelve a la venta sin escribir nada y con el cliente adjunto', async () => {

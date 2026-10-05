@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/preact';
+import { appUpdateSignal } from '../state/app-update.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { StatusBar } from './StatusBar.tsx';
 import { cashKindSignal, lastCashCountAtSignal, nowMinuteSignal } from '../state/cash.ts';
-import { startOnboarding } from '../keyboard/onboarding-controller.ts';
 import {
   backendNoticesSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -16,8 +17,6 @@ import {
   syncConfiguredSignal,
   syncStatusSignal,
 } from '../state/sync.ts';
-
-vi.mock('../keyboard/onboarding-controller.ts', () => ({ startOnboarding: vi.fn() }));
 
 const demo = {
   template: 'kiosco',
@@ -34,6 +33,7 @@ beforeEach(() => {
   syncConfiguredSignal.value = true;
   lastPullApplicationSignal.value = null;
   backendNoticesSignal.value = [];
+  appUpdateSignal.value = 'none';
   // Por defecto, con un arqueo reciente: el aviso de caja no aparece salvo en sus propios tests.
   nowMinuteSignal.value = '2026-09-24T12:00:00.000Z';
   lastCashCountAtSignal.value = '2026-09-24T11:00:00.000Z';
@@ -57,44 +57,45 @@ describe('aviso "Sin arqueo en 24 h" (#100)', () => {
     render(<StatusBar />);
     expect(screen.queryByRole('button', { name: 'Sin arqueo en 24 h' })).toBeNull();
   });
+});
 
-  it('convive con la marca DEMO y el botón de alta', () => {
-    lastCashCountAtSignal.value = undefined;
-    setDemoSession(demo);
-    try {
-      render(<StatusBar />);
-      expect(screen.getByRole('button', { name: 'Sin arqueo en 24 h' })).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).not.toBeNull();
-    } finally {
-      setDemoSession(null);
-    }
+describe('botón "Versión nueva (/ACTUALIZAR)" (#54)', () => {
+  it('sin versión nueva no aparece', () => {
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: 'Versión nueva (/ACTUALIZAR)' })).toBeNull();
+  });
+
+  it('con una versión descargada aparece, fuera del orden de Tab', () => {
+    appUpdateSignal.value = 'available';
+    render(<StatusBar />);
+    const button = screen.getByRole('button', { name: 'Versión nueva (/ACTUALIZAR)' });
+    expect(button.tabIndex).toBe(-1);
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('mientras se aplica dice "Actualizando…" y está deshabilitado', () => {
+    appUpdateSignal.value = 'applying';
+    render(<StatusBar />);
+    const button = screen.getByRole('button', { name: 'Actualizando…' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
-describe('StatusBar — terminal en demo (#128)', () => {
+describe('StatusBar — demo revocada (#176)', () => {
   afterEach(() => {
     setDemoSession(null);
+    demoRevokedSignal.value = null;
   });
 
-  it('sin demo no hay marca ni botón de alta', () => {
-    render(<StatusBar />);
-    expect(screen.queryByText('DEMO')).toBeNull();
-    expect(screen.queryByRole('button', { name: /\(\/ALTA\)/ })).toBeNull();
-  });
-
-  it('con demo se ven DEMO y el botón; el click lleva al alta sin abrir /DIAGNOSTICO', () => {
-    vi.mocked(startOnboarding).mockClear();
+  it('dice "La demo terminó"; la marca y el botón viven en el encabezado (#193)', () => {
+    syncStatusSignal.value = 'sync-error';
     setDemoSession(demo);
-    activeScreenSignal.value = 'sale';
+    demoRevokedSignal.value = '2026-10-02T10:00:00.000Z';
     render(<StatusBar />);
 
-    expect(screen.getByText('DEMO')).not.toBeNull();
-    const button = screen.getByRole('button', { name: 'Crear mi comercio (/ALTA)' });
-    expect(button.tabIndex).toBe(-1);
-    fireEvent.click(button);
-
-    expect(startOnboarding).toHaveBeenCalledTimes(1);
-    expect(activeScreenSignal.value).toBe('sale');
+    expect(screen.getByText('La demo terminó')).not.toBeNull();
+    expect(screen.queryByText('DEMO')).toBeNull();
+    expect(screen.queryByRole('button', { name: /DEMO_NUEVA/ })).toBeNull();
   });
 });
 

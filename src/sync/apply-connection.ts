@@ -20,14 +20,18 @@ import {
   setLocalCatalogCounts,
   setSyncConfigured,
   setSyncStatus,
+  setTerminalIdentity,
 } from '../ui/state/sync.ts';
 import { saveBackendCapabilities } from './backend-capabilities.ts';
+import { saveBackendCompany } from './backend-company.ts';
+import { saveBackendPortal } from './backend-portal.ts';
 import { saveBackendNotices } from './backend-notices.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { connectionState } from './connection-state.ts';
 import { withTimeout, type ProbeSnapshot } from './connection.ts';
 import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
+import { clearDemoRevoked } from './demo-revoked.ts';
 import { clearSyncCursors, setCustomersCursor, setProductsCursor } from './cursor.ts';
 import { acquireSyncLockWaiting, pushPendingLot } from './engine.ts';
 import { clearPushLotState } from './push-lot.ts';
@@ -154,12 +158,23 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     }
     // 4.4.0 (#128): las capacidades son de esta conexión; una foto sin ellas las borra.
     saveBackendCapabilities(params.snapshot.capabilities);
+    // 4.5.0 (#193): la empresa de esta conexión, nunca la de la anterior.
+    saveBackendCompany(params.snapshot.company);
+    // 4.6.0 (#179): el portal de esta conexión.
+    saveBackendPortal(params.snapshot.portal);
     saveBackendNotices(params.snapshot.notices ?? []);
 
     setConnectionState('active');
     setActiveConnectorType(params.candidate.type);
     // Otra conexión desde `/CONFIG` sale de la demo: el wizard arma el candidato sin `demo`.
     setDemoSession(params.candidate.demo ?? null);
+    // #193: la sucursal y la caja de la barra de estado y del título.
+    setTerminalIdentity({
+      branch: params.candidate.branch ?? '',
+      pointOfSale: params.candidate.pointOfSale ?? '',
+    });
+    // #176: cualquier conexión aplicada deja atrás una demo revocada.
+    clearDemoRevoked();
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);
@@ -210,5 +225,8 @@ export function applyTerminalSettings(terminal: {
   setConnectionState(state);
   // De `incomplete` a `active`: ahora sí hay comandos del conector (ver `bootstrap`).
   setActiveConnectorType(state === 'active' ? next.type : null);
+  setTerminalIdentity(
+    state === 'active' ? { branch: next.branch ?? '', pointOfSale: next.pointOfSale ?? '' } : null,
+  );
   return ok(undefined);
 }

@@ -1,19 +1,27 @@
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { loadDraftCart } from '../storage/draft-cart-repository.ts';
+import { deleteTrainingDatabase } from '../storage/training-copy.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { loadSyncConfig } from '../sync/config.ts';
 import { connectionState } from '../sync/connection-state.ts';
 import { restoreBackendCapabilities } from '../sync/backend-capabilities.ts';
+import { restoreBackendCompany } from '../sync/backend-company.ts';
+import { restoreBackendPortal } from '../sync/backend-portal.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
+import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
-import { stripOnboardingParams } from '../sync/demo-link.ts';
+import { hasOnboardingParams, stripOnboardingParams } from '../sync/demo-link.ts';
 import { openRequiredWizard, openWizardWithCandidate } from './keyboard/config-controller.ts';
+import { openDemoConfirm } from './keyboard/demo-confirm-controller.ts';
+import { consumeTrainingExited } from './keyboard/training-controller.ts';
 import { runOnboardingFromUrl } from './onboarding.ts';
-import { cartSelectionIndexSignal, cartSignal } from './state/cart.ts';
+import { resetSessionAfterWipe } from './session-reset.ts';
+import { cartSignal } from './state/cart.ts';
 import { commandBarNoticeSignal, commandBarWarningSignal } from './state/command-bar.ts';
 import { setCatalogRepository } from './state/catalog.ts';
-import { attachedCustomerSignal, resetAttachedCustomer } from './state/customer.ts';
+import { attachedCustomerSignal } from './state/customer.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { startCartPersistence } from './state/persist-cart.ts';
 import { refreshStockSnapshot } from './state/stock.ts';
@@ -21,7 +29,12 @@ import { refreshCustomerBalances } from './state/customer-balance.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
 import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
-import { setActiveConnectorType, setConnectionState, setDemoSession } from './state/sync.ts';
+import {
+  setActiveConnectorType,
+  setConnectionState,
+  setDemoSession,
+  setTerminalIdentity,
+} from './state/sync.ts';
 import { configNoticeSignal, identityResetSignal } from './state/sync-config.ts';
 
 /**
@@ -45,7 +58,17 @@ export async function bootstrap(): Promise<void> {
   // Etapa 2 (#97): antes que nada — sin id, lo local se borra y no hay que
   // cargar repositorios ni la venta en curso de datos que ya no sirven.
   const identity = await resolveDeviceIdentity();
+  if (identity.status === 'training-exited') {
+    // #177: se perdió el id en entrenamiento y ya se salió del modo; al recargar, el borrado de
+    // siempre corre sobre la base real. No hay nada más que arrancar.
+    window.location.reload();
+    return new Promise<void>(() => undefined);
+  }
   identityResetSignal.value = identity.status === 'created' && identity.wipedLocalData;
+  // #177: fuera del entrenamiento, una base de práctica que quedó (salida o entrada a medias) se borra.
+  if (!isTrainingMode()) {
+    await deleteTrainingDatabase();
+  }
 
   const catalogRepository = await loadCatalogRepository();
   setCatalogRepository(catalogRepository);
@@ -70,21 +93,21 @@ export async function bootstrap(): Promise<void> {
 
   // Onboarding de demo (#128): un link de demo o la vuelta del alta. Antes de leer la config:
   // puede haberla cambiado. La URL se limpia siempre, así un F5 no lo repite.
-  const onboarding = await runOnboardingFromUrl(window.location.href, {
-    config: loadSyncConfig(),
-    hasUserData: hasUserData(await summarizeLocalData()),
-  });
+  // #177: en entrenamiento un link de demo o la vuelta del alta no se procesan: borrarían o
+  // cambiarían la conexión real desde la base de práctica. La URL se limpia igual y se avisa.
+  const onboarding = isTrainingMode()
+    ? skipOnboardingInTraining(window.location.href)
+    : await runOnboardingFromUrl(window.location.href, {
+        config: loadSyncConfig(),
+        hasUserData: hasUserData(await summarizeLocalData()),
+      });
   if (onboarding.kind !== 'none') {
     window.history.replaceState(null, '', stripOnboardingParams(window.location.href));
   }
   if (onboarding.kind === 'applied') {
     // Lo local se borró: la venta en curso restaurada más arriba ya no existe, y el último arqueo
     // tampoco (aviso "Sin arqueo en 24 h").
-    cartSignal.value = { lines: [] };
-    cartSelectionIndexSignal.value = null;
-    resetAttachedCustomer();
-    identityResetSignal.value = false;
-    lastCashCountAtSignal.value = (await getCashBalance()).lastCountAt;
+    await resetSessionAfterWipe();
   }
 
   // Etapa 2b (#76): el estado de la conexión sale de lo guardado. Sin una
@@ -96,23 +119,57 @@ export async function bootstrap(): Promise<void> {
   setConnectionState(state);
   setActiveConnectorType(state === 'active' && configResult.ok ? configResult.value.type : null);
   setDemoSession(state === 'active' && configResult.ok ? (configResult.value.demo ?? null) : null);
+  // #193: la sucursal y la caja de la barra de estado y del título.
+  setTerminalIdentity(
+    state === 'active' && configResult.ok
+      ? {
+          branch: configResult.value.branch ?? '',
+          pointOfSale: configResult.value.pointOfSale ?? '',
+        }
+      : null,
+  );
   // 4.4.0 (#128): capacidades del último `getInfo` y avisos del último pull, así una terminal que
-  // arranca sin red los sabe.
+  // arranca sin red los sabe. 4.5.0 (#193): también la empresa; 4.6.0 (#179), el portal.
   restoreBackendCapabilities();
+  restoreBackendCompany();
+  restoreBackendPortal();
   restoreBackendNotices();
+  // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
+  restoreDemoRevoked();
 
   if (onboarding.kind === 'review') {
     await openWizardWithCandidate(onboarding.candidate, onboarding.notice);
   } else if (state !== 'active') {
     await openRequiredWizard();
-    if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+    if (onboarding.kind === 'failed') {
       configNoticeSignal.value = onboarding.notice;
     }
-  } else if (onboarding.kind === 'failed' || onboarding.kind === 'ignored') {
+  } else if (onboarding.kind === 'failed') {
     commandBarWarningSignal.value = onboarding.notice;
   } else if (onboarding.kind === 'applied' && onboarding.notice !== undefined) {
     commandBarNoticeSignal.value = onboarding.notice;
   }
 
+  // #176: hay algo que perder, así que se confirma antes de pedir la demo. Sin conexión activa, el
+  // wizard requerido ya quedó abierto arriba, por si se cancela. `openDemoConfirm` pausa el sync
+  // antes de su primer `await`: `startSyncEngine` no corre nada mientras la pantalla esté abierta.
+  if (onboarding.kind === 'confirm') {
+    void openDemoConfirm(onboarding.entry);
+  }
+
+  // #177: la salida del entrenamiento recargó; se avisa una sola vez.
+  if (consumeTrainingExited()) {
+    commandBarNoticeSignal.value = 'Saliste del entrenamiento.';
+  }
+
   startSyncEngine();
+}
+
+/** En entrenamiento (#177): un link en la URL se limpia y se avisa; nunca se aplica. */
+function skipOnboardingInTraining(href: string): { kind: 'none' } {
+  if (hasOnboardingParams(href)) {
+    window.history.replaceState(null, '', stripOnboardingParams(href));
+    commandBarWarningSignal.value = 'Salí del entrenamiento y volvé a abrir el link.';
+  }
+  return { kind: 'none' };
 }

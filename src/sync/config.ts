@@ -18,11 +18,17 @@ function withLegacyType(value: unknown): unknown {
   return value;
 }
 
-/** Terminal en demo (#128): lo que devolvió `POST /demo-sessions`, para la marca y `/ALTA`. */
+/**
+ * Terminal en demo (#128): lo que devolvió `POST /demo-sessions`, para la marca, `/ALTA` y
+ * `/DEMO_NUEVA`.
+ */
 export const demoSessionInfoSchema = z.object({
   template: z.string(),
   onboarding: z.object({ url: z.url(), label: z.string() }),
   startedAt: z.string(),
+  // El `backend` del link (#176), al que `/DEMO_NUEVA` le pide otra demo. Puede no ser la `baseUrl`
+  // que devolvió la sesión. Ausente en una demo anterior a #176: se usa la `baseUrl`.
+  backend: z.string().optional(),
 });
 export type DemoSessionInfo = z.infer<typeof demoSessionInfoSchema>;
 

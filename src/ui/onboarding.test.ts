@@ -4,7 +4,7 @@ import type { ApplyConnectionParams } from '../sync/apply-connection.ts';
 import type { SyncConfig } from '../sync/config.ts';
 import type { ProbeSnapshot } from '../sync/connection.ts';
 import type { DemoSession } from '../sync/demo-session.ts';
-import { runOnboardingFromUrl, type OnboardingDeps } from './onboarding.ts';
+import { runOnboardingFromUrl, startDemo, type OnboardingDeps } from './onboarding.ts';
 
 const NOW = new Date('2026-09-28T12:00:00.000Z');
 
@@ -31,6 +31,7 @@ const DEMO_CONFIG: Result<SyncConfig> = ok({
   verifiedAt: 'x',
   demo: { template: 'kiosco', onboarding: session.onboarding, startedAt: 'x' },
 });
+const INVALID_CONFIG: Result<SyncConfig> = err('sync/config-invalid', { issues: [] });
 const REAL_CONFIG: Result<SyncConfig> = ok({
   type: 'rest',
   baseUrl: 'https://erp.x',
@@ -92,46 +93,50 @@ describe('runOnboardingFromUrl — entrada con link de demo (#128)', () => {
       apiKey: 'k',
       branch: 'CENTRAL',
       pointOfSale: 'Caja 1',
-      demo: { template: 'kiosco', onboarding: session.onboarding, startedAt: NOW.toISOString() },
+      demo: {
+        template: 'kiosco',
+        onboarding: session.onboarding,
+        startedAt: NOW.toISOString(),
+        backend: 'https://b.x',
+      },
     });
     expect(deps.probeConnection).toHaveBeenCalledWith(applied()?.candidate);
   });
 
-  it('ya en demo: reinicia la demo aunque haya datos', async () => {
+  it('ya en demo y sin datos: aplica directo', async () => {
     const outcome = await runOnboardingFromUrl(
       entry,
-      { config: DEMO_CONFIG, hasUserData: true },
+      { config: DEMO_CONFIG, hasUserData: false },
       deps,
     );
     expect(outcome).toEqual({ kind: 'applied' });
     expect(applied()?.local).toBe('wipe');
   });
 
-  it('con conexión real se ignora sin llamar al backend', async () => {
+  it.each([
+    ['ya en demo con datos', DEMO_CONFIG, true],
+    ['sin config con datos', NO_CONFIG, true],
+    ['conexión real sin datos', REAL_CONFIG, false],
+    ['conexión real con datos', REAL_CONFIG, true],
+    ['config ilegible', INVALID_CONFIG, false],
+  ])('%s: pide confirmación sin llamar al backend (#176)', async (_name, config, hasUserData) => {
+    const outcome = await runOnboardingFromUrl(entry, { config, hasUserData }, deps);
+    expect(outcome).toEqual({ kind: 'confirm', entry: { backend: 'https://b.x' } });
+    expect(deps.requestDemoSession).not.toHaveBeenCalled();
+    expect(deps.probeConnection).not.toHaveBeenCalled();
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+  });
+
+  it('la confirmación lleva el template del link', async () => {
     const outcome = await runOnboardingFromUrl(
-      entry,
+      `${entry}&template=almacen`,
       { config: REAL_CONFIG, hasUserData: false },
       deps,
     );
     expect(outcome).toEqual({
-      kind: 'ignored',
-      notice: 'Esta terminal ya está conectada: se ignoró el link de demo.',
+      kind: 'confirm',
+      entry: { backend: 'https://b.x', template: 'almacen' },
     });
-    expect(deps.requestDemoSession).not.toHaveBeenCalled();
-    expect(deps.applyConnection).not.toHaveBeenCalled();
-  });
-
-  it('sin config pero con datos locales se ignora', async () => {
-    const outcome = await runOnboardingFromUrl(
-      entry,
-      { config: NO_CONFIG, hasUserData: true },
-      deps,
-    );
-    expect(outcome).toEqual({
-      kind: 'ignored',
-      notice: 'Esta terminal tiene datos locales: se ignoró el link de demo.',
-    });
-    expect(deps.requestDemoSession).not.toHaveBeenCalled();
   });
 
   it('template desconocido: reintenta sin template y avisa', async () => {
@@ -166,6 +171,22 @@ describe('runOnboardingFromUrl — entrada con link de demo (#128)', () => {
       kind: 'failed',
       notice: 'No se pudo iniciar la demo: este backend no ofrece demos.',
     });
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+  });
+
+  it('backend con el tope de demos (503) → failed con el motivo, sin reintentar', async () => {
+    deps.requestDemoSession.mockResolvedValue(err('demo/capacity', undefined));
+    const outcome = await runOnboardingFromUrl(
+      entry,
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+    expect(outcome).toEqual({
+      kind: 'failed',
+      notice:
+        'No se pudo iniciar la demo: hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos.',
+    });
+    expect(deps.requestDemoSession).toHaveBeenCalledTimes(1);
     expect(deps.applyConnection).not.toHaveBeenCalled();
   });
 
@@ -208,6 +229,38 @@ describe('runOnboardingFromUrl — entrada con link de demo (#128)', () => {
       : DEMO_CONFIG;
     await runOnboardingFromUrl(entry, { config: withLocale, hasUserData: false }, deps);
     expect(applied()?.candidate).toMatchObject({ locale: 'es-AR' });
+  });
+});
+
+describe('startDemo (#176)', () => {
+  it('pide la demo, prueba y aplica con wipe, aunque la terminal tenga una conexión real', async () => {
+    const outcome = await startDemo({ backend: 'https://b.x' }, REAL_CONFIG, deps);
+    expect(outcome).toEqual({ kind: 'applied' });
+    expect(applied()?.local).toBe('wipe');
+    expect(applied()?.candidate.demo?.backend).toBe('https://b.x');
+  });
+
+  it('si el backend no ofrece demos: failed y no aplica nada', async () => {
+    deps.requestDemoSession.mockResolvedValue(err('demo/not-offered', undefined));
+    const outcome = await startDemo({ backend: 'https://b.x' }, REAL_CONFIG, deps);
+    expect(outcome).toEqual({
+      kind: 'failed',
+      notice: 'No se pudo iniciar la demo: este backend no ofrece demos.',
+    });
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+  });
+
+  it('template desconocido: reintenta sin template y avisa', async () => {
+    deps.requestDemoSession
+      .mockResolvedValueOnce(
+        err('demo/unknown-template', { template: 'nope', templates: ['kiosco'] }),
+      )
+      .mockResolvedValueOnce(ok(session));
+    const outcome = await startDemo({ backend: 'https://b.x', template: 'nope' }, NO_CONFIG, deps);
+    expect(outcome).toEqual({
+      kind: 'applied',
+      notice: 'La plantilla nope no existe; se usó kiosco.',
+    });
   });
 });
 

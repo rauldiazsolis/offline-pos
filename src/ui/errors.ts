@@ -90,6 +90,8 @@ export function describeError(failure: Failure): string {
       return `No se pudo actualizar el catálogo local (${failure.meta.message}).`;
     case 'storage/cleanup-failed':
       return `No se pudieron borrar los datos locales viejos: ${failure.meta.message}`;
+    case 'printer/save-failed':
+      return `No se pudo guardar la impresora: ${failure.meta.message}`;
     case 'sync/push-issues':
       return `El sistema externo reportó un problema con un envío ya confirmado: ${failure.meta.issues[0] ?? ''}`;
     case 'connection/sync-busy':
@@ -154,6 +156,19 @@ export function describeError(failure: Failure): string {
       return `La plantilla ${failure.meta.template} no existe (hay: ${failure.meta.templates.join(', ')}).`;
     case 'demo/not-offered':
       return 'este backend no ofrece demos';
+    case 'portal/not-offered':
+      return 'este backend no ofrece el portal';
+    case 'demo/rate-limited': {
+      const seconds = failure.meta.retryAfterSeconds;
+      const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));
+      const when =
+        minutes === undefined
+          ? 'en unos minutos'
+          : `en ${String(minutes)} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+      return `se pidieron demasiadas demos desde esta conexión; probá de nuevo ${when}`;
+    }
+    case 'demo/capacity':
+      return 'hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos';
     case 'terminal/reset-failed':
       return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
     default: {

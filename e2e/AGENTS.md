@@ -32,14 +32,42 @@ para `minibackend-sync.spec.ts`, otro en `4001`, en memoria (`DEMO_BACKEND_PORT`
 para `e2e/published-site.spec.ts` (#148), por el mismo motivo: cada
 `POST /demo-sessions` vuelve a cargar la base desde cero, así que con uno solo le pisaría los datos a
 los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 'serial'`) por el mismo
-motivo; el de "conexión real" usa el `test` de `fixtures.ts`, el resto el de Playwright a secas.
+motivo; el de "datos sin enviar" (#176) usa el `test` de `fixtures.ts`, el resto el de Playwright a
+secas. El de la demo revocada la revoca con `POST /_demo/revoke-demos` del panel.
 
-**Sitio publicado** (#148): `e2e/published-site.spec.ts` corre contra `.site-out/` (`pnpm site:build`,
-con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de `4173`), servido por
-`pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`. Prueba `/versions`, que la
-carpeta de la versión arranca con rutas relativas y que su almacenamiento es
-`offline-pos@/<versión>/`. El resto de la suite sigue en `/`: prueba de paso que la raíz no cambió. El
-redirect de `/` y los headers son de Cloudflare: se verifican en la primera publicación.
+**Sitio publicado** (#148, #54): `e2e/published-site.spec.ts` corre contra `.site-out/`
+(`pnpm site:build`, con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de
+`4173`), servido por `pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`.
+Prueba la home (el backend local con su link de demo al canal), que el canal `/v4/` arranca con rutas
+relativas y que su almacenamiento es `offline-pos@/v4/`, y las docs del canal con el puente de
+Sheets. El canal va fijo: si el contrato sube de major, que falle es lo que se quiere. El resto de la
+suite sigue en `/`: prueba de paso que la raíz no cambió. El redirect de `/versions` y los headers
+son de Cloudflare: se verifican en la primera publicación. Se arma con `--only-local` (#147): la home
+solo con el demo-backend local, así el e2e no depende de un backend publicado ni le crea una demo en
+cada corrida.
+
+**Service worker** (#54): `playwright.config.ts` pone `serviceWorkers: 'block'` para toda la suite,
+que así no depende de él. `e2e/pwa.spec.ts` lo habilita (`test.use({ serviceWorkers: 'allow' })`) y
+levanta su propio servidor en `4175`, que sirve el `dist/` de `4173` bajo `/v4/` (en `localhost`,
+contexto seguro) y puede agregarle bytes a `sw.js` para que el navegador vea una versión nueva sin
+un segundo build. Prueba abrir sin red con F5, el aviso y `/ACTUALIZAR` (que no actualiza con una
+venta en curso), `pos.reset()` (con una marca dentro de la caché: el nombre sale del contenido del
+build, así que al reinstalarse se repite) y el manifest. Como cada test tiene un contexto nuevo, la
+primera carga instala el service worker sin que controle la página: para probar una versión nueva
+hay que recargar una vez antes (`openControlled`).
+
+**Una sola pestaña** (#175): `e2e/single-tab.spec.ts` abre varias páginas en el **mismo contexto** de
+Playwright, que comparten `localStorage`, IndexedDB, `navigator.locks` y `BroadcastChannel` como dos
+pestañas de un navegador (cada test de los demás specs tiene su propio contexto, así que nunca se
+cruzan). Solo la primera página siembra la conexión (el `page` de `fixtures.ts`); las otras comparten
+su almacenamiento. La tercera página prueba **otra carpeta del mismo origen**: el sitio de
+`site:preview` tiene una sola carpeta de versión, así que `context.route` sirve el build de 4173 en
+`/otra-carpeta/` (la app usa rutas relativas) y la página arranca con su propio almacenamiento.
+
+**Modo entrenamiento** (#177): `e2e/training.spec.ts` usa el `test` de `fixtures.ts` y anota y
+corta con `page.route` todo request al backend inalcanzable, así ve si hubo un push. Lee las dos bases
+con `getAllFromStore(page, tabla, 'offline-pos#entrenamiento')` (`dbName`, por defecto la real).
+Siembra el catálogo recién con la barra visible: abrir IndexedDB mientras Dexie la crea se bloquea.
 
 **Flakes en CI** (#169): `playwright.config.ts` reintenta una vez solo con `CI`, así
 `trace: 'on-first-retry'` deja la traza; un test que pasa al reintentar sale como "flaky" en el log.

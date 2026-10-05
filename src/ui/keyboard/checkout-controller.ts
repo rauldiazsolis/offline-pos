@@ -7,8 +7,10 @@ import { calculateTotals } from '../../domain/totals.ts';
 import { releaseAccountHold } from '../../storage/customer-repository.ts';
 import { newId } from '../../storage/ids.ts';
 import { closeSaleAndPersist } from '../../storage/sale-repository.ts';
+import { isTrainingMode } from '../../storage/training-mode.ts';
 import { requestAccountHoldNow } from '../../sync/account-hold.ts';
 import { describeError } from '../errors.ts';
+import { showOrPrintReceipt } from '../print/after-close.ts';
 import { formatAmountInput, parseNonNegativeAmount } from '../parse-amount.ts';
 import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
 import {
@@ -18,9 +20,9 @@ import {
   resetCheckout,
   TENDERABLE_METHODS,
 } from '../state/checkout.ts';
+import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
-import { receiptSaleSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
 import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
@@ -128,9 +130,9 @@ export function cancelCheckout(): void {
 /**
  * Resuelve el pago de "Cuenta corriente" para `amount` (RF-17/18): reusa un
  * hold ya aprobado si el monto no cambió desde el intento anterior; si
- * cambió, libera ese hold (best-effort) y pide uno nuevo. Con red, pide un
- * hold síncrono contra el saldo real; sin red, evalúa el crédito disponible
- * cacheado. Nunca pasa por el outbox — la única operación de este tipo (ver
+ * cambió, libera ese hold (best-effort) y pide uno nuevo. Con red y fuera del
+ * entrenamiento (#177), pide un hold síncrono contra el saldo real; si no,
+ * evalúa el crédito disponible cacheado. Nunca pasa por el outbox — la única operación de este tipo (ver
  * §5 del diseño).
  */
 async function resolveAccountReference(amount: number): Promise<Result<string | undefined>> {
@@ -148,7 +150,8 @@ async function resolveAccountReference(amount: number): Promise<Result<string | 
     pendingHoldSignal.value = undefined;
   }
 
-  if (navigator.onLine) {
+  // #177: la reserva es una escritura en el backend; en entrenamiento se evalúa siempre offline.
+  if (navigator.onLine && !isTrainingMode()) {
     const holdResult = await requestAccountHoldNow({
       customerId: customer.id,
       amount,
@@ -244,12 +247,14 @@ export async function submitCheckout(): Promise<void> {
 
   await refreshStockSnapshot();
   await refreshCustomerBalances();
-  receiptSaleSignal.value = result.value;
   cartSignal.value = { lines: [] };
   // Sin esto la selección seguía apuntando a una línea que ya no existe, y el
   // próximo código de barras (todo dígitos) se tomaba como su cantidad.
   cartSelectionIndexSignal.value = null;
+  // Una advertencia era de la venta que se cerró (stock, o "Terminá o descartá la venta para
+  // actualizar" de /ACTUALIZAR, #54): ya no aplica, y taparía el aviso de la venta registrada.
+  commandBarWarningSignal.value = null;
   resetAttachedCustomer();
   resetCheckout();
-  activeScreenSignal.value = 'receipt';
+  showOrPrintReceipt({ kind: 'sale', sale: result.value, copy: false });
 }

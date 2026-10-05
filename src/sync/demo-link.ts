@@ -108,7 +108,25 @@ export function returnUrlFor(href: string): string {
   return `${url.origin}${url.pathname}`;
 }
 
+/** El link de demo para `/DEMO_NUEVA` (#176): la misma carpeta del POS, sin query ni fragmento. */
+export function buildDemoLink(href: string, backend: string, template?: string): string {
+  const url = new URL(returnUrlFor(href));
+  url.searchParams.set('demo', 'true');
+  url.searchParams.set('backend', backend);
+  if (template !== undefined) {
+    url.searchParams.set('template', template);
+  }
+  return url.toString();
+}
+
 const ONBOARDING_PARAMS = ['demo', 'backend', 'template'];
+
+/** ¿La URL trae un link de demo o la vuelta del alta? En entrenamiento no se procesan (#177). */
+export function hasOnboardingParams(href: string): boolean {
+  const url = new URL(href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  return ONBOARDING_PARAMS.some((name) => url.searchParams.has(name)) || hashParams.has('connect');
+}
 
 /** Ruta relativa (para `history.replaceState`) sin lo del onboarding; el resto queda igual. */
 export function stripOnboardingParams(href: string): string {

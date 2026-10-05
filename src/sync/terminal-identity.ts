@@ -1,6 +1,8 @@
 import { buildEventOrigin, type EventOrigin } from '../domain/event-origin.ts';
 import { db } from '../storage/db.ts';
 import { clearAllTables } from '../storage/local-data.ts';
+import { clearTrainingKeys } from '../storage/training-copy.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { clearSyncCursors } from './cursor.ts';
 import { clearPushLotState } from './push-lot.ts';
@@ -12,7 +14,10 @@ export const DEVICE_ID_KEY = storageKey('device-id');
 let cachedDeviceId: string | undefined;
 
 export type IdentityResolution =
-  { status: 'existing' } | { status: 'created'; wipedLocalData: boolean };
+  | { status: 'existing' }
+  | { status: 'created'; wipedLocalData: boolean }
+  /** #177: se perdió el id en entrenamiento; se salió del modo y `bootstrap` recarga. */
+  | { status: 'training-exited' };
 
 function readStoredDeviceId(): string | undefined {
   try {
@@ -51,6 +56,12 @@ export async function resolveDeviceIdentity(): Promise<IdentityResolution> {
   if (stored !== undefined) {
     cachedDeviceId = stored;
     return { status: 'existing' };
+  }
+  // #177: sin id con la marca de entrenamiento, primero se sale del entrenamiento: el borrado de
+  // siempre tiene que correr sobre la base real, no sobre la de práctica. `bootstrap` recarga.
+  if (isTrainingMode()) {
+    clearTrainingKeys();
+    return { status: 'training-exited' };
   }
 
   const config = loadSyncConfig();

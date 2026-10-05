@@ -1,7 +1,7 @@
 {
   "name": "offline-pos",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.5.0",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
@@ -20,7 +20,8 @@
     "test:backend": "pnpm --filter demo-backend run test",
     "typecheck:backend": "pnpm --filter demo-backend run typecheck",
     "site:build": "vite build --outDir .site-dist && node site/build-site.ts --dist .site-dist --out .site-out",
-    "site:preview": "vite preview --outDir .site-out --port 4174 --strictPort"
+    "site:preview": "vite preview --outDir .site-out --port 4174 --strictPort",
+    "release:tag": "node site/tag-release.ts"
   },
   "dependencies": {
     "@preact/signals": "^2.11.2",

@@ -1,10 +1,13 @@
 import type { PushLot } from '../domain/push-lot.ts';
 import type { Failure, Result } from '../domain/result.ts';
 import { STORAGE_NAMESPACE } from '../storage/storage-namespace.ts';
+import { trainingMark } from '../storage/training-mode.ts';
 import {
   backendCapabilitiesSignal,
+  backendCompanySignal,
   backendNoticesSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -13,6 +16,7 @@ import {
   type BackendStatus,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
+import { appUpdateSignal, serviceWorkerStateSignal } from '../ui/state/app-update.ts';
 import { getLastCleanup, type CleanupRecord } from './cleanup-schedule.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import type { BackendNotice, LotIssue } from './connector.ts';
@@ -42,6 +46,8 @@ export type SyncDiagnostics = {
   backendStatus: BackendStatus;
   /** Capacidades del último `getInfo` exitoso (4.4.0, #128); `undefined` = nunca se supo. */
   capabilities: readonly string[] | undefined;
+  /** Empresa del último `getInfo` exitoso (4.5.0, #193); `undefined` = no informada. */
+  company: string | undefined;
   /** Avisos vigentes del backend según el último pull aplicado (4.4.0, #128). */
   notices: readonly BackendNotice[];
   /** Id de dispositivo de esta terminal (contrato v3, #96). */
@@ -53,7 +59,33 @@ export type SyncDiagnostics = {
   posVersion: string;
   /** Nombre del almacenamiento local de esta carpeta (#148, `storage/storage-namespace.ts`). */
   storageNamespace: string;
+  /** Desde cuándo la demo está revocada (#176); `null` = no lo está. */
+  demoRevokedAt: string | null;
+  /** Desde cuándo está prendido el modo entrenamiento (#177); `null` = apagado. */
+  trainingSince: string | null;
+  /** Si el POS abre sin red: el estado del service worker (#54). */
+  offline: OfflineStatus;
 };
+
+/** Si el POS abre sin red (#54), para `/DIAGNOSTICO` y `pos.status()`. */
+export type OfflineStatus = 'ready' | 'installing' | 'update-waiting' | 'unsupported';
+
+export function describeOffline(status: OfflineStatus): string {
+  switch (status) {
+    case 'ready':
+      return 'sin conexión: lista';
+    case 'installing':
+      return 'preparando el modo sin conexión';
+    case 'update-waiting':
+      return 'versión nueva descargada, falta aplicar';
+    case 'unsupported':
+      return 'sin service worker';
+  }
+}
+
+function currentOfflineStatus(): OfflineStatus {
+  return appUpdateSignal.value !== 'none' ? 'update-waiting' : serviceWorkerStateSignal.value;
+}
 
 export function collectDiagnostics(): SyncDiagnostics {
   return {
@@ -68,11 +100,15 @@ export function collectDiagnostics(): SyncDiagnostics {
     pushLotIssues: pushLotIssuesSignal.value,
     backendStatus: backendStatusSignal.value,
     capabilities: backendCapabilitiesSignal.value,
+    company: backendCompanySignal.value,
     notices: backendNoticesSignal.value,
     deviceId: getDeviceId(),
     log: syncLogSignal.value,
     lastCleanup: getLastCleanup(),
     posVersion: __POS_VERSION__,
     storageNamespace: STORAGE_NAMESPACE,
+    demoRevokedAt: demoRevokedSignal.value,
+    trainingSince: trainingMark()?.startedAt ?? null,
+    offline: currentOfflineStatus(),
   };
 }

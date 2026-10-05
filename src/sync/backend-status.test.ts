@@ -4,7 +4,10 @@ import { fakeConnector } from '../test/fake-connector.ts';
 import {
   backendCapabilitiesSignal,
   backendCheckDueSignal,
+  backendCompanySignal,
+  backendPortalSignal,
   backendStatusSignal,
+  demoRevokedSignal,
   setBackendCheckDue,
   setBackendStatus,
   syncLogSignal,
@@ -16,6 +19,7 @@ import {
   noteSyncFailure,
   refreshBackendStatus,
 } from './backend-status.ts';
+import { saveSyncConfig } from './config.ts';
 
 const now = '2026-09-24T12:00:00.000Z';
 
@@ -32,6 +36,7 @@ beforeEach(() => {
 afterEach(() => {
   syncLogSignal.value = [];
   backendCapabilitiesSignal.value = undefined;
+  demoRevokedSignal.value = null;
   localStorage.clear();
 });
 
@@ -68,6 +73,36 @@ describe('blocksSync', () => {
 });
 
 describe('refreshBackendStatus', () => {
+  it('guarda la empresa que manda el backend; sin ella, la borra (4.5.0, #193)', async () => {
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () =>
+          Promise.resolve(
+            ok({ contractVersion: '4.5.0', status: 'ok', company: { name: 'Kiosco Pepe' } }),
+          ),
+      }),
+      now,
+    );
+    expect(backendCompanySignal.value).toBe('Kiosco Pepe');
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendCompanySignal.value).toBeUndefined();
+  });
+
+  it('guarda el portal que manda el backend; sin él, lo borra (4.6.0, #179)', async () => {
+    const portal = { command: 'PANEL', label: 'Panel' };
+    await refreshBackendStatus(
+      fakeConnector({
+        getInfo: () => Promise.resolve(ok({ contractVersion: '4.6.0', status: 'ok', portal })),
+      }),
+      now,
+    );
+    expect(backendPortalSignal.value).toEqual(portal);
+
+    await refreshBackendStatus(fakeConnector(), now);
+    expect(backendPortalSignal.value).toBeUndefined();
+  });
+
   it('con getInfo ok fija el estado, apaga el chequeo pendiente y lo registra en el log', async () => {
     await refreshBackendStatus(fakeConnector(), now);
 
@@ -154,5 +189,32 @@ describe('noteSyncFailure', () => {
       kind: 'incompatible',
       backendVersion: '3.0.0',
     });
+  });
+});
+
+describe('noteSyncFailure — demo revocada (#176)', () => {
+  const unauthorized = failure(
+    err('sync/request-failed', { status: 401, message: 'Unauthorized' }),
+  );
+
+  it('un 401 con la terminal en demo marca la demo revocada', () => {
+    saveSyncConfig({
+      type: 'rest',
+      baseUrl: 'https://b.x',
+      apiKey: 'demo-1',
+      demo: {
+        template: 'kiosco',
+        onboarding: { url: 'https://b.x/alta', label: 'Alta' },
+        startedAt: now,
+      },
+    });
+    noteSyncFailure(unauthorized);
+    expect(demoRevokedSignal.value).not.toBeNull();
+  });
+
+  it('un 401 con una conexión real no la marca', () => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://erp.x', apiKey: 'k' });
+    noteSyncFailure(unauthorized);
+    expect(demoRevokedSignal.value).toBeNull();
   });
 });

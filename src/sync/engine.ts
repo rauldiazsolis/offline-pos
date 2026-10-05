@@ -11,6 +11,7 @@ import { err, ok, type Failure, type Result } from '../domain/result.ts';
 import { loadCatalogRepository } from '../storage/catalog-repository.ts';
 import { loadCustomerRepository } from '../storage/customer-repository.ts';
 import { db } from '../storage/db.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { applyPull } from '../storage/apply-pull.ts';
 import { newId } from '../storage/ids.ts';
 import { countLocalCatalog, listPendingOutbox } from '../storage/local-data.ts';
@@ -20,6 +21,7 @@ import { refreshStockSnapshot } from '../ui/state/stock.ts';
 import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   backendStatusSignal,
+  demoRevokedSignal,
   lastSyncFailureSignal,
   pushLotIssuesSignal,
   setBackendCheckDue,
@@ -44,6 +46,7 @@ import { saveBackendNotices } from './backend-notices.ts';
 import type { Connector, LotIssue, OutboxBatchItem } from './connector.ts';
 import { loadSyncConfig, type SyncConfig } from './config.ts';
 import { connectorPullMode, createConnector } from './connector-registry.ts';
+import { clearDemoRevoked } from './demo-revoked.ts';
 import {
   getCustomersCursor,
   getLastFullSyncAt,
@@ -144,6 +147,11 @@ export async function pushPendingLot(
   now: string,
   options: { ignoreBackoff?: boolean } = {},
 ): Promise<PushSummary> {
+  // #177: en entrenamiento nada viaja. Es el único que llama a `pushBatch` (el ciclo, /SINCRONIZAR
+  // y el envío antes de borrar), así que alcanza con cortar acá.
+  if (isTrainingMode()) {
+    return { attempted: 0, failed: false };
+  }
   const resumed = await buildOrResumeLot(now);
   if (resumed === undefined) {
     return { attempted: 0, failed: false };
@@ -394,7 +402,8 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * **solo mientras dura este request** (nunca durante todo el intervalo entre
  * ciclos), respeta `/CONFIG` abierto, chequea red y config activa, y que el
  * backend no esté en mantenimiento ni sea incompatible (4.0.0, #99): en ese
- * caso el ciclo hace solo un `getInfo` y, cuando vuelve `ok`, se retoma. `run`
+ * caso el ciclo hace solo un `getInfo` y, cuando vuelve `ok`, se retoma. Con la demo revocada
+ * (#176) no corre nada, ni el `getInfo`: lo reintenta `/SINCRONIZAR`. `run`
  * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
  * ni `runPullCycle` necesitan saber de dónde salió. Devuelve lo que devuelve
  * `run`, o `undefined` si el ciclo no corrió (pausado, cerrojo, sin red o sin config).
@@ -403,6 +412,10 @@ async function withConnectorCycle<T>(
   run: (connector: Connector, now: string, config: SyncConfig) => Promise<T>,
 ): Promise<T | undefined> {
   if (syncPausedSignal.value) {
+    return undefined;
+  }
+  // #176: con la demo revocada no se golpea al backend con 401 cada ciclo; /SINCRONIZAR reintenta.
+  if (demoRevokedSignal.value !== null) {
     return undefined;
   }
   const release = tryAcquireSyncLock();
@@ -459,9 +472,12 @@ export async function runPushCycle(options: { ignoreBackoff?: boolean } = {}): P
  * `BatchLotStatus` no distingue severidad — más conservador, nunca se autobloquea, solo adelanta
  * la reconciliación completa.
  */
-/** Limpieza a 7 días (#98): nunca con `/CONFIG` abierto; el cerrojo lo toma ella misma. */
+/**
+ * Limpieza a 7 días (#98): nunca con `/CONFIG` abierto; el cerrojo lo toma ella misma. Tampoco en
+ * entrenamiento (#177): la base de práctica es efímera.
+ */
 async function maybeRunCleanup(): Promise<void> {
-  if (syncPausedSignal.value) {
+  if (syncPausedSignal.value || isTrainingMode()) {
     return;
   }
   await runCleanupIfDue({ now: new Date().toISOString(), acquireLock: tryAcquireSyncLock });
@@ -491,6 +507,8 @@ export async function runPullCycleNow(options: { full?: boolean } = {}): Promise
 
 /** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
 export async function syncNow(): Promise<void> {
+  // #176: vuelve a probar una demo revocada; si sigue dando 401, se marca de nuevo.
+  clearDemoRevoked();
   // 4.0.0 (#99): /SINCRONIZAR pregunta primero el estado del backend.
   setBackendCheckDue(true);
   await runPushCycle({ ignoreBackoff: true });

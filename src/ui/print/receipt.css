@@ -1,0 +1,66 @@
+/* El comprobante (#174): mismo dibujo en la pantalla y en el iframe de impresión. Papel blanco y
+   tinta negra siempre (también con el tema oscuro), y sin variables de tokens.css: el iframe no las
+   tiene. */
+.receipt {
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+.receipt p,
+.receipt h1 {
+  margin: 0;
+}
+.receipt--58mm {
+  width: 58mm;
+  padding: 3mm 5mm;
+  font-size: 9pt;
+}
+.receipt--80mm {
+  width: 80mm;
+  padding: 3mm 4mm;
+  font-size: 10pt;
+}
+.receipt--a6 {
+  width: 89mm; /* 105 mm menos 8 mm de margen de página por lado */
+  padding: 0;
+  font-size: 10pt;
+}
+.receipt__header,
+.receipt__footer,
+.receipt__mark {
+  text-align: center;
+}
+.receipt__header p:first-child {
+  font-weight: bold;
+}
+.receipt__title {
+  font-size: 1.15em;
+}
+.receipt__mark {
+  font-weight: bold;
+  letter-spacing: 0.2em;
+}
+.receipt__divider {
+  border: none;
+  border-top: 1px dashed #000;
+  margin: 1mm 0;
+  width: 100%;
+}
+.receipt__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+}
+.receipt__row span:last-child {
+  white-space: nowrap;
+}
+.receipt__row--bold,
+.receipt__text--bold {
+  font-weight: bold;
+}

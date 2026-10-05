@@ -44,6 +44,11 @@ solo que lo recibió, no que ya terminó de procesarlo. `domain/push-lot.ts` tie
 exponencial (mismo esquema que antes, ahora por lote en vez de por evento);
 `sync/push-lot.ts` lo persiste en `localStorage` (mismo criterio best-effort que
 `sync/cursor.ts`) junto con la lista de lotes ya enviados que todavía no confirmaron `ok`/`issues`.
+**En entrenamiento (#177) `pushPendingLot` no hace nada**: es el único que llama a `pushBatch` (el
+ciclo, `/SINCRONIZAR` y `flushPendingBeforeWipe`), así que es el único corte. El pull corre igual
+sobre la base de práctica, con sus propias claves (`storage/training-mode.ts::operationalKey`, sin
+lotes reales), y lo de entrenamiento, `pending` para siempre, se reaplica en cada pull; el conteo de
+pendientes de la barra se muestra en 0 (`setPendingOutboxCount`).
 
 ## Pull
 
@@ -107,7 +112,7 @@ estadística de conceptos (`cashConcepts`), ni lo que sostiene el saldo de efect
 **el ancla es el último arqueo** y todo lo creado desde su `createdAt` se conserva aunque tenga más
 de 7 días (ventas, movimientos de stock, de cuenta y de caja, y el propio arqueo); **sin ningún
 arqueo** no se borran ventas ni movimientos de caja (son la base 0 del saldo). Un arqueo viejo con
-ajuste espera a que el evento de ese ajuste no esté pendiente. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
+ajuste espera a que el evento de ese ajuste no esté pendiente. En entrenamiento (#177) no corre: la base de práctica es efímera. Cadencia (`sync/cleanup-schedule.ts`): al arrancar y después de cada pull
 exitoso, como mucho cada 24 h (`offline-pos:cleanup:last-run`, validado con Zod al leerse — un
 registro de la forma anterior, con turnos, se ignora y la limpieza vuelve a correr —, que guarda
 también los conteos y la fecha del ancla para `/DIAGNOSTICO`), con el cerrojo de sync (si está tomado, se saltea) y nunca con
@@ -132,7 +137,7 @@ incompatible, #99), el id de dispositivo, los lotes en espera con su último
 estado y su cantidad de eventos, el lote en curso "no recibido por el backend", cómo se aplicó el
 último pull y la última limpieza de datos locales con su ancla — de solo lectura, mismo patrón de
 teclado que `/RESUMEN`. Desde 4.4.0 (#128) también las capacidades del backend ("sin consultar",
-"ninguna" o la lista) y la sección "Avisos del backend" (severidad, mensaje y `ref` como "tipo id"). Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
+"ninguna" o la lista), desde 4.5.0 (#193) la empresa ("Empresa: …" o "no informada") y la sección "Avisos del backend" (severidad, mensaje y `ref` como "tipo id"). Desde la Etapa 2 de #94 también se abre con un click en la barra de estado
 (ver "Barra de estado" en `src/ui/AGENTS.md`).
 
 ## Cadencias
@@ -162,7 +167,8 @@ dentro de la transacción de `storage/apply-pull.ts`, todo o nada, nunca toca ve
 
 Cuenta corriente (Fase 3) es el único flujo que a propósito puede requerir red síncrona: al confirmar
 un cobro con monto en el campo Cuenta corriente, `ui/keyboard/checkout-controller.ts` llama `sync/account-hold.ts::requestAccountHoldNow`
-directo — la **única** operación del `Connector` que no pasa por el outbox ni se reintenta con
+directo (salvo en entrenamiento, #177: la reserva es una escritura en el backend, así que se evalúa
+siempre offline) — la **única** operación del `Connector` que no pasa por el outbox ni se reintenta con
 backoff, porque necesita una respuesta ya para decidir el flujo (§5). Si se aprueba, el `holdId`
 viaja como `Payment.reference` y se confirma con un evento `'account-hold-confirm'` propio, encolado
 en la **misma transacción** que la venta (`storage/sale-repository.ts`) — así sobrevive a que la red
@@ -176,6 +182,45 @@ antes de #87 se trataba aparte como "best-effort"; con push por lote deja de nec
 especial, es un evento más del lote, igual que documenta §6 para el vencimiento del lado del backend.
 
 ## Contrato: qué trajo cada versión
+
+**Contrato 4.6.0 (#178)** — aditivo (spec
+`docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`):
+- **Capacidad `portal`**: `GET /info` la declara con `portal: { command, label }` y
+  `POST /portal-links` devuelve `{ url, expiresAt? }`, la URL que el backend decide según la key (link
+  con autorización de un uso o de varios, o su login); la key nunca va en la URL y el link nunca viaja
+  en el pull. El demo-backend la implementa con `/PANEL` (link de un solo uso, 60 s,
+  `GET /_demo/portal/<token>`).
+- **El portal en el POS (#179**, spec `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`):
+  `backendInfoSchema.portal` (`command` `^[A-Z0-9_]{2,16}$`, `label` no vacío; mal formado cuenta
+  como ausente, con `.catch`) y `ProbeSnapshot.portal`. `sync/backend-portal.ts` lo guarda como la
+  empresa (`localStorage` por carpeta y `backendPortalSignal`; lo escriben `applyConnection` y
+  `refreshBackendStatus`, si deja de venir se borra, lo restaura `bootstrap`), así el botón se ve
+  aunque se arranque sin red. `portalOffer` (pura) decide qué se ofrece: hacen falta la capacidad
+  **y** el objeto; un nombre que choca con uno del POS pasa a `PORTAL` (los nombres reservados los
+  pasa la UI). `sync/portal-link.ts::requestPortalLink` hace el `POST /portal-links` fuera del puerto
+  (solo `rest` y `rest-demo`; otro conector es `portal/not-offered` sin pedir nada), con
+  `buildHeaders` y `failedResponse` del conector REST y `sync/http-body.ts` (el `ErrorBody` y la
+  lectura del JSON, compartidos con `demo-session.ts`): 404 → `portal/not-offered`, 503 →
+  `sync/backend-maintenance` con su `message`, 409 → incompatible, 401/403 → `sync/request-failed`
+  con su status (la UI decide si es la demo que terminó), sin red → `sync/request-failed` sin status.
+  La URL tiene que pasar `isAllowedBackendUrl`; `expiresAt` mal formado se ignora. Sin reintentos;
+  la URL no se guarda ni entra al log de sync. La UI, en "Portal" de `src/ui/AGENTS.md`.
+- **Errores** (`ErrorBody { code, message? }`, `Retry-After`, que el backend expone por CORS):
+  `503 maintenance` en push, pull, holds, demo-sessions y portal-links (el sync ya lo manejaba: no es
+  fallo de red, consulta `/info`); en `/demo-sessions`, `429 rate-limited` y `503 demo-capacity`.
+  `sync/demo-session.ts` los traduce a `demo/rate-limited` (con los segundos de `Retry-After`, solo
+  enteros), `demo/capacity` y `sync/backend-maintenance`, sin reintentar. El demo-backend los simula
+  desde el panel. Que `/account-holds` con 503 caiga a la evaluación offline sigue en #187.
+
+**Contrato 4.5.0 (#193)** — aditivo (spec
+`docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`): `GET /info` suma
+`company: { name }` opcional, el comercio de la key. El POS la guarda como las capacidades
+(`sync/backend-company.ts`, `localStorage` por carpeta y `backendCompanySignal`): la actualiza con
+cada `/info` exitoso (`refreshBackendStatus`), la toma de la prueba al aplicar una conexión
+(`ProbeSnapshot.company`) y la borra si el backend deja de mandarla. Mal formada o con el nombre vacío
+cuenta como ausente (`backendInfoSchema` con `.catch`). No es una capacidad. El demo-backend la manda
+(el nombre de la demo según la plantilla con una key de demo, el del alta con la del comercio); el
+puente de Sheets no, y sigue compatible por el piso. La UI, en "Barra de estado" de `src/ui/AGENTS.md`.
 
 **Contrato 4.4.0 (#128)** — aditivo, la última versión antes del MVP (spec
 `docs/superpowers/specs/2026-09-28-onboarding-demo-contrato-4-4-design.md`):
@@ -203,6 +248,8 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
   (desvío aprobado en la Tarea 2: `processing` podría quedar colgado para siempre).
 - **Stock vacío** (#115): ver "Pull" más arriba.
 - `POST /demo-sessions` y la vuelta con `#connect`: ver "Onboarding de demo" más abajo.
+- **Demo revocada** (#176, aclaración sin cambio de forma, sigue 4.4.0): un backend revoca una demo
+  respondiendo 401 a su key; ver "Onboarding de demo" más abajo.
 
 **Contrato 4.3.0 (#125)** — aditivo: `CustomerPayment.voidsPaymentId?`, la anulación de una cobranza
 como otra cobranza negativa (mismos medios, total invertido, su propio recibo). Viaja como un
@@ -314,8 +361,8 @@ los repositorios y guardan la config con `verifiedAt` **al final** — riesgo re
 guardado vive en `localStorage` y no puede entrar en la transacción de Dexie; si fallara justo después
 del commit, el próximo arranque encontraría la config anterior con datos nuevos. Al terminar: vuelve a
 la venta, reanuda el sync y dispara `runPushThenPull()`. Los caminos 2 y 3 también reemplazan las
-capacidades y los avisos del backend por los de la prueba (4.4.0): nunca quedan los de la conexión
-anterior.
+capacidades y los avisos del backend por los de la prueba (4.4.0), y la empresa (4.5.0): nunca quedan
+los de la conexión anterior.
 
 ## Onboarding de demo (#128)
 
@@ -324,13 +371,15 @@ del `AGENTS.md` de la raíz. Módulos:
 
 | Módulo | Qué hace |
 |---|---|
-| `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
-| `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, y los errores de red de siempre). No pasa por el puerto `Connector`. |
+| `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `buildDemoLink` (el link para `/DEMO_NUEVA`, #176), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
+| `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, `demo/rate-limited` y `demo/capacity` desde 4.6.0, y los errores de red de siempre). No pasa por el puerto `Connector`. |
 | `sync/wipe-key.ts` | `issueWipeKey`/`consumeWipeKey`: token de un solo uso en `offline-pos:pending-wipe-key` (con su fecha), vence a las 2 h. Se consume siempre que vuelva, haga falta o no. |
-| `ui/onboarding.ts` | `runOnboardingFromUrl`: la orquestación, con dependencias inyectadas. Devuelve `none`/`applied`/`ignored`/`failed`/`review` y `bootstrap` decide qué mostrar. |
+| `sync/demo-revoked.ts` | Demo revocada (#176): `isDemoRevokedFailure` (puro: 401/403 con la config en demo), `markDemoRevoked`/`clearDemoRevoked`/`restoreDemoRevoked`, en `demoRevokedSignal` y best-effort en `storageKey('demo-revoked')`. La marca `noteSyncFailure` (por donde pasa todo fallo de `getInfo`, push y pull); con ella `withConnectorCycle` no corre nada, ni el `getInfo`; la borran `syncNow` (vuelve a probar) y `applyConnection`; la restaura `bootstrap`. |
+| `ui/onboarding.ts` | `runOnboardingFromUrl`: la orquestación, con dependencias inyectadas. Devuelve `none`/`applied`/`failed`/`review`/`confirm` y `bootstrap` decide qué mostrar. `confirm` (#176) es un link de demo con algo que perder: no pide la demo, la pide la pantalla "Abrir una demo" con `startDemo` (exportada; también la usa el camino directo), que guarda `demo.backend`. |
 
-`SyncConfig.demo?: { template, onboarding: { url, label }, startedAt }` (fuera de la unión por
-`type`, como `branch`/`locale`) marca la terminal en demo; aplicar otra conexión desde `/CONFIG` la
+`SyncConfig.demo?: { template, onboarding: { url, label }, startedAt, backend? }` (fuera de la unión
+por `type`, como `branch`/`locale`; `backend` es el del link, #176, ausente en una demo anterior)
+marca la terminal en demo; aplicar otra conexión desde `/CONFIG` la
 guarda sin `demo`. Una terminal en demo usa el conector `rest`; `rest-demo` y `/DEMO_RESET` quedan
 para quien configure a mano el minibackend.
 

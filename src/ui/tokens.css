@@ -235,6 +235,69 @@ textarea {
 }
 
 /*
+ * Modo entrenamiento (#177): una franja de alto fijo arriba de todas las pantallas, con rayas ámbar
+ * y negro para que no se confunda con el chrome ni con una advertencia. La pantalla activa toma el
+ * alto que queda: `--app-height` se redefine dentro del wrapper (los dos en px lógicos del zoom).
+ */
+:root {
+  --color-training-a: #f59e0b;
+  --color-training-b: #111827;
+  --training-banner-h: calc(var(--font-size-sm) * 3);
+}
+
+.app-zoom-wrapper--training {
+  --app-height: calc(100svh / var(--app-zoom) - var(--training-banner-h));
+}
+
+.training-banner {
+  height: var(--training-banner-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  /* Las pantallas fijan su tipografía cada una; la franja vive afuera de todas. */
+  font-family: var(--font-sans);
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--color-training-a) 0 16px,
+    var(--color-training-b) 16px 32px
+  );
+}
+
+.training-banner__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-training-b);
+  color: var(--color-training-a);
+  font-size: var(--font-size-sm);
+  font-weight: bold;
+  letter-spacing: 0.05em;
+}
+
+.training-banner__button {
+  flex-shrink: 0;
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: bold;
+}
+
+/*
+ * El ticket en pantalla (comprobante y vista previa de `/IMPRESORA`, #174) es el papel a tamaño
+ * real: cancela el `zoom` de la app, así sus medidas en mm y pt son las del papel y el texto nunca
+ * baja de ~12 px (9 pt en 58 mm), por encima del piso de #111. En el iframe de impresión no hay
+ * zoom que cancelar: esto vive acá y no en `receipt.css`.
+ */
+.receipt-paper {
+  zoom: calc(1 / var(--app-zoom));
+}
+
+/*
  * La barra de comandos vive sobre "chrome" oscuro (ver --color-chrome-*) —
  * un outline claro ahí no se lee bien, así que el foco se marca con un
  * borde inferior en el mismo azul de acento en vez del outline por default.

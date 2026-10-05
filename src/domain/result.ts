@@ -108,6 +108,14 @@ export type ErrorMeta = {
   // sync/demo-session.ts (POST /demo-sessions, #128)
   'demo/unknown-template': { template: string; templates: string[] };
   'demo/not-offered': undefined;
+  // 4.6.0 (#179): `POST /portal-links` respondió 404, o el conector activo no es REST.
+  'portal/not-offered': undefined;
+  // 4.6.0 (#173): el backend frena pedidos (429) o llegó a su tope de demos (503 demo-capacity)
+  'demo/rate-limited': { retryAfterSeconds?: number };
+  'demo/capacity': undefined;
+
+  // storage/printer-config.ts (impresión, #174)
+  'printer/save-failed': { message: string };
 
   // sync/terminal-data.ts (pos.reset() desde la consola)
   'terminal/reset-failed': { message: string };

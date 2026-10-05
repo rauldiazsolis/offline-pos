@@ -2,7 +2,7 @@ import { POS_CONTRACT_VERSION } from '../src/domain/contract-version.ts';
 import { backendInfoSchema, CONTRACT_VERSION_HEADER } from '../src/sync/connector.ts';
 import { requestDemoSession } from '../src/sync/demo-session.ts';
 
-/** Lo que `/versions` muestra de un backend, consultado en vivo (#148). */
+/** Lo que la home muestra de un backend, consultado en vivo (#148, #54). */
 export type BackendFacts = { contract: string; capabilities: string[]; checkedAt: string };
 
 /**
@@ -35,7 +35,7 @@ export async function queryBackend(url: string, now: Date): Promise<BackendFacts
   const capabilities = info.data.capabilities ?? [];
   if (!capabilities.includes('demo-sessions')) {
     throw new Error(
-      `${url}: no declara la capacidad demo-sessions; /versions solo lista backends con demo`,
+      `${url}: no declara la capacidad demo-sessions; la home solo lista backends con demo`,
     );
   }
   return { contract: info.data.contractVersion, capabilities, checkedAt: now.toISOString() };

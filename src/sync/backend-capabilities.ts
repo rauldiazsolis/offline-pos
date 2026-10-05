@@ -5,6 +5,8 @@ import { storageKey } from '../storage/storage-namespace.ts';
 /** Capacidades del contrato 4.4.0 (#128): un backend las declara en `GET /info`. */
 export const CAPABILITY_DEMO_SESSIONS = 'demo-sessions';
 export const CAPABILITY_CUSTOMER_PAYMENT_VOID = 'customer-payment-void';
+/** 4.6.0 (#179): va con el objeto `portal` de `GET /info` (`backend-portal.ts`). */
+export const CAPABILITY_PORTAL = 'portal';
 
 /**
  * Las del último `getInfo` exitoso, en `localStorage`: una terminal que arranca sin red las sabe

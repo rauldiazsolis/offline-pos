@@ -1,6 +1,8 @@
+import type { DayEntry } from '../../domain/day-summary.ts';
 import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import { getDaySummary } from '../../storage/cash-summary-repository.ts';
 import {
+  cashSummaryNoticeSignal,
   cashSummaryTabSignal,
   dayViewSignal,
   movementFilterSignal,
@@ -11,11 +13,14 @@ import {
   selectedProductIndexSignal,
   type CashSummaryTab,
 } from '../state/cash-summary.ts';
+import { documentName, reprintReceipt } from '../print/after-close.ts';
+import type { ReceiptSource } from '../print/resolve-receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 
 /** Capa de glue entre `/RESUMEN` y `storage/cash-summary-repository.ts` — mismo rol que `cash-controller.ts`. */
 
 function resetTabsAndFilters(): void {
+  cashSummaryNoticeSignal.value = null;
   cashSummaryTabSignal.value = 'movements';
   movementFilterSignal.value = '';
   productFilterSignal.value = '';
@@ -37,6 +42,7 @@ export async function triggerCashSummary(): Promise<void> {
  * `await`, así una tecla en vuelo no se pisa).
  */
 export async function showSummaryDay(date: string): Promise<void> {
+  cashSummaryNoticeSignal.value = null;
   selectedEntryIndexSignal.value = 0;
   selectedProductIndexSignal.value = null;
   selectedPaymentIndexSignal.value = null;
@@ -68,6 +74,7 @@ export function exitCashSummaryScreen(): void {
 }
 
 export function setCashSummaryTab(tab: CashSummaryTab): void {
+  cashSummaryNoticeSignal.value = null;
   cashSummaryTabSignal.value = tab;
   movementFilterSignal.value = '';
   productFilterSignal.value = '';
@@ -96,4 +103,43 @@ export function updatePaymentFilter(value: string): void {
   // coincidencias, nunca oculta filas, así que no hace falta reindexar la selección como en
   // Productos.
   paymentFilterSignal.value = value;
+}
+
+/**
+ * Qué se reimprime de una fila de Movimientos (#174): ventas y cobranzas (también las anuladas y
+ * las anulaciones), siempre como copia. Una cobranza va sin saldos: los de ese momento no están
+ * guardados. Los movimientos de caja y los arqueos no tienen comprobante.
+ */
+export function reprintSourceFor(
+  entry: DayEntry,
+  customerNames: ReadonlyMap<string, string>,
+): ReceiptSource | undefined {
+  switch (entry.kind) {
+    case 'sale':
+      return { kind: 'sale', sale: entry.sale, copy: true };
+    case 'collection':
+      return {
+        kind: 'collection',
+        payment: entry.payment,
+        customerName: customerNames.get(entry.payment.customerId) ?? entry.payment.customerId,
+        copy: true,
+      };
+    case 'movement':
+    case 'count':
+      return undefined;
+  }
+}
+
+/**
+ * Reimprimir (o ver, sin papel) la fila elegida; nada si no es una venta ni una cobranza. Al
+ * imprimir, el aviso de `/RESUMEN` dice qué copia salió.
+ */
+export function reprintEntry(entry: DayEntry, customerNames: ReadonlyMap<string, string>): void {
+  const source = reprintSourceFor(entry, customerNames);
+  if (source === undefined) {
+    return;
+  }
+  if (reprintReceipt(source) === 'printed') {
+    cashSummaryNoticeSignal.value = `Copia del ${documentName(source)} enviada a imprimir.`;
+  }
 }

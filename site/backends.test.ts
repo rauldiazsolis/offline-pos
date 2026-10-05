@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { loadBackends, parseBackends } from './backends.ts';
+import { loadBackends, parseBackends, selectBackends } from './backends.ts';
 
 describe('backends conocidos (#148)', () => {
   it('la lista del repo es válida y arranca con el demo-backend local', () => {
@@ -23,5 +23,14 @@ describe('backends conocidos (#148)', () => {
       parseBackends([{ name: 'A', url: 'http://localhost:4000', local: 'otro' }]),
     ).toThrow();
     expect(() => parseBackends([])).toThrow();
+  });
+
+  it('onlyLocal se queda con los backends locales: el e2e no depende de uno publicado (#147)', () => {
+    const backends = parseBackends([
+      { name: 'A', url: 'http://localhost:4000', local: 'demo-backend' },
+      { name: 'B', url: 'https://erp.example.com' },
+    ]);
+    expect(selectBackends(backends, { onlyLocal: true }).map(({ name }) => name)).toEqual(['A']);
+    expect(selectBackends(backends, { onlyLocal: false })).toEqual(backends);
   });
 });

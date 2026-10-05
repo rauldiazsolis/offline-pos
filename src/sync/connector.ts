@@ -234,10 +234,20 @@ export function toPullBatchResult(data: z.infer<typeof pullBatchResponseSchema>)
 /** Header con la versión del contrato que habla el POS, en todo request REST (4.0.0, #99). */
 export const CONTRACT_VERSION_HEADER = 'X-POS-Contract-Version';
 
+/** El comando y el botón del portal (4.6.0): `command` sin la "/", que agrega el POS. */
+export const backendPortalSchema = z.object({
+  command: z.string().regex(/^[A-Z0-9_]{2,16}$/),
+  label: z.string().trim().min(1),
+});
+
+export type BackendPortal = z.infer<typeof backendPortalSchema>;
+
 /**
  * Respuesta de `GET /info` (contrato 4.0.0, #99): versión y estado del backend. 4.4.0 (#128): un
  * `status` desconocido se trata como `ok` (reglas de evolución) y `capabilities` declara lo
- * opcional que el backend implementa (ausente = ninguna).
+ * opcional que el backend implementa (ausente = ninguna). 4.5.0 (#193): `company`, el comercio de
+ * la key, para mostrarlo; mal formado o con el nombre vacío cuenta como ausente. 4.6.0 (#179):
+ * `portal`, el comando y el botón del portal; mal formado cuenta como ausente.
  */
 export const backendInfoSchema = z.object({
   contractVersion: z.string(),
@@ -245,6 +255,11 @@ export const backendInfoSchema = z.object({
   message: z.string().optional(),
   backend: z.object({ name: z.string(), version: z.string() }).optional(),
   capabilities: z.array(z.string()).optional(),
+  company: z
+    .object({ name: z.string().trim().min(1) })
+    .optional()
+    .catch(undefined),
+  portal: backendPortalSchema.optional().catch(undefined),
 });
 
 export type BackendInfo = {
@@ -253,6 +268,8 @@ export type BackendInfo = {
   message?: string;
   backend?: { name: string; version: string };
   capabilities?: string[];
+  company?: { name: string };
+  portal?: BackendPortal;
 };
 
 /** Omite los opcionales ausentes (`exactOptionalPropertyTypes`). */
@@ -263,6 +280,8 @@ export function toBackendInfo(data: z.infer<typeof backendInfoSchema>): BackendI
     ...(data.message !== undefined ? { message: data.message } : {}),
     ...(data.backend !== undefined ? { backend: data.backend } : {}),
     ...(data.capabilities !== undefined ? { capabilities: data.capabilities } : {}),
+    ...(data.company !== undefined ? { company: data.company } : {}),
+    ...(data.portal !== undefined ? { portal: data.portal } : {}),
   };
 }
 

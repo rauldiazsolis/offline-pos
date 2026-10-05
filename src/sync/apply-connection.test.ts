@@ -9,8 +9,12 @@ import { fakeConnector } from '../test/fake-connector.ts';
 import {
   activeConnectorTypeSignal,
   backendCapabilitiesSignal,
+  backendCompanySignal,
+  backendPortalSignal,
   connectionStateSignal,
+  demoRevokedSignal,
   syncStatusSignal,
+  terminalIdentitySignal,
 } from '../ui/state/sync.ts';
 import {
   applyConnection,
@@ -122,6 +126,58 @@ describe('applyConnection', () => {
     await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
     expect(backendCapabilitiesSignal.value).toBeUndefined();
     expect(localStorage.getItem('offline-pos:backend-capabilities')).toBeNull();
+  });
+
+  it('guarda la empresa de la prueba; una foto sin ella la borra (4.5.0, #193)', async () => {
+    await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, company: { name: 'Kiosco Pepe' } },
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(backendCompanySignal.value).toBe('Kiosco Pepe');
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+    expect(backendCompanySignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:backend-company')).toBeNull();
+  });
+
+  it('guarda el portal de la prueba; una foto sin él lo borra (4.6.0, #179)', async () => {
+    const portal = { command: 'PANEL', label: 'Panel' };
+    await applyConnection({
+      candidate,
+      snapshot: { ...snapshot, portal },
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(backendPortalSignal.value).toEqual(portal);
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+    expect(backendPortalSignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:backend-portal')).toBeNull();
+  });
+
+  it('fija la sucursal y la caja de la conexión aplicada (#193)', async () => {
+    await applyConnection({
+      candidate: { ...candidate, branch: 'Central', pointOfSale: 'Caja 1' },
+      snapshot,
+      local: 'wipe',
+      originChanged: true,
+      now,
+    });
+    expect(terminalIdentitySignal.value).toEqual({ branch: 'Central', pointOfSale: 'Caja 1' });
+  });
+
+  it('deja atrás una demo revocada (#176)', async () => {
+    demoRevokedSignal.value = now;
+    localStorage.setItem('offline-pos:demo-revoked', JSON.stringify({ at: now }));
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+
+    expect(demoRevokedSignal.value).toBeNull();
+    expect(localStorage.getItem('offline-pos:demo-revoked')).toBeNull();
   });
 
   it('fija el tipo del conector activo (de ahí salen los comandos de la barra)', async () => {
@@ -322,6 +378,8 @@ describe('applyTerminalSettings', () => {
     });
     expect(connectionStateSignal.value).toBe('active');
     expect(activeConnectorTypeSignal.value).toBe('rest');
+    // #193: la barra y el título muestran la terminal nueva.
+    expect(terminalIdentitySignal.value).toEqual({ branch: 'Centro', pointOfSale: 'Caja 2' });
   });
 
   it('sin config guardada devuelve el error de lectura', () => {

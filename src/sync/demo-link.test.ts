@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { err, ok } from '../domain/result.ts';
 import {
+  buildDemoLink,
   buildOnboardingUrl,
   readConnectReturn,
+  hasOnboardingParams,
   readDemoEntry,
   returnUrlFor,
   stripOnboardingParams,
@@ -77,9 +79,33 @@ describe('links de ida y limpieza', () => {
   it('returnUrlFor usa origin + pathname (anda en una subruta)', () => {
     expect(returnUrlFor('https://pos.x/app/?demo=true#connect=a')).toBe('https://pos.x/app/');
   });
+  it('hasOnboardingParams: un link de demo o la vuelta del alta (#177)', () => {
+    expect(hasOnboardingParams('https://pos.x/app/?demo=true&backend=b')).toBe(true);
+    expect(hasOnboardingParams('https://pos.x/app/#connect=a')).toBe(true);
+    expect(hasOnboardingParams('https://pos.x/app/?otro=1#x=2')).toBe(false);
+  });
   it('stripOnboardingParams saca solo lo del onboarding', () => {
     expect(
       stripOnboardingParams('https://pos.x/app/?demo=true&backend=b&template=t&otro=1#connect=a'),
     ).toBe('/app/?otro=1');
+  });
+});
+
+describe('buildDemoLink (#176)', () => {
+  it('arma el link en la misma carpeta, con backend y template', () => {
+    const link = buildDemoLink('https://pos.x/0.3.0/?x=1#a', 'https://b.x/connector', 'kiosco');
+    const url = new URL(link);
+    expect(`${url.origin}${url.pathname}`).toBe('https://pos.x/0.3.0/');
+    expect(url.searchParams.get('demo')).toBe('true');
+    expect(url.searchParams.get('backend')).toBe('https://b.x/connector');
+    expect(url.searchParams.get('template')).toBe('kiosco');
+    expect(url.searchParams.get('x')).toBeNull();
+    expect(url.hash).toBe('');
+  });
+
+  it('sin template no lo pone, y readDemoEntry lo lee de vuelta', () => {
+    const link = buildDemoLink('https://pos.x/', 'https://b.x');
+    expect(new URL(link).searchParams.has('template')).toBe(false);
+    expect(readDemoEntry(link)).toEqual(ok({ backend: 'https://b.x' }));
   });
 });

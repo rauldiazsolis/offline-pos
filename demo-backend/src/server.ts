@@ -7,6 +7,7 @@ import { demoResetRoute } from './routes/demo-reset.ts';
 import { demoSessionRoutes } from './routes/demo-sessions.ts';
 import { infoRoutes } from './routes/info.ts';
 import { panelRoutes } from './routes/panel.ts';
+import { portalRoutes } from './routes/portal.ts';
 import { syncRoutes } from './routes/sync.ts';
 import { seedIfEmpty } from './seed.ts';
 
@@ -23,6 +24,7 @@ registerRoutes(syncRoutes);
 registerRoutes(accountHoldRoutes);
 registerRoutes(demoResetRoute);
 registerRoutes(demoSessionRoutes);
+registerRoutes(portalRoutes);
 registerRoutes(panelRoutes);
 
 createApp(db).listen(PORT, () => {

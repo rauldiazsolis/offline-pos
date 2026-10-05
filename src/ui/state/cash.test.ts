@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setTrainingModeForTests } from '../../storage/training-mode.ts';
 import {
   cashCountOverdueSignal,
   lastCashCountAtSignal,
@@ -7,6 +8,7 @@ import {
 } from './cash.ts';
 
 afterEach(() => {
+  setTrainingModeForTests(null);
   vi.useRealTimers();
   lastCashCountAtSignal.value = undefined;
 });
@@ -36,5 +38,14 @@ describe('aviso de arqueo (#100)', () => {
     stop();
     vi.advanceTimersByTime(60_000);
     expect(nowMinuteSignal.value).toBe('2026-09-24T12:01:00.000Z');
+  });
+});
+
+describe('aviso de arqueo en entrenamiento (#177)', () => {
+  it('no se muestra: la caja de práctica arranca en 0', () => {
+    nowMinuteSignal.value = '2026-10-04T12:00:00.000Z';
+    lastCashCountAtSignal.value = undefined;
+    setTrainingModeForTests({ startedAt: '2026-10-04T11:00:00.000Z' });
+    expect(cashCountOverdueSignal.value).toBe(false);
   });
 });

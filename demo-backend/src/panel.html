@@ -11,13 +11,24 @@
       th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; font-size: 0.9rem; }
       button { padding: 0.5rem 1rem; cursor: pointer; }
       td button { padding: 0.2rem 0.6rem; }
-      #reset-status { margin-left: 1rem; color: #555; }
+      #reset-status, #revoke-status { margin-left: 1rem; color: #555; }
     </style>
   </head>
   <body>
     <h1>Minibackend de demo — offline-pos</h1>
     <button id="reset-btn">Reset demo</button>
     <span id="reset-status"></span>
+    <button id="revoke-btn">Revocar las demos</button>
+    <span id="revoke-status"></span>
+    <p>
+      <label>POST /demo-sessions responde
+        <select id="demo-sessions-mode">
+          <option value="normal">normal (201)</option>
+          <option value="rate-limited">429 rate-limited (Retry-After: 600)</option>
+          <option value="capacity">503 demo-capacity</option>
+        </select>
+      </label>
+    </p>
 
     <section>
       <h2>Lotes de push</h2>
@@ -123,6 +134,8 @@
       maintenanceMessage.addEventListener('change', saveMaintenance);
       const simulateContract3 = document.getElementById('simulate-contract3');
       simulateContract3.addEventListener('change', () => post('/_demo/api/settings', { simulateContract3: simulateContract3.checked }, 'PUT'));
+      const demoSessionsMode = document.getElementById('demo-sessions-mode');
+      demoSessionsMode.addEventListener('change', () => post('/_demo/api/settings', { demoSessions: demoSessionsMode.value }, 'PUT'));
       const notice = document.getElementById('notice');
       const noticeSeverity = document.getElementById('notice-severity');
       const noticeMessage = document.getElementById('notice-message');
@@ -163,6 +176,7 @@
         notice.checked = settings.notice.enabled;
         if (document.activeElement !== noticeSeverity) noticeSeverity.value = settings.notice.severity;
         if (document.activeElement !== noticeMessage) noticeMessage.value = settings.notice.message;
+        if (document.activeElement !== demoSessionsMode) demoSessionsMode.value = settings.demoSessions;
         loadTable('/_demo/api/lots', 'lots-table', (l) => `<tr><td>${l.id}</td><td>${l.deviceId ?? ''}</td><td>${l.eventCount}</td><td>${l.status}</td><td>${lotIssues(l)}</td><td>${lotActions(l)}</td></tr>`);
         loadTable('/_demo/api/catalog/products', 'catalog-products-table', catalogRow('products'));
         loadTable('/_demo/api/catalog/customers', 'catalog-customers-table', catalogRow('customers'));
@@ -181,6 +195,13 @@
         await fetch('/_demo/reset', { method: 'POST' });
         status.textContent = 'Listo.';
         refresh();
+      });
+
+      document.getElementById('revoke-btn').addEventListener('click', async () => {
+        const status = document.getElementById('revoke-status');
+        const response = await fetch('/_demo/revoke-demos', { method: 'POST' });
+        const { revoked } = await response.json();
+        status.textContent = `Revocadas: ${revoked}.`;
       });
 
       refresh();

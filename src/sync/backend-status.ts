@@ -8,7 +8,11 @@ import {
   type BackendStatus,
 } from '../ui/state/sync.ts';
 import { saveBackendCapabilities } from './backend-capabilities.ts';
+import { saveBackendCompany } from './backend-company.ts';
+import { saveBackendPortal } from './backend-portal.ts';
+import { loadSyncConfig } from './config.ts';
 import type { BackendInfo, Connector } from './connector.ts';
+import { isDemoRevokedFailure, markDemoRevoked } from './demo-revoked.ts';
 import { logSyncAttempt } from './sync-log.ts';
 
 /**
@@ -52,6 +56,10 @@ export async function refreshBackendStatus(
   if (result.ok) {
     // 4.4.0 (#128): lo que el backend declara, también si está incompatible o en mantenimiento.
     saveBackendCapabilities(result.value.capabilities ?? []);
+    // 4.5.0 (#193): la empresa de la key; sin ella, se deja de mostrar.
+    saveBackendCompany(result.value.company);
+    // 4.6.0 (#179): el portal; sin él, se deja de ofrecer.
+    saveBackendPortal(result.value.portal);
     const status = classifyBackendInfo(result.value);
     setBackendStatus(status);
     setBackendCheckDue(false);
@@ -64,9 +72,13 @@ export async function refreshBackendStatus(
 /**
  * Después de un fallo de sync: un `409 incompatible-contract` fija el estado
  * ya; cualquier otro fallo que no sea de red agenda un `getInfo` antes del
- * próximo ciclo (puede ser que el backend haya entrado en mantenimiento).
+ * próximo ciclo (puede ser que el backend haya entrado en mantenimiento). Con
+ * la terminal en demo, un 401/403 además marca la demo revocada (#176).
  */
 export function noteSyncFailure(failure: Failure): void {
+  if (isDemoRevokedFailure(failure, loadSyncConfig())) {
+    markDemoRevoked(new Date().toISOString());
+  }
   if (failure.error === 'sync/incompatible-contract') {
     setBackendStatus({ kind: 'incompatible', backendVersion: failure.meta.backend });
     return;

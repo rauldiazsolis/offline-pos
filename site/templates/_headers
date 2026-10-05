@@ -1,6 +1,7 @@
-# Cloudflare Pages (#148). Por defecto Pages ya manda "public, max-age=0, must-revalidate":
-# el HTML, /versions, llms.txt y version.json se revalidan siempre. Solo los assets con hash
-# (nunca cambian de contenido) se guardan un año.
+# Cloudflare Pages (#148, #54). Por defecto Pages ya manda "public, max-age=0, must-revalidate":
+# el HTML, llms.txt, version.json, sw.js y el manifest se revalidan siempre (la búsqueda de
+# versiones nuevas del service worker siempre llega al servidor). Solo los assets con hash (nunca
+# cambian de contenido) se guardan un año.
 /*
   X-Content-Type-Options: nosniff
 

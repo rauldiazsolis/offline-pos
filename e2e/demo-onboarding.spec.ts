@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { test as fixtureTest } from './fixtures.ts';
-import { confirmCheckout, fillPayment } from './helpers.ts';
+import { confirmCheckout, fillPayment, seedCatalog } from './helpers.ts';
 import { getAllFromStore } from './indexed-db.ts';
 
 /**
@@ -31,6 +31,12 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Crear mi comercio (/ALTA)' })).toBeVisible();
   expect(page.url()).not.toContain('demo=');
+  // #193: la empresa de la demo como título del encabezado y la caja debajo; caja y sucursal en la
+  // pestaña.
+  const header = page.getByTestId('terminal-header');
+  await expect(header.getByText('Kiosco de demo')).toBeVisible();
+  await expect(header.getByText('Caja 1 - CENTRAL')).toBeVisible();
+  await expect(page).toHaveTitle('Caja 1 - CENTRAL');
 
   await commandBar.fill('arroz');
   await expect(page.getByText('Arroz 1kg')).toBeVisible();
@@ -40,7 +46,8 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   await commandBar.fill('/ALTA');
   await commandBar.press('Enter');
   await expect(page).toHaveURL(/localhost:4001\/_demo\/onboarding\?return_url=/);
-  await page.getByRole('link', { name: 'Crear comercio y volver al POS' }).click();
+  await page.getByLabel('Nombre del comercio').fill('Almacén Rosa');
+  await page.getByRole('button', { name: 'Crear comercio y volver al POS' }).click();
 
   await expect(page.getByLabel('Barra de comandos')).toBeVisible();
   await expect(page.getByText('DEMO', { exact: true })).toHaveCount(0);
@@ -49,6 +56,8 @@ test('link de demo → venta en demo → /ALTA → alta falsa → vuelve configu
   expect(config).toMatchObject({ type: 'rest', baseUrl: BACKEND, apiKey: 'demo-api-key' });
   expect(config).not.toHaveProperty('demo');
   await expect(page.getByText('Arroz 1kg')).toHaveCount(0); // la venta en curso se borró
+  // #193: ya no es una demo, la empresa es la del alta.
+  await expect(page.getByTestId('terminal-header').getByText('Almacén Rosa')).toBeVisible();
 });
 
 test('template desconocido: arranca con el default y avisa', async ({ page }) => {
@@ -76,7 +85,7 @@ test('vuelta sin wipe_key con datos: wizard precargado, nada borrado', async ({ 
   await commandBar.fill('/ALTA');
   await commandBar.press('Enter');
   await expect(page).toHaveURL(/localhost:4001\/_demo\/onboarding\?return_url=/);
-  await page.getByRole('link', { name: 'Volver sin wipe_key' }).click();
+  await page.getByRole('button', { name: 'Volver sin wipe_key' }).click();
 
   await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
   await expect(page.getByText(/Volviste del alta/)).toBeVisible();
@@ -106,11 +115,131 @@ test('avisos del backend: "Avisos (1)" y el detalle en /DIAGNOSTICO', async ({ p
   }
 });
 
-fixtureTest('con una conexión real el link se ignora y avisa', async ({ page }) => {
+fixtureTest(
+  'con datos sin enviar: el link pide confirmación; Esc no toca nada, Enter abre la demo (#176)',
+  async ({ page }) => {
+    await page.goto('/');
+    const commandBar = page.getByLabel('Barra de comandos');
+    await expect(commandBar).toBeVisible();
+    await seedCatalog(page);
+
+    // Una venta que nunca llega: el backend del fixture es inalcanzable.
+    await commandBar.fill('arroz');
+    await expect(page.getByText('Arroz 1kg')).toBeVisible();
+    await commandBar.press('Enter');
+    await commandBar.press('Control+Enter');
+    await expect(page.getByRole('heading', { name: 'Cobrar' })).toBeVisible();
+    await fillPayment(page, 'Efectivo', 1200);
+    await confirmCheckout(page);
+    await expect(page.getByRole('heading', { name: 'Comprobante' })).toBeVisible();
+
+    await page.goto(DEMO_LINK);
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toBeVisible();
+    await expect(page.getByText(/Sin enviar a 127\.0\.0\.1:9: 1 venta/)).toBeVisible();
+    await expect(page.getByText(/Conexión a 127\.0\.0\.1:9/)).toBeVisible();
+    expect(page.url()).not.toContain('demo=');
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toHaveCount(0);
+    expect(await getAllFromStore(page, 'sales')).toHaveLength(1);
+    expect(await readConfig(page)).toMatchObject({ baseUrl: 'http://127.0.0.1:9' });
+
+    await page.goto(DEMO_LINK);
+    await expect(page.getByRole('heading', { name: 'Abrir una demo' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Borrar y abrir la demo (Enter)' }),
+    ).toBeEnabled();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+    expect(await getAllFromStore(page, 'sales')).toHaveLength(0);
+    // Sin navegar: el fixture vuelve a sembrar su conexión en cada carga de página.
+    expect(await readConfig(page)).toMatchObject({ baseUrl: BACKEND, demo: { backend: BACKEND } });
+  },
+);
+
+test('demo revocada: la barra lo dice y "Empezar una demo nueva" arranca otra limpia (#176)', async ({
+  page,
+}) => {
   await page.goto(DEMO_LINK);
-  await expect(
-    page.getByText('Esta terminal ya está conectada: se ignoró el link de demo.'),
-  ).toBeVisible();
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+  const { apiKey: oldKey } = (await readConfig(page)) as { apiKey: string };
+  expect(oldKey).toMatch(/^demo-/);
+
+  await page.request.post(`${BACKEND}/_demo/revoke-demos`);
+  // Al aplicar la demo arrancan ciclos de sync: si uno tiene el cerrojo, /SINCRONIZAR no corre y
+  // hay que repetirlo.
+  await expect(async () => {
+    await commandBar.fill('/SINCRONIZAR');
+    await commandBar.press('Enter');
+    await expect(page.getByText('La demo terminó')).toBeVisible({ timeout: 2_000 });
+  }).toPass();
+
+  await page.getByRole('button', { name: 'Empezar una demo nueva (/DEMO_NUEVA)' }).click();
+  await expect(page.getByLabel('Barra de comandos')).toBeVisible();
+  await expect(page.getByText('DEMO', { exact: true })).toBeVisible();
+  await expect(page.getByText('La demo terminó')).toHaveCount(0);
   expect(page.url()).not.toContain('demo=');
-  expect(await readConfig(page)).toMatchObject({ baseUrl: 'http://127.0.0.1:9' });
+  const { apiKey } = (await readConfig(page)) as { apiKey: string };
+  expect(apiKey).toMatch(/^demo-/);
+  expect(apiKey).not.toBe(oldKey);
+});
+
+test('portal (#179): el comando y el botón abren el backend en la caja de esta terminal', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const commandBar = page.getByLabel('Barra de comandos');
+  await expect(commandBar).toBeVisible();
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+
+  // Comando: la pestaña se abre en el gesto del Enter y recibe el link de un solo uso.
+  await commandBar.fill('/PANEL');
+  const [fromCommand] = await Promise.all([
+    context.waitForEvent('page'),
+    commandBar.press('Enter'),
+  ]);
+  await expect(fromCommand.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromCommand.close();
+  await expect(commandBar).toHaveValue('');
+
+  // Botón: otro link (el anterior ya se usó); el foco sigue en la barra del POS.
+  const [fromButton] = await Promise.all([context.waitForEvent('page'), button.click()]);
+  await expect(fromButton.getByText('Entraste como Caja 1 de CENTRAL')).toBeVisible();
+  await fromButton.close();
+  await expect(commandBar).toBeFocused();
+  await expect(page.getByText(/No se pudo abrir/)).toHaveCount(0);
+});
+
+test('portal (#179): con el backend en mantenimiento, el botón no abre pestaña y lo dice en la barra', async ({
+  page,
+  context,
+}) => {
+  await page.goto(DEMO_LINK);
+  const button = page.getByRole('button', { name: 'Panel del backend (/PANEL)' });
+  await expect(button).toBeVisible();
+  let openedTabs = 0;
+  context.on('page', () => {
+    openedTabs += 1;
+  });
+
+  const settings = `${BACKEND}/_demo/api/settings`;
+  await page.request.put(settings, {
+    data: { maintenance: { enabled: true, message: 'Volvemos enseguida' } },
+  });
+  try {
+    await button.click();
+    // El click del botón cierra el overlay de la barra (#28): el mensaje tiene que verse igual.
+    await expect(
+      page.getByText(
+        'No se pudo abrir Panel del backend: El backend está en mantenimiento: Volvemos enseguida.',
+      ),
+    ).toBeVisible();
+    expect(openedTabs).toBe(0);
+  } finally {
+    await page.request.put(settings, { data: { maintenance: { enabled: false, message: '' } } });
+  }
 });

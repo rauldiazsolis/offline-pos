@@ -1,11 +1,11 @@
 # offline-pos: guía para integradores
 
-> POS web offline-first y genérico que se conecta a cualquier backend que implemente el Connector API (REST/JSON, contrato 4.4.0). Este directorio acompaña a una versión publicada del POS.
+> POS web offline-first y genérico que se conecta a cualquier backend que implemente el Connector API (REST/JSON, contrato 4.6.0). Este directorio acompaña a un canal publicado del POS (`/v4/`, el último POS de ese major del contrato).
 
 Para implementar un backend: leer primero la guía (qué es el POS, cómo probarlo con el demo-backend, cómo entra un comercio) y después el OpenAPI (cada operación, esquemas y reglas de evolución del contrato).
 
 ## Docs
 
-- [Guía para integradores](guia.md): probarlo, link de demo y alta, operaciones del contrato, compatibilidad, servir el zip.
+- [Guía para integradores](guia.md): probarlo, link de demo y alta, operaciones del contrato, mantenimiento, compatibilidad, portal, servir el POS en tu servidor.
 - [Guía en HTML](index.html): la misma guía para leer en el navegador.
 - [Connector API (OpenAPI 3.1)](../connector-api.openapi.yaml): el contrato completo.

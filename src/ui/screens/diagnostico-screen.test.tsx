@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ok } from '../../domain/result.ts';
 import type { SyncDiagnostics } from '../../sync/diagnostics.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { backendCapabilitiesSignal, backendPortalSignal } from '../state/sync.ts';
 import { DiagnosticoScreen } from './diagnostico-screen.tsx';
 
 const diagnostics: SyncDiagnostics = {
@@ -41,6 +42,7 @@ const diagnostics: SyncDiagnostics = {
     },
   },
   capabilities: ['demo-sessions', 'customer-payment-void'],
+  company: 'Kiosco Pepe',
   notices: [
     { id: 'n1', severity: 'critical', message: 'Cuota vencida' },
     {
@@ -54,12 +56,19 @@ const diagnostics: SyncDiagnostics = {
   log: [],
   posVersion: '0.1.0',
   storageNamespace: 'offline-pos@/0.1.0/',
+  demoRevokedAt: null,
+  trainingSince: null,
+  offline: 'ready',
 };
 
-vi.mock('../../sync/diagnostics.ts', () => ({ collectDiagnostics: () => diagnostics }));
+vi.mock('../../sync/diagnostics.ts', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  collectDiagnostics: () => diagnostics,
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();
+  diagnostics.offline = 'ready';
 });
 
 describe('DiagnosticoScreen (contrato v3)', () => {
@@ -67,6 +76,21 @@ describe('DiagnosticoScreen (contrato v3)', () => {
     render(<DiagnosticoScreen />);
     expect(screen.getByText(/POS 0\.1\.0/)).not.toBeNull();
     expect(screen.getByText('offline-pos@/0.1.0/')).not.toBeNull();
+  });
+
+  it('muestra si el POS abre sin red, según el service worker (#54)', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText(/sin conexión: lista/)).not.toBeNull();
+    unmount();
+
+    diagnostics.offline = 'update-waiting';
+    const second = render(<DiagnosticoScreen />);
+    expect(screen.getByText(/versión nueva descargada, falta aplicar/)).not.toBeNull();
+    second.unmount();
+
+    diagnostics.offline = 'unsupported';
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText(/sin service worker/)).not.toBeNull();
   });
 
   it('muestra el dispositivo, el estado de cada lote en espera y los avisos con su evento', () => {
@@ -138,6 +162,58 @@ describe('DiagnosticoScreen — estado del backend (#99)', () => {
 
     expect(screen.getByText('Capacidades: demo-sessions, customer-payment-void')).not.toBeNull();
   });
+
+  it('muestra la empresa del backend, o "no informada" (4.5.0, #193)', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText('Empresa: Kiosco Pepe')).not.toBeNull();
+    unmount();
+
+    diagnostics.company = undefined;
+    try {
+      render(<DiagnosticoScreen />);
+      expect(screen.getByText('Empresa: no informada')).not.toBeNull();
+    } finally {
+      diagnostics.company = 'Kiosco Pepe';
+    }
+  });
+});
+
+describe('DiagnosticoScreen — entrenamiento (#177)', () => {
+  it('dice desde cuándo está prendido; apagado no dice nada', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.queryByText(/Modo entrenamiento desde/)).toBeNull();
+    unmount();
+
+    diagnostics.trainingSince = '2026-10-04T12:00:00.000Z';
+    try {
+      render(<DiagnosticoScreen />);
+      expect(
+        screen.getByText(
+          `Modo entrenamiento desde ${new Date('2026-10-04T12:00:00.000Z').toLocaleString()}`,
+        ),
+      ).not.toBeNull();
+    } finally {
+      diagnostics.trainingSince = null;
+    }
+  });
+});
+
+describe('DiagnosticoScreen — portal (4.6.0, #179)', () => {
+  afterEach(() => {
+    backendCapabilitiesSignal.value = undefined;
+    backendPortalSignal.value = undefined;
+  });
+
+  it('muestra el comando y la etiqueta del portal, o "no ofrecido"', () => {
+    const { unmount } = render(<DiagnosticoScreen />);
+    expect(screen.getByText('Portal: no ofrecido')).not.toBeNull();
+    unmount();
+
+    backendCapabilitiesSignal.value = ['portal'];
+    backendPortalSignal.value = { command: 'PANEL', label: 'Panel del backend' };
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Portal: /PANEL (Panel del backend)')).not.toBeNull();
+  });
 });
 
 describe('DiagnosticoScreen — backend incompatible resaltado (prueba manual de la Etapa 4)', () => {
@@ -168,5 +244,36 @@ describe('DiagnosticoScreen — mensaje con estado ok (4.4.0, #128)', () => {
     } finally {
       diagnostics.backendStatus = original;
     }
+  });
+});
+
+describe('DiagnosticoScreen — demo (#176)', () => {
+  const demoConfig = ok({
+    type: 'rest' as const,
+    baseUrl: 'http://localhost:4001',
+    demo: {
+      template: 'kiosco',
+      onboarding: { url: 'http://localhost:4001/alta', label: 'Alta' },
+      startedAt: '2026-10-02T09:00:00.000Z',
+    },
+  });
+
+  afterEach(() => {
+    diagnostics.config = ok({ type: 'rest', baseUrl: 'http://localhost:4000' });
+    diagnostics.demoRevokedAt = null;
+  });
+
+  it('con la terminal en demo muestra la plantilla', () => {
+    diagnostics.config = demoConfig;
+    render(<DiagnosticoScreen />);
+    expect(screen.getByText('Demo de kiosco')).not.toBeNull();
+  });
+
+  it('con la demo revocada dice desde cuándo', () => {
+    diagnostics.config = demoConfig;
+    diagnostics.demoRevokedAt = '2026-10-02T10:00:00.000Z';
+    render(<DiagnosticoScreen />);
+    const when = new Date('2026-10-02T10:00:00.000Z').toLocaleString();
+    expect(screen.getByText(`Demo de kiosco · revocada desde ${when}`)).not.toBeNull();
   });
 });

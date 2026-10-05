@@ -4,6 +4,7 @@ import { ok, err } from '../domain/result.ts';
 import { buildOutboxEventsForStockMovements, markSynced } from '../domain/outbox.ts';
 import { markLotFailed as markLotFailedForTest, buildPushLot } from '../domain/push-lot.ts';
 import { db } from '../storage/db.ts';
+import { setTrainingModeForTests } from '../storage/training-mode.ts';
 import { fakeConnector } from '../test/fake-connector.ts';
 import { setCatalogRepository } from '../ui/state/catalog.ts';
 import {
@@ -22,6 +23,7 @@ import {
   syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
+import { demoRevokedSignal } from '../ui/state/sync.ts';
 import { getLastCleanup } from './cleanup-schedule.ts';
 import { saveSyncConfig } from './config.ts';
 import type { BatchLotStatus } from './connector.ts';
@@ -728,6 +730,25 @@ describe('runPullCycle — regla del pull (Etapa 3, #98)', () => {
     await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
 
     expect((await db.stock.get('p1'))?.quantity).toBe(8);
+  });
+
+  it('en entrenamiento el pull corre y reaplica lo de práctica sobre el stock del backend (#177)', async () => {
+    setTrainingModeForTests({ startedAt: now });
+    try {
+      await seedLocal();
+      await db.outbox.bulkAdd(
+        buildOutboxEventsForStockMovements(
+          [{ id: 'm1', productId: 'p1', delta: -2, reason: 'sale', createdAt: now }],
+          { now, origin: { branch: 'b', pointOfSale: 'p' } },
+        ),
+      );
+
+      await runPullCycle(fakeConnector({ pullBatch: pullWith({}) }), now);
+
+      expect((await db.stock.get('p1'))?.quantity).toBe(8);
+    } finally {
+      setTrainingModeForTests(null);
+    }
   });
 
   it('manda el lote en curso en pendingLotIds; si el backend no lo conoce, lo marca no recibido y reaplica sus eventos', async () => {
@@ -1719,5 +1740,82 @@ describe('estado del backend (contrato 4.0.0, #99)', () => {
     await syncNow();
 
     expect(backend.calls[0]).toBe('GET /info');
+  });
+});
+
+describe('demo revocada (#176)', () => {
+  const demo = {
+    template: 'kiosco',
+    onboarding: { url: 'https://api.example.com/alta', label: 'Alta' },
+    startedAt: now,
+  };
+
+  beforeEach(() => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now, demo });
+  });
+
+  afterEach(() => {
+    demoRevokedSignal.value = null;
+  });
+
+  it('con la demo revocada no corre push ni pull, ni pregunta /info', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    demoRevokedSignal.value = now;
+    setBackendCheckDue(true);
+    const calls = stubRestFetch();
+
+    await runPushThenPull();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('/SINCRONIZAR borra la marca y vuelve a probar', async () => {
+    demoRevokedSignal.value = now;
+    const calls = stubRestFetch();
+
+    await syncNow();
+
+    expect(demoRevokedSignal.value).toBeNull();
+    expect(calls).toContain('POST /sync/pull');
+  });
+
+  it('un 401 en el push con la terminal en demo marca la demo revocada', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          json: () => Promise.resolve({ error: 'La demo terminó' }),
+        } as Response),
+      ),
+    );
+
+    await runPushCycle();
+
+    expect(demoRevokedSignal.value).not.toBeNull();
+  });
+});
+
+describe('modo entrenamiento (#177)', () => {
+  afterEach(() => {
+    setTrainingModeForTests(null);
+  });
+
+  it('pushPendingLot no manda nada, ni ignorando el backoff, y no arma lote', async () => {
+    setTrainingModeForTests({ startedAt: now });
+    await db.outbox.add({ type: 'sale', sale, id: 'sale-1', status: 'pending', createdAt: now });
+    const pushBatch = vi.fn();
+
+    const summary = await pushPendingLot(fakeConnector({ pushBatch }), now, {
+      ignoreBackoff: true,
+    });
+
+    expect(summary).toEqual({ attempted: 0, failed: false });
+    expect(pushBatch).not.toHaveBeenCalled();
+    expect(getCurrentPushLot()).toBeUndefined();
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
   });
 });

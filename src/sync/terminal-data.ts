@@ -3,6 +3,8 @@ import { err, ok, type Result } from '../domain/result.ts';
 import { db } from '../storage/db.ts';
 import { clearAllTables } from '../storage/local-data.ts';
 import { LOCAL_STORAGE_PREFIX } from '../storage/storage-namespace.ts';
+import { deleteTrainingDatabase } from '../storage/training-copy.ts';
+import { isTrainingMode } from '../storage/training-mode.ts';
 import { setSyncPaused } from '../ui/state/sync.ts';
 import { secretConfigKeys } from './connector-registry.ts';
 import { acquireSyncLockWaiting } from './engine.ts';
@@ -57,6 +59,8 @@ function readStoredValue(raw: string, secrets: Set<string>): JsonValue {
  */
 export type LocalDataDump = {
   exportedAt: string;
+  /** #177: el volcado es de la base de entrenamiento (la que está abierta). */
+  training: boolean;
   indexedDb: Record<string, unknown[]>;
   localStorage: Record<string, JsonValue>;
 };
@@ -78,7 +82,12 @@ export async function exportLocalData(
       stored[key] = readStoredValue(raw, secrets);
     }
   }
-  return { exportedAt: now, indexedDb: Object.fromEntries(tables), localStorage: stored };
+  return {
+    exportedAt: now,
+    training: isTrainingMode(),
+    indexedDb: Object.fromEntries(tables),
+    localStorage: stored,
+  };
 }
 
 /**
@@ -92,7 +101,8 @@ export async function exportLocalData(
  * escribir en el medio, y si sale bien pausa el sync (`syncPausedSignal`,
  * mismo mecanismo que `/CONFIG`): quien llama recarga la página a
  * continuación, y hasta entonces ningún ciclo tiene que arrancar sobre una
- * base vacía.
+ * base vacía. Antes de recargar, la consola además da de baja el service worker y las cachés de
+ * esta carpeta (#54, `ui/service-worker.ts::removeOwnServiceWorker`): viven en la UI, no acá.
  */
 export async function resetTerminal(): Promise<Result<void>> {
   const release = await acquireSyncLockWaiting(RESET_LOCK_WAIT_MS);
@@ -103,6 +113,11 @@ export async function resetTerminal(): Promise<Result<void>> {
     await db.transaction('rw', db.tables, clearAllTables);
     for (const key of posLocalStorageKeys()) {
       localStorage.removeItem(key);
+    }
+    // #177: también la base de entrenamiento. En entrenamiento la abierta es esa (ya vacía) y
+    // borrarla abierta se bloquearía: la marca cayó con el prefijo y el próximo arranque la borra.
+    if (!isTrainingMode()) {
+      await deleteTrainingDatabase();
     }
     setSyncPaused(true);
     return ok(undefined);

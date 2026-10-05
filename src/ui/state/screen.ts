@@ -2,7 +2,7 @@ import { signal } from '@preact/signals';
 
 /**
  * Qué sub-pantalla está activa dentro del flujo de venta. `/COBRAR` (o
- * Ctrl+Enter), `/ANULAR` y `/CONFIG` cambian este signal; las pantallas
+ * Ctrl+Enter), `/ANULAR`, `/CONFIG` y `/IMPRESORA` cambian este signal; las pantallas
  * correspondientes (ver ui/screens/) lo leen para decidir qué mostrar.
  */
 export type ActiveScreen =
@@ -15,6 +15,7 @@ export type ActiveScreen =
   | 'cash'
   | 'cash-summary'
   | 'demo-reset'
-  | 'diagnostico';
+  | 'diagnostico'
+  | 'printer';
 
 export const activeScreenSignal = signal<ActiveScreen>('sale');

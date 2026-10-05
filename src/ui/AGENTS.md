@@ -95,7 +95,11 @@ La barra de comandos vive **abajo** de la pantalla de venta, no arriba — decis
 usuario comparando ambos extremos: `addProductLine` siempre agrega la línea nueva al final del
 carrito, así que con el input abajo la línea recién agregada aparece pegada a donde se está
 tipeando, en vez del salto largo de atención que había con el input arriba y el carrito creciendo
-hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
+hacia abajo. Desde #193 la barra de estado (info pasiva) va al pie, **debajo** de la barra de
+comandos, y arriba queda el encabezado con el comercio y la caja (ver "Encabezado y barra de estado").
+Antes la barra de estado ocupaba el extremo opuesto, arriba; se movió para que el título se lea solo,
+sin competir con el estado de sync. Los overlays de la barra de comandos se siguen abriendo hacia
+arriba, así que la barra de estado debajo no los toca.
 
 ## Cobro y advertencias (Etapa 4, #99)
 
@@ -112,9 +116,23 @@ hacia abajo. La barra de estado (info pasiva) ocupa el extremo opuesto, arriba.
   próxima tecla; un error tiene precedencia). El stock sale de `ui/state/stock.ts::
   stockSnapshotSignal` (la tabla entera en memoria).
 
-## Barra de estado
+## Encabezado y barra de estado
 
-Barra de estado (extremo opuesto, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
+**Encabezado (#193, `ui/components/TerminalHeader.tsx`)**: arriba de la venta, en qué comercio y en
+qué caja está la terminal. La empresa (`backendCompanySignal`, de `GET /info` 4.5.0) es el título, en
+`--font-size-lg`, y `<caja> - <sucursal>` va debajo, en chico; sin empresa, la caja es el título
+(`ui/terminal-context.ts::terminalHeading`, con `terminalIdentitySignal`: la sucursal y la caja de la
+config activa, que fijan `bootstrap`, `applyConnection` y `applyTerminalSettings`). Con la terminal en
+demo, la marca **DEMO** (un recuadro ámbar al lado del título) y, a la derecha, el botón de la demo.
+Si falta lugar se recortan el título y el subtítulo con "…", nunca el botón. Es información pasiva:
+un click no hace nada salvo en el botón. Sin conexión activa ni demo, no se muestra. Se eligió entre
+tres bocetos (título solo arriba y sync al pie; todo al pie en una línea; la empresa como título):
+el usuario prefirió el último, por más atractivo. El **título de la pestaña** es `<caja> -
+<sucursal>`, sin la empresa (`terminal-context.ts::startTerminalTitle`, que arranca
+`main.tsx::startApp`): vale también para las pantallas sin encabezado (`/CAJA`, `/COBRAR`,
+`/RESUMEN`…); sin conexión activa queda el de siempre y la segunda pestaña (#175) conserva el suyo.
+
+Barra de estado (al pie, debajo de la barra de comandos desde #193, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
 propósito no interactiva; esa decisión se reabrió a propósito en la prueba manual de esa etapa: un
 click abre `/DIAGNOSTICO` (lo mismo que el comando, patrón "Teclado y mouse"), sin entrar en el orden
 de Tab ni sacarle el foco a la barra de comandos. Desde 4.0.0 (#99), dos estados del backend
@@ -138,14 +156,49 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
 (`sync/timeout`) y el error del puente de Sheets (`sync/remote-error`).
 
 **Desde 4.4.0 (#128)**, además del estado de sync:
-- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): delante de
-  todo, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
+- **Terminal en demo** (`demoSessionSignal`, lo pone `bootstrap` desde `SyncConfig.demo`): en el
+  encabezado, la marca **DEMO** y un botón `<onboarding.label> (/ALTA)` (p. ej. "Crear mi comercio (/ALTA)")
   que llama a lo mismo que el comando (`ui/keyboard/onboarding-controller.ts::startOnboarding`: emite
   el `wipe_key` y navega al alta). No abre `/DIAGNOSTICO`. `/ALTA` solo aparece en el menú de "/" con
-  la terminal en demo (`availableCommands`).
+  la terminal en demo (`availableCommands`), igual que `/DEMO_NUEVA` (#176).
+- **Demo revocada** (#176, `demoRevokedSignal`): el estado dice "La demo terminó" con el punto rojo
+  (detrás de "Sin conexión" y "Sin configurar") y el botón del alta pasa a ser "Empezar una demo
+  nueva (/DEMO_NUEVA)" (`onboarding-controller.ts::startNewDemo`, lo mismo que el comando: navega al
+  link de demo armado con `demo.backend`, o la `baseUrl` en una demo anterior, y la plantilla).
+  `/DIAGNOSTICO` muestra "Demo de <plantilla> · revocada desde <hora>" (`demoRevokedAt` de
+  `collectDiagnostics`, así `pos.status()` dice lo mismo).
 - **"Avisos (N)"** (`backendNoticesSignal`), a la derecha y antes de "Sin arqueo en 24 h": el color es
   el del aviso más grave (`critical` → error, `warning` → ámbar, `info` → neutro) y el click abre
   `/DIAGNOSTICO`, donde está el detalle. Sin avisos no se muestra. Nunca bloquea nada.
+
+## Portal (#179)
+
+Spec: `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`; lo de `sync/`, en "Contrato
+4.6.0" de `src/sync/AGENTS.md`.
+
+- **Qué se ofrece** (`ui/keyboard/commands.ts`): `currentPortalOffer()` = `portalOffer` con las
+  capacidades, el portal guardado y `RESERVED_COMMAND_NAMES` (todos los nombres del POS, estén
+  disponibles o no ahora: el núcleo, `ACTUALIZAR`, `ALTA`, `DEMO_NUEVA` y los de todos los
+  conectores, así el nombre no cambia según el estado). Nada con la demo revocada (la key ya no
+  sirve y el encabezado ofrece `/DEMO_NUEVA`); sí sin red, en mantenimiento o incompatible: al usarlo,
+  el error dice por qué no abre. Lo usan `availableCommands` (el comando, con la etiqueta como
+  descripción), `runCommand` (antes que los comandos del conector), el encabezado y `/DIAGNOSTICO`
+  ("Portal: /PANEL (Panel del backend)" o "no ofrecido").
+- **`openPortal(label)`** (`ui/keyboard/portal-controller.ts`, dependencias inyectadas), lo mismo
+  para el comando y el botón: **pide el link primero** y recién con él abre la pestaña
+  (`window.open(url, '_blank', 'noopener')`), mientras el gesto siga vigente
+  (`navigator.userActivation.isActive`, unos 5 s en Chromium). Un error no abre nada: abrir la
+  pestaña en blanco en el gesto y cerrarla al fallar hacía parpadear la pantalla (prueba manual).
+  Si el backend tardó más que el gesto, no se intenta abrir (el bloqueador la frenaría sin avisar) y
+  la barra dice "…: el backend tardó en contestar; probá de nuevo.". Los errores: "No se pudo abrir
+  <label>: <motivo>." (`describeError`); con la terminal en demo, un 401/403 marca la demo revocada
+  (como un ciclo de sync) y el motivo es "la demo terminó". Todo mensaje reabre el overlay de la
+  barra (`overlayDismissedSignal`): el `mousedown` del botón lo cierra como un click afuera (#28), y
+  si no, el error quedaba oculto (como `/CAJA` desde la barra de estado). Un pedido a la vez. El
+  comando limpia la barra antes de llamarla.
+- **El botón** (`TerminalHeader`): `.btn` con `<label> (/<command>)`, a la derecha, `tabIndex={-1}`
+  y `keepFocusOnMouseDown`; con la demo activa va antes del de `/ALTA`, que sigue siendo el primario.
+  Nunca parte su etiqueta.
 
 ## `/CAJA` y `/RESUMEN` (Etapa 5, #100 y #120)
 
@@ -169,6 +222,16 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   "12", "#12", conceptos y descripciones), Productos y Medios de pago. Panel lateral: total vendido,
   tickets con "(N anuladas)", desc/recargos, otros pagos, efectivo del día (cobros, ingresos, egresos,
   ajustes) y, solo hoy, el saldo actual. Las ventas se agrupan por `ticket.date` si lo tienen.
+- **Reimprimir en Movimientos** (#174): con una venta o una cobranza elegida (también anuladas y
+  anulaciones), Enter o el botón al lado de las pestañas reimprime una copia ahí mismo
+  ("Reimprimir (Enter)"); con "No imprimir", abre la copia en el comprobante ("Ver comprobante
+  (Enter)") y Esc vuelve a `/RESUMEN` en el mismo día, pestaña y búsqueda (la selección vuelve a la
+  primera fila). Con un movimiento de caja o un arqueo, Enter no hace nada. Al imprimir, un renglón
+  de alto fijo debajo de la franja (`cashSummaryNoticeSignal`, como el de `/ANULAR`) dice "Copia del
+  Ticket #4 enviada a imprimir." y se borra con la próxima tecla, al cambiar de día o de pestaña y al
+  salir. El botón siempre ocupa su lugar (oculto si la fila no se reimprime) y va en un grupo con las
+  pestañas: si no entran al lado del buscador, bajan juntos al segundo renglón. Enter para anular acá
+  quedó anotado en #140.
 
 ## Cobranza sin venta y saldo del cliente (Etapa 6, #101)
 
@@ -182,10 +245,10 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   `domain/customer-payment.ts::resolveCollection`, si no "Ingresá al menos un monto."). Total y
   "Saldo actual → Después" en vivo; un cliente bloqueado se advierte en ámbar. Mismas teclas que
   Cobro; Esc vuelve a la venta con el cliente todavía adjunto.
-- **Comprobante**: la misma pantalla (`ReceiptFrame` compartido), "Recibo de cobranza", "Recibo #3",
-  cliente, pagos por medio, total y "Saldo anterior / Saldo nuevo"; lo pone
-  `receiptCollectionSignal` (junto a `receiptSaleSignal`, `ui/state/receipt.ts`). Al cerrarlo, el
-  cliente queda desadjuntado, como después de cobrar una venta.
+- **Comprobante**: el mismo que el de una venta (ver "Impresión"), "Recibo de cobranza", "Recibo #3",
+  cliente, pagos por medio, total y "Saldo anterior / Saldo nuevo" (los de ese momento viajan en el
+  `ReceiptSource`, porque después no se pueden recalcular). Al registrarla, el cliente queda
+  desadjuntado, como después de cobrar una venta.
 - **Saldo en la venta**: `customerBalancesSignal` (`ui/state/customer-balance.ts`) tiene la tabla
   entera en memoria, como el stock, y se recarga en los mismos puntos más después de una cobranza. La
   tarjeta de Cliente suma una quinta fila fija, "Saldo: Debe $X / A favor $X / Sin saldo"
@@ -232,6 +295,183 @@ directo, eso lo resuelve `sync/engine.ts`. Los errores de red se traducen en un 
   como `/CAJA`): "Anulado el Recibo #1 con el Recibo #2". Recarga el stock y los saldos. El
   comprobante de la anulación queda en #137.
 
+## Impresión (#174)
+
+Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
+
+- **`/IMPRESORA`** (`ui/screens/printer-screen.tsx`, `ui/keyboard/printer-controller.ts`, modelo puro
+  en `ui/keyboard/printer-form-model.ts`, estado en `ui/state/printer.ts`): dos `select`s — en la
+  prueba manual los grupos tipo radio dejaban la pantalla muy alta — **Formato** (No imprimir,
+  58 mm, 80 mm, A6; tiene el foco al abrir y ↑/↓ lo cambian con el `select` cerrado) y **Al cobrar**
+  (Imprimir, Mostrar el comprobante, Nada; sin papel no se ofrece Imprimir y, si estaba elegido,
+  pasa a Mostrar) —, Encabezado y Pie (`textarea`s libres) y la vista previa de un ticket de ejemplo
+  que se actualiza mientras se edita. Se edita una copia (`printerFormSignal`): Guardar (Ctrl+Enter,
+  porque Enter en un `textarea` es salto de línea) la persiste y la pone en `printerConfigSignal`;
+  Esc o Cancelar vuelven sin guardar; "Prueba de impresión (Alt+P, por la tecla física)" imprime el
+  ejemplo con lo que está en pantalla, sin guardar. **Estable**: el formulario tiene un ancho máximo,
+  la vista previa un marco de ancho fijo, y los botones van en dos líneas fijas (la prueba arriba,
+  siempre visible y deshabilitada sin papel; Cancelar y Guardar abajo).
+- **La config** (`storage/printer-config.ts`) es del equipo, no de la conexión: vive en
+  `localStorage` (`storageKey('printer')`), validada con Zod; algo ausente o roto cae al default
+  `{ format: 'a6', onCheckout: 'show' }` (como antes de #174). `/CONFIG` y "Borrar y cambiar" no la
+  tocan; `pos.reset()` sí, como todo el prefijo.
+- **`ui/print/`**: `receipt-document.ts` es el modelo puro del comprobante (`ReceiptDocument`:
+  encabezado, título, marcas como "COPIA" o "PRUEBA", meta, filas y pie), con los nombres y los
+  formateadores ya resueltos. `resolve-receipt.ts` lo arma desde un `ReceiptSource` (la venta, o la
+  cobranza con el cliente y sus saldos, y si es copia; una copia nunca lleva saldos).
+  `ReceiptView.tsx` lo dibuja en el ancho del formato, con `receipt.css` (papel blanco, sin variables
+  de tema: el iframe no las tiene). `receipt-printer.ts` es el puerto `ReceiptPrinter`;
+  `browser-printer.tsx`, la implementación con `window.print()` en un iframe oculto (CSS inyectado con
+  `?inline` más el `@page` del formato; lo saca con `afterprint` o a los 60 s). ESC/POS (#188) va a
+  ser otra implementación del puerto. En los tests, `setReceiptPrinter` pone una impresora falsa.
+- **Al cobrar** (`ui/print/after-close.ts::showOrPrintReceipt`): Cobro y la cobranza registran primero
+  y después, según la config: Imprimir vuelve a la venta (barra vacía y enfocada) y manda a imprimir
+  sin esperar; Mostrar va al comprobante; Nada vuelve directo a la venta. Los dos que vuelven a la
+  venta lo dicen en el slot de avisos de la barra (`commandBarNoticeSignal`, como `/CAJA`): "Ticket
+  #4 registrado." o "… registrado y enviado a imprimir." ("enviado": el POS no sabe si el diálogo se
+  canceló); en una cobranza, "Recibo #3 de Ana …" (`documentName`).
+- **El comprobante** (`ui/screens/receipt-screen.tsx`, `receiptSignal = { source, returnTo }`): dibuja
+  el papel (`ReceiptPreview`) en el formato configurado; "Imprimir (Enter)" solo con papel; "Continuar (Esc)"
+  vuelve a `returnTo` (la venta o `/RESUMEN`).
+- **El papel en pantalla** (`ui/print/ReceiptPreview.tsx`, en el comprobante y la vista previa): un
+  marco de ancho fijo (el de A6 más un margen) con el papel blanco centrado sobre fondo gris, así se
+  ve el ancho del rollo y nada cambia de forma con el formato. Cancela el zoom de la app
+  (`.receipt-paper`, `tokens.css`): el papel va a tamaño real y su texto (9 pt en 58 mm) queda sobre
+  el piso de 11 px de #111 a 600 px. Lo vigila `e2e/text-size.spec.ts`, que mide con el zoom
+  acumulado de los ancestros. Un formato más ancho que A6, si llega, se achica para entrar al marco.
+
+## Una sola pestaña (#175)
+
+Spec: `docs/superpowers/specs/2026-10-02-una-sola-pestana-design.md`; el principio, en la raíz.
+
+- **Coordinación** (`ui/tab-leadership.ts`, todo inyectado en `TabLeadershipDeps`, sin DOM):
+  `claimTab(TAB_LOCK_NAME, deps)` pide el cerrojo con `ifAvailable` y, si lo recibe, lo retiene con
+  una promesa que nunca se resuelve y escucha el canal; si no, devuelve `{ kind: 'secondary',
+  takeOver }`. Puertos: `TabLocks` (lo que se usa de `navigator.locks`) y `TabChannel` (el canal,
+  con mensajes validados por `parseTabMessage`: el único es `release-request`). Los fakes viven en
+  `test/fake-tab-locks.ts`.
+- **Traspaso**: `takeOver` pide el cerrojo en espera y manda `release-request`. La original atiende un
+  solo pedido: `prepareRelease` (`ui/tab-release.ts::prepareTabRelease`: pausa el sync, toma el cerrojo
+  de sync y se queda con él, espera las escrituras de IndexedDB, todo con `RELEASE_WAIT_MS` = 4 s de
+  tope), marca la pestaña desplazada (`storage/tab-displaced.ts`) y se recarga. Si en
+  `STEAL_AFTER_MS` (5 s) el cerrojo no llegó, la segunda aborta su pedido en espera y lo pide con
+  `steal`; a una pestaña que le quitan el cerrojo se le rechaza su `request` y se recarga marcada. El
+  pedido en espera se aborta solo si todavía no llegó (`isHeld`, leído sincrónicamente): nunca se le
+  quita el cerrojo a sí misma.
+- **Adaptadores** (`ui/tab-browser.ts::browserTabLeadershipDeps`): `navigator.locks` solo si existe
+  (sin él, la pestaña manda siempre), `BroadcastChannel(TAB_LOCK_NAME)`, `location.reload`.
+- **Arranque** (`main.tsx::start`): lee y borra la marca de desplazada (siempre, así una vieja no
+  aparece después) y pide el cerrojo **antes de todo**: con él, `startApp` (consola `pos.*`,
+  `bootstrap()` y render, como antes); sin él, `document.title` = "POS en otra pestaña" y
+  `SecondaryTabScreen`, sin tocar la URL (un `?demo=…` o `#connect=…` se procesa al tomar el control).
+  Al tomar el control vuelve el título y corre `startApp` sin recargar.
+- **`SecondaryTabScreen`** (`ui/screens/secondary-tab-screen.tsx`): no depende de nada de la app
+  (nada está inicializado). "El POS está abierto en otra pestaña", el texto que explica qué hacer y,
+  si la desplazaron, "Se empezó a usar el POS en otra pestaña." arriba. El botón "Usar esta pestaña
+  (Enter)" tiene el foco (Enter nativo = click) y pasa a "Tomando el control…", deshabilitado.
+  `keepFocusOnMouseDown` en el contenedor. No hay link a la otra pestaña: Chromium no la deja traer al
+  frente.
+
+## Service worker y versión nueva (#54)
+
+Spec: `docs/superpowers/specs/2026-10-03-service-worker-pwa-canal-design.md`; el canal y la
+publicación, en "Publicación" de la raíz.
+
+- **Registro** (`ui/service-worker.ts::startServiceWorker`, adaptador): lo llama `main.tsx::startApp`,
+  o sea solo la pestaña que manda (#175), y solo en el build (`import.meta.env.PROD`). Registra
+  `./sw.js` con el `scope` de su carpeta. Sin `navigator.serviceWorker` (contexto no seguro, como
+  `http://` a una IP) no hace nada; un registro que falla no rompe el arranque.
+- **Versiones nuevas**: busca al arrancar y cada hora (`UPDATE_CHECK_INTERVAL_MS`; el navegador solo
+  busca al navegar, y una pestaña de POS queda abierta días). Una versión que queda esperando
+  (`registration.waiting` al arrancar, o una instalación que termina con un controller activo) pasa
+  `ui/state/app-update.ts::appUpdateSignal` a `available`. `serviceWorkerStateSignal`
+  (`unsupported`, `installing`, `ready`) alimenta `/DIAGNOSTICO` y `pos.status()`
+  (`sync/diagnostics.ts::describeOffline`: "sin conexión: lista", "preparando el modo sin conexión",
+  "versión nueva descargada, falta aplicar" o "sin service worker").
+- **El aviso**: "Versión nueva (/ACTUALIZAR)" en la barra de estado, primero a la derecha
+  (`btn-primary`), y `/ACTUALIZAR` en el menú solo mientras `appUpdateSignal` no es `none` (como
+  `/ALTA` en demo). No dice qué versión es.
+- **`/ACTUALIZAR`** (`ui/keyboard/app-update-controller.ts::applyAppUpdate`, dependencias
+  inyectadas): con una venta en curso (líneas, cliente o ajuste global: lo que vacía `/DESCARTAR`) no
+  actualiza y avisa "Terminá o descartá la venta para actualizar." (como toda advertencia de la
+  barra, se borra con la próxima tecla o al cerrar la venta: `submitCheckout`). Si no, pasa a `applying` (el
+  botón dice "Actualizando…", deshabilitado), suelta como el traspaso de #175
+  (`prepareTabRelease`, que devuelve con qué deshacer), le manda `skip-waiting` al service worker en
+  espera y recarga con `controllerchange`. Si no llega en `APPLY_TIMEOUT_MS` (10 s): deshace la
+  suelta (reanuda el sync), vuelve a `available` y avisa "No se pudo actualizar: cerrá y abrí el
+  POS.". Al abrir el POS sin ninguna pestaña abierta, el navegador ya activa la versión en espera.
+- **La regla de los `import()` dinámicos**: la app no tiene ninguno, un solo bundle. Por eso una
+  segunda pestaña que sigue con el código viejo después de un `/ACTUALIZAR` en la original puede
+  tomar el control y correr `startApp` sin que le falte nada aunque `assets/` ya no tenga los
+  archivos viejos. **Si algún día se suma un `import()` dinámico, la segunda pestaña tiene que
+  recargar al tomar el control en vez de correr `startApp`.**
+- **El service worker** (`src/workers/sw.ts`, lógica pura en `sw-logic.ts`, sin nada de la app)
+  guarda todo el build al instalarse (todo o nada), atiende las navegaciones con el `index.html` de
+  la caché (la query, como `?demo=…`, la lee la app) y los archivos del build desde la caché; todo lo
+  demás (el backend, `version.json`, las docs de `docs/`) va a la red: solo la carpeta (o su
+  `index.html`) es el POS, la app no tiene rutas propias. Nunca hace `skipWaiting` solo. Lo compila
+  `build/sw-plugin.ts` en un segundo build (`iife`, sin hash), con la lista de archivos y su hash
+  inyectados (`build/precache.ts`).
+
+## Modo entrenamiento (#177)
+
+Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`; el principio, en la raíz; la
+base y las claves, en `src/storage/AGENTS.md`; el sync, en `src/sync/AGENTS.md`.
+
+- **`/ENTRENAMIENTO`** (`commands.ts::trainingCommand`, siempre en el menú; nombre reservado para el
+  portal): apagado, "Practicar sin enviar nada al backend"; prendido, "Salir del entrenamiento". Lo
+  mismo hace el botón de la franja (`ui/keyboard/training-controller.ts::toggleTraining`).
+- **Entrar**: con una venta en curso (`ui/state/sale-in-progress.ts::saleInProgress`, la misma de
+  `/ACTUALIZAR`) no entra y avisa "Terminá o descartá la venta para entrar al entrenamiento.". Si no,
+  pausa el sync y abre la pantalla (`ui/screens/training-screen.tsx`, estado en
+  `ui/state/training.ts`, patrón de "Abrir una demo"): qué es el modo y lo real sin enviar
+  (`training-model.ts::describeTrainingPending`, "Sin enviar: 1 venta y 1 movimiento más…").
+  Enter = "Entrar al entrenamiento" (`.btn-primary`): último envío de lo real (si falla, entra igual),
+  copia, marca, `prepareTabRelease` y recarga. Esc = "Cancelar" (reanuda el sync).
+- **Salir**: se puede con una venta de práctica a medias. La pantalla lista lo que se descarta
+  (`describeTrainingDiscard`: ventas, cobranzas, movimientos de caja y arqueos, la venta en curso y
+  los clientes creados, o "No hiciste nada en el entrenamiento.") y lo que vuelve. Enter = "Descartar
+  y salir" (`.btn-danger`): borra las claves, deja la marca `training-exited` en `sessionStorage` y
+  recarga; `bootstrap` la consume y la barra dice "Saliste del entrenamiento.". Esc = "Seguir
+  entrenando".
+- **La franja** (`ui/components/TrainingBanner.tsx`): arriba de todas las pantallas, dentro de
+  `.app-zoom-wrapper`; con `.app-zoom-wrapper--training` (`tokens.css`) la pantalla activa toma
+  `--app-height` menos `--training-banner-h`. Rayas ámbar y negro (`--color-training-*`), el texto en
+  negrita que se recorta con "…" si falta lugar (nunca el botón) y la tipografía propia (vive afuera
+  de las pantallas, que fijan la suya). El botón: `tabIndex={-1}` y `keepFocusOnMouseDown`.
+- **El resto**: el título de la pestaña lleva "ENTRENAMIENTO · " (`terminal-context.ts::trainingTitle`);
+  todo comprobante, la marca "ENTRENAMIENTO" (`print/resolve-receipt.ts`); el aviso "Sin arqueo en
+  24 h" no se muestra (la caja de práctica arranca en 0); `/DIAGNOSTICO` y `pos.status()` dicen "Modo
+  entrenamiento desde …"; `pos.export()` lleva `training`.
+- **Cortado** (`commands.ts::TRAINING_BLOCKED_COMMANDS`): `/CONFIG`, `/ALTA`, `/DEMO_NUEVA` y
+  `/DEMO_RESET` quedan deshabilitados con el motivo "en entrenamiento; salí con /ENTRENAMIENTO"; el
+  botón del encabezado (alta o demo nueva) deja el mismo mensaje en la barra. Un link de demo o la
+  vuelta del alta al arrancar no se procesan: se limpia la URL y la barra dice "Salí del entrenamiento
+  y volvé a abrir el link." (`sync/demo-link.ts::hasOnboardingParams`). Sin id de dispositivo, primero
+  se sale del entrenamiento y se recarga. `/ACTUALIZAR`, `/SINCRONIZAR` (solo el pull), el portal,
+  `/RESUMEN` y `/ANULAR` andan igual, sobre la base de práctica.
+
+## "Abrir una demo" (#176)
+
+Spec: `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`; el principio, en
+"Onboarding de demo" de la raíz.
+
+- **Cuándo**: `bootstrap` con un `confirm` de `runOnboardingFromUrl` (un link de demo con algo que
+  perder) llama a `ui/keyboard/demo-confirm-controller.ts::openDemoConfirm`, que pausa el sync antes
+  de su primer `await`. Sin conexión activa, el wizard requerido queda abierto debajo.
+- **Estado** (`ui/state/demo-confirm.ts::demoConfirmSignal`): `checking` (último envío a la conexión
+  actual con `flushPendingBeforeWipe`, con red y config legible, y los conteos), `confirming` y
+  `starting`. `App` muestra la pantalla delante de todo, también sin conexión activa.
+- **Qué se pierde** (`ui/keyboard/demo-confirm-model.ts::describeDemoLoss`, puro): lo sin enviar
+  (destacado), la venta en curso, el historial de la terminal y la conexión actual (o la demo en
+  curso); se conservan `/IMPRESORA` y el locale. El catálogo y los clientes no se listan.
+- **Teclado y mouse** (`ui/screens/demo-confirm-screen.tsx`, como `/DEMO_RESET`): Enter = "Borrar y
+  abrir la demo" (`.btn-danger`), Esc = "Cancelar"; mientras revisa o abre la demo, los botones están
+  deshabilitados. Cancelar no toca nada y vuelve a la venta (reanuda el sync) o al wizard requerido.
+  Confirmar corre `startDemo`: si sale bien, `ui/session-reset.ts::resetSessionAfterWipe` (también lo
+  usa `bootstrap`) y vuelve a la venta con el aviso de plantilla; si falla, no se borró nada y el
+  motivo va a la barra de comandos o al wizard.
+
 ## `/CONFIG` como wizard
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
@@ -271,20 +511,22 @@ borrado, o sale si la terminal está `active`). Arranca en Revisar con la termin
 primer paso incompleto en modo requerido, y en Terminal tras perder la identidad.
 
 **Onboarding de demo (#128)**: `configNoticeSignal` (`ui/state/sync-config.ts`) muestra arriba del
-wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la demo: <motivo>.", "Esta
-terminal tiene datos locales: se ignoró el link de demo."). A la vuelta del alta sin `wipe_key` y con
+wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la demo: <motivo>."; un link
+con algo que perder ya no se ignora: va a "Abrir una demo", #176). A la vuelta del alta sin `wipe_key` y con
 datos del usuario, o si la prueba falla, `config-controller.ts::openWizardWithCandidate` precarga la
 conexión que trajo (`rest`, URL, clave, sucursal y punto de venta) y arranca en Probar, sin borrar
 nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión. Con una terminal
-`active`, un link ignorado o fallido se avisa en el slot de la barra de comandos
+`active`, un link fallido se avisa en el slot de la barra de comandos
 (`commandBarWarningSignal`), y "La plantilla X no existe; se usó Y." como aviso informativo
 (`commandBarNoticeSignal`).
 
 ## Utilidades de consola `pos.*` (Etapa 0 de #94, issue #95)
 
 Objeto global `window.pos` para DevTools, instalado en `main.tsx` **antes** de `bootstrap()` (si el
-arranque falla, `pos.export()`/`pos.reset()` siguen disponibles para recuperar la terminal). Queda
-también en producción y nada pide confirmación: abrir DevTools y tipear ya es deliberado.
+arranque falla, `pos.export()`/`pos.reset()` siguen disponibles para recuperar la terminal), y solo
+en la pestaña que manda (#175): una segunda pestaña no tiene nada inicializado que inspeccionar ni
+borrar. Queda también en producción y nada pide confirmación: abrir DevTools y tipear ya es
+deliberado.
 `ui/console/pos-console.ts` es una capa fina con dependencias inyectadas, sin lógica propia:
 `help()`, `sync()` (= `/SINCRONIZAR`, `syncNow`), `status()` (= `/DIAGNOSTICO`: pantalla y consola
 leen la misma foto, `sync/diagnostics.ts::collectDiagnostics`), `outbox()`
@@ -294,7 +536,9 @@ todas las claves `offline-pos:*` de `localStorage` (por prefijo, nunca una lista
 `export()` descarga un JSON para soporte con las credenciales reemplazadas por `"***"` — cada
 conector marca las suyas con `ConfigField.secret`. `reset()` borra **también la config de
 `/CONFIG`** (a diferencia de `/DEMO_RESET`): equivale a perder el id de dispositivo, y sin él la
-terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync y recarga.
+terminal arranca de cero. Toma el cerrojo de sync mientras borra, pausa el sync, da de baja el
+service worker de esta carpeta y borra sus cachés (#54, `ui/service-worker.ts::removeOwnServiceWorker`,
+nunca los de otro canal; si eso falla, igual recarga) y recarga.
 `pos.deviceId()` (Etapa 1 de #94, #96) devuelve el id de dispositivo de la terminal
 (`sync/terminal-identity.ts::peekDeviceId`), el mismo que muestra `/DIAGNOSTICO` y que viaja en cada
 push/pull — `null` antes de que `bootstrap()` lo resuelva (la consola se instala antes del arranque).
@@ -310,16 +554,21 @@ carrito la selecciona, lo mismo que llegar con ↑/↓ (`selectCartLine`, #99). 
 en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobranza** (#101): lo
 mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
-**`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día), **`/CAJA`** (selector, campos,
-sugerencias y botones, Etapa 5) y la **barra de estado** (click = `/DIAGNOSTICO`; el aviso de arqueo
-abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO` y el botón del alta hace `/ALTA`, #128).
+**`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
+(`select`s, campos y botones), **`/CAJA`** (selector, campos,
+sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la pantalla y la franja
+de entrenamiento** (#177, botones) y la **barra de estado** (click =
+`/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
+**encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
+del portal hace su comando, #179; el resto es pasivo, #193).
 
 ## Diseño visual
 
 Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
 
-- **Chrome oscuro arriba y abajo, contenido claro en el medio**: la barra de comandos (abajo) y la de
-  estado (arriba) usan los tokens `--color-chrome-*` (`tokens.css`); el resto de la app, los claros.
+- **Chrome oscuro arriba y abajo, contenido claro en el medio**: el encabezado (arriba), la barra de
+  comandos y, debajo, la de estado (al pie, #193) usan los tokens `--color-chrome-*` (`tokens.css`);
+  el resto de la app, los claros.
   Es un contraste fijo, no un modo oscuro conmutable.
 - **Foco, selección y paso actual (#112)**: **solo el foco dibuja un contorno azul** — el anillo
   general de `tokens.css` (2 px por fuera, `--focus-ring-offset` de aire), igual en botones,

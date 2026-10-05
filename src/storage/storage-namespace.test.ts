@@ -6,6 +6,8 @@ import {
   STORAGE_NAMESPACE,
   storageKey,
   storageNamespaceFor,
+  TAB_LOCK_NAME,
+  tabLockNameFor,
 } from './storage-namespace.ts';
 
 describe('storageNamespaceFor (#148)', () => {
@@ -43,5 +45,18 @@ describe('en jsdom (servido en /)', () => {
     expect(STORAGE_NAMESPACE).toBe('offline-pos');
     expect(storageKey('sync-config')).toBe('offline-pos:sync-config');
     expect(db.name).toBe('offline-pos');
+  });
+});
+
+describe('tabLockNameFor (#175)', () => {
+  it('en la raíz y en cada carpeta es un nombre propio: dos carpetas nunca se bloquean', () => {
+    expect(tabLockNameFor('/')).toBe('offline-pos:tab');
+    expect(tabLockNameFor('/0.1.0/')).toBe('offline-pos@/0.1.0/:tab');
+    expect(tabLockNameFor('/0.1.0/index.html')).toBe('offline-pos@/0.1.0/:tab');
+    expect(tabLockNameFor('/0.2.0/')).not.toBe(tabLockNameFor('/0.1.0/'));
+  });
+
+  it('TAB_LOCK_NAME es la clave "tab" de esta carpeta', () => {
+    expect(TAB_LOCK_NAME).toBe(storageKey('tab'));
   });
 });

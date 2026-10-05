@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * #148: las claves de `localStorage` pasan por `storageKey`, así en `/` quedan exactamente como
- * antes (`offline-pos:<nombre>`) y en una carpeta se aíslan. Este test lee el código: cada nombre
- * de hoy sigue usándose y ninguna clave con el prefijo escrito a mano volvió.
+ * #148: las claves de `localStorage` pasan por `storageKey` (o `operationalKey`, #177, que en modo
+ * real es lo mismo), así en `/` quedan exactamente como antes (`offline-pos:<nombre>`) y en una
+ * carpeta se aíslan. Este test lee el código: cada nombre de hoy sigue usándose y ninguna clave con
+ * el prefijo escrito a mano volvió.
  */
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 
@@ -39,7 +40,9 @@ describe('claves de localStorage (#148)', () => {
       .map((source) => source.text)
       .join('\n');
     for (const name of LEGACY_NAMES) {
-      expect(all).toContain(`storageKey('${name}')`);
+      expect(
+        all.includes(`storageKey('${name}')`) || all.includes(`operationalKey('${name}')`),
+      ).toBe(true);
     }
   });
 

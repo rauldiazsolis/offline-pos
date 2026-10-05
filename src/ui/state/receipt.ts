@@ -1,14 +1,13 @@
 import { signal } from '@preact/signals';
-import type { Sale } from '../../domain/sale.ts';
-import type { CollectionRecord } from '../../storage/customer-payment-repository.ts';
+import type { ReceiptSource } from '../print/resolve-receipt.ts';
 
-/** Última venta cerrada — la lee receipt-screen para mostrar el comprobante. */
-export const receiptSaleSignal = signal<Sale | null>(null);
+/** A dónde vuelve Esc desde el comprobante: la venta, o `/RESUMEN` al ver una copia (#174). */
+export type ReceiptReturn = 'sale' | 'cash-summary';
 
 /**
- * Última cobranza registrada (#101) con el nombre del cliente, que ya se desadjuntó al confirmar.
- * Un signal propio junto al de la venta: el comprobante muestra el que esté puesto.
+ * El comprobante en pantalla: de qué es (la venta recién cerrada, la cobranza recién registrada con
+ * el nombre del cliente y sus saldos, o una copia) y a dónde se vuelve. Un solo signal desde #174.
  */
-export type CollectionReceipt = CollectionRecord & { customerName: string };
-
-export const receiptCollectionSignal = signal<CollectionReceipt | null>(null);
+export const receiptSignal = signal<{ source: ReceiptSource; returnTo: ReceiptReturn } | null>(
+  null,
+);
