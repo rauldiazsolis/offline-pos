@@ -52,7 +52,39 @@ describe('readConnectReturn', () => {
     wipeKey: 'w',
   };
   it('decodifica el fragmento', () => {
-    expect(readConnectReturn(`https://pos.x/#connect=${encode(payload)}`)).toEqual(ok(payload));
+    expect(readConnectReturn(`https://pos.x/#connect=${encode(payload)}`)).toEqual(
+      ok({ type: 'rest', ...payload }),
+    );
+  });
+  it('acepta type: rest explícito', () => {
+    expect(
+      readConnectReturn(`https://pos.x/#connect=${encode({ type: 'rest', ...payload })}`),
+    ).toEqual(ok({ type: 'rest', ...payload }));
+  });
+  it('la forma de Google Sheets: type y webAppUrl, nada más (#133)', () => {
+    const sheets = {
+      type: 'google-sheets',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+      sharedSecret: 'no-viaja',
+    };
+    expect(readConnectReturn(`https://pos.x/#connect=${encode(sheets)}`)).toEqual(
+      ok({ type: 'google-sheets', webAppUrl: 'https://script.google.com/macros/s/abc/exec' }),
+    );
+  });
+  it('Google Sheets sin webAppUrl https → demo/invalid-return', () => {
+    for (const webAppUrl of [
+      undefined,
+      'no-es-url',
+      'http://script.google.com/macros/s/abc/exec',
+    ]) {
+      const link = `https://pos.x/#connect=${encode({ type: 'google-sheets', webAppUrl })}`;
+      expect(readConnectReturn(link)?.ok).toBe(false);
+    }
+  });
+  it('un type desconocido → demo/invalid-return', () => {
+    expect(
+      readConnectReturn(`https://pos.x/#connect=${encode({ type: 'otro', ...payload })}`)?.ok,
+    ).toBe(false);
   });
   it('sin fragmento no hay vuelta', () => {
     expect(readConnectReturn('https://pos.x/')).toBeUndefined();

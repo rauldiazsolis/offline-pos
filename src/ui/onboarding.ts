@@ -167,8 +167,11 @@ async function handleReturn(
       notice: sentence(`No se pudo completar el alta: ${describeError(back)}`),
     };
   }
-  const { wipeKey, ...connection } = back.value;
-  const candidate: SyncConfig = { type: 'rest', ...connection, ...keptLocale(context.config) };
+  if (back.value.type !== 'rest') {
+    return { kind: 'none' };
+  }
+  const { wipeKey, type, ...connection } = back.value;
+  const candidate: SyncConfig = { type, ...connection, ...keptLocale(context.config) };
   // El `wipe_key` se consume siempre que venga (es de un solo uso), aunque no haga falta.
   const authorized = deps.consumeWipeKey(wipeKey, deps.now()) || !context.hasUserData;
   if (!authorized) {
