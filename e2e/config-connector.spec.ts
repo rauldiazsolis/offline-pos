@@ -134,6 +134,8 @@ test('Conectar el POS desde una planilla: el wizard precargado, sucursal y caja 
     'step',
   );
 
+  await expect(page.getByLabel('Sucursal')).toHaveValue('');
+  await expect(page.getByLabel('Punto de venta')).toHaveValue('');
   await page.getByLabel('Sucursal').fill('Planilla');
   await page.getByLabel('Punto de venta').fill('Caja 2');
   await page.keyboard.press('Control+Enter');
