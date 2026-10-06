@@ -51,6 +51,9 @@ Tomadas en el brainstorming del 2026-10-05 (y las del 2026-09-30 que siguen en p
 - **El link no lleva el secreto compartido**: la página de `doGet` es pública.
 - **El link de Sheets siempre precarga el wizard**, nunca aplica ni borra solo: le faltan la
   sucursal y el punto de venta (y el secreto, si se usa).
+- **Una pestaña Configuración, al final, en vez de una portada**: la portada y el dashboard de la
+  planilla son del usuario. Lleva la URL del POS (clave/valor que el puente lee) y los pasos para
+  conectar; nunca el secreto.
 - **Una spec, tres etapas** (A → B → C), cada una con su plan, su rama y su PR; entre etapas, el
   usuario prueba contra una planilla real.
 - **Doc público nuevo** en `docs/integradores/google-sheets.md`; el README del conector queda para
@@ -106,21 +109,32 @@ Tomadas en el brainstorming del 2026-10-05 (y las del 2026-09-30 que siguen en p
 
 - **`doGet` devuelve una página** (`HtmlService`) en vez del JSON de prueba: el nombre de la planilla,
   la versión del contrato y un botón **Conectar el POS** que abre
-  `<POS_URL>#connect=<base64url de JSON>` con
+  `<URL del POS>#connect=<base64url de JSON>` con
 
   ```json
   { "type": "google-sheets", "webAppUrl": "<ScriptApp.getService().getUrl()>" }
   ```
 
-  en una pestaña nueva (`target="_blank"`: la página de un Web App corre en un iframe). `POS_URL` es
-  una constante de `bridge.gs` (`https://pos.contax.ar/v4/`) que se puede cambiar con la propiedad de
-  script `POS_URL`. La base64url se arma con `Utilities.base64EncodeWebSafe` sin el relleno `=`.
-- **Pestaña Inicio** en el seed, la primera de la planilla, creada solo si no existe (nunca se
-  reescribe: el usuario la va a editar para el template): título, el link fijo a
-  `https://pos.contax.ar/v4/` (sin config, así sobrevive a la copia) y los pasos (hacer una copia,
-  Extensiones > Apps Script > Implementar como Aplicación web, abrir la URL del Web App, Conectar el
-  POS, completar el wizard). Cada terminal se conecta igual, abriendo la URL del Web App desde esa
-  terminal. No guarda nada propio de una copia. Sus textos van en `columnas.gs`.
+  en una pestaña nueva (`target="_blank"`: la página de un Web App corre en un iframe). La URL del POS
+  sale de la pestaña Configuración (abajo), con `https://pos.contax.ar/v4/` por omisión.
+  La base64url se arma con `Utilities.base64EncodeWebSafe` sin el relleno `=`.
+- **Pestaña Configuración** en el seed, **al final** de las pestañas (nunca primera: la portada y
+  el dashboard de la planilla son del usuario, y el puente no crea ni toca ninguna pestaña "Inicio").
+  Se crea solo si no existe; si existe, el puente solo la lee (se le puede dar formato o moverla).
+  Lleva:
+  - **pares clave/valor que el puente lee**, encontrados por la clave (columna A) y no por la
+    posición, como las columnas. Hoy uno solo: **URL del POS**, sembrado con
+    `https://pos.contax.ar/v4/`. La página de `doGet` lo lee; con la celda vacía o sin la fila, usa
+    ese mismo valor por omisión (constante de `bridge.gs`). Reemplaza a una propiedad de script: el
+    dueño lo cambia desde la planilla, y es seguro en una copia porque no es propio de ninguna
+    implementación;
+  - abajo, los pasos para conectar (hacer una copia, Extensiones > Apps Script > Implementar como
+    Aplicación web, abrir la URL del Web App, Conectar el POS, completar el wizard) y que cada
+    terminal se conecta igual, abriendo la URL del Web App desde esa terminal.
+
+  Nunca guarda nada propio de una copia, y **el secreto compartido sigue en las propiedades del
+  script**: en la pestaña viajaría con cada copia del template y lo vería cualquiera con acceso a la
+  planilla. Los textos (nombre de la pestaña, claves, pasos) van en `columnas.gs`.
 - **Riesgo, primero de la etapa**: `ScriptApp.getService().getUrl()` podría pedir un permiso además
   de `@OnlyCurrentDoc`. Se verifica contra una planilla real antes de seguir; si lo pide, se descarta
   (permisos mínimos) y la página pasa a tener un campo para pegar la URL del Web App.
@@ -180,7 +194,7 @@ Tomadas en el brainstorming del 2026-10-05 (y las del 2026-09-30 que siguen en p
 Por etapa: `pnpm lint && pnpm typecheck && pnpm test && pnpm build` y `pnpm test:e2e`; en C,
 `pnpm site:build` y `pnpm site:preview` (4174). Prueba manual del usuario contra una planilla real:
 en A, el portal, la empresa en `/DIAGNOSTICO` y anular una cobranza; en B, el permiso de
-`ScriptApp`, la página de `doGet`, Conectar el POS y la pestaña Inicio en una copia; en C, la guía
+`ScriptApp`, la página de `doGet`, Conectar el POS y la pestaña Configuración en una copia; en C, la guía
 en el sitio armado.
 
 ## Documentación del repo
