@@ -642,8 +642,8 @@ en el historial de git).
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
-worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04; se
-publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
+`0.6.0` con Google Sheets el 2026-10-06; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
@@ -652,8 +652,7 @@ hito 2, el link de demo con confirmación (#176), el contrato del portal (#178),
 (#179) y el modo entrenamiento (#177). Google Sheets tuvo su epic, #180, completo en tres etapas
 (spec `docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en
 4.6.0 con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); C, el puente y
-su guía publicados en `/v4/docs/google-sheets/`. Falta publicarlo en una versión del POS (la B
-cambia la app: sin ella, "Conectar el POS" no abre el wizard en `pos.contax.ar/v4/`).
+su guía publicados en `/v4/docs/google-sheets/`, todo en la `0.6.0`.
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -677,7 +676,6 @@ etiqueta antes de tomar un issue.
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
   `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`), #205 (flake de
-  `e2e/mouse.spec.ts`), #207 (concurrency del CI: cancelar la corrida vieja de un PR) y #135 (fines
-  de línea: `.gitattributes` con `eol=lf`).
+  `e2e/mouse.spec.ts`) y #135 (fines de línea: `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
   su repo.
