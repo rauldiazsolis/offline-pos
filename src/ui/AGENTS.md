@@ -515,7 +515,10 @@ wizard por qué está abierto o qué pasó con un link ("No se pudo iniciar la d
 con algo que perder ya no se ignora: va a "Abrir una demo", #176). A la vuelta del alta sin `wipe_key` y con
 datos del usuario, o si la prueba falla, `config-controller.ts::openWizardWithCandidate` precarga la
 conexión que trajo (`rest`, URL, clave, sucursal y punto de venta) y arranca en Probar, sin borrar
-nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión. Con una terminal
+nada: el operador elige Mantener o Borrar como en cualquier cambio de conexión. El link de una
+planilla ("Conectar el POS" desde la página del puente de Sheets, #133) **siempre** termina ahí, con
+`{ type: 'google-sheets', webAppUrl }` y el aviso "Conexión con la planilla precargada…": nunca prueba
+ni borra solo, y como le falta la sucursal, `runProbe` rebota al paso Terminal. Con una terminal
 `active`, un link fallido se avisa en el slot de la barra de comandos
 (`commandBarWarningSignal`), y "La plantilla X no existe; se usó Y." como aviso informativo
 (`commandBarNoticeSignal`).
