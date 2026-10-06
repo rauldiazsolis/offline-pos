@@ -381,6 +381,7 @@ function doPost(e) {
   }
   try {
     headerCache = {};
+    productNameCache = null;
     ensureSheetsExist();
     return respond({ ok: true, data: handler(request.payload || {}, request.idempotencyKey) });
   } catch (error) {
@@ -594,6 +595,8 @@ function getSheet(name) {
 
 // Se rearma en cada request (doPost): dentro de uno, la fila 1 no cambia.
 var headerCache = {};
+// Los nombres de Productos (pushSale), también por request.
+var productNameCache = null;
 
 /** Minúsculas, sin acentos ni signos: "Códigos de barras" y "codigosdebarras" son la misma columna. */
 function normalize(text) {
@@ -1078,6 +1081,7 @@ function pushSale(sale, stamp) {
   if (!sale || !sale.id) {
     throw new Error('Falta sale');
   }
+  var names = productNames();
   var lines = sale.lines.map(function (line, index) {
     var discount = line.discount || {};
     return withStamp(
@@ -1088,7 +1092,9 @@ function pushSale(sale, stamp) {
         linea: index + 1,
         tipo: line.kind,
         productId: line.productId,
-        descripcion: line.description,
+        // Una línea de producto viaja sin descripción: va el nombre que tiene en Productos al
+        // venderse (una foto, como el precio unitario). Un id que Productos no tiene queda vacío.
+        descripcion: line.kind === 'product' ? names[line.productId] : line.description,
         cantidad: line.qty,
         precioUnitario: line.unitPrice,
         descuentoTipo: discount.type,
@@ -1139,6 +1145,19 @@ function pushSale(sale, stamp) {
     markRows('Ventas', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
     markRows('Pagos', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
   }
+}
+
+/** Nombre de cada producto de la pestaña Productos, por id. Una lectura por request. */
+function productNames() {
+  if (productNameCache === null) {
+    productNameCache = {};
+    readRows('Productos').forEach(function (row) {
+      if (row.id !== '') {
+        productNameCache[String(row.id)] = String(row.name);
+      }
+    });
+  }
+  return productNameCache;
 }
 
 /** Marca (no borra: un evento nunca se modifica) las filas cuyo `key` es `id`; devuelve cuántas encontró. */

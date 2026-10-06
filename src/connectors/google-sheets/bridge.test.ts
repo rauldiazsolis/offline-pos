@@ -294,7 +294,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         1,
         'Producto',
         'p-001',
-        '',
+        'Gaseosa cola 500ml',
         1,
         1200,
         '',
@@ -1070,6 +1070,29 @@ describe('contrato 4.x (#99, #120)', () => {
     ]);
     // La acreditación va al libro de CuentaCorriente con su signo.
     expect(table(spreadsheet, 'CuentaCorriente').some((row) => row.includes(-1100))).toBe(true);
+  });
+
+  it('una línea de producto lleva en Descripción el nombre que tiene en Productos (#212)', () => {
+    const { spreadsheet, call } = loadBridge();
+    const sale = {
+      ...SALE,
+      lines: [...SALE.lines, { kind: 'product', productId: 'no-existe', qty: 1, unitPrice: 0 }],
+    };
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1', sale)] }, 'lot-1');
+    const voidTicket = {
+      ...sale,
+      id: 'v1',
+      voidsSaleId: 's1',
+      lines: sale.lines.map((line) => ({ ...line, qty: -line.qty })),
+    };
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e2', voidTicket)] }, 'lot-2');
+
+    // El producto de la planilla, la línea libre con su texto y un id que Productos no tiene, vacía.
+    const descriptions = ['Gaseosa cola 500ml', 'Regalo', ''];
+    expect(table(spreadsheet, 'Ventas').map((row) => row[6])).toEqual([
+      ...descriptions,
+      ...descriptions,
+    ]);
   });
 
   it('la anulación de una venta que la planilla no tiene no falla', () => {

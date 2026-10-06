@@ -131,7 +131,8 @@ Cada fila que escribe el puente lleva el dispositivo, la sucursal y el punto de 
 Un evento nunca se modifica: una anulación es otro registro que apunta al original.
 
 - **Venta**: una fila por línea en Ventas (con la fecha y el número del ticket) y una por medio en
-  Pagos. Un pago a cuenta corriente suma una fila en CuentaCorriente.
+  Pagos. La Descripción de una línea de producto es el nombre que el producto tiene en Productos al
+  registrarse la venta (si el id ya no está, queda vacía). Un pago a cuenta corriente suma una fila en CuentaCorriente.
 - **Anulación de una venta**: otra venta, con líneas y pagos invertidos, la columna **Anula a** y el
   motivo; las filas del original pasan a Estado = Anulada. Si la planilla no tiene el original, no es
   un error.

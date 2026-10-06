@@ -34,7 +34,9 @@ sigue siendo el error de siempre — agregarla vacía haría viajar productos a 
 lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
 `customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
-Anulada, como una venta. "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
+Anulada, como una venta. Una línea de producto viaja sin descripción (contrato): `pushSale` escribe
+en Descripción el nombre que tiene en Productos al registrarse (`productNames`, una lectura por
+request; un id que no está queda vacío, #212). "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
 nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
 `{ type: 'google-sheets', webAppUrl }`; `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de
 esa implementación: una copia nunca conecta a la original; sin permiso extra, verificado) y nunca
