@@ -367,8 +367,10 @@ backend). Spec:
 
 Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de vida de la conexión").
 Google Sheets tiene su propia vuelta (#133): la página del Web App del puente abre `#connect=` con
-`{ type: 'google-sheets', webAppUrl }`, sin secreto, y el POS siempre precarga el wizard (nunca
-prueba, aplica ni borra solo).
+`{ type: 'google-sheets', webAppUrl }`, nunca con el secreto, y opcionalmente la sucursal y la caja
+(`branch`, `pointOfSale`). Con las dos y sin datos del usuario no se pierde nada: prueba y aplica
+borrando, como la vuelta del alta; si falta alguna, hay datos o la prueba falla (por ejemplo, porque
+la planilla pide un secreto), precarga el wizard sin borrar nada.
 Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
 sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
 sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.

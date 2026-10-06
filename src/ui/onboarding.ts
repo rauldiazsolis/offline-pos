@@ -172,17 +172,7 @@ async function handleReturn(
     };
   }
   if (back.value.type === 'google-sheets') {
-    // Al link de la planilla le faltan la sucursal, el punto de venta y el secreto: nunca se prueba
-    // ni se borra solo, el operador termina en el wizard (que ofrece Mantener o Borrar si hace falta).
-    return {
-      kind: 'review',
-      candidate: {
-        type: 'google-sheets',
-        webAppUrl: back.value.webAppUrl,
-        ...keptLocale(context.config),
-      },
-      notice: SHEETS_CONNECT_NOTICE,
-    };
+    return handleSheetsReturn(back.value, context, deps);
   }
   const { wipeKey, type, ...connection } = back.value;
   const candidate: SyncConfig = { type, ...connection, ...keptLocale(context.config) };
@@ -202,6 +192,40 @@ async function handleReturn(
       kind: 'review',
       candidate,
       notice: sentence(`No se pudo probar la conexión del alta: ${describeError(applied)}`),
+    };
+  }
+  return { kind: 'applied' };
+}
+
+/**
+ * La vuelta de la página del puente de Sheets (#133). Con la sucursal y la caja en el link y sin
+ * datos del usuario no se pierde nada: se prueba y se aplica, como la vuelta del alta. Si no (le
+ * falta la identidad, hay datos, o la prueba falla, por ejemplo porque la planilla pide un secreto
+ * que el link nunca trae), el wizard con lo que vino precargado.
+ */
+async function handleSheetsReturn(
+  back: Extract<ConnectReturn, { type: 'google-sheets' }>,
+  context: OnboardingContext,
+  deps: OnboardingDeps,
+): Promise<OnboardingOutcome> {
+  const candidate: SyncConfig = { ...back, ...keptLocale(context.config) };
+  if (back.branch === undefined || back.pointOfSale === undefined) {
+    return { kind: 'review', candidate, notice: SHEETS_CONNECT_NOTICE };
+  }
+  if (context.hasUserData) {
+    return {
+      kind: 'review',
+      candidate,
+      notice:
+        'Conexión con la planilla precargada. Esta terminal tiene datos locales: revisá la conexión y elegí qué hacer con ellos.',
+    };
+  }
+  const applied = await probeAndWipe(candidate, deps, deps.now().toISOString());
+  if (!applied.ok) {
+    return {
+      kind: 'review',
+      candidate,
+      notice: `${sentence(`No se pudo probar la conexión con la planilla: ${describeError(applied)}`)} Si configuraste un secreto compartido en Apps Script, completalo y probá de nuevo.`,
     };
   }
   return { kind: 'applied' };

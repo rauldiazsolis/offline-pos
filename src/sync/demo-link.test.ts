@@ -61,7 +61,7 @@ describe('readConnectReturn', () => {
       readConnectReturn(`https://pos.x/#connect=${encode({ type: 'rest', ...payload })}`),
     ).toEqual(ok({ type: 'rest', ...payload }));
   });
-  it('la forma de Google Sheets: type y webAppUrl, nada más (#133)', () => {
+  it('la forma de Google Sheets: type y webAppUrl; el secreto nunca se lee (#133)', () => {
     const sheets = {
       type: 'google-sheets',
       webAppUrl: 'https://script.google.com/macros/s/abc/exec',
@@ -69,6 +69,37 @@ describe('readConnectReturn', () => {
     };
     expect(readConnectReturn(`https://pos.x/#connect=${encode(sheets)}`)).toEqual(
       ok({ type: 'google-sheets', webAppUrl: 'https://script.google.com/macros/s/abc/exec' }),
+    );
+  });
+  it('Google Sheets con la sucursal y la caja de la página del puente', () => {
+    const sheets = {
+      type: 'google-sheets',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+      branch: ' Centro ',
+      pointOfSale: 'Caja 2',
+    };
+    expect(readConnectReturn(`https://pos.x/#connect=${encode(sheets)}`)).toEqual(
+      ok({
+        type: 'google-sheets',
+        webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+        branch: 'Centro',
+        pointOfSale: 'Caja 2',
+      }),
+    );
+  });
+  it('Google Sheets con una caja en blanco: cuenta como ausente', () => {
+    const sheets = {
+      type: 'google-sheets',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+      branch: 'Centro',
+      pointOfSale: '  ',
+    };
+    expect(readConnectReturn(`https://pos.x/#connect=${encode(sheets)}`)).toEqual(
+      ok({
+        type: 'google-sheets',
+        webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+        branch: 'Centro',
+      }),
     );
   });
   it('Google Sheets sin webAppUrl https → demo/invalid-return', () => {

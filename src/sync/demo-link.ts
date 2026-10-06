@@ -58,8 +58,9 @@ const restReturnSchema = z.object({
   wipeKey: z.string().min(1).optional(),
 });
 
-// "Conectar el POS" desde una planilla (#133): solo la URL del Web App. Nunca trae el secreto ni la
-// identidad de la terminal, así que siempre termina en el wizard.
+// "Conectar el POS" desde una planilla (#133): la URL del Web App y, opcionales, la sucursal y la
+// caja que eligió el comercio en la página del puente. Nunca trae el secreto: la página es pública.
+// Una sucursal o caja vacía cuenta como ausente (la página arma el link con lo que haya tipeado).
 const sheetsReturnSchema = z.object({
   type: z.literal('google-sheets'),
   webAppUrl: z
@@ -68,6 +69,8 @@ const sheetsReturnSchema = z.object({
       (raw) => URL.canParse(raw) && new URL(raw).protocol === 'https:',
       'Tiene que ser https',
     ),
+  branch: z.string().optional(),
+  pointOfSale: z.string().optional(),
 });
 
 const connectReturnSchema = z.union([sheetsReturnSchema, restReturnSchema]);
@@ -81,7 +84,7 @@ export type ConnectReturn =
       pointOfSale: string;
       wipeKey?: string;
     }
-  | { type: 'google-sheets'; webAppUrl: string };
+  | { type: 'google-sheets'; webAppUrl: string; branch?: string; pointOfSale?: string };
 
 /** base64url → JSON: el único borde que lanza (`atob`, `JSON.parse`). */
 function decodeBase64UrlJson(value: string): unknown {
@@ -108,7 +111,14 @@ export function readConnectReturn(href: string): Result<ConnectReturn> | undefin
   }
   const data = parsed.data;
   if (data.type === 'google-sheets') {
-    return ok({ type: 'google-sheets', webAppUrl: data.webAppUrl });
+    const branch = data.branch?.trim() ?? '';
+    const pointOfSale = data.pointOfSale?.trim() ?? '';
+    return ok({
+      type: 'google-sheets',
+      webAppUrl: data.webAppUrl,
+      ...(branch !== '' ? { branch } : {}),
+      ...(pointOfSale !== '' ? { pointOfSale } : {}),
+    });
   }
   const { baseUrl, apiKey, branch, pointOfSale, wipeKey } = data;
   return ok({
