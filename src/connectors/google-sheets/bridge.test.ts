@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { FakeSpreadsheet, type FakeOptions } from '../../test/fake-spreadsheet.ts';
 
@@ -1331,5 +1331,52 @@ describe('portal (4.6.0)', () => {
       error: 'Secreto compartido inválido',
     });
     expect(bridge.raw({ action: 'portalLink', sharedSecret: 's1' }).ok).toBe(true);
+  });
+});
+
+describe('pestaña Configuración', () => {
+  it('el primer request la crea al final, con la URL del POS y los pasos', () => {
+    const { spreadsheet, call } = loadBridge();
+    const insert = vi.spyOn(spreadsheet, 'insertSheet');
+
+    pullBatch(call);
+
+    const names = spreadsheet.sheetNames();
+    expect(names.at(-1)).toBe('Configuración');
+    // Con el índice explícito del final: sin índice, Sheets la pone al lado de la pestaña activa.
+    expect(insert).toHaveBeenLastCalledWith('Configuración', names.length - 1);
+    // `table` saltea la fila 1 como encabezado; acá la fila 1 ya es una clave.
+    const rows = spreadsheet.getSheetByName('Configuración')?.values() ?? [];
+    expect(rows[0]?.slice(0, 2)).toEqual(['URL del POS', 'https://pos.contax.ar/v4/']);
+    expect(rows.some((row) => String(row[0]).includes('Conectar el POS'))).toBe(true);
+  });
+
+  it('nunca guarda el secreto compartido', () => {
+    const bridge = loadBridge({ sharedSecret: 'secreto-1' });
+
+    bridge.raw({
+      action: 'pullBatch',
+      payload: { cursors: {}, pendingLotIds: [] },
+      sharedSecret: 'secreto-1',
+    });
+
+    const config = bridge.spreadsheet.getSheetByName('Configuración');
+    expect(config).not.toBeNull();
+    expect(JSON.stringify(config?.values())).not.toContain('secreto-1');
+  });
+
+  it('si ya existe no la toca', () => {
+    const { spreadsheet, call } = loadBridge();
+    const own = spreadsheet.addSheet('Configuración', [
+      ['Notas mías', ''],
+      ['URL del POS', 'https://otro.pos/v4/'],
+    ]);
+
+    pullBatch(call);
+
+    expect(own.values()).toEqual([
+      ['Notas mías', ''],
+      ['URL del POS', 'https://otro.pos/v4/'],
+    ]);
   });
 });

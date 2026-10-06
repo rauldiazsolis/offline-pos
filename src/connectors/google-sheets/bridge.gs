@@ -21,6 +21,9 @@ var CAPABILITIES = ['customer-payment-void', 'portal'];
 /** El portal (4.6.0) abre esta planilla: el POS muestra el comando y el botón con esta etiqueta. */
 var PORTAL = { command: 'PLANILLA', label: 'Abrir planilla' };
 
+/** Adónde lleva "Conectar el POS" si la pestaña Configuración no dice otra cosa. */
+var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
+
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
  *
@@ -405,6 +408,7 @@ function ensureSheetsExist() {
       ensureColumns(sheet, name);
     }
   });
+  ensureConfigSheet(spreadsheet);
 }
 
 /**
@@ -481,6 +485,27 @@ function createSheet(spreadsheet, name) {
   if (SEED[name]) {
     appendObjects(name, SEED[name]);
   }
+}
+
+/**
+ * La pestaña Configuración, al final de la planilla: solo se crea si no existe (el dueño la puede
+ * mover o darle formato, y la portada de la planilla es suya). Lleva los pares clave/valor que el
+ * puente lee y, abajo, los pasos para conectar una terminal.
+ */
+function ensureConfigSheet(spreadsheet) {
+  if (spreadsheet.getSheetByName(CONFIG_SHEET)) {
+    return;
+  }
+  var rows = [[CONFIG_LABELS.posUrl, DEFAULT_POS_URL], ['', '']].concat(
+    CONFIG_STEPS.map(function (step) {
+      return [step, ''];
+    }),
+  );
+  // Con el índice explícito: sin él, Sheets la inserta al lado de la pestaña activa.
+  var sheet = spreadsheet.insertSheet(CONFIG_SHEET, spreadsheet.getNumSheets());
+  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  sheet.getRange(1, 1).setFontWeight('bold');
+  sheet.getRange(3, 1).setFontWeight('bold');
 }
 
 // --------------------------------------------------------------- helpers
