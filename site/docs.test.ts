@@ -18,3 +18,17 @@ describe('docs publicadas para integradores (#148)', () => {
     expect(read('../docs/integradores/llms.txt')).toContain('../connector-api.openapi.yaml');
   });
 });
+
+/**
+ * Lo que no puede aparecer en lo publicado del puente: issues (`\(#\d`, `#\d{2,}\b`, `, #\d` — el
+ * `\b` deja pasar un color CSS como `#2563eb`, y ninguno confunde `'#,##0.00'`) ni archivos o
+ * documentos internos del repo.
+ */
+const INTERNAL =
+  /\(#\d|#\d{2,}\b|, #\d|superpowers|AGENTS\.md|pos-web-diseno|historia\.md|demo-backend|RNF-\d/;
+
+describe('el puente de Google Sheets publicado (#180)', () => {
+  it.each(['bridge.gs', 'columnas.gs'])('%s no cita issues ni archivos internos', (file) => {
+    expect(read(`../src/connectors/google-sheets/${file}`)).not.toMatch(INTERNAL);
+  });
+});
