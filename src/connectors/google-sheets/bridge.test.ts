@@ -16,8 +16,11 @@ const responseSchema = z.object({
   contractVersion: z.string().optional(),
 });
 
-function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
-  const spreadsheet = new FakeSpreadsheet(options);
+type BridgeOptions = FakeOptions & { sharedSecret?: string };
+
+function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES) {
+  const { sharedSecret, ...spreadsheetOptions } = options;
+  const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
   const context = vm.createContext({
     SpreadsheetApp: spreadsheet.app(),
     ContentService: {
@@ -30,7 +33,11 @@ function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
     LockService: {
       getScriptLock: () => ({ waitLock: () => undefined, releaseLock: () => undefined }),
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: (key: string) => (key === 'SHARED_SECRET' ? (sharedSecret ?? null) : null),
+      }),
+    },
   });
   for (const file of files) {
     vm.runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
@@ -937,20 +944,31 @@ describe('contrato 4.x (#99, #120)', () => {
     return spreadsheetCall.raw(body);
   }
 
-  it('la acción info devuelve la versión y el estado, sin tocar la planilla', () => {
+  it('la acción info declara 4.6.0, sus capacidades, el portal y la planilla como empresa', () => {
     const bridge = loadBridge();
 
-    const response = rawCall(bridge, { action: 'info', contractVersion: '4.2.0' });
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.6.0' });
 
     expect(response).toEqual({
       ok: true,
       data: {
-        contractVersion: '4.2.0',
+        contractVersion: '4.6.0',
         status: 'ok',
-        backend: { name: 'pos-sheets-bridge', version: '4.2.0' },
+        backend: { name: 'pos-sheets-bridge', version: '4.6.0' },
+        capabilities: ['customer-payment-void', 'portal'],
+        portal: { command: 'PLANILLA', label: 'Abrir planilla' },
+        company: { name: 'Kiosco de prueba' },
       },
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
+  });
+
+  it('sin nombre de planilla, info no manda empresa', () => {
+    const bridge = loadBridge({ name: '' });
+
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.6.0' });
+
+    expect(response.data).not.toHaveProperty('company');
   });
 
   it('un request con otro major responde incompatible-contract sin escribir nada', () => {
@@ -966,7 +984,7 @@ describe('contrato 4.x (#99, #120)', () => {
     expect(response).toMatchObject({
       ok: false,
       code: 'incompatible-contract',
-      contractVersion: '4.2.0',
+      contractVersion: '4.6.0',
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
   });
@@ -1289,5 +1307,29 @@ describe('anulación de cobranzas (4.3.0)', () => {
     call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 300)] }, 'lot-1');
 
     expect(old.values()[0]?.slice(0, 13)).toEqual([...COBRANZAS_4_2_LABELS, 'Estado', 'Anula a']);
+  });
+});
+
+describe('portal (4.6.0)', () => {
+  it('portalLink devuelve la URL de la planilla, sin crear pestañas', () => {
+    const bridge = loadBridge({ url: 'https://docs.google.com/spreadsheets/d/abc/edit' });
+
+    const response = bridge.raw({ action: 'portalLink', contractVersion: '4.6.0' });
+
+    expect(response).toEqual({
+      ok: true,
+      data: { url: 'https://docs.google.com/spreadsheets/d/abc/edit' },
+    });
+    expect(bridge.spreadsheet.sheetNames()).toEqual([]);
+  });
+
+  it('portalLink exige el secreto compartido, como las demás acciones', () => {
+    const bridge = loadBridge({ sharedSecret: 's1' });
+
+    expect(bridge.raw({ action: 'portalLink' })).toEqual({
+      ok: false,
+      error: 'Secreto compartido inválido',
+    });
+    expect(bridge.raw({ action: 'portalLink', sharedSecret: 's1' }).ok).toBe(true);
   });
 });

@@ -9,12 +9,17 @@
  */
 
 /**
- * Versión del Connector API que habla este puente (4.2.0 desde #101; 4.1.0, #120; 4.0.0, #99). Un request
- * con otra versión mayor se responde `incompatible-contract` sin procesar
- * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
- * redespliegue el puente.
+ * Versión del Connector API que habla este puente. Un request con otra versión mayor se responde
+ * `incompatible-contract` sin procesar nada: el POS no recibe ack y el lote queda en su outbox hasta
+ * que se redespliegue el puente.
  */
-var CONTRACT_VERSION = '4.2.0';
+var CONTRACT_VERSION = '4.6.0';
+
+/** Lo que el puente hace más allá del piso 4.0.0 del contrato (4.4.0). */
+var CAPABILITIES = ['customer-payment-void', 'portal'];
+
+/** El portal (4.6.0) abre esta planilla: el POS muestra el comando y el botón con esta etiqueta. */
+var PORTAL = { command: 'PLANILLA', label: 'Abrir planilla' };
 
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
@@ -262,13 +267,23 @@ var ACTIONS = {
   pullBatch: pullBatchAction,
 };
 
-/** Versión y estado (4.0.0, #99). La planilla nunca está en mantenimiento: siempre `ok`. */
+/**
+ * Versión, estado, capacidades y portal; la empresa (4.5.0) es la planilla. La planilla nunca está
+ * en mantenimiento: siempre `ok`.
+ */
 function infoAction() {
-  return {
+  var info = {
     contractVersion: CONTRACT_VERSION,
     status: 'ok',
     backend: { name: 'pos-sheets-bridge', version: CONTRACT_VERSION },
+    capabilities: CAPABILITIES,
+    portal: PORTAL,
   };
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName();
+  if (name) {
+    info.company = { name: name };
+  }
+  return info;
 }
 
 function contractMajor(version) {
@@ -316,6 +331,12 @@ function doPost(e) {
   // `info` es liviano: sin lock ni auto-provisión de pestañas.
   if (request.action === 'info') {
     return respond({ ok: true, data: infoAction() });
+  }
+
+  // `portalLink` (4.6.0) también es liviano: la URL de esta planilla. No hay token que emitir:
+  // abrirla ya exige una cuenta de Google con acceso.
+  if (request.action === 'portalLink') {
+    return respond({ ok: true, data: { url: SpreadsheetApp.getActiveSpreadsheet().getUrl() } });
   }
 
   var handler = ACTIONS[request.action];

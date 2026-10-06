@@ -6,6 +6,9 @@ export type FakeOptions = {
   defaultColumns?: number;
   /** Si `true`, una celda con solo validación cuenta como contenido en `getLastRow`/`getLastColumn`. */
   validationCountsAsContent?: boolean;
+  /** Nombre y URL de la planilla (`getName()`, `getUrl()`). */
+  name?: string;
+  url?: string;
 };
 
 type FakeCell = { value: unknown; format: string; validation: FakeValidation | null };
@@ -274,6 +277,12 @@ export class FakeSpreadsheet {
   }
   sheetNames(): string[] {
     return [...this.sheets.keys()];
+  }
+  getName(): string {
+    return this.options.name ?? 'Kiosco de prueba';
+  }
+  getUrl(): string {
+    return this.options.url ?? 'https://docs.google.com/spreadsheets/d/fake/edit';
   }
   /** Lo que el script ve como `SpreadsheetApp`. */
   app(): {
