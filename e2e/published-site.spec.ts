@@ -48,12 +48,33 @@ test('el canal arranca con el link de demo y guarda todo en su propio almacenami
   expect((await page.request.get(`${SITE}/${CHANNEL}/favicon.svg`)).ok()).toBe(true);
 });
 
-test('/v4/docs/ muestra la guía y enlaza el OpenAPI y el puente de Sheets', async ({ page }) => {
+test('/v4/docs/ muestra la guía y enlaza el OpenAPI y llms.txt', async ({ page }) => {
   await page.goto(`${SITE}/${CHANNEL}/docs/`);
   await expect(
     page.getByRole('heading', { level: 1, name: 'Guía para integradores' }),
   ).toBeVisible();
-  for (const file of ['connector-api.openapi.yaml', 'llms.txt', 'bridge.gs', 'columnas.gs']) {
+  for (const file of ['connector-api.openapi.yaml', 'llms.txt']) {
     expect((await page.request.get(`${SITE}/${CHANNEL}/docs/${file}`)).ok()).toBe(true);
+  }
+});
+
+test('desde /v4/docs/ se llega a la guía del puente de Sheets y a sus archivos', async ({
+  page,
+}) => {
+  await page.goto(`${SITE}/${CHANNEL}/docs/`);
+  await page.getByRole('link', { name: 'guía del puente de Google Sheets' }).click();
+  await expect(page).toHaveURL(`${SITE}/${CHANNEL}/docs/google-sheets/`);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Google Sheets: el puente de Apps Script' }),
+  ).toBeVisible();
+
+  const hrefs = [
+    await page.getByRole('link', { name: 'bridge.gs' }).first().getAttribute('href'),
+    await page.getByRole('link', { name: 'columnas.gs' }).first().getAttribute('href'),
+    await page.getByRole('link', { name: 'OpenAPI' }).first().getAttribute('href'),
+  ];
+  for (const href of hrefs) {
+    expect(href).not.toBeNull();
+    expect((await page.request.get(new URL(href ?? '', page.url()).href)).ok()).toBe(true);
   }
 });
