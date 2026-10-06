@@ -69,4 +69,19 @@ describe('renderGuidePage', () => {
     expect(html).toContain('<title>Guía para integradores · offline-pos 0.1.0</title>');
     expect(html).toContain('<strong>mundo</strong>');
   });
+
+  it('en una subcarpeta de docs, el encabezado sube con docsRoot y el Markdown queda al lado', () => {
+    const html = renderGuidePage('# Google Sheets', '0.1.0', '../');
+    expect(html).toContain('href="guia.md"');
+    expect(html).toContain('href="../connector-api.openapi.yaml"');
+    expect(html).toContain('href="../llms.txt"');
+    expect(html).toContain('href="../../../"');
+  });
+
+  it('sin docsRoot, el encabezado es el de docs/', () => {
+    const html = renderGuidePage('# Guía para integradores', '0.1.0');
+    expect(html).toContain('href="connector-api.openapi.yaml"');
+    expect(html).toContain('href="llms.txt"');
+    expect(html).toContain('href="../../"');
+  });
 });
