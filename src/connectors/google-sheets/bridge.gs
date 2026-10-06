@@ -27,8 +27,8 @@ var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
  *
- * Un solo endpoint: doPost(e). Request (Content-Type text/plain, para evitar
- * el preflight CORS que Apps Script no maneja):
+ * doGet() es la página para conectar el POS (ver abajo). La API es un solo endpoint: doPost(e).
+ * Request (Content-Type text/plain, para evitar el preflight CORS que Apps Script no maneja):
  *   { action, payload, idempotencyKey?, sharedSecret?, contractVersion? }
  * Response (siempre HTTP 200 — Apps Script no deja controlar el status):
  *   { ok: true, data } | { ok: false, error, code?, contractVersion? }
@@ -295,9 +295,35 @@ function contractMajor(version) {
 
 // ---------------------------------------------------------------- entrada
 
+/**
+ * La página del Web App: el nombre de la planilla, la versión del contrato y "Conectar el POS", que
+ * abre el POS con esta planilla precargada en su configuración. El link lleva la URL de ESTA
+ * implementación (nunca sale de una celda: viajaría en cada copia de la planilla) y nunca el secreto
+ * compartido, porque la página es pública. No toma el lock ni crea pestañas.
+ */
 function doGet() {
-  // Health check para probar el despliegue desde el navegador.
-  return respond({ ok: true, data: { service: 'pos-sheets-bridge' } });
+  if (typeof CONFIG_LABELS === 'undefined') {
+    return htmlPage('<p>Falta el archivo columnas.gs en el proyecto de Apps Script.</p>');
+  }
+  var pos = posUrl();
+  var link = connectLink(pos, ScriptApp.getService().getUrl());
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName() || 'Esta planilla';
+  return htmlPage(
+    '<h1>' +
+      escapeHtml(name) +
+      '</h1>' +
+      '<p class="sub">Puente del POS · contrato ' +
+      escapeHtml(CONTRACT_VERSION) +
+      '</p>' +
+      '<p><a class="boton" href="' +
+      escapeHtml(link) +
+      '" target="_blank" rel="noopener">Conectar el POS</a></p>' +
+      '<p>Abre el POS (' +
+      escapeHtml(pos) +
+      ') con esta planilla en su configuración. Ahí completás la sucursal, el punto de venta y el ' +
+      'secreto compartido, si lo configuraste. Cada terminal se conecta igual: abriendo esta página ' +
+      'desde esa terminal.</p>',
+  );
 }
 
 function doPost(e) {
@@ -368,6 +394,56 @@ function respond(body) {
   return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(
     ContentService.MimeType.JSON,
   );
+}
+
+// ------------------------------------------------------ página del Web App
+
+/** El valor de una clave de la pestaña Configuración (por etiqueta o clave interna); '' si no está. */
+function readConfigValue(key) {
+  var sheet = getSheet(CONFIG_SHEET);
+  if (!sheet || sheet.getLastRow() === 0) {
+    return '';
+  }
+  var wanted = [normalize(CONFIG_LABELS[key]), normalize(key)];
+  var width = Math.min(2, sheet.getMaxColumns());
+  var rows = sheet.getRange(1, 1, sheet.getLastRow(), width).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (wanted.indexOf(normalize(rows[i][0])) !== -1) {
+      return rows[i][1] === undefined ? '' : String(rows[i][1]).trim();
+    }
+  }
+  return '';
+}
+
+/** La URL del POS de la pestaña Configuración, sin fragmento; si no es http(s), la de por omisión. */
+function posUrl() {
+  var value = readConfigValue('posUrl');
+  return /^https?:\/\//i.test(value) ? value.split('#')[0] : DEFAULT_POS_URL;
+}
+
+/** `<POS>#connect=<base64url sin relleno>` con lo único que el POS necesita de esta planilla. */
+function connectLink(pos, webAppUrl) {
+  var json = JSON.stringify({ type: 'google-sheets', webAppUrl: webAppUrl });
+  var encoded = Utilities.base64EncodeWebSafe(json, Utilities.Charset.UTF_8).replace(/=+$/, '');
+  return pos + '#connect=' + encoded;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function htmlPage(body) {
+  var style =
+    '<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:0 1rem;' +
+    'color:#1f2937}.sub{color:#6b7280}.boton{display:inline-block;padding:.75rem 1.25rem;' +
+    'border-radius:.5rem;background:#2563eb;color:#fff;text-decoration:none;font-weight:600}</style>';
+  return HtmlService.createHtmlOutput(style + body)
+    .setTitle('Conectar el POS')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ------------------------------------------------------- auto-provisión
