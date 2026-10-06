@@ -54,5 +54,7 @@ describe('el puente de Google Sheets publicado (#180)', () => {
     expect(read('../docs/integradores/guia.md')).toContain('](google-sheets.md)');
     const llms = read('../docs/integradores/llms.txt');
     expect(llms).toContain('](google-sheets.md)');
+    expect(llms).toContain(`](${SOURCES}bridge.gs)`);
+    expect(llms).toContain(`](${SOURCES}columnas.gs)`);
   });
 });

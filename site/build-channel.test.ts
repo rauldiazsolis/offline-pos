@@ -1,5 +1,12 @@
 // @vitest-environment node
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -26,7 +33,7 @@ function publishedChannel(siteDir: string, version: string): void {
 }
 
 describe('buildChannel (#54)', () => {
-  it('arma v4/ con el build, version.json, las docs con el OpenAPI local y el puente de Sheets', () => {
+  it('arma v4/ con el build, version.json y las docs con el OpenAPI local', () => {
     const { distDir, siteDir } = fixture();
     const folder = buildChannel({ distDir, siteDir, info: INFO });
 
@@ -36,13 +43,44 @@ describe('buildChannel (#54)', () => {
     const guide = readFileSync(join(folder, 'docs', 'guia.md'), 'utf8');
     expect(guide).toContain('](connector-api.openapi.yaml)');
     expect(guide).not.toContain('../connector-api.openapi.yaml');
-    expect(readFileSync(join(folder, 'docs', 'llms.txt'), 'utf8')).not.toContain('../');
+    expect(guide).toContain('](google-sheets/)');
+    const llms = readFileSync(join(folder, 'docs', 'llms.txt'), 'utf8');
+    expect(llms).not.toContain('../');
+    expect(llms).toContain('](google-sheets/guia.md)');
+    expect(llms).toContain('](google-sheets/bridge.gs)');
+    expect(llms).toContain('](google-sheets/columnas.gs)');
     expect(existsSync(join(folder, 'docs', 'connector-api.openapi.yaml'))).toBe(true);
     expect(readFileSync(join(folder, 'docs', 'index.html'), 'utf8')).toContain(
       '<h1>Guía para integradores</h1>',
     );
-    expect(existsSync(join(folder, 'docs', 'bridge.gs'))).toBe(true);
-    expect(existsSync(join(folder, 'docs', 'columnas.gs'))).toBe(true);
+    expect(readdirSync(join(folder, 'docs')).filter((file) => file.endsWith('.gs'))).toEqual([]);
+  });
+
+  it('publica el puente de Sheets y su guía en docs/google-sheets/ (#180)', () => {
+    const { distDir, siteDir } = fixture();
+    const sheets = join(buildChannel({ distDir, siteDir, info: INFO }), 'docs', 'google-sheets');
+
+    expect(readdirSync(sheets).sort()).toEqual([
+      'bridge.gs',
+      'columnas.gs',
+      'guia.md',
+      'index.html',
+    ]);
+    for (const file of ['bridge.gs', 'columnas.gs']) {
+      expect(readFileSync(join(sheets, file), 'utf8')).toBe(
+        readFileSync(new URL(`../src/connectors/google-sheets/${file}`, import.meta.url), 'utf8'),
+      );
+    }
+    const guide = readFileSync(join(sheets, 'guia.md'), 'utf8');
+    expect(guide).not.toContain('src/');
+    expect(guide).toContain('](bridge.gs)');
+    expect(guide).toContain('](columnas.gs)');
+    expect(guide).toContain('](../guia.md)');
+    expect(guide).toContain('](../connector-api.openapi.yaml)');
+    const html = readFileSync(join(sheets, 'index.html'), 'utf8');
+    expect(html).toContain('<h1>Google Sheets: el puente de Apps Script</h1>');
+    expect(html).toContain('href="../connector-api.openapi.yaml"');
+    expect(html).toContain('href="bridge.gs"');
   });
 
   it('reemplaza el canal entero con una versión más nueva', () => {
