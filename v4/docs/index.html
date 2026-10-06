@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guía para integradores · offline-pos 0.5.0</title>
+    <title>Guía para integradores · offline-pos 0.6.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -58,8 +58,9 @@
   <body>
     <main>
       <header>
-        offline-pos 0.5.0 · <a href="guia.md">Markdown</a> ·
-        <a href="connector-api.openapi.yaml">OpenAPI</a> · <a href="llms.txt">llms.txt</a> ·
+        offline-pos 0.6.0 · <a href="guia.md">Markdown</a> ·
+        <a href="connector-api.openapi.yaml">OpenAPI</a> ·
+        <a href="llms.txt">llms.txt</a> ·
         <a href="../../">Backends y canales</a>
       </header>
       <h1>Guía para integradores</h1>
@@ -238,6 +239,13 @@ recomienda un solo uso y un vencimiento corto (60 segundos).</li>
 </ul>
 <p>El demo-backend lo implementa con <code>/PANEL</code>: un link de un solo uso que vence a los 60 segundos y
 muestra con qué caja se entró.</p>
+<h2>Google Sheets: un backend sin servidor</h2>
+<p>Un comercio sin sistema propio puede usar una planilla de Google Sheets como backend, sin servidor y
+sin costo: un puente de Apps Script, pegado en la planilla e implementado como aplicación web, habla
+el mismo contrato que un backend REST (con otro transporte, porque Apps Script no expone headers) y
+guarda cada venta, cobranza y movimiento de caja en sus pestañas.</p>
+<p>Cómo instalarlo, conectar el POS desde la planilla, actualizarlo y qué guarda cada pestaña está en
+la <a href="google-sheets/">guía del puente de Google Sheets</a>, junto a sus dos archivos.</p>
 <h2>Servir el POS desde tu propio servidor</h2>
 <p>El POS es un build estático. Una versión exacta sale de los
 <a href="https://github.com/rauldiazsolis/offline-pos/tags">tags del repo</a>: <code>git checkout vX.Y.Z</code>,

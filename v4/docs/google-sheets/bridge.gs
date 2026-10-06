@@ -9,18 +9,26 @@
  */
 
 /**
- * Versión del Connector API que habla este puente (4.2.0 desde #101; 4.1.0, #120; 4.0.0, #99). Un request
- * con otra versión mayor se responde `incompatible-contract` sin procesar
- * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
- * redespliegue el puente.
+ * Versión del Connector API que habla este puente. Un request con otra versión mayor se responde
+ * `incompatible-contract` sin procesar nada: el POS no recibe ack y el lote queda en su outbox hasta
+ * que se redespliegue el puente.
  */
-var CONTRACT_VERSION = '4.2.0';
+var CONTRACT_VERSION = '4.6.0';
+
+/** Lo que el puente hace más allá del piso 4.0.0 del contrato (4.4.0). */
+var CAPABILITIES = ['customer-payment-void', 'portal'];
+
+/** El portal (4.6.0) abre esta planilla: el POS muestra el comando y el botón con esta etiqueta. */
+var PORTAL = { command: 'PLANILLA', label: 'Abrir planilla' };
+
+/** Adónde lleva "Conectar el POS" si la pestaña Configuración no dice otra cosa. */
+var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
 
 /**
- * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
+ * Puente HTTP entre el POS y esta planilla (conector de Google Sheets).
  *
- * Un solo endpoint: doPost(e). Request (Content-Type text/plain, para evitar
- * el preflight CORS que Apps Script no maneja):
+ * doGet() es la página para conectar el POS (ver abajo). La API es un solo endpoint: doPost(e).
+ * Request (Content-Type text/plain, para evitar el preflight CORS que Apps Script no maneja):
  *   { action, payload, idempotencyKey?, sharedSecret?, contractVersion? }
  * Response (siempre HTTP 200 — Apps Script no deja controlar el status):
  *   { ok: true, data } | { ok: false, error, code?, contractVersion? }
@@ -44,7 +52,7 @@ var CONTRACT_VERSION = '4.2.0';
  * Tipos: text | integer | number | quantity | percent | datetime. `quantity` es una cantidad con signo
  * y hasta 3 decimales (contrato v3: se vende por peso).
  *
- * Contrato v3 (#96): una pestaña que ya existía gana sola las columnas opcionales nuevas al final
+ * Contrato v3: una pestaña que ya existía gana sola las columnas opcionales nuevas al final
  * (ensureColumns) — así una planilla anterior se actualiza al redesplegar el puente. `Turnos` ya no
  * está: el contrato no tiene cash-session; si la pestaña existía, queda como estaba.
  */
@@ -92,9 +100,9 @@ var SCHEMA = {
     ['deviceId', 'text', true],
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
-    // 4.0.0 (#99): una anulación es una venta más que apunta a la que anula.
+    // 4.0.0: una anulación es una venta más que apunta a la que anula.
     ['anulaA', 'text', true],
-    // 4.1.0 (#120): número del ticket en su día. Texto a propósito: es una fecha de calendario
+    // 4.1.0: número del ticket en su día. Texto a propósito: es una fecha de calendario
     // local, no un instante (una columna 'datetime' la movería de zona horaria).
     ['fechaTicket', 'text', true],
     ['numeroTicket', 'integer', true],
@@ -121,7 +129,7 @@ var SCHEMA = {
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
   ]),
-  // Contrato v3 (#96): ingresos/egresos de caja, incluido el ajuste por arqueo.
+  // Contrato v3: ingresos/egresos de caja, incluido el ajuste por arqueo.
   MovimientosCaja: columns([
     ['movementId', 'text'],
     ['fecha', 'datetime'],
@@ -136,7 +144,7 @@ var SCHEMA = {
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
   ]),
-  // Contrato v3 (#96): cobranzas sin venta, una fila por medio de pago.
+  // Contrato v3: cobranzas sin venta, una fila por medio de pago.
   Cobranzas: columns([
     ['customerPaymentId', 'text'],
     ['fecha', 'datetime'],
@@ -147,12 +155,16 @@ var SCHEMA = {
     ['deviceId', 'text', true],
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
-    // 4.2.0 (#101): número del recibo en su día. Texto a propósito, como la fecha del ticket.
+    // 4.2.0: número del recibo en su día. Texto a propósito, como la fecha del ticket.
     ['fechaRecibo', 'text', true],
     ['numeroRecibo', 'integer', true],
+    // 4.3.0: la anulación de una cobranza es otra cobranza que apunta a la que anula; la original
+    // queda marcada, como una venta anulada.
+    ['estado', 'text', true],
+    ['anulaA', 'text', true],
   ]),
   // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
-  // Idempotencia + estado consultable por LOTE de push (antes por evento, #87).
+  // Idempotencia + estado consultable por LOTE de push (antes por evento).
   _PushLots: columns([
     ['id', 'text'],
     ['status', 'text'],
@@ -161,7 +173,7 @@ var SCHEMA = {
     ['deviceId', 'text', true],
   ]),
   // Fingerprint por fila de Productos/Clientes, para poder ofrecer un cursor de pull real sin
-  // depender de un trigger onEdit (#87) — ver comentario de `trackChanges` más abajo.
+  // depender de un trigger onEdit — ver comentario de `trackChanges` más abajo.
   _Snapshot: columns([
     ['resource', 'text'],
     ['id', 'text'],
@@ -250,7 +262,7 @@ var SEED = {
   ],
 };
 
-// Contrato batch (#87): dos operaciones, nada de acciones por recurso/evento. Las funciones de
+// Contrato batch: dos operaciones, nada de acciones por recurso/evento. Las funciones de
 // abajo (pushSale, pullProducts, etc.) siguen existiendo, pero solo como piezas internas que
 // pushBatchAction/pullBatchAction llaman — no son alcanzables desde afuera.
 var ACTIONS = {
@@ -258,13 +270,23 @@ var ACTIONS = {
   pullBatch: pullBatchAction,
 };
 
-/** Versión y estado (4.0.0, #99). La planilla nunca está en mantenimiento: siempre `ok`. */
+/**
+ * Versión, estado, capacidades y portal; la empresa (4.5.0) es la planilla. La planilla nunca está
+ * en mantenimiento: siempre `ok`.
+ */
 function infoAction() {
-  return {
+  var info = {
     contractVersion: CONTRACT_VERSION,
     status: 'ok',
     backend: { name: 'pos-sheets-bridge', version: CONTRACT_VERSION },
+    capabilities: CAPABILITIES,
+    portal: PORTAL,
   };
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName();
+  if (name) {
+    info.company = { name: name };
+  }
+  return info;
 }
 
 function contractMajor(version) {
@@ -273,9 +295,35 @@ function contractMajor(version) {
 
 // ---------------------------------------------------------------- entrada
 
+/**
+ * La página del Web App: el nombre de la planilla, la versión del contrato y "Conectar el POS", que
+ * abre el POS con esta planilla precargada en su configuración. El link lleva la URL de ESTA
+ * implementación (nunca sale de una celda: viajaría en cada copia de la planilla) y nunca el secreto
+ * compartido, porque la página es pública. No toma el lock ni crea pestañas.
+ */
 function doGet() {
-  // Health check para probar el despliegue desde el navegador.
-  return respond({ ok: true, data: { service: 'pos-sheets-bridge' } });
+  if (typeof CONFIG_LABELS === 'undefined') {
+    return htmlPage('<p>Falta el archivo columnas.gs en el proyecto de Apps Script.</p>');
+  }
+  var pos = posUrl();
+  var link = connectLink(pos, ScriptApp.getService().getUrl());
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName() || 'Esta planilla';
+  return htmlPage(
+    '<h1>' +
+      escapeHtml(name) +
+      '</h1>' +
+      '<p class="sub">Puente del POS · contrato ' +
+      escapeHtml(CONTRACT_VERSION) +
+      '</p>' +
+      '<p><a class="boton" href="' +
+      escapeHtml(link) +
+      '" target="_blank" rel="noopener">Conectar el POS</a></p>' +
+      '<p>Abre el POS (' +
+      escapeHtml(pos) +
+      ') con esta planilla en su configuración. Ahí completás la sucursal, el punto de venta y el ' +
+      'secreto compartido, si lo configuraste. Cada terminal se conecta igual: abriendo esta página ' +
+      'desde esa terminal.</p>',
+  );
 }
 
 function doPost(e) {
@@ -314,6 +362,12 @@ function doPost(e) {
     return respond({ ok: true, data: infoAction() });
   }
 
+  // `portalLink` (4.6.0) también es liviano: la URL de esta planilla. No hay token que emitir:
+  // abrirla ya exige una cuenta de Google con acceso.
+  if (request.action === 'portalLink') {
+    return respond({ ok: true, data: { url: SpreadsheetApp.getActiveSpreadsheet().getUrl() } });
+  }
+
   var handler = ACTIONS[request.action];
   if (!handler) {
     return respond({ ok: false, error: 'Acción desconocida: ' + request.action });
@@ -340,6 +394,56 @@ function respond(body) {
   return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(
     ContentService.MimeType.JSON,
   );
+}
+
+// ------------------------------------------------------ página del Web App
+
+/** El valor de una clave de la pestaña Configuración (por etiqueta o clave interna); '' si no está. */
+function readConfigValue(key) {
+  var sheet = getSheet(CONFIG_SHEET);
+  if (!sheet || sheet.getLastRow() === 0) {
+    return '';
+  }
+  var wanted = [normalize(CONFIG_LABELS[key]), normalize(key)];
+  var width = Math.min(2, sheet.getMaxColumns());
+  var rows = sheet.getRange(1, 1, sheet.getLastRow(), width).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (wanted.indexOf(normalize(rows[i][0])) !== -1) {
+      return rows[i][1] === undefined ? '' : String(rows[i][1]).trim();
+    }
+  }
+  return '';
+}
+
+/** La URL del POS de la pestaña Configuración, sin fragmento; si no es http(s), la de por omisión. */
+function posUrl() {
+  var value = readConfigValue('posUrl');
+  return /^https?:\/\//i.test(value) ? value.split('#')[0] : DEFAULT_POS_URL;
+}
+
+/** `<POS>#connect=<base64url sin relleno>` con lo único que el POS necesita de esta planilla. */
+function connectLink(pos, webAppUrl) {
+  var json = JSON.stringify({ type: 'google-sheets', webAppUrl: webAppUrl });
+  var encoded = Utilities.base64EncodeWebSafe(json, Utilities.Charset.UTF_8).replace(/=+$/, '');
+  return pos + '#connect=' + encoded;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function htmlPage(body) {
+  var style =
+    '<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:0 1rem;' +
+    'color:#1f2937}.sub{color:#6b7280}.boton{display:inline-block;padding:.75rem 1.25rem;' +
+    'border-radius:.5rem;background:#2563eb;color:#fff;text-decoration:none;font-weight:600}</style>';
+  return HtmlService.createHtmlOutput(style + body)
+    .setTitle('Conectar el POS')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ------------------------------------------------------- auto-provisión
@@ -380,11 +484,12 @@ function ensureSheetsExist() {
       ensureColumns(sheet, name);
     }
   });
+  ensureConfigSheet(spreadsheet);
 }
 
 /**
  * Agrega al final de una pestaña existente las columnas OPCIONALES del SCHEMA que le faltan
- * (contrato v3, #96): así una planilla anterior se actualiza sola al redesplegar el puente, sin
+ * (contrato v3): así una planilla anterior se actualiza sola al redesplegar el puente, sin
  * tocar datos. Una requerida que falta no se agrega: sigue siendo el error claro de headerMap (una
  * columna Precio vacía haría viajar productos a $0). La columna nueva lleva formato y validación en
  * la fila plantilla (2) según su tipo, igual que createSheet. Se reconoce por etiqueta o clave.
@@ -456,6 +561,27 @@ function createSheet(spreadsheet, name) {
   if (SEED[name]) {
     appendObjects(name, SEED[name]);
   }
+}
+
+/**
+ * La pestaña Configuración, al final de la planilla: solo se crea si no existe (el dueño la puede
+ * mover o darle formato, y la portada de la planilla es suya). Lleva los pares clave/valor que el
+ * puente lee y, abajo, los pasos para conectar una terminal.
+ */
+function ensureConfigSheet(spreadsheet) {
+  if (spreadsheet.getSheetByName(CONFIG_SHEET)) {
+    return;
+  }
+  var rows = [[CONFIG_LABELS.posUrl, DEFAULT_POS_URL], ['', '']].concat(
+    CONFIG_STEPS.map(function (step) {
+      return [step, ''];
+    }),
+  );
+  // Con el índice explícito: sin él, Sheets la inserta al lado de la pestaña activa.
+  var sheet = spreadsheet.insertSheet(CONFIG_SHEET, spreadsheet.getNumSheets());
+  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  sheet.getRange(1, 1).setFontWeight('bold');
+  sheet.getRange(3, 1).setFontWeight('bold');
 }
 
 // --------------------------------------------------------------- helpers
@@ -654,7 +780,7 @@ function compact(object) {
   return result;
 }
 
-// -------------------------------------------------- lotes de push (#87)
+// -------------------------------------------------- lotes de push
 
 /**
  * Punto de entrada de `pushBatch`: idempotente por LOTE (no por evento, ver
@@ -670,7 +796,7 @@ function pushBatchAction(payload, idempotencyKey) {
   if (findLot(idempotencyKey)) {
     return {};
   }
-  // Contrato v3 (#96): el dispositivo viaja una vez por lote; el origen, en cada evento.
+  // Contrato v3: el dispositivo viaja una vez por lote; el origen, en cada evento.
   var deviceId = payload.deviceId || '';
   var issues = [];
   (payload.events || []).forEach(function (event) {
@@ -706,7 +832,7 @@ function withStamp(object, stamp) {
 }
 
 /**
- * Aplica un evento de outbox — mismo despacho que `demo-backend/src/lots.ts`. Un tipo que el
+ * Aplica un evento de outbox — mismo despacho que un backend REST del contrato. Un tipo que el
  * contrato v3 no tiene (p. ej. un `cash-session` viejo) lanza: queda como issue del lote con su
  * eventId, sin tumbar el resto.
  */
@@ -860,7 +986,7 @@ function pullProducts() {
 }
 
 /**
- * Saldo por cliente (4.2.0, #101): la suma del libro CuentaCorriente (ventas a cuenta, holds
+ * Saldo por cliente (4.2.0): la suma del libro CuentaCorriente (ventas a cuenta, holds
  * confirmados, acreditaciones y cobranzas en negativo), tenga o no crédito. Una lectura por pull.
  */
 function customerBalances() {
@@ -1006,19 +1132,20 @@ function pushSale(sale, stamp) {
   appendObjects('Ventas', lines);
   appendObjects('Pagos', payments);
   appendObjects('CuentaCorriente', ledger);
-  // 4.0.0 (#99): la anulación es un ticket propio; el original se marca (no se borra, RNF-07). Si la
-  // planilla todavía no lo tiene, no es un error: el ticket de anulación ya quedó registrado.
+  // 4.0.0: la anulación es un ticket propio; el original se marca (no se borra: un evento nunca se
+  // modifica). Si la planilla todavía no lo tiene, no es un error: el ticket de anulación ya quedó
+  // registrado.
   if (sale.voidsSaleId) {
-    markSaleRows('Ventas', sale.voidsSaleId, { estado: 'anulada' });
-    markSaleRows('Pagos', sale.voidsSaleId, { estado: 'anulada' });
+    markRows('Ventas', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
+    markRows('Pagos', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
   }
 }
 
-/** Marca (no borra, RNF-07) las filas de una venta; devuelve cuántas encontró. */
-function markSaleRows(sheetName, saleId, values) {
+/** Marca (no borra: un evento nunca se modifica) las filas cuyo `key` es `id`; devuelve cuántas encontró. */
+function markRows(sheetName, key, id, values) {
   var count = 0;
   readRows(sheetName).forEach(function (row) {
-    if (String(row.saleId) === saleId) {
+    if (String(row[key]) === id) {
       setCells(sheetName, row._row, values);
       count++;
     }
@@ -1115,6 +1242,8 @@ function pushCustomerPayment(payment, stamp) {
           totalCobranza: payment.total,
           fechaRecibo: payment.receipt ? payment.receipt.date : undefined,
           numeroRecibo: payment.receipt ? payment.receipt.number : undefined,
+          estado: 'cerrada',
+          anulaA: payment.voidsPaymentId,
         },
         stamp,
       );
@@ -1131,4 +1260,9 @@ function pushCustomerPayment(payment, stamp) {
       stamp,
     ),
   ]);
+  // 4.3.0: la original se marca, nunca se borra. Si la planilla no la tiene, no es un error: la
+  // anulación ya quedó registrada.
+  if (payment.voidsPaymentId) {
+    markRows('Cobranzas', 'customerPaymentId', payment.voidsPaymentId, { estado: 'anulada' });
+  }
 }

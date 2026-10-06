@@ -105,6 +105,8 @@ var COLUMN_LABELS = {
     pointOfSale: 'Punto de venta',
     fechaRecibo: 'Fecha del recibo',
     numeroRecibo: 'N° de recibo',
+    estado: 'Estado',
+    anulaA: 'Anula a',
   },
   _PushLots: {
     id: 'Id',
@@ -138,3 +140,24 @@ var VALUE_LABELS = {
   origenMovimiento: { manual: 'Manual', 'count-adjustment': 'Ajuste por arqueo' },
   blocked: { yes: 'Sí', no: 'No' },
 };
+
+// La pestaña Configuración: el puente la crea al final de la planilla la primera vez y después solo
+// la lee. Las claves (columna A) se buscan por su texto, no por la fila: se pueden mover, y se puede
+// escribir abajo o al costado. Nunca va acá el secreto compartido (viajaría con cada copia).
+var CONFIG_SHEET = 'Configuración';
+
+var CONFIG_LABELS = {
+  posUrl: 'URL del POS',
+};
+
+// Lo que se escribe debajo de las claves al crear la pestaña. El primero es el título.
+var CONFIG_STEPS = [
+  'Cómo conectar una terminal',
+  '1. Si esta planilla es una plantilla compartida, hacé tu copia (Archivo > Hacer una copia) y seguí en la copia.',
+  '2. Extensiones > Apps Script > Implementar > Nueva implementación > Aplicación web. Ejecutar como: Yo. Quién tiene acceso: Cualquier persona. Autorizá el acceso a esta planilla.',
+  '3. Desde la terminal, abrí la URL de la aplicación web y tocá Conectar el POS.',
+  '4. En el POS, completá la sucursal y el punto de venta (y el secreto compartido, si lo configuraste) y probá la conexión.',
+  'Cada terminal se conecta igual: abriendo la URL de la aplicación web desde esa terminal.',
+  'URL del POS: adónde lleva el botón Conectar el POS. Vacía, se usa https://pos.contax.ar/v4/.',
+  'El secreto compartido no va en esta pestaña: se configura en Apps Script (Configuración del proyecto > Propiedades de la secuencia de comandos > SHARED_SECRET).',
+];
