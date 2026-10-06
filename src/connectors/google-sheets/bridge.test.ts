@@ -16,8 +16,11 @@ const responseSchema = z.object({
   contractVersion: z.string().optional(),
 });
 
-function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
-  const spreadsheet = new FakeSpreadsheet(options);
+type BridgeOptions = FakeOptions & { sharedSecret?: string };
+
+function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES) {
+  const { sharedSecret, ...spreadsheetOptions } = options;
+  const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
   const context = vm.createContext({
     SpreadsheetApp: spreadsheet.app(),
     ContentService: {
@@ -30,7 +33,11 @@ function loadBridge(options: FakeOptions = {}, files: string[] = SOURCE_FILES) {
     LockService: {
       getScriptLock: () => ({ waitLock: () => undefined, releaseLock: () => undefined }),
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }) },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: (key: string) => (key === 'SHARED_SECRET' ? (sharedSecret ?? null) : null),
+      }),
+    },
   });
   for (const file of files) {
     vm.runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
@@ -840,8 +847,8 @@ describe('contrato v3 (#96)', () => {
 
     // Sin recibo (anterior a 4.2.0): las dos columnas del recibo quedan vacías.
     expect(table(spreadsheet, 'Cobranzas')).toEqual([
-      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', '', '', ''],
-      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', '', '', ''],
+      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', '', '', '', 'Cerrada', ''],
+      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', '', '', '', 'Cerrada', ''],
     ]);
     expect(table(spreadsheet, 'CuentaCorriente')[0]).toEqual(
       expect.arrayContaining(['c-1', -500, 'cp1']),
@@ -937,20 +944,31 @@ describe('contrato 4.x (#99, #120)', () => {
     return spreadsheetCall.raw(body);
   }
 
-  it('la acción info devuelve la versión y el estado, sin tocar la planilla', () => {
+  it('la acción info declara 4.6.0, sus capacidades, el portal y la planilla como empresa', () => {
     const bridge = loadBridge();
 
-    const response = rawCall(bridge, { action: 'info', contractVersion: '4.2.0' });
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.6.0' });
 
     expect(response).toEqual({
       ok: true,
       data: {
-        contractVersion: '4.2.0',
+        contractVersion: '4.6.0',
         status: 'ok',
-        backend: { name: 'pos-sheets-bridge', version: '4.2.0' },
+        backend: { name: 'pos-sheets-bridge', version: '4.6.0' },
+        capabilities: ['customer-payment-void', 'portal'],
+        portal: { command: 'PLANILLA', label: 'Abrir planilla' },
+        company: { name: 'Kiosco de prueba' },
       },
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
+  });
+
+  it('sin nombre de planilla, info no manda empresa', () => {
+    const bridge = loadBridge({ name: '' });
+
+    const response = rawCall(bridge, { action: 'info', contractVersion: '4.6.0' });
+
+    expect(response.data).not.toHaveProperty('company');
   });
 
   it('un request con otro major responde incompatible-contract sin escribir nada', () => {
@@ -966,7 +984,7 @@ describe('contrato 4.x (#99, #120)', () => {
     expect(response).toMatchObject({
       ok: false,
       code: 'incompatible-contract',
-      contractVersion: '4.2.0',
+      contractVersion: '4.6.0',
     });
     expect(bridge.spreadsheet.getSheetByName('Ventas')).toBeNull();
   });
@@ -1139,7 +1157,7 @@ describe('recibo de cobranza y saldo por cliente (4.2.0, #101)', () => {
     const header = spreadsheet.getSheetByName('Cobranzas')?.values()[0] ?? [];
     expect(header).toContain('Fecha del recibo');
     expect(header).toContain('N° de recibo');
-    expect(table(spreadsheet, 'Cobranzas').map((row) => row.slice(-2))).toEqual([
+    expect(table(spreadsheet, 'Cobranzas').map((row) => row.slice(9, 11))).toEqual([
       ['2026-09-27', 3],
     ]);
   });
@@ -1211,5 +1229,107 @@ describe('recibo de cobranza y saldo por cliente (4.2.0, #101)', () => {
     expect(customersOf(pullBatch(call, { customers: cursor }))).toEqual([
       expect.objectContaining({ id: 'c-9', balance: -250 }),
     ]);
+  });
+});
+
+describe('anulación de cobranzas (4.3.0)', () => {
+  const COBRANZAS_4_2_LABELS = [
+    'Id de cobranza',
+    'Fecha',
+    'Id de cliente',
+    'Medio de pago',
+    'Monto',
+    'Total de la cobranza',
+    'Dispositivo',
+    'Sucursal',
+    'Punto de venta',
+    'Fecha del recibo',
+    'N° de recibo',
+  ];
+
+  function paymentEvent(id: string, total: number, voidsPaymentId?: string) {
+    return {
+      type: 'customer-payment',
+      id,
+      createdAt: NOW,
+      origin: {},
+      payment: {
+        id,
+        customerId: 'c-1',
+        payments: [{ method: 'cash', amount: total }],
+        total,
+        createdAt: NOW,
+        ...(voidsPaymentId !== undefined ? { voidsPaymentId } : {}),
+      },
+    };
+  }
+
+  function column(spreadsheet: FakeSpreadsheet, label: string): number {
+    return (spreadsheet.getSheetByName('Cobranzas')?.values()[0] ?? []).indexOf(label);
+  }
+
+  it('la anulación escribe "Anula a", marca la original como anulada y el saldo vuelve a subir', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 500)] }, 'lot-1');
+
+    const response = call(
+      'pushBatch',
+      { deviceId: 'dev-1', events: [paymentEvent('cp2', -500, 'cp1')] },
+      'lot-2',
+    );
+
+    expect(response.ok).toBe(true);
+    const estado = column(spreadsheet, 'Estado');
+    const anulaA = column(spreadsheet, 'Anula a');
+    expect(
+      table(spreadsheet, 'Cobranzas').map((row) => [row[0], row[4], row[estado], row[anulaA]]),
+    ).toEqual([
+      ['cp1', 500, 'Anulada', ''],
+      ['cp2', -500, 'Cerrada', 'cp1'],
+    ]);
+    // Monto en el libro: la cobranza baja el saldo, su anulación lo sube.
+    expect(table(spreadsheet, 'CuentaCorriente').map((row) => row[4])).toEqual([-500, 500]);
+  });
+
+  it('la anulación de una cobranza que la planilla no tiene no falla', () => {
+    const { call } = loadBridge();
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp2', -500, 'nope')] }, 'lot-1');
+    const pull = pullBatch(call, {}, ['lot-1']);
+
+    expect((pull.data as { lots: unknown }).lots).toEqual({ 'lot-1': { status: 'ok' } });
+  });
+
+  it('una pestaña Cobranzas de 4.2.0 gana Estado y Anula a al final sin tocar lo que había', () => {
+    const { spreadsheet, call } = loadBridge();
+    const old = spreadsheet.addSheet('Cobranzas', [COBRANZAS_4_2_LABELS]);
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 300)] }, 'lot-1');
+
+    expect(old.values()[0]?.slice(0, 13)).toEqual([...COBRANZAS_4_2_LABELS, 'Estado', 'Anula a']);
+  });
+});
+
+describe('portal (4.6.0)', () => {
+  it('portalLink devuelve la URL de la planilla, sin crear pestañas', () => {
+    const bridge = loadBridge({ url: 'https://docs.google.com/spreadsheets/d/abc/edit' });
+
+    const response = bridge.raw({ action: 'portalLink', contractVersion: '4.6.0' });
+
+    expect(response).toEqual({
+      ok: true,
+      data: { url: 'https://docs.google.com/spreadsheets/d/abc/edit' },
+    });
+    expect(bridge.spreadsheet.sheetNames()).toEqual([]);
+  });
+
+  it('portalLink exige el secreto compartido, como las demás acciones', () => {
+    const bridge = loadBridge({ sharedSecret: 's1' });
+
+    expect(bridge.raw({ action: 'portalLink' })).toEqual({
+      ok: false,
+      error: 'Secreto compartido inválido',
+    });
+    expect(bridge.raw({ action: 'portalLink', sharedSecret: 's1' }).ok).toBe(true);
   });
 });

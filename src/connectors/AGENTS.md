@@ -30,7 +30,10 @@ completa sola la primera vez que se lee la fila); `CuentaCorriente` pasa a ser e
 schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns` agrega al
 final de cada pestaña existente las columnas **opcionales** que le faltan (una requerida que falta
 sigue siendo el error de siempre — agregarla vacía haría viajar productos a $0). Sheets procesa cada
-lote dentro del request: nunca informa `queued`/`processing`. Cada conector es dueño de su schema de config
+lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
+`customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
+`portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
+Anulada, como una venta. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y

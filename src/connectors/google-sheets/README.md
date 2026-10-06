@@ -8,9 +8,10 @@ Script** (`bridge.gs`) desplegado como Web App.
 > conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
 > contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
 > Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, desde la
-> Etapa 4 (#99) el **contrato 4.0.0**, desde la Etapa 5 (#120) el **4.1.0** y desde la Etapa 6
-> (#101) el **4.2.0**: ver "Actualizar el puente a la v3 del contrato", "Contrato 4.0.0",
-> "Contrato 4.1.0" y "Contrato 4.2.0" más abajo si ya tenías una planilla andando.
+> Etapa 4 (#99) el **contrato 4.0.0**, desde la Etapa 5 (#120) el **4.1.0**, desde la Etapa 6
+> (#101) el **4.2.0** y desde #180 el **4.6.0**: ver "Actualizar el puente a la v3 del contrato",
+> "Contrato 4.0.0", "Contrato 4.1.0", "Contrato 4.2.0" y "Contrato 4.6.0" más abajo si ya tenías una
+> planilla andando.
 
 ## Setup (comerciante)
 
@@ -152,6 +153,23 @@ sola al final de Ventas.
   incompatible a un puente 4.1.0 y deja de sincronizar hasta que se actualice — la venta nunca se
   bloquea y nada se pierde. Las dos columnas aparecen solas al final de Cobranzas
   (`ensureColumns`).
+
+## Contrato 4.6.0 (#180)
+
+- **`info` declara 4.6.0** con `capabilities: ['customer-payment-void', 'portal']`,
+  `portal: { command: 'PLANILLA', label: 'Abrir planilla' }` y `company: { name }`, el nombre de la
+  planilla (sin nombre, no se manda). El POS muestra la empresa en `/DIAGNOSTICO` y ofrece
+  `/PLANILLA` y su botón en la barra de estado.
+- **Acción `portalLink`**: sin payload, liviana como `info` (sin lock ni pestañas nuevas), pide el
+  secreto como las demás. Devuelve `{ url }`, la URL de la planilla: abrirla ya exige una cuenta de
+  Google con acceso, así que no hay token que emitir.
+- **Anular cobranzas (4.3.0)**: la anulación llega como otra cobranza con medios y total en negativo
+  y `voidsPaymentId`. Se escribe como cualquier cobranza (en `CuentaCorriente`, `-total`: el saldo
+  sube), con las columnas nuevas **Estado** (`Cerrada`) y **Anula a**; las filas de la original pasan
+  a Estado = Anulada. Si la planilla no la tiene, no es un error.
+- **Hay que redesplegar el puente** (`bridge.gs` y `columnas.gs`) para tener el portal y anular
+  cobranzas; un puente 4.2.0 sigue sincronizando (piso 4.0.0), sin esas dos cosas. Estado y Anula a
+  aparecen solas al final de Cobranzas (`ensureColumns`); las filas viejas quedan con Estado vacío.
 
 ## Qué hace cada operación
 
@@ -317,5 +335,11 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     N° de recibo en Cobranzas y su total en negativo en CuentaCorriente; en el siguiente pull el
     cliente viaja con su saldo (también uno sin crédito).
 
+22. Contrato 4.6.0: `info` responde `4.6.0` con las capacidades, el portal y el nombre de la
+    planilla; en el POS, `/DIAGNOSTICO` muestra "Empresa: <nombre de la planilla>", y `/PLANILLA` (o
+    el botón "Abrir planilla") abre la planilla en una pestaña nueva. Anular una cobranza desde
+    `/ANULAR` escribe la fila negativa con Anula a, deja la original en Anulada y en el siguiente pull
+    el saldo del cliente vuelve a subir.
+
 Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99;
-para el 20, en #120; para el 21, en #101).
+para el 20, en #120; para el 21, en #101; para el 22, en #180).

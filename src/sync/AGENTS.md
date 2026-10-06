@@ -198,7 +198,8 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
   aunque se arranque sin red. `portalOffer` (pura) decide qué se ofrece: hacen falta la capacidad
   **y** el objeto; un nombre que choca con uno del POS pasa a `PORTAL` (los nombres reservados los
   pasa la UI). `sync/portal-link.ts::requestPortalLink` hace el `POST /portal-links` fuera del puerto
-  (solo `rest` y `rest-demo`; otro conector es `portal/not-offered` sin pedir nada), con
+  (`rest` y `rest-demo`; con `google-sheets`, la acción `portalLink` del puente vía `callBridge`,
+  que devuelve la URL de la planilla, #180), con
   `buildHeaders` y `failedResponse` del conector REST y `sync/http-body.ts` (el `ErrorBody` y la
   lectura del JSON, compartidos con `demo-session.ts`): 404 → `portal/not-offered`, 503 →
   `sync/backend-maintenance` con su `message`, 409 → incompatible, 401/403 → `sync/request-failed`

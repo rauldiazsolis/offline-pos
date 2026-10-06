@@ -279,7 +279,7 @@ se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arrib
 POS: un agregado nuevo no obliga a todos los backends a actualizarse. Lo que un backend hace más
 allá del piso lo declara como **capacidad** en `GET /info` (`demo-sessions`,
 `customer-payment-void`); el POS nunca la deduce de la versión e ignora un nombre que no conoce. Un
-backend 4.2 (Sheets, o uno externo que todavía no se actualizó) vuelve a ser compatible sin tocarlo:
+backend 4.2 (uno externo que todavía no se actualizó) sigue siendo compatible sin tocarlo:
 simplemente no anula cobranzas. Las **reglas de evolución** (campos y enums desconocidos, foto
 completa nunca truncada, numeración con huecos) están en el OpenAPI. Qué trajo cada versión (v3,
 4.0.0 a 4.4.0), cómo el POS sigue el estado del backend, las capacidades y los avisos (`notices`)
@@ -300,7 +300,7 @@ cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla fals
 cada carpeta de versión** del deploy, al lado del OpenAPI, para que un integrador copie el puente de
 su versión. Un cambio de contrato que el puente no acompaña no lo rompe: con el piso 4.0.0 sigue
 compatible y simplemente no declara la capacidad nueva. El puente informa su versión
-(`bridge.gs::CONTRACT_VERSION`): con un POS de otro major la terminal lo ve incompatible, no
+(`bridge.gs::CONTRACT_VERSION`, 4.6.0 desde #180, con el portal a la planilla): con un POS de otro major la terminal lo ve incompatible, no
 sincroniza y sigue vendiendo sin perder nada.
 
 **Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
@@ -628,6 +628,7 @@ en el historial de git).
 | #178 + #173 | Contrato 4.6.0: capacidad `portal` (`POST /portal-links`; el demo-backend con `/PANEL`), 503 de mantenimiento, 429 y 503 de las demos con mensajes claros en el POS | PR #201 |
 | #179 | El portal en el POS: el comando y el botón que manda el backend (`portal` de `GET /info`), `POST /portal-links` y la pestaña nueva recién con el link | PR #206 |
 | #177 | Modo entrenamiento: base de Dexie aparte, nada se empuja, franja, ENTRENAMIENTO en el ticket y aviso al salir con lo que se descarta | PR #208 |
+| Epic #180, etapa A | El puente de Sheets en 4.6.0: anula cobranzas, la planilla como empresa y el portal `/PLANILLA` a la planilla de origen | PR #211 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -638,7 +639,10 @@ producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con 
 del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
 paga), la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54); antes del
 hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
-(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, después del hito 1.
+(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, en tres etapas (spec
+`docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en 4.6.0
+con el portal (PR #211); sigue B, "Conectar el POS" desde la planilla (#133), y C, el puente y su guía
+publicados en `/v4/docs/google-sheets/`.
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la

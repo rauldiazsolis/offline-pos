@@ -105,6 +105,8 @@ var COLUMN_LABELS = {
     pointOfSale: 'Punto de venta',
     fechaRecibo: 'Fecha del recibo',
     numeroRecibo: 'N° de recibo',
+    estado: 'Estado',
+    anulaA: 'Anula a',
   },
   _PushLots: {
     id: 'Id',

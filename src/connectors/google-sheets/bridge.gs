@@ -9,12 +9,17 @@
  */
 
 /**
- * Versión del Connector API que habla este puente (4.2.0 desde #101; 4.1.0, #120; 4.0.0, #99). Un request
- * con otra versión mayor se responde `incompatible-contract` sin procesar
- * nada: el POS no recibe ack y el lote queda en su outbox hasta que se
- * redespliegue el puente.
+ * Versión del Connector API que habla este puente. Un request con otra versión mayor se responde
+ * `incompatible-contract` sin procesar nada: el POS no recibe ack y el lote queda en su outbox hasta
+ * que se redespliegue el puente.
  */
-var CONTRACT_VERSION = '4.2.0';
+var CONTRACT_VERSION = '4.6.0';
+
+/** Lo que el puente hace más allá del piso 4.0.0 del contrato (4.4.0). */
+var CAPABILITIES = ['customer-payment-void', 'portal'];
+
+/** El portal (4.6.0) abre esta planilla: el POS muestra el comando y el botón con esta etiqueta. */
+var PORTAL = { command: 'PLANILLA', label: 'Abrir planilla' };
 
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets, #67).
@@ -150,6 +155,10 @@ var SCHEMA = {
     // 4.2.0 (#101): número del recibo en su día. Texto a propósito, como la fecha del ticket.
     ['fechaRecibo', 'text', true],
     ['numeroRecibo', 'integer', true],
+    // 4.3.0: la anulación de una cobranza es otra cobranza que apunta a la que anula; la original
+    // queda marcada, como una venta anulada.
+    ['estado', 'text', true],
+    ['anulaA', 'text', true],
   ]),
   // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
   // Idempotencia + estado consultable por LOTE de push (antes por evento, #87).
@@ -258,13 +267,23 @@ var ACTIONS = {
   pullBatch: pullBatchAction,
 };
 
-/** Versión y estado (4.0.0, #99). La planilla nunca está en mantenimiento: siempre `ok`. */
+/**
+ * Versión, estado, capacidades y portal; la empresa (4.5.0) es la planilla. La planilla nunca está
+ * en mantenimiento: siempre `ok`.
+ */
 function infoAction() {
-  return {
+  var info = {
     contractVersion: CONTRACT_VERSION,
     status: 'ok',
     backend: { name: 'pos-sheets-bridge', version: CONTRACT_VERSION },
+    capabilities: CAPABILITIES,
+    portal: PORTAL,
   };
+  var name = SpreadsheetApp.getActiveSpreadsheet().getName();
+  if (name) {
+    info.company = { name: name };
+  }
+  return info;
 }
 
 function contractMajor(version) {
@@ -312,6 +331,12 @@ function doPost(e) {
   // `info` es liviano: sin lock ni auto-provisión de pestañas.
   if (request.action === 'info') {
     return respond({ ok: true, data: infoAction() });
+  }
+
+  // `portalLink` (4.6.0) también es liviano: la URL de esta planilla. No hay token que emitir:
+  // abrirla ya exige una cuenta de Google con acceso.
+  if (request.action === 'portalLink') {
+    return respond({ ok: true, data: { url: SpreadsheetApp.getActiveSpreadsheet().getUrl() } });
   }
 
   var handler = ACTIONS[request.action];
@@ -1009,16 +1034,16 @@ function pushSale(sale, stamp) {
   // 4.0.0 (#99): la anulación es un ticket propio; el original se marca (no se borra, RNF-07). Si la
   // planilla todavía no lo tiene, no es un error: el ticket de anulación ya quedó registrado.
   if (sale.voidsSaleId) {
-    markSaleRows('Ventas', sale.voidsSaleId, { estado: 'anulada' });
-    markSaleRows('Pagos', sale.voidsSaleId, { estado: 'anulada' });
+    markRows('Ventas', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
+    markRows('Pagos', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
   }
 }
 
-/** Marca (no borra, RNF-07) las filas de una venta; devuelve cuántas encontró. */
-function markSaleRows(sheetName, saleId, values) {
+/** Marca (no borra: un evento nunca se modifica) las filas cuyo `key` es `id`; devuelve cuántas encontró. */
+function markRows(sheetName, key, id, values) {
   var count = 0;
   readRows(sheetName).forEach(function (row) {
-    if (String(row.saleId) === saleId) {
+    if (String(row[key]) === id) {
       setCells(sheetName, row._row, values);
       count++;
     }
@@ -1115,6 +1140,8 @@ function pushCustomerPayment(payment, stamp) {
           totalCobranza: payment.total,
           fechaRecibo: payment.receipt ? payment.receipt.date : undefined,
           numeroRecibo: payment.receipt ? payment.receipt.number : undefined,
+          estado: 'cerrada',
+          anulaA: payment.voidsPaymentId,
         },
         stamp,
       );
@@ -1131,4 +1158,9 @@ function pushCustomerPayment(payment, stamp) {
       stamp,
     ),
   ]);
+  // 4.3.0: la original se marca, nunca se borra. Si la planilla no la tiene, no es un error: la
+  // anulación ya quedó registrada.
+  if (payment.voidsPaymentId) {
+    markRows('Cobranzas', 'customerPaymentId', payment.voidsPaymentId, { estado: 'anulada' });
+  }
 }
