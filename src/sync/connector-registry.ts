@@ -92,9 +92,7 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     pullMode: 'snapshot',
     fields: googleSheetsConfigFields,
     commands: [],
-    // Congelado en el contrato 4.2 (#127): con un POS posterior, el puente figura como incompatible.
-    description:
-      'Una planilla de Google Sheets, a través de un puente de Apps Script. Sin mantenimiento: habla el contrato 4.2.',
+    description: 'Una planilla de Google Sheets, a través de un puente de Apps Script.',
     setupHelp: [
       'En la planilla: Extensiones → Apps Script. Pegá bridge.gs y columnas.gs (están en src/connectors/google-sheets/).',
       'Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier persona.',

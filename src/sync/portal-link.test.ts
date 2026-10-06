@@ -116,11 +116,47 @@ describe('requestPortalLink (4.6.0, #179)', () => {
       meta: { message: 'Failed to fetch' },
     });
   });
+});
 
-  it('un conector que no es REST no ofrece el portal y no pide nada', async () => {
-    const sheets = { type: 'google-sheets' as const, webAppUrl: 'https://script.google.com/x' };
+describe('requestPortalLink con el puente de Google Sheets (4.6.0)', () => {
+  const sheets = {
+    type: 'google-sheets' as const,
+    webAppUrl: 'https://script.google.com/macros/s/x/exec',
+    sharedSecret: 's1',
+  };
 
-    expect(await requestPortalLink(sheets)).toMatchObject({ error: 'portal/not-offered' });
-    expect(fetchMock).not.toHaveBeenCalled();
+  it('pide la acción portalLink al puente, con el secreto, y devuelve la URL de la planilla', async () => {
+    fetchMock.mockResolvedValue(
+      json(200, { ok: true, data: { url: 'https://docs.google.com/spreadsheets/d/abc/edit' } }),
+    );
+
+    const result = await requestPortalLink(sheets);
+
+    expect(result).toEqual({
+      ok: true,
+      value: { url: 'https://docs.google.com/spreadsheets/d/abc/edit' },
+    });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe(sheets.webAppUrl);
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      action: 'portalLink',
+      sharedSecret: 's1',
+    });
+  });
+
+  it('un error del puente llega con su mensaje', async () => {
+    fetchMock.mockResolvedValue(json(200, { ok: false, error: 'Secreto compartido inválido' }));
+
+    expect(await requestPortalLink(sheets)).toEqual({
+      ok: false,
+      error: 'sync/remote-error',
+      meta: { message: 'Secreto compartido inválido' },
+    });
+  });
+
+  it('una URL que no es https es inválida', async () => {
+    fetchMock.mockResolvedValue(json(200, { ok: true, data: { url: 'http://otro.x/planilla' } }));
+
+    expect(await requestPortalLink(sheets)).toMatchObject({ error: 'sync/invalid-payload' });
   });
 });
