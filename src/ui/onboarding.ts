@@ -23,7 +23,8 @@ import { describeError } from './errors.ts';
  * "cambiar la conexión nunca borra solo" (AGENTS.md): se borra lo local en (a) un link de demo
  * cuando no se pierde nada (sin config o ya en demo, sin datos del usuario); si no, la terminal
  * pide confirmación (`confirm`, #176) y la demo se pide recién después (`startDemo`); (b) la vuelta
- * del alta con un `wipe_key` emitido por esta terminal, o sin datos del usuario.
+ * del alta con un `wipe_key` emitido por esta terminal, o sin datos del usuario. La vuelta de una
+ * planilla de Google Sheets ("Conectar el POS", #133) nunca borra: siempre precarga el wizard.
  */
 
 export type OnboardingOutcome =
@@ -156,6 +157,9 @@ export async function startDemo(
   return notice !== undefined ? { kind: 'applied', notice } : { kind: 'applied' };
 }
 
+const SHEETS_CONNECT_NOTICE =
+  'Conexión con la planilla precargada: completá la sucursal y el punto de venta (y el secreto compartido, si lo configuraste en Apps Script) y probá la conexión.';
+
 async function handleReturn(
   back: Result<ConnectReturn>,
   context: OnboardingContext,
@@ -167,8 +171,18 @@ async function handleReturn(
       notice: sentence(`No se pudo completar el alta: ${describeError(back)}`),
     };
   }
-  if (back.value.type !== 'rest') {
-    return { kind: 'none' };
+  if (back.value.type === 'google-sheets') {
+    // Al link de la planilla le faltan la sucursal, el punto de venta y el secreto: nunca se prueba
+    // ni se borra solo, el operador termina en el wizard (que ofrece Mantener o Borrar si hace falta).
+    return {
+      kind: 'review',
+      candidate: {
+        type: 'google-sheets',
+        webAppUrl: back.value.webAppUrl,
+        ...keptLocale(context.config),
+      },
+      notice: SHEETS_CONNECT_NOTICE,
+    };
   }
   const { wipeKey, type, ...connection } = back.value;
   const candidate: SyncConfig = { type, ...connection, ...keptLocale(context.config) };

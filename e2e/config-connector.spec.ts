@@ -116,3 +116,38 @@ test('Esc cancela sin guardar', async ({ page }) => {
   expect(stored).toContain('127.0.0.1:9');
   expect(stored).not.toContain('9999');
 });
+
+test('Conectar el POS desde una planilla: el wizard precargado, sucursal y caja a mano, y se aplica (#133)', async ({
+  page,
+}) => {
+  const encoded = Buffer.from(
+    JSON.stringify({ type: 'google-sheets', webAppUrl: WEB_APP_URL }),
+  ).toString('base64url');
+  await page.goto(`/#connect=${encoded}`);
+
+  await expect(page.getByRole('heading', { name: 'Configurar conexión' })).toBeVisible();
+  await expect(page.getByText(/Conexión con la planilla precargada/)).toBeVisible();
+  expect(page.url()).not.toContain('connect=');
+  // Sin sucursal ni caja la prueba no arranca: el wizard queda en el paso Terminal.
+  await expect(page.getByRole('button', { name: /^Paso 1:/ })).toHaveAttribute(
+    'aria-current',
+    'step',
+  );
+
+  await page.getByLabel('Sucursal').fill('Planilla');
+  await page.getByLabel('Punto de venta').fill('Caja 2');
+  await page.keyboard.press('Control+Enter');
+  await expect(page.getByText(/Conexión OK/)).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Aplicar (Enter)' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Barra de comandos')).toBeFocused();
+
+  const stored = await page.evaluate((key) => localStorage.getItem(key), STORAGE_KEY);
+  expect(JSON.parse(stored ?? 'null')).toMatchObject({
+    type: 'google-sheets',
+    webAppUrl: WEB_APP_URL,
+    branch: 'Planilla',
+    pointOfSale: 'Caja 2',
+  });
+});
