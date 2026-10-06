@@ -71,8 +71,9 @@ Convenciones de proceso acordadas con el usuario (antes vivían en la memoria lo
 - **Ramas y PR**: cada etapa en su propia rama, con commits chicos verificados localmente
   (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`, y `pnpm test:e2e` cuando aplica). El PR
   se abre recién al terminar la etapa, después de la revisión y de sus cambios pedidos (el CI remoto
-  solo corre en PR y en `main`, así corre una vez por etapa), y se mergea con **merge commit**, nunca
-  squash: el historial commit por commit sirve para revisar y hacer bisect.
+  corre en el PR, que cancela la corrida vieja si llega otro push, y con el tag de una versión, no en
+  `main`: #207), y se mergea con **merge commit**, nunca squash: el historial commit por commit sirve
+  para revisar y hacer bisect.
 - **CI**: después de un push no se espera ni se lee el CI de GitHub (hacerlo enlentece los comandos
   locales); alcanzan los chequeos locales. Si el CI falla, el usuario avisa.
 - **Issues en GitHub**, nunca en un markdown del repo. "Anotá: …" crea un issue y se sigue con lo que
