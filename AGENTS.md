@@ -297,8 +297,9 @@ no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (`bri
 piso** (decisión del 2026-09-29, epic #166, que revirtió el congelamiento de #127 y el puente aparte de
 #138): no acompaña cada cambio de contrato, se actualiza cuando conviene una capacidad nueva o cuando
 cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla falsa) y **publicado en
-cada carpeta de versión** del deploy, al lado del OpenAPI, para que un integrador copie el puente de
-su versión. Un cambio de contrato que el puente no acompaña no lo rompe: con el piso 4.0.0 sigue
+el canal** con su guía (`/v4/docs/google-sheets/`, desde la etapa C de #180), para que un integrador
+copie el puente del canal de sus terminales. Un cambio de contrato que el puente no acompaña no lo
+rompe: con el piso 4.0.0 sigue
 compatible y simplemente no declara la capacidad nueva. El puente informa su versión
 (`bridge.gs::CONTRACT_VERSION`, 4.6.0 desde #180, con el portal a la planilla): con un POS de otro major la terminal lo ve incompatible, no
 sincroniza y sigue vendiendo sin perder nada.
@@ -416,9 +417,12 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
   arman y sirven el sitio en local (`4174`); con `--only-local`, la home consulta solo los backends
   locales (lo usa el e2e, para no depender de uno publicado).
-- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI y
-  el puente de Google Sheets en `/v4/docs/`. El OpenAPI no lleva referencias internas (issues, specs,
-  `AGENTS.md`): lo vigila `site/docs.test.ts`.
+- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
+  `/v4/docs/`; la guía del puente de Google Sheets (`google-sheets.md`) va con `bridge.gs` y
+  `columnas.gs` en `/v4/docs/google-sheets/` (#180). Los links se escriben para el repo y
+  `site/build-channel.ts` los localiza al publicar. Ni el OpenAPI, ni los `.gs`, ni la guía del
+  puente llevan referencias internas (issues, specs, `AGENTS.md`, archivos del repo salvo los `.gs`):
+  lo vigila `site/docs.test.ts`.
 
 ## Una sola pestaña (#175)
 

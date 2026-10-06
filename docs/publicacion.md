@@ -14,7 +14,7 @@ carpetas por versión.
     integradores las docs de cada canal;
   - un **canal por major del contrato** (`/v4/`): siempre el último POS de ese major, con su service
     worker, su manifest, su `version.json` (versión, contrato y piso) y sus docs (`/v4/docs/`, con el
-    OpenAPI y el puente de Google Sheets);
+    OpenAPI, y `/v4/docs/google-sheets/` con el puente de Google Sheets y su guía);
   - `/llms.txt`, `_headers` y `_redirects` (`/versions` redirige a la home).
 - Dentro del canal, una versión nueva llega a las terminales por el **service worker**, con la misma
   URL y el mismo almacenamiento: el operador la aplica con `/ACTUALIZAR`, o se aplica sola al abrir
@@ -140,6 +140,9 @@ Con `https://pos.contax.ar` (antes del dominio propio era `https://<proyecto>.pa
 8. Sin red (DevTools → Network → Offline, o desconectando la compu) y con F5, el POS abre igual.
 9. Con la versión siguiente: una terminal abierta muestra **Versión nueva (/ACTUALIZAR)** en la barra
    de estado (busca cada hora y al arrancar), y `/ACTUALIZAR` la aplica y recarga.
+10. `/v4/docs/` muestra la guía para integradores; su link a la guía del puente de Google Sheets
+    abre `/v4/docs/google-sheets/`, y desde ahí `bridge.gs` y `columnas.gs` responden (son los de la
+    versión publicada, para pegar en la planilla).
 
 ## 6. Sumar un backend a la home
 

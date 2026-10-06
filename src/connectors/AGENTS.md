@@ -11,18 +11,19 @@ reglas están acá.
 
 `connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
 `connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
-de un puente Apps Script (`bridge.gs`, ver su README). Sus dos archivos (`bridge.gs` y
-`columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene los textos
-visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves internas y
-encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en Vitest con
-una planilla falsa (`src/test/fake-spreadsheet.ts`). Desde la Etapa 2 de #87, `bridge.gs` expone
+de un puente Apps Script (`bridge.gs`; lo que ve quien lo usa, en la guía pública
+`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus dos archivos
+(`bridge.gs` y `columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene
+los textos visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves
+internas y encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en
+Vitest con una planilla falsa (`src/test/fake-spreadsheet.ts`). Desde la Etapa 2 de #87, `bridge.gs` expone
 solo `pushBatch`/`pullBatch` (las acciones por evento/recurso de antes quedan como funciones
 internas que esas dos llaman) y resuelve el lock del script puertas adentro — antes cada evento
 pendiente era un request HTTP propio, cada uno tomando el lock de punta a punta. `pullBatch` ofrece
 cursor real para Productos/Clientes pese a que Sheets no trackea "última modificación" por fila:
 compara el contenido de cada fila contra un fingerprint guardado en una hoja oculta (`_Snapshot`) en
 vez de depender de un trigger `onEdit` (más difícil de probar y que no cubriría las escrituras del
-propio bridge de todos modos) — ver el README del conector, sección "Cursor de pull". Contrato v3
+propio bridge de todos modos) — ver la guía del puente, "Cursor del pull". Contrato v3
 (#96): pestañas nuevas `MovimientosCaja` y `Cobranzas`; columnas de identidad (Dispositivo, Sucursal,
 Punto de venta) en lo que escribe, Alta/Bloqueado/Motivo del bloqueo en Productos y Clientes (Alta se
 completa sola la primera vez que se lee la fila); `CuentaCorriente` pasa a ser el libro completo
@@ -40,7 +41,10 @@ esa implementación: una copia nunca conecta a la original; sin permiso extra, v
 viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet`: se crea al
 final con el índice explícito, solo si no existe; claves por texto con `readConfigValue`; con la celda
 vacía o algo que no sea `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs`
-(`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). Cada conector es dueño de su schema de config
+(`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
+canal sirve los dos `.gs` con la guía en `/v4/docs/google-sheets/`, así que sus comentarios no citan
+issues ni archivos del repo (la versión del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`.
+Un cambio del puente que se ve desde afuera va también a la guía. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y
