@@ -94,11 +94,11 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     commands: [],
     description: 'Una planilla de Google Sheets, a través de un puente de Apps Script.',
     setupHelp: [
-      'En la planilla: Extensiones → Apps Script. Pegá bridge.gs y columnas.gs (están en src/connectors/google-sheets/).',
+      'En la planilla: Extensiones → Apps Script. Pegá bridge.gs y columnas.gs, de las docs del canal del POS (por ejemplo https://pos.contax.ar/v4/docs/google-sheets/).',
       'Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier persona.',
       'Copiá la URL de la aplicación web: termina en /exec.',
       'Si configuraste SHARED_SECRET en las propiedades del script, cargá el mismo valor como secreto compartido.',
-      'Detalle completo en el README del conector (src/connectors/google-sheets/README.md).',
+      'Detalle completo en la guía del puente, en la misma página que los dos archivos.',
     ],
   },
 ];

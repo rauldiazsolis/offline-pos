@@ -297,8 +297,9 @@ no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (`bri
 piso** (decisión del 2026-09-29, epic #166, que revirtió el congelamiento de #127 y el puente aparte de
 #138): no acompaña cada cambio de contrato, se actualiza cuando conviene una capacidad nueva o cuando
 cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla falsa) y **publicado en
-cada carpeta de versión** del deploy, al lado del OpenAPI, para que un integrador copie el puente de
-su versión. Un cambio de contrato que el puente no acompaña no lo rompe: con el piso 4.0.0 sigue
+el canal** con su guía (`/v4/docs/google-sheets/`, desde la etapa C de #180), para que un integrador
+copie el puente del canal de sus terminales. Un cambio de contrato que el puente no acompaña no lo
+rompe: con el piso 4.0.0 sigue
 compatible y simplemente no declara la capacidad nueva. El puente informa su versión
 (`bridge.gs::CONTRACT_VERSION`, 4.6.0 desde #180, con el portal a la planilla): con un POS de otro major la terminal lo ve incompatible, no
 sincroniza y sigue vendiendo sin perder nada.
@@ -416,9 +417,12 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
   arman y sirven el sitio en local (`4174`); con `--only-local`, la home consulta solo los backends
   locales (lo usa el e2e, para no depender de uno publicado).
-- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI y
-  el puente de Google Sheets en `/v4/docs/`. El OpenAPI no lleva referencias internas (issues, specs,
-  `AGENTS.md`): lo vigila `site/docs.test.ts`.
+- **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
+  `/v4/docs/`; la guía del puente de Google Sheets (`google-sheets.md`) va con `bridge.gs` y
+  `columnas.gs` en `/v4/docs/google-sheets/` (#180). Los links se escriben para el repo y
+  `site/build-channel.ts` los localiza al publicar. Ni el OpenAPI, ni los `.gs`, ni la guía del
+  puente llevan referencias internas (issues, specs, `AGENTS.md`, archivos del repo salvo los `.gs`):
+  lo vigila `site/docs.test.ts`.
 
 ## Una sola pestaña (#175)
 
@@ -633,6 +637,7 @@ en el historial de git).
 | #177 | Modo entrenamiento: base de Dexie aparte, nada se empuja, franja, ENTRENAMIENTO en el ticket y aviso al salir con lo que se descarta | PR #208 |
 | Epic #180, etapa A | El puente de Sheets en 4.6.0: anula cobranzas, la planilla como empresa y el portal `/PLANILLA` a la planilla de origen | PR #211 |
 | Epic #180, etapa B (#133) | "Conectar el POS": la página del Web App abre el POS con la planilla precargada en `/CONFIG` (sin secreto), y la pestaña Configuración con la URL del POS | PR #213 |
+| Epic #180, etapa C | El puente publicado: guía pública `docs/integradores/google-sheets.md` y `/v4/docs/google-sheets/` con los `.gs`, sin referencias internas | PR #216 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -643,10 +648,11 @@ producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con 
 del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
 paga), la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54); antes del
 hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
-(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, en tres etapas (spec
-`docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en 4.6.0
-con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); sigue C, el puente y
-su guía publicados en `/v4/docs/google-sheets/`.
+(#179) y el modo entrenamiento (#177). Google Sheets tuvo su epic, #180, completo en tres etapas
+(spec `docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en
+4.6.0 con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); C, el puente y
+su guía publicados en `/v4/docs/google-sheets/`. Falta publicarlo en una versión del POS (la B
+cambia la app: sin ella, "Conectar el POS" no abre el wizard en `pos.contax.ar/v4/`).
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -661,7 +667,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: Sheets en el epic #180 (y #212, la Descripción vacía de una línea de producto). Impresión: #188 (ESC/POS directo, corte y cajón,
+- MVP de mini contax: Sheets, #212 (la Descripción vacía de una línea de producto). Impresión: #188 (ESC/POS directo, corte y cajón,
   cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181

@@ -2,272 +2,19 @@
 
 Backend completo para un micro-comercio sin ERP: el catálogo y las ventas viven en una planilla de
 Google Sheets. Implementa el puerto `Connector` (`src/sync/connector.ts`) contra un **puente Apps
-Script** (`bridge.gs`) desplegado como Web App.
+Script** (`bridge.gs` y `columnas.gs`) implementado como Web App, que habla el contrato **4.6.0**.
 
-> Estado: conectado al POS desde la Etapa 2 del epic #68 — se elige en `/CONFIG` con el tipo de
-> conexión "Google Sheets". Desde la Etapa 2 del rediseño de sync por lotes (#87), habla el
-> contrato batch (`pushBatch`/`pullBatch`) igual que el conector REST, con cursor real para
-> Productos/Clientes. Desde la Etapa 1 del epic #94 (#96) habla el **contrato v3**, desde la
-> Etapa 4 (#99) el **contrato 4.0.0**, desde la Etapa 5 (#120) el **4.1.0**, desde la Etapa 6
-> (#101) el **4.2.0** y desde #180 el **4.6.0**: ver "Actualizar el puente a la v3 del contrato",
-> "Contrato 4.0.0", "Contrato 4.1.0", "Contrato 4.2.0" y "Contrato 4.6.0" más abajo si ya tenías una
-> planilla andando.
+**Todo lo que ve quien usa el puente está en la guía pública,
+[`docs/integradores/google-sheets.md`](../../../docs/integradores/google-sheets.md)**, que se publica
+con los dos `.gs` en `/v4/docs/google-sheets/`: qué hace y qué no, instalar, permisos, Conectar el
+POS y la pestaña Configuración, el portal `/PLANILLA`, actualizar el puente, cómo se ve y se edita la
+planilla, qué guarda cada evento, el contrato del puente (transporte y acciones), el cursor del pull
+y las limitaciones. Este README queda para el desarrollo; las reglas del conector, en
+`src/connectors/AGENTS.md`.
 
-## Setup (comerciante)
-
-1. Hacer "Archivo > Hacer una copia" de la plantilla de planilla (viene con `bridge.gs` y
-   `columnas.gs` ya incrustados, y con datos de prueba). Si armás el proyecto a mano: Extensiones >
-   Apps Script, y pegá **los dos archivos** (`bridge.gs` y `columnas.gs`) como archivos del mismo
-   proyecto. Sin `columnas.gs` el puente responde `Falta el archivo columnas.gs…`.
-2. En la copia: Extensiones > Apps Script > Implementar > Nueva implementación > **Aplicación web**:
-   - "Ejecutar como": **Yo**
-   - "Quién tiene acceso": **Cualquier persona**
-3. (Opcional, recomendado) Proteger el puente con un secreto compartido: Configuración del proyecto >
-   Propiedades de la secuencia de comandos > agregar `SHARED_SECRET` con el valor que quieras.
-4. Desde la terminal, abrir la URL de la aplicación web (`https://script.google.com/macros/s/.../exec`):
-   muestra el nombre de la planilla, la versión del contrato y el botón **Conectar el POS**, que abre
-   el POS en una pestaña nueva con esta planilla precargada en `/CONFIG` (#133).
-5. En el POS, completar la sucursal, el punto de venta y, si lo pusiste, el secreto compartido, y
-   probar la conexión. Cada terminal se conecta igual, abriendo la URL desde esa terminal.
-
-Alternativa sin el botón: en `/CONFIG`, elegir el tipo de conexión "Google Sheets" (con la letra G
-alcanza) y pegar la URL del Web App y, opcionalmente, el secreto compartido.
-
-El link del botón lleva la URL de **esa** implementación (`ScriptApp.getService().getUrl()`, así una
-copia de la planilla nunca conecta a la original) y **nunca** el secreto: la página es pública. Lo
-abre en el POS de la pestaña **Configuración** (abajo).
-
-"Cualquier persona" **no** significa que cualquiera pueda editar tu planilla: el script corre con tus
-permisos y solo expone las acciones de `bridge.gs`. Es la única forma de que el POS escriba sin que
-nadie tenga que iniciar sesión en Google. Con `SHARED_SECRET`, además, hace falta conocer el secreto.
-
-**Permisos que pide Google al autorizar el script:** solo acceso a _esta_ planilla ("See, edit,
-create, and delete **this** spreadsheet"). `bridge.gs` lleva la anotación `@OnlyCurrentDoc` justamente
-para eso. Si la pantalla de autorización dice "**all** your Google Sheets spreadsheets", cancelá:
-revisá que la anotación esté en la primera línea del script y volvé a autorizar. Google además
-muestra un aviso de "app no verificada": es normal en un script propio y personal. La página de
-"Conectar el POS" usa `ScriptApp` (la URL de la propia implementación) y `HtmlService`, que no piden
-otro permiso: verificado contra una planilla real el 2026-10-05.
-
-Si la planilla no tiene las pestañas que el puente necesita, las crea sola en el primer request (y
-siembra datos de prueba en `Productos` y `Clientes`).
-
-**Pestaña Configuración**: en el primer request, si no existe, el puente la crea **al final** de la
-planilla (la portada y los resúmenes de la planilla son tuyos) y después solo la lee: se le puede dar
-formato o moverla. Tiene pares clave/valor que el puente encuentra por el texto de la clave (columna
-A), no por la fila, y abajo los pasos para conectar una terminal. Hoy una sola clave: **URL del
-POS**, adónde lleva el botón "Conectar el POS" (`https://pos.contax.ar/v4/` por omisión, y también
-con la celda vacía o algo que no sea `http(s)://`): para otro canal o un POS propio. Nunca guarda
-nada propio de una copia ni el secreto compartido, que sigue en las propiedades del script (en la
-pestaña viajaría con cada copia y lo vería cualquiera con acceso a la planilla).
-
-## Actualizar el puente a la v3 del contrato (#96)
-
-1. Abrí la planilla → Extensiones → Apps Script.
-2. Reemplazá el contenido de `bridge.gs` y de `columnas.gs` por los de esta carpeta (los dos
-   archivos: `columnas.gs` tiene las etiquetas nuevas).
-3. Guardá (Ctrl+S).
-4. Implementar → Administrar implementaciones → lápiz sobre la implementación existente →
-   Versión: **Nueva versión** → Implementar. La URL `/exec` no cambia: no hace falta tocar `/CONFIG`.
-   (Crear una implementación **nueva** daría otra URL, y cambiar la URL en `/CONFIG` cuenta como otro
-   origen: borraría los datos locales.)
-5. En el POS, `/SINCRONIZAR`. En la planilla deberías ver:
-   - pestañas nuevas **MovimientosCaja** y **Cobranzas**;
-   - columnas nuevas al final de Productos (Alta, Bloqueado, Motivo del bloqueo), Clientes (Bloqueado,
-     Motivo del bloqueo, Dispositivo, Sucursal, Punto de venta), Ventas (Dispositivo, Sucursal, Punto
-     de venta, Sucursal de anulación, Punto de venta de anulación), Pagos (Dispositivo, Sucursal, Punto
-     de venta), CuentaCorriente (Id de cobranza, Dispositivo, Sucursal, Punto de venta) y `_PushLots`
-     (Dispositivo);
-   - la columna Alta completa en todas las filas de Productos y Clientes;
-   - la pestaña **Turnos**, si existía, queda como estaba: el puente ya no escribe ahí.
-
-El primer pull por delta después de redesplegar vuelve a traer todas las filas de Productos y
-Clientes (su contenido ahora incluye Alta y Bloqueado, así que el fingerprint cambia una vez): es
-esperado.
-
-## Cómo se ve y cómo se edita la planilla
-
-Todo está en español: pestañas (`Productos`, `Clientes`, `Ventas`, `Pagos`, `CuentaCorriente`,
-`MovimientosCaja`, `Cobranzas`), encabezados ("Precio unitario", "Medio de pago") y valores ("Efectivo", "Cerrada",
-"Producto"). Los nombres los define `columnas.gs` — es el único archivo que hay que tocar para
-cambiarlos; `bridge.gs` trabaja con claves internas que no se renombran.
-
-El puente encuentra cada columna por su **encabezado**, no por su posición. Podés:
-
-- reordenar columnas y agregar las tuyas ("Notas", cálculos…): se ignoran;
-- convertir un rango en una tabla de Google Sheets desde el menú (Formato > Convertir en tabla);
-- borrar `Documento`, `Teléfono` o `Códigos de barras` (son opcionales);
-- **bloquear** un producto o un cliente: elegí "Sí" en `Bloqueado` y, si querés, escribí el motivo en
-  `Motivo del bloqueo`. Es informativo: el POS lo muestra (desde la Etapa 4 de #94) pero nunca impide
-  vender ni cobrar; "No" o vacío = no bloqueado;
-- `Alta` de un producto o cliente: si la dejás vacía, el puente la completa con la hora de la primera
-  vez que lee la fila, y queda fija.
-
-No podés borrar ni renombrar las demás columnas: el puente responde con un error que dice cuál falta
-(`Falta la columna 'Precio' en la pestaña Productos`) y el POS lo muestra en la barra de estado.
-Reconocer un encabezado no distingue mayúsculas, acentos ni espacios, y también entiende los nombres
-de versiones anteriores (`name`, `precioUnitario`…): al leer una pestaña vieja, los pasa a la etiqueta
-nueva; los datos y los valores viejos (`cash`, `cerrada`) se siguen leyendo.
-
-Cada pestaña nueva nace con el tamaño exacto (encabezado y una fila de datos vacía) y con formato por
-columna: texto para ids y códigos, importes con miles y decimales, IVA en porcentaje, fechas reales
-(`dd/mm/aaaa hh:mm`), cantidades con hasta 3 decimales (se vende por peso) y listas desplegables en
-Estado, Medio de pago, Tipo, Tipo de descuento, Bloqueado, Sentido y Origen. Las filas nuevas copian
-ese formato de la fila 2. A una pestaña que ya existía no se le agregan ni quitan filas: solo gana al
-final las columnas **opcionales** que le falten (una requerida que falta sigue siendo un error).
-
-**Permisos mínimos, a propósito.** El puente pide solo acceso a esta planilla (`@OnlyCurrentDoc`). Las
-tablas nativas de Sheets no se usan porque crearlas desde Apps Script exige el servicio avanzado de
-Sheets API, que necesita un permiso mucho más amplio (todas tus planillas o todo tu Drive).
-
-## Contrato 4.0.0 (#99)
-
-- **Acción `info`**: devuelve `{ contractVersion: '4.0.0', status: 'ok', backend: { name:
-'pos-sheets-bridge', version } }`. Es liviana (no toma el lock ni crea pestañas); el POS la usa
-  para probar la conexión en `/CONFIG`, al arrancar y después de un error. La planilla nunca está en
-  mantenimiento: siempre `ok`.
-- **`contractVersion` en el cuerpo** de cada request (el `doPost` de Apps Script no expone headers).
-  Si su versión mayor no es la del puente, responde `{ ok: false, code: 'incompatible-contract',
-contractVersion: '<la del puente>', error }` **sin procesar nada**: el POS no recibe ack y el lote
-  queda en su outbox hasta que se redespliegue el puente. Un request sin `contractVersion` (un POS
-  anterior) se procesa.
-- **La anulación es una venta más**: el ticket de anulación llega como `sale` con líneas y pagos
-  invertidos, `voidsSaleId` (la venta que anula) y `voidReason`. Se escribe como cualquier venta, con
-  la columna nueva **Anula a** y el Motivo de anulación; las filas del original en Ventas y Pagos pasan
-  a Estado = Anulada (sin borrar). Si la planilla todavía no tiene el original, no es un error. La
-  acreditación de cuenta corriente (un pago `account` negativo sin hold) entra a `CuentaCorriente`
-  con su signo.
-- Ya no existe el evento `sale-void`: un POS 4.0.0 no lo manda, y uno que llegue queda como _issue_
-  del lote. Las columnas **Anulada el**, **Sucursal de anulación** y **Punto de venta de anulación**
-  de una planilla existente quedan como están, sin uso (`ensureColumns` solo agrega).
-
-Para actualizar: mismos pasos que "Actualizar el puente a la v3 del contrato" (reemplazar
-`bridge.gs` y `columnas.gs`, nueva versión de la misma implementación). La columna Anula a aparece
-sola al final de Ventas.
-
-## Contrato 4.1.0 (#120)
-
-- **Número de ticket**: cada venta (y cada anulación, que es otro ticket) llega con
-  `ticket: { date, number }` — el número del ticket en su día local de la terminal. Se escribe en
-  dos columnas nuevas de Ventas, **Fecha del ticket** (texto `AAAA-MM-DD`, a propósito: es una fecha
-  de calendario, no un instante) y **N° de ticket**, en todas las filas de la venta. Una venta de un
-  POS anterior llega sin número y las dos quedan vacías.
-- **Hay que redesplegar el puente**: un POS 4.1.0 considera incompatible a un puente 4.0.0 (podría
-  no guardar el número) y deja de sincronizar hasta que se actualice — la venta nunca se bloquea y
-  nada se pierde, los lotes esperan en el outbox. Mismos pasos que la actualización anterior; las
-  dos columnas aparecen solas al final de Ventas (`ensureColumns`).
-
-## Contrato 4.2.0 (#101)
-
-- **Número de recibo**: cada cobranza sin venta llega con `receipt: { date, number }` — el número
-  del recibo en su día local de la terminal, con un contador propio (independiente del de
-  tickets). Se escribe en dos columnas nuevas de Cobranzas, **Fecha del recibo** (texto
-  `AAAA-MM-DD`) y **N° de recibo**, en todas las filas de la cobranza. Una cobranza de un POS
-  anterior llega sin número y las dos quedan vacías.
-- **Saldo de cada cliente**: `pullBatch` informa el `balance` de cada cliente, tenga o no crédito,
-  como la suma de sus filas en el libro **CuentaCorriente** (ventas y holds a cuenta, acreditaciones
-  y cobranzas en negativo); 0 si no tiene movimientos. Como entra en la fila del cliente, cambia su
-  fingerprint de `_Snapshot`: un cliente con un movimiento nuevo vuelve a viajar en el delta.
-- **Hay que redesplegar el puente** (`bridge.gs` y `columnas.gs`): un POS 4.2.0 considera
-  incompatible a un puente 4.1.0 y deja de sincronizar hasta que se actualice — la venta nunca se
-  bloquea y nada se pierde. Las dos columnas aparecen solas al final de Cobranzas
-  (`ensureColumns`).
-
-## Contrato 4.6.0 (#180)
-
-- **`info` declara 4.6.0** con `capabilities: ['customer-payment-void', 'portal']`,
-  `portal: { command: 'PLANILLA', label: 'Abrir planilla' }` y `company: { name }`, el nombre de la
-  planilla (sin nombre, no se manda). El POS muestra la empresa en `/DIAGNOSTICO` y ofrece
-  `/PLANILLA` y su botón en la barra de estado.
-- **Acción `portalLink`**: sin payload, liviana como `info` (sin lock ni pestañas nuevas), pide el
-  secreto como las demás. Devuelve `{ url }`, la URL de la planilla: abrirla ya exige una cuenta de
-  Google con acceso, así que no hay token que emitir.
-- **Anular cobranzas (4.3.0)**: la anulación llega como otra cobranza con medios y total en negativo
-  y `voidsPaymentId`. Se escribe como cualquier cobranza (en `CuentaCorriente`, `-total`: el saldo
-  sube), con las columnas nuevas **Estado** (`Cerrada`) y **Anula a**; las filas de la original pasan
-  a Estado = Anulada. Si la planilla no la tiene, no es un error.
-- **Hay que redesplegar el puente** (`bridge.gs` y `columnas.gs`) para tener el portal y anular
-  cobranzas; un puente 4.2.0 sigue sincronizando (piso 4.0.0), sin esas dos cosas. Estado y Anula a
-  aparecen solas al final de Cobranzas (`ensureColumns`); las filas viejas quedan con Estado vacío.
-
-## Qué hace cada operación
-
-Desde la Etapa 2 (#87) el puente expone solo dos acciones — igual que el contrato REST —, cada una
-resolviendo internamente varias de las operaciones de antes:
-
-| Operación del POS                           | Comportamiento                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pushBatch`                                 | Aplica **todo el lote de una sola vez**: una fila por línea/pago en `Ventas`/`Pagos` (`sale`; si es una anulación, con Anula a, y las filas del original pasan a Estado = Anulada sin borrar), una fila en `Clientes` (`customer`), una fila en `CuentaCorriente` derivada de `Ventas`/`Pagos` (`account-hold-confirm`), una fila en `MovimientosCaja` (`cash-movement`), una fila por medio en `Cobranzas` más el total en negativo en `CuentaCorriente` (`customer-payment`). Cada fila lleva Dispositivo (del lote), Sucursal y Punto de venta (del evento). `stock-movement`/`account-hold-release` son no-ops. Un evento que no se puede aplicar (ej. `account-hold-confirm` de una venta que la planilla todavía no tiene, o un tipo que el contrato 4.0.0 no tiene, como un `cash-session` o un `sale-void` viejos) queda como _issue_ del lote con el id del evento — nunca tumba el resto del lote ni el ack. |
-| `pullBatch`                                 | Trae `Productos` y `Clientes` (con Alta y bloqueo), completo o solo lo que cambió desde el cursor de cada uno (ver "Cursor de pull" abajo), más el estado (`ok`/`issues`/ausente) de los `idempotencyKey` de push que se le pidan. Sheets procesa cada lote dentro del mismo request, así que nunca informa `queued`/`processing`. Como todo el request corre con el lock del script, la foto y los estados de lote son siempre del mismo instante (requisito del contrato); y como no trae stock ni saldo, la reaplicación de eventos del POS (#98) no hace nada con este conector. `tracksStock: false` fijo: el POS nunca bloquea una venta por falta de stock.                                                                                                                                                                                                                                                     |
-| `requestAccountHold` / `releaseAccountHold` | Locales, sin red: el fiado es sin bloqueo (siempre aprobado).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-
-Limitaciones conocidas:
-
-- `CuentaCorriente` es el libro completo del cliente: holds confirmados (positivo), pagos a cuenta
-  sin hold — fiado vendido sin red (positivo) o acreditación (negativo) — con su signo tal cual, y
-  cobranzas (el total en negativo). Anular una venta a cuenta sin hold acredita con su propia fila
-  negativa (4.0.0); una venta con hold confirmado no genera contra-asiento.
-- El balance de cada cliente no vuelve al POS: sumar `CuentaCorriente` queda del lado de la planilla.
-- Una fila borrada de `Productos`/`Clientes` no genera un "tombstone": el delta de `pullBatch` no
-  informa bajas, solo altas y cambios. Una baja se refleja recién en la próxima foto completa (al
-  configurar, cada 2h o a pedido — mismo mecanismo que documenta `src/sync/AGENTS.md` para la reconciliación en
-  general).
-- `/DEMO_RESET` no existe con este conector (solo lo declara el tipo `rest-demo`, ver "Comandos por
-  conector" en `src/connectors/AGENTS.md`): no aparece en el menú de "/". La planilla nunca se resetea desde el POS.
-
-## Cursor de pull (Etapa 2, #87)
-
-Sheets no tiene una noción nativa de "última modificación" por fila, y de todos modos `pullBatch`
-necesita leer la pestaña completa (no hay forma de leer "solo lo que cambió" directamente). El
-puente aprovecha esa lectura obligada: por cada fila de `Productos`/`Clientes` guarda un
-_fingerprint_ de su contenido en una pestaña oculta (`_Snapshot`) y lo compara contra lo que vio la
-vez anterior. Fila nueva o con contenido distinto → se le asigna la hora actual como su
-`updatedAt` y se persiste; sin cambios → conserva la que ya tenía. El `nextCursor` que devuelve
-`pullBatch` es el máximo `updatedAt` entre todas las filas vigentes de ese recurso. Esto cubre por
-igual una edición manual del comerciante en la planilla y una escritura del propio puente
-(`pushCustomer`), sin necesitar un trigger `onEdit`.
-
-## Contrato del puente
-
-`POST <webAppUrl>` con `Content-Type: text/plain;charset=utf-8` (a propósito, no `application/json`:
-evita el preflight `OPTIONS` que Apps Script no maneja) y body JSON:
-
-```json
-{
-  "action": "pushBatch",
-  "payload": {
-    "deviceId": "3f0c…",
-    "events": [
-      {
-        "type": "sale",
-        "id": "01J...",
-        "createdAt": "2026-09-23T10:00:00.000Z",
-        "origin": { "branch": "Centro", "pointOfSale": "Caja 1" },
-        "sale": {}
-      }
-    ]
-  },
-  "idempotencyKey": "01J...",
-  "sharedSecret": "...",
-  "contractVersion": "4.0.0"
-}
-```
-
-Respuesta (siempre HTTP 200; el resultado viaja en el body):
-
-```json
-{ "ok": true, "data": {} }
-{ "ok": false, "error": "mensaje" }
-{ "ok": false, "error": "mensaje", "code": "incompatible-contract", "contractVersion": "4.0.0" }
-```
-
-Acciones: `info` (sin payload; versión y estado, sin lock), `pullBatch` (payload `{ deviceId, cursors: { products?, customers? }, pendingLotIds: [] }`,
-responde `data: { products: { items, nextCursor? }, customers: { items, nextCursor? }, lots: {} }`,
-con `issues` de cada lote como `{ message, eventId? }`); `pushBatch` (payload
-`{ deviceId, events: [...] }`, cada evento con su sobre `id`/`createdAt`/`origin`, responde `data: {}`). `pushBatch` es idempotente por
-`idempotencyKey` — el **lote completo**, no cada evento — vía la pestaña oculta `_PushLots`, que
-también guarda `ok`/`issues` para que `pullBatch` lo informe. Ambas toman
-`LockService.getScriptLock()`.
+`bridge.gs` y `columnas.gs` se publican **tal cual**: sus comentarios no citan issues ni archivos del
+repo (lo vigila `site/docs.test.ts`), y la historia de cada versión del contrato vive en el historial
+de git, no en ellos.
 
 ## Desarrollo
 
@@ -336,12 +83,12 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     pestaña Productos". Borrar `Teléfono` → sigue funcionando.
 16. Convertir `Clientes` en tabla nativa (Formato > Convertir en tabla) y hacer un `pushBatch` con un
     `customer` → anotar si la tabla se expande sola con la fila nueva. Si no, dejarlo como limitación
-    en este README.
+    en la guía.
 17. Planilla de una etapa anterior (encabezados viejos, sin `_PushLots`/`_Snapshot`): llamar cualquier
     acción → los encabezados pasan a español, los datos y valores viejos (`cash`, `cerrada`) se leen,
     las pestañas nuevas se crean solas y la anulación de una venta vieja (un `sale` con `voidsSaleId`)
     la marca como Anulada.
-18. Contrato v3 sobre una planilla anterior: seguir "Actualizar el puente a la v3 del contrato" → las
+18. Contrato v3 sobre una planilla anterior: seguir "Actualizar el puente" de la guía → las
     columnas nuevas aparecen al final de cada pestaña sin tocar los datos, Alta se completa, y marcar
     "Sí" en Bloqueado de un producto lo trae con `blocked: { reason }` en el siguiente `pullBatch`.
 

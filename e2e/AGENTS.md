@@ -39,8 +39,9 @@ secas. El de la demo revocada la revoca con `POST /_demo/revoke-demos` del panel
 (`pnpm site:build`, con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de
 `4173`), servido por `pnpm site:preview` en `4174`, y usa el demo-backend en memoria de `4002`.
 Prueba la home (el backend local con su link de demo al canal), que el canal `/v4/` arranca con rutas
-relativas y que su almacenamiento es `offline-pos@/v4/`, y las docs del canal con el puente de
-Sheets. El canal va fijo: si el contrato sube de major, que falle es lo que se quiere. El resto de la
+relativas y que su almacenamiento es `offline-pos@/v4/`, y las docs del canal: desde `/v4/docs/` se
+llega a la guía del puente de Sheets (`/v4/docs/google-sheets/`) y sus `.gs` responden. El canal va
+fijo: si el contrato sube de major, que falle es lo que se quiere. El resto de la
 suite sigue en `/`: prueba de paso que la raíz no cambió. El redirect de `/versions` y los headers
 son de Cloudflare: se verifican en la primera publicación. Se arma con `--only-local` (#147): la home
 solo con el demo-backend local, así el e2e no depende de un backend publicado ni le crea una demo en

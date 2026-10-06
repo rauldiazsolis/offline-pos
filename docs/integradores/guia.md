@@ -174,6 +174,16 @@ un usuario con su cuenta.
 El demo-backend lo implementa con `/PANEL`: un link de un solo uso que vence a los 60 segundos y
 muestra con qué caja se entró.
 
+## Google Sheets: un backend sin servidor
+
+Un comercio sin sistema propio puede usar una planilla de Google Sheets como backend, sin servidor y
+sin costo: un puente de Apps Script, pegado en la planilla e implementado como aplicación web, habla
+el mismo contrato que un backend REST (con otro transporte, porque Apps Script no expone headers) y
+guarda cada venta, cobranza y movimiento de caja en sus pestañas.
+
+Cómo instalarlo, conectar el POS desde la planilla, actualizarlo y qué guarda cada pestaña está en
+la [guía del puente de Google Sheets](google-sheets.md), junto a sus dos archivos.
+
 ## Servir el POS desde tu propio servidor
 
 El POS es un build estático. Una versión exacta sale de los
