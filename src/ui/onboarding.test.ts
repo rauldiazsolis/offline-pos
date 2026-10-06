@@ -359,3 +359,40 @@ describe('runOnboardingFromUrl — vuelta del alta (#128)', () => {
     expect(deps.applyConnection).not.toHaveBeenCalled();
   });
 });
+
+describe('runOnboardingFromUrl — Conectar el POS desde una planilla (#133)', () => {
+  const webAppUrl = 'https://script.google.com/macros/s/abc/exec';
+  const sheetsLink = `https://pos.x/#connect=${encode({ type: 'google-sheets', webAppUrl })}`;
+  const notice =
+    'Conexión con la planilla precargada: completá la sucursal y el punto de venta (y el secreto compartido, si lo configuraste en Apps Script) y probá la conexión.';
+
+  it.each([
+    ['sin config', NO_CONFIG, false],
+    ['en demo y sin datos', DEMO_CONFIG, false],
+    ['con una conexión real y datos', REAL_CONFIG, true],
+  ])(
+    '%s: siempre review, sin probar, aplicar ni consumir un wipe_key',
+    async (_, config, hasUserData) => {
+      const outcome = await runOnboardingFromUrl(sheetsLink, { config, hasUserData }, deps);
+
+      expect(outcome).toEqual({
+        kind: 'review',
+        candidate: { type: 'google-sheets', webAppUrl },
+        notice,
+      });
+      expect(deps.probeConnection).not.toHaveBeenCalled();
+      expect(deps.applyConnection).not.toHaveBeenCalled();
+      expect(deps.consumeWipeKey).not.toHaveBeenCalled();
+    },
+  );
+
+  it('conserva el locale de la config actual', async () => {
+    const config: Result<SyncConfig> = ok({
+      type: 'rest',
+      baseUrl: 'https://erp.x',
+      locale: 'es-AR',
+    });
+    const outcome = await runOnboardingFromUrl(sheetsLink, { config, hasUserData: false }, deps);
+    expect(outcome).toMatchObject({ candidate: { locale: 'es-AR' } });
+  });
+});

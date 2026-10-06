@@ -1,13 +1,16 @@
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { ok } from '../../domain/result.ts';
+import { readConnectReturn } from '../../sync/demo-link.ts';
 import { FakeSpreadsheet, type FakeOptions } from '../../test/fake-spreadsheet.ts';
 
 const SOURCE_FILES = ['columnas.gs', 'bridge.gs'];
 
 const outputSchema = z.object({ content: z.string() });
+const pageSchema = z.object({ html: z.string(), title: z.string() });
 const responseSchema = z.object({
   ok: z.boolean(),
   data: z.unknown().optional(),
@@ -16,13 +19,38 @@ const responseSchema = z.object({
   contractVersion: z.string().optional(),
 });
 
-type BridgeOptions = FakeOptions & { sharedSecret?: string };
+type BridgeOptions = FakeOptions & { sharedSecret?: string; webAppUrl?: string };
 
 function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES) {
-  const { sharedSecret, ...spreadsheetOptions } = options;
+  const {
+    sharedSecret,
+    webAppUrl = 'https://script.google.com/macros/s/fake/exec',
+    ...spreadsheetOptions
+  } = options;
   const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
   const context = vm.createContext({
     SpreadsheetApp: spreadsheet.app(),
+    ScriptApp: { getService: () => ({ getUrl: () => webAppUrl }) },
+    HtmlService: {
+      createHtmlOutput: (html: string) => {
+        const output = {
+          html,
+          title: '',
+          setTitle: (title: string) => {
+            output.title = title;
+            return output;
+          },
+          addMetaTag: () => output,
+        };
+        return output;
+      },
+    },
+    Utilities: {
+      Charset: { UTF_8: 'UTF-8' },
+      // Como el real: base64 "web safe" CON el relleno `=`.
+      base64EncodeWebSafe: (text: string) =>
+        Buffer.from(text, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
+    },
     ContentService: {
       MimeType: { JSON: 'JSON' },
       createTextOutput: (content: string) => {
@@ -56,7 +84,11 @@ function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES)
     return raw({ action, payload, idempotencyKey });
   }
 
-  return { spreadsheet, call, raw };
+  function page() {
+    return pageSchema.parse(vm.runInContext('doGet()', context));
+  }
+
+  return { spreadsheet, call, raw, page };
 }
 
 /** Filas de datos no vacías de una pestaña, con las fechas como ISO para poder comparar. */
@@ -1331,5 +1363,118 @@ describe('portal (4.6.0)', () => {
       error: 'Secreto compartido inválido',
     });
     expect(bridge.raw({ action: 'portalLink', sharedSecret: 's1' }).ok).toBe(true);
+  });
+});
+
+describe('pestaña Configuración', () => {
+  it('el primer request la crea al final, con la URL del POS y los pasos', () => {
+    const { spreadsheet, call } = loadBridge();
+    const insert = vi.spyOn(spreadsheet, 'insertSheet');
+
+    pullBatch(call);
+
+    const names = spreadsheet.sheetNames();
+    expect(names.at(-1)).toBe('Configuración');
+    // Con el índice explícito del final: sin índice, Sheets la pone al lado de la pestaña activa.
+    expect(insert).toHaveBeenLastCalledWith('Configuración', names.length - 1);
+    // `table` saltea la fila 1 como encabezado; acá la fila 1 ya es una clave.
+    const rows = spreadsheet.getSheetByName('Configuración')?.values() ?? [];
+    expect(rows[0]?.slice(0, 2)).toEqual(['URL del POS', 'https://pos.contax.ar/v4/']);
+    expect(rows.some((row) => String(row[0]).includes('Conectar el POS'))).toBe(true);
+  });
+
+  it('nunca guarda el secreto compartido', () => {
+    const bridge = loadBridge({ sharedSecret: 'secreto-1' });
+
+    bridge.raw({
+      action: 'pullBatch',
+      payload: { cursors: {}, pendingLotIds: [] },
+      sharedSecret: 'secreto-1',
+    });
+
+    const config = bridge.spreadsheet.getSheetByName('Configuración');
+    expect(config).not.toBeNull();
+    expect(JSON.stringify(config?.values())).not.toContain('secreto-1');
+  });
+
+  it('si ya existe no la toca', () => {
+    const { spreadsheet, call } = loadBridge();
+    const own = spreadsheet.addSheet('Configuración', [
+      ['Notas mías', ''],
+      ['URL del POS', 'https://otro.pos/v4/'],
+    ]);
+
+    pullBatch(call);
+
+    expect(own.values()).toEqual([
+      ['Notas mías', ''],
+      ['URL del POS', 'https://otro.pos/v4/'],
+    ]);
+  });
+});
+
+describe('Conectar el POS (doGet)', () => {
+  const hrefOf = (html: string) => (/href="([^"]+)"/.exec(html)?.[1] ?? '').replace(/&amp;/g, '&');
+
+  it('muestra la planilla, el contrato y el botón con el link del POS', () => {
+    const bridge = loadBridge({
+      name: 'Kiosco <Ana>',
+      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
+    });
+
+    const { html, title } = bridge.page();
+
+    expect(title).toBe('Conectar el POS');
+    expect(html).toContain('Kiosco &lt;Ana&gt;');
+    expect(html).toContain('4.6.0');
+    expect(html).toContain('target="_blank"');
+    const href = hrefOf(html);
+    expect(href.startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
+    expect(href).not.toMatch(/=$/); // sin el relleno
+    // El link lo lee el mismo código del POS: el contrato entre los dos, de punta a punta.
+    expect(readConnectReturn(href)).toEqual(
+      ok({ type: 'google-sheets', webAppUrl: 'https://script.google.com/macros/s/abc/exec' }),
+    );
+  });
+
+  it('nunca lleva el secreto compartido', () => {
+    const bridge = loadBridge({ sharedSecret: 'secreto-1' });
+
+    const { html } = bridge.page();
+
+    expect(html).not.toContain('secreto-1');
+    const encoded = hrefOf(html).split('#connect=')[1] ?? '';
+    expect(Buffer.from(encoded, 'base64url').toString()).not.toContain('secreto');
+  });
+
+  it('usa la URL del POS de la pestaña Configuración, encontrada por la clave', () => {
+    const bridge = loadBridge();
+    bridge.spreadsheet.addSheet('Configuración', [
+      ['Mis notas', ''],
+      ['  url del pos ', ' https://otro.pos/v4/#viejo '],
+    ]);
+
+    expect(hrefOf(bridge.page().html).startsWith('https://otro.pos/v4/#connect=')).toBe(true);
+  });
+
+  it.each([
+    ['vacía', ''],
+    ['que no es http(s)', 'javascript:alert(1)'],
+  ])('con la URL del POS %s usa la de por omisión', (_, value) => {
+    const bridge = loadBridge();
+    bridge.spreadsheet.addSheet('Configuración', [['URL del POS', value]]);
+
+    expect(hrefOf(bridge.page().html).startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
+  });
+
+  it('no crea pestañas', () => {
+    const bridge = loadBridge();
+    bridge.page();
+    expect(bridge.spreadsheet.sheetNames()).toEqual([]);
+  });
+
+  it('sin columnas.gs lo dice en la página', () => {
+    const bridge = loadBridge({}, ['bridge.gs']);
+    expect(bridge.page().html).toContain('Falta el archivo columnas.gs');
   });
 });

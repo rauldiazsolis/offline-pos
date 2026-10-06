@@ -22,12 +22,20 @@ Script** (`bridge.gs`) desplegado como Web App.
 2. En la copia: Extensiones > Apps Script > Implementar > Nueva implementación > **Aplicación web**:
    - "Ejecutar como": **Yo**
    - "Quién tiene acceso": **Cualquier persona**
-3. Copiar la URL de la aplicación web (`https://script.google.com/macros/s/.../exec`).
-4. (Opcional, recomendado) Proteger el puente con un secreto compartido: Configuración del proyecto >
+3. (Opcional, recomendado) Proteger el puente con un secreto compartido: Configuración del proyecto >
    Propiedades de la secuencia de comandos > agregar `SHARED_SECRET` con el valor que quieras.
-5. Pegar la URL (y el secreto, si lo pusiste) en `/CONFIG`: elegir el tipo de conexión "Google
-   Sheets" (con la letra G alcanza) y completar "URL del Web App" y, opcionalmente, "Secreto
-   compartido". Ctrl+Enter guarda.
+4. Desde la terminal, abrir la URL de la aplicación web (`https://script.google.com/macros/s/.../exec`):
+   muestra el nombre de la planilla, la versión del contrato y el botón **Conectar el POS**, que abre
+   el POS en una pestaña nueva con esta planilla precargada en `/CONFIG` (#133).
+5. En el POS, completar la sucursal, el punto de venta y, si lo pusiste, el secreto compartido, y
+   probar la conexión. Cada terminal se conecta igual, abriendo la URL desde esa terminal.
+
+Alternativa sin el botón: en `/CONFIG`, elegir el tipo de conexión "Google Sheets" (con la letra G
+alcanza) y pegar la URL del Web App y, opcionalmente, el secreto compartido.
+
+El link del botón lleva la URL de **esa** implementación (`ScriptApp.getService().getUrl()`, así una
+copia de la planilla nunca conecta a la original) y **nunca** el secreto: la página es pública. Lo
+abre en el POS de la pestaña **Configuración** (abajo).
 
 "Cualquier persona" **no** significa que cualquiera pueda editar tu planilla: el script corre con tus
 permisos y solo expone las acciones de `bridge.gs`. Es la única forma de que el POS escriba sin que
@@ -37,10 +45,21 @@ nadie tenga que iniciar sesión en Google. Con `SHARED_SECRET`, además, hace fa
 create, and delete **this** spreadsheet"). `bridge.gs` lleva la anotación `@OnlyCurrentDoc` justamente
 para eso. Si la pantalla de autorización dice "**all** your Google Sheets spreadsheets", cancelá:
 revisá que la anotación esté en la primera línea del script y volvé a autorizar. Google además
-muestra un aviso de "app no verificada": es normal en un script propio y personal.
+muestra un aviso de "app no verificada": es normal en un script propio y personal. La página de
+"Conectar el POS" usa `ScriptApp` (la URL de la propia implementación) y `HtmlService`, que no piden
+otro permiso: verificado contra una planilla real el 2026-10-05.
 
 Si la planilla no tiene las pestañas que el puente necesita, las crea sola en el primer request (y
 siembra datos de prueba en `Productos` y `Clientes`).
+
+**Pestaña Configuración**: en el primer request, si no existe, el puente la crea **al final** de la
+planilla (la portada y los resúmenes de la planilla son tuyos) y después solo la lee: se le puede dar
+formato o moverla. Tiene pares clave/valor que el puente encuentra por el texto de la clave (columna
+A), no por la fila, y abajo los pasos para conectar una terminal. Hoy una sola clave: **URL del
+POS**, adónde lleva el botón "Conectar el POS" (`https://pos.contax.ar/v4/` por omisión, y también
+con la celda vacía o algo que no sea `http(s)://`): para otro canal o un POS propio. Nunca guarda
+nada propio de una copia ni el secreto compartido, que sigue en las propiedades del script (en la
+pestaña viajaría con cada copia y lo vería cualquiera con acceso a la planilla).
 
 ## Actualizar el puente a la v3 del contrato (#96)
 
@@ -263,7 +282,9 @@ planilla falsa en memoria (`src/test/fake-spreadsheet.ts`). El lado TS (`bridge-
 Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejemplo para `pushBatch`:
 `{ action: 'pushBatch', payload: { deviceId: 'prueba', events: [{ type: 'sale', id: '01J...', createdAt: '…', origin: {}, sale: {...} }] }, idempotencyKey: '01J...' }`.
 
-1. Health check: abrir `$URL` en el navegador → `{"ok":true,"data":{"service":"pos-sheets-bridge"}}`.
+1. Página: abrir `$URL` en el navegador → el nombre de la planilla, "contrato 4.6.0" y **Conectar el
+   POS**; el botón abre el POS en una pestaña nueva, con el wizard de `/CONFIG` en el paso Terminal,
+   el aviso "Conexión con la planilla precargada" y la URL del Web App en los datos del conector.
 2. **CORS desde un navegador** (la asunción crítica del diseño). Abrir cualquier página `http(s)` (por
    ejemplo el POS con `pnpm build && pnpm preview`), DevTools > Console:
    ```js
@@ -341,5 +362,10 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     `/ANULAR` escribe la fila negativa con Anula a, deja la original en Anulada y en el siguiente pull
     el saldo del cliente vuelve a subir.
 
+23. Conectar el POS: en una planilla nueva, el primer request crea la pestaña Configuración al final,
+    con "URL del POS" y los pasos; cambiar "URL del POS" (por ejemplo a un POS local) y recargar la
+    página del paso 1 cambia adónde lleva el botón. En una copia de la planilla ("Hacer una copia" e
+    implementarla), el botón de la copia lleva la URL del Web App de la copia, no la de la original.
+
 Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99;
-para el 20, en #120; para el 21, en #101; para el 22, en #180).
+para el 20, en #120; para el 21, en #101; para el 22, en #180; para el 1 y el 23, en #133).

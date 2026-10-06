@@ -4,8 +4,9 @@ import { toZodIssues } from '../domain/zod-issues.ts';
 
 /**
  * Links del onboarding de demo (#128), lectura pura: la entrada `?demo=true&backend=…&template=…`
- * y la vuelta del alta con la config en el fragmento (`#connect=…`, nunca en la query string: el
- * navegador no manda el fragmento al servidor que sirve el POS). La orquestación está en
+ * y la vuelta con la config en el fragmento (`#connect=…`, nunca en la query string: el navegador
+ * no manda el fragmento al servidor que sirve el POS). La vuelta es la del alta (REST) o la de
+ * "Conectar el POS" desde una planilla de Google Sheets (#133). La orquestación está en
  * `ui/onboarding.ts`.
  */
 
@@ -47,7 +48,9 @@ export function readDemoEntry(href: string): Result<DemoEntry> | undefined {
 
 const allowedUrl = z.url().refine(isAllowedBackendUrl, 'Tiene que ser https (o http a localhost)');
 
-const connectReturnSchema = z.object({
+// La vuelta del alta (REST, #128): sin `type` o con `type: 'rest'`.
+const restReturnSchema = z.object({
+  type: z.literal('rest').optional(),
   baseUrl: allowedUrl,
   apiKey: z.string().min(1),
   branch: z.string().min(1),
@@ -55,13 +58,30 @@ const connectReturnSchema = z.object({
   wipeKey: z.string().min(1).optional(),
 });
 
-export type ConnectReturn = {
-  baseUrl: string;
-  apiKey: string;
-  branch: string;
-  pointOfSale: string;
-  wipeKey?: string;
-};
+// "Conectar el POS" desde una planilla (#133): solo la URL del Web App. Nunca trae el secreto ni la
+// identidad de la terminal, así que siempre termina en el wizard.
+const sheetsReturnSchema = z.object({
+  type: z.literal('google-sheets'),
+  webAppUrl: z
+    .string()
+    .refine(
+      (raw) => URL.canParse(raw) && new URL(raw).protocol === 'https:',
+      'Tiene que ser https',
+    ),
+});
+
+const connectReturnSchema = z.union([sheetsReturnSchema, restReturnSchema]);
+
+export type ConnectReturn =
+  | {
+      type: 'rest';
+      baseUrl: string;
+      apiKey: string;
+      branch: string;
+      pointOfSale: string;
+      wipeKey?: string;
+    }
+  | { type: 'google-sheets'; webAppUrl: string };
 
 /** base64url → JSON: el único borde que lanza (`atob`, `JSON.parse`). */
 function decodeBase64UrlJson(value: string): unknown {
@@ -86,8 +106,19 @@ export function readConnectReturn(href: string): Result<ConnectReturn> | undefin
   if (!parsed.success) {
     return err('demo/invalid-return', { issues: toZodIssues(parsed.error) });
   }
-  const { wipeKey, ...connection } = parsed.data;
-  return ok({ ...connection, ...(wipeKey !== undefined ? { wipeKey } : {}) });
+  const data = parsed.data;
+  if (data.type === 'google-sheets') {
+    return ok({ type: 'google-sheets', webAppUrl: data.webAppUrl });
+  }
+  const { baseUrl, apiKey, branch, pointOfSale, wipeKey } = data;
+  return ok({
+    type: 'rest',
+    baseUrl,
+    apiKey,
+    branch,
+    pointOfSale,
+    ...(wipeKey !== undefined ? { wipeKey } : {}),
+  });
 }
 
 /** La ida al alta: conserva la query propia de `onboardingUrl`. */

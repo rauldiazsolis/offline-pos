@@ -33,7 +33,14 @@ sigue siendo el error de siempre — agregarla vacía haría viajar productos a 
 lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
 `customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
-Anulada, como una venta. Cada conector es dueño de su schema de config
+Anulada, como una venta. "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
+nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
+`{ type: 'google-sheets', webAppUrl }`; `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de
+esa implementación: una copia nunca conecta a la original; sin permiso extra, verificado) y nunca
+viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet`: se crea al
+final con el índice explícito, solo si no existe; claves por texto con `readConfigValue`; con la celda
+vacía o algo que no sea `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs`
+(`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y

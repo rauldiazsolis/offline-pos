@@ -364,6 +364,9 @@ backend). Spec:
    `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md`.
 
 Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de vida de la conexión").
+Google Sheets tiene su propia vuelta (#133): la página del Web App del puente abre `#connect=` con
+`{ type: 'google-sheets', webAppUrl }`, sin secreto, y el POS siempre precarga el wizard (nunca
+prueba, aplica ni borra solo).
 Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
 sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
 sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.
@@ -629,6 +632,7 @@ en el historial de git).
 | #179 | El portal en el POS: el comando y el botón que manda el backend (`portal` de `GET /info`), `POST /portal-links` y la pestaña nueva recién con el link | PR #206 |
 | #177 | Modo entrenamiento: base de Dexie aparte, nada se empuja, franja, ENTRENAMIENTO en el ticket y aviso al salir con lo que se descarta | PR #208 |
 | Epic #180, etapa A | El puente de Sheets en 4.6.0: anula cobranzas, la planilla como empresa y el portal `/PLANILLA` a la planilla de origen | PR #211 |
+| Epic #180, etapa B (#133) | "Conectar el POS": la página del Web App abre el POS con la planilla precargada en `/CONFIG` (sin secreto), y la pestaña Configuración con la URL del POS | PR #213 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -641,8 +645,8 @@ paga), la impresión (#174), una sola pestaña (#175) y el service worker con el
 hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
 (#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, en tres etapas (spec
 `docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en 4.6.0
-con el portal (PR #211); sigue B, "Conectar el POS" desde la planilla (#133), y C, el puente y su guía
-publicados en `/v4/docs/google-sheets/`.
+con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); sigue C, el puente y
+su guía publicados en `/v4/docs/google-sheets/`.
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -657,7 +661,7 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: Sheets en el epic #180. Impresión: #188 (ESC/POS directo, corte y cajón,
+- MVP de mini contax: Sheets en el epic #180 (y #212, la Descripción vacía de una línea de producto). Impresión: #188 (ESC/POS directo, corte y cajón,
   cuando haya una impresora con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181

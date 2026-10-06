@@ -250,7 +250,8 @@ export class FakeSpreadsheet {
   getSheetByName(name: string): FakeSheet | null {
     return this.sheets.get(name) ?? null;
   }
-  insertSheet(name: string): FakeSheet {
+  /** El índice se ignora: acá una pestaña nueva siempre va al final (el orden es el del `Map`). */
+  insertSheet(name: string, _index?: number): FakeSheet {
     const sheet = new FakeSheet(
       name,
       this.options.defaultRows ?? 20,
@@ -274,6 +275,9 @@ export class FakeSpreadsheet {
     });
     this.sheets.set(name, sheet);
     return sheet;
+  }
+  getNumSheets(): number {
+    return this.sheets.size;
   }
   sheetNames(): string[] {
     return [...this.sheets.keys()];
