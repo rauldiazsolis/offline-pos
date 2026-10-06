@@ -34,6 +34,9 @@ carpetas por versión.
   - **todos los días** (cron) y **a mano** (Run workflow): igual, solo regenera. Si nada cambió más
     que la fecha de consulta, no commitea. Sin tag no corre el CI: si el código de `site/` estuviera
     roto, la home falla igual y no se publica nada.
+- El **CI** (`.github/workflows/ci.yml`) corre en cada PR (un push nuevo cancela la corrida vieja)
+  y con el tag, llamado por Publicación; no en el push a `main`: el PR ya probó el merge y el tag lo
+  vuelve a probar antes de publicar (#207).
 - La home se genera consultando en vivo cada backend de `site/backends.json`
   (`POST /demo-sessions` y, con esa conexión, `GET /info`). El demo-backend local no se consulta en
   la máquina de nadie: la Action levanta el del commit, en memoria. Si un backend no contesta, la

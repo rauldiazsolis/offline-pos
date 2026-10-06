@@ -1,12 +1,18 @@
 name: CI
 
+# Corre en cada PR y con el tag (lo llama Publicación, que publica solo si pasa entero); no en el push
+# a `main`: el PR ya probó el merge y el tag vuelve a correrlo antes de publicar (#207).
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
-  # Publicación lo llama con un tag y publica solo si pasa entero.
   workflow_call:
+
+# Un push nuevo a un PR cancela la corrida vieja (abrir el PR y subir enseguida otro commit dispara
+# dos, #207). Llamado desde Publicación, `github.workflow` y el evento son los del tag: nunca se
+# cancela ni comparte grupo con un PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
