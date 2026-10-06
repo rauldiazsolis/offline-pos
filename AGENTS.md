@@ -628,6 +628,7 @@ en el historial de git).
 | #178 + #173 | Contrato 4.6.0: capacidad `portal` (`POST /portal-links`; el demo-backend con `/PANEL`), 503 de mantenimiento, 429 y 503 de las demos con mensajes claros en el POS | PR #201 |
 | #179 | El portal en el POS: el comando y el botón que manda el backend (`portal` de `GET /info`), `POST /portal-links` y la pestaña nueva recién con el link | PR #206 |
 | #177 | Modo entrenamiento: base de Dexie aparte, nada se empuja, franja, ENTRENAMIENTO en el ticket y aviso al salir con lo que se descarta | PR #208 |
+| Epic #180, etapa A | El puente de Sheets en 4.6.0: anula cobranzas, la planilla como empresa y el portal `/PLANILLA` a la planilla de origen | PR #211 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
@@ -638,7 +639,10 @@ producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con 
 del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
 paga), la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54); antes del
 hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
-(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, después del hito 1.
+(#179) y el modo entrenamiento (#177). Google Sheets pasa a su epic, #180, en tres etapas (spec
+`docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en 4.6.0
+con el portal (PR #211); sigue B, "Conectar el POS" desde la planilla (#133), y C, el puente y su guía
+publicados en `/v4/docs/google-sheets/`.
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
