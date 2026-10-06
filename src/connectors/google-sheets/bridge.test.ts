@@ -840,8 +840,8 @@ describe('contrato v3 (#96)', () => {
 
     // Sin recibo (anterior a 4.2.0): las dos columnas del recibo quedan vacías.
     expect(table(spreadsheet, 'Cobranzas')).toEqual([
-      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', '', '', ''],
-      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', '', '', ''],
+      ['cp1', NOW, 'c-1', 'Efectivo', 300, 500, 'dev-1', '', '', '', '', 'Cerrada', ''],
+      ['cp1', NOW, 'c-1', 'Código QR', 200, 500, 'dev-1', '', '', '', '', 'Cerrada', ''],
     ]);
     expect(table(spreadsheet, 'CuentaCorriente')[0]).toEqual(
       expect.arrayContaining(['c-1', -500, 'cp1']),
@@ -1139,7 +1139,7 @@ describe('recibo de cobranza y saldo por cliente (4.2.0, #101)', () => {
     const header = spreadsheet.getSheetByName('Cobranzas')?.values()[0] ?? [];
     expect(header).toContain('Fecha del recibo');
     expect(header).toContain('N° de recibo');
-    expect(table(spreadsheet, 'Cobranzas').map((row) => row.slice(-2))).toEqual([
+    expect(table(spreadsheet, 'Cobranzas').map((row) => row.slice(9, 11))).toEqual([
       ['2026-09-27', 3],
     ]);
   });
@@ -1211,5 +1211,83 @@ describe('recibo de cobranza y saldo por cliente (4.2.0, #101)', () => {
     expect(customersOf(pullBatch(call, { customers: cursor }))).toEqual([
       expect.objectContaining({ id: 'c-9', balance: -250 }),
     ]);
+  });
+});
+
+describe('anulación de cobranzas (4.3.0)', () => {
+  const COBRANZAS_4_2_LABELS = [
+    'Id de cobranza',
+    'Fecha',
+    'Id de cliente',
+    'Medio de pago',
+    'Monto',
+    'Total de la cobranza',
+    'Dispositivo',
+    'Sucursal',
+    'Punto de venta',
+    'Fecha del recibo',
+    'N° de recibo',
+  ];
+
+  function paymentEvent(id: string, total: number, voidsPaymentId?: string) {
+    return {
+      type: 'customer-payment',
+      id,
+      createdAt: NOW,
+      origin: {},
+      payment: {
+        id,
+        customerId: 'c-1',
+        payments: [{ method: 'cash', amount: total }],
+        total,
+        createdAt: NOW,
+        ...(voidsPaymentId !== undefined ? { voidsPaymentId } : {}),
+      },
+    };
+  }
+
+  function column(spreadsheet: FakeSpreadsheet, label: string): number {
+    return (spreadsheet.getSheetByName('Cobranzas')?.values()[0] ?? []).indexOf(label);
+  }
+
+  it('la anulación escribe "Anula a", marca la original como anulada y el saldo vuelve a subir', () => {
+    const { spreadsheet, call } = loadBridge();
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 500)] }, 'lot-1');
+
+    const response = call(
+      'pushBatch',
+      { deviceId: 'dev-1', events: [paymentEvent('cp2', -500, 'cp1')] },
+      'lot-2',
+    );
+
+    expect(response.ok).toBe(true);
+    const estado = column(spreadsheet, 'Estado');
+    const anulaA = column(spreadsheet, 'Anula a');
+    expect(
+      table(spreadsheet, 'Cobranzas').map((row) => [row[0], row[4], row[estado], row[anulaA]]),
+    ).toEqual([
+      ['cp1', 500, 'Anulada', ''],
+      ['cp2', -500, 'Cerrada', 'cp1'],
+    ]);
+    // Monto en el libro: la cobranza baja el saldo, su anulación lo sube.
+    expect(table(spreadsheet, 'CuentaCorriente').map((row) => row[4])).toEqual([-500, 500]);
+  });
+
+  it('la anulación de una cobranza que la planilla no tiene no falla', () => {
+    const { call } = loadBridge();
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp2', -500, 'nope')] }, 'lot-1');
+    const pull = pullBatch(call, {}, ['lot-1']);
+
+    expect((pull.data as { lots: unknown }).lots).toEqual({ 'lot-1': { status: 'ok' } });
+  });
+
+  it('una pestaña Cobranzas de 4.2.0 gana Estado y Anula a al final sin tocar lo que había', () => {
+    const { spreadsheet, call } = loadBridge();
+    const old = spreadsheet.addSheet('Cobranzas', [COBRANZAS_4_2_LABELS]);
+
+    call('pushBatch', { deviceId: 'dev-1', events: [paymentEvent('cp1', 300)] }, 'lot-1');
+
+    expect(old.values()[0]?.slice(0, 13)).toEqual([...COBRANZAS_4_2_LABELS, 'Estado', 'Anula a']);
   });
 });
