@@ -279,7 +279,7 @@ se lo muestra al humano vía la barra de estado (ver "Patrón outbox" más arrib
 POS: un agregado nuevo no obliga a todos los backends a actualizarse. Lo que un backend hace más
 allá del piso lo declara como **capacidad** en `GET /info` (`demo-sessions`,
 `customer-payment-void`); el POS nunca la deduce de la versión e ignora un nombre que no conoce. Un
-backend 4.2 (Sheets, o uno externo que todavía no se actualizó) vuelve a ser compatible sin tocarlo:
+backend 4.2 (uno externo que todavía no se actualizó) sigue siendo compatible sin tocarlo:
 simplemente no anula cobranzas. Las **reglas de evolución** (campos y enums desconocidos, foto
 completa nunca truncada, numeración con huecos) están en el OpenAPI. Qué trajo cada versión (v3,
 4.0.0 a 4.4.0), cómo el POS sigue el estado del backend, las capacidades y los avisos (`notices`)
@@ -300,7 +300,7 @@ cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla fals
 cada carpeta de versión** del deploy, al lado del OpenAPI, para que un integrador copie el puente de
 su versión. Un cambio de contrato que el puente no acompaña no lo rompe: con el piso 4.0.0 sigue
 compatible y simplemente no declara la capacidad nueva. El puente informa su versión
-(`bridge.gs::CONTRACT_VERSION`): con un POS de otro major la terminal lo ve incompatible, no
+(`bridge.gs::CONTRACT_VERSION`, 4.6.0 desde #180, con el portal a la planilla): con un POS de otro major la terminal lo ve incompatible, no
 sincroniza y sigue vendiendo sin perder nada.
 
 **Permisos mínimos en integraciones de terceros**: un conector pide el scope más chico que funcione
