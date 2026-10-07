@@ -25,7 +25,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Portal (#179): la capacidad, `POST /portal-links` y sus errores | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el comando, el botón y la pestaña en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado, demo revocada | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA`, `/DEMO_NUEVA`, "Abrir una demo" y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
-| Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns`), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
+| Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns_`, funciones públicas), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
 | Venta: cantidades y redondeo, tickets en 0 o negativos, anulación de ventas y de cobranzas | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/CAJA`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Cobranza y saldo del cliente | Persistencia en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); pantalla, comprobante, saldo en la venta y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
@@ -293,8 +293,9 @@ demos del POS**: es la referencia de lo que debe hacer un backend, y el circuito
 (`POST /demo-sessions`, la página de alta, la key del comercio que nace del alta) es una parte más de
 esa referencia. Después del alta, la terminal ya no está en demo aunque hable con el demo-backend. El
 nombre de la carpeta queda (decisión del 2026-10-03, #193). Los backends externos, como el mini-erp,
-no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (`bridge.gs` y
-`columnas.gs`, en `src/connectors/google-sheets/`) **se mantiene en este repo como un backend más, con
+no (ver "POS y mini-erp: desarrollo separado"). El puente de Google Sheets (los `.gs` de
+`src/connectors/google-sheets/`, publicados juntos en `pos-sheets.gs`, con la home que prepara la
+planilla, sus datos de prueba y el Tablero, #219) **se mantiene en este repo como un backend más, con
 piso** (decisión del 2026-09-29, epic #166, que revirtió el congelamiento de #127 y el puente aparte de
 #138): no acompaña cada cambio de contrato, se actualiza cuando conviene una capacidad nueva o cuando
 cambia el major, y siempre queda testeado (`bridge.test.ts` con la planilla falsa) y **publicado en
@@ -367,8 +368,10 @@ backend). Spec:
 
 Es la única excepción a "cambiar la conexión nunca borra solo" (ver "Ciclo de vida de la conexión").
 Google Sheets tiene su propia vuelta (#133): la página del Web App del puente abre `#connect=` con
-`{ type: 'google-sheets', webAppUrl }`, sin secreto, y el POS siempre precarga el wizard (nunca
-prueba, aplica ni borra solo).
+`{ type: 'google-sheets', webAppUrl }`, nunca con el secreto, y opcionalmente la sucursal y la caja
+(`branch`, `pointOfSale`). Con las dos y sin datos del usuario no se pierde nada: prueba y aplica
+borrando, como la vuelta del alta; si falta alguna, hay datos o la prueba falla (por ejemplo, porque
+la planilla pide un secreto), precarga el wizard sin borrar nada.
 Los módulos están en `src/sync/AGENTS.md` y la UI en `src/ui/AGENTS.md`. Pasar de demo a producción
 sin repetir el onboarding queda para después (#143, backlog). Preferencia del usuario sobre quién
 sirve el POS: estático e instalaciones independientes, sin mezclar `localStorage` ni IndexedDB.
@@ -412,15 +415,16 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
   contrato; `/info` público quedó en #151), así que la lista solo admite backends con demo. Se
   regenera con el tag, con un push a `main` que toca `site/`, todos los días y a mano; si un backend
   no contesta, no se publica nada (con un tag, ni el canal). Lista el demo-backend local y mini contax
-  (`https://mini.contax.ar/connector`, #147). El mini-erp abre `/v4/` por convención.
+  (`https://mini.contax.ar/connector`, #147). El mini-erp abre `/v4/` por convención. Antes de lo de
+  integradores, "Con Google Sheets" lleva a las instrucciones del puente del canal más nuevo (#219).
 - **`site/`** es tooling de publicación en TypeScript que Node 24 corre sin compilar; puede importar
   módulos puros de `src/`, nunca al revés. Sus errores se lanzan (una publicación con datos malos
   corta la Action), pero todo dato externo se valida con Zod. `pnpm site:build` y `pnpm site:preview`
   arman y sirven el sitio en local (`4174`); con `--only-local`, la home consulta solo los backends
   locales (lo usa el e2e, para no depender de uno publicado).
 - **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
-  `/v4/docs/`; la guía del puente de Google Sheets (`google-sheets.md`) va con `bridge.gs` y
-  `columnas.gs` en `/v4/docs/google-sheets/` (#180). Los links se escriben para el repo y
+  `/v4/docs/`; la guía del puente de Google Sheets (`google-sheets.md`) va con `pos-sheets.gs` y el
+  botón "Copiar el código" en `/v4/docs/google-sheets/` (#180, #219). Los links se escriben para el repo y
   `site/build-channel.ts` los localiza al publicar. Ni el OpenAPI, ni los `.gs`, ni la guía del
   puente llevan referencias internas (issues, specs, `AGENTS.md`, archivos del repo salvo los `.gs`):
   lo vigila `site/docs.test.ts`.
@@ -639,11 +643,13 @@ en el historial de git).
 | Epic #180, etapa A | El puente de Sheets en 4.6.0: anula cobranzas, la planilla como empresa y el portal `/PLANILLA` a la planilla de origen | PR #211 |
 | Epic #180, etapa B (#133) | "Conectar el POS": la página del Web App abre el POS con la planilla precargada en `/CONFIG` (sin secreto), y la pestaña Configuración con la URL del POS | PR #213 |
 | Epic #180, etapa C | El puente publicado: guía pública `docs/integradores/google-sheets.md` y `/v4/docs/google-sheets/` con los `.gs`, sin referencias internas | PR #216 |
+| #219 + #212 | La planilla lista en un paso: `pos-sheets.gs` (un archivo), la home que la prepara con datos de prueba de un rubro y el Tablero, "Abrir el POS" con la sucursal y la caja que el POS aplica solo, solo cinco funciones públicas, la Descripción de las líneas de producto y "Con Google Sheets" en la home del sitio | — |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
 worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
-`0.6.0` con Google Sheets el 2026-10-06; se publica con `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
+`0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; se publica con
+`docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
 del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
@@ -652,7 +658,9 @@ hito 2, el link de demo con confirmación (#176), el contrato del portal (#178),
 (#179) y el modo entrenamiento (#177). Google Sheets tuvo su epic, #180, completo en tres etapas
 (spec `docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en
 4.6.0 con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); C, el puente y
-su guía publicados en `/v4/docs/google-sheets/`, todo en la `0.6.0`.
+su guía publicados en `/v4/docs/google-sheets/`, todo en la `0.6.0`. La `0.7.0` trae la planilla
+lista en un paso (#219, spec `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`) y
+#212.
 Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
 
 **Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
@@ -667,8 +675,8 @@ etiqueta antes de tomar un issue.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
   dos últimos, sobre `notices` de 4.4.0).
 - Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: Sheets, #212 (la Descripción vacía de una línea de producto). Impresión: #188 (ESC/POS directo, corte y cajón,
-  cuando haya una impresora con qué probar).
+- MVP de mini contax: Impresión, #188 (ESC/POS directo, corte y cajón, cuando haya una impresora
+  con qué probar).
 - Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
   autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
   (iniciar la caja con datos del backend), #197 (pasar una terminal de `/v4/` a `/v5/` sin perder

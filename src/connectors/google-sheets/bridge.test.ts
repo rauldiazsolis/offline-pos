@@ -1,94 +1,98 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
-import { ok } from '../../domain/result.ts';
-import { readConnectReturn } from '../../sync/demo-link.ts';
-import { FakeSpreadsheet, type FakeOptions } from '../../test/fake-spreadsheet.ts';
+import { loadAppsScript, publicFunctions, type AppsScriptOptions } from '../../test/apps-script.ts';
+import type { FakeSpreadsheet } from '../../test/fake-spreadsheet.ts';
 
 const SOURCE_FILES = ['columnas.gs', 'bridge.gs'];
 
-const outputSchema = z.object({ content: z.string() });
-const pageSchema = z.object({ html: z.string(), title: z.string() });
-const responseSchema = z.object({
-  ok: z.boolean(),
-  data: z.unknown().optional(),
-  error: z.string().optional(),
-  code: z.string().optional(),
-  contractVersion: z.string().optional(),
-});
+function loadBridge(options: AppsScriptOptions = {}, files: string[] = SOURCE_FILES) {
+  return loadAppsScript(options, files);
+}
 
-type BridgeOptions = FakeOptions & { sharedSecret?: string; webAppUrl?: string };
-
-function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES) {
-  const {
-    sharedSecret,
-    webAppUrl = 'https://script.google.com/macros/s/fake/exec',
-    ...spreadsheetOptions
-  } = options;
-  const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
-  const context = vm.createContext({
-    SpreadsheetApp: spreadsheet.app(),
-    ScriptApp: { getService: () => ({ getUrl: () => webAppUrl }) },
-    HtmlService: {
-      createHtmlOutput: (html: string) => {
-        const output = {
-          html,
-          title: '',
-          setTitle: (title: string) => {
-            output.title = title;
-            return output;
-          },
-          addMetaTag: () => output,
-        };
-        return output;
-      },
+/** Un catálogo de prueba: el puente ya no siembra nada (#219). Los ids son los de los eventos. */
+const CATALOG = {
+  Productos: [
+    {
+      id: 'p-001',
+      sku: 'SKU-001',
+      barcodes: '7790001000011',
+      name: 'Gaseosa cola 500ml',
+      price: 1200,
+      taxRate: 0.21,
+      category: 'bebidas',
     },
-    Utilities: {
-      Charset: { UTF_8: 'UTF-8' },
-      // Como el real: base64 "web safe" CON el relleno `=`.
-      base64EncodeWebSafe: (text: string) =>
-        Buffer.from(text, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
+    {
+      id: 'p-002',
+      sku: 'SKU-002',
+      barcodes: '7790001000028,7790001000035',
+      name: 'Alfajor triple',
+      price: 900,
+      taxRate: 0.21,
+      category: 'golosinas',
     },
-    ContentService: {
-      MimeType: { JSON: 'JSON' },
-      createTextOutput: (content: string) => {
-        const output = { content, setMimeType: () => output };
-        return output;
-      },
+    {
+      id: 'p-003',
+      sku: 'SKU-003',
+      barcodes: '7790001000042',
+      name: 'Yerba 1kg',
+      price: 4500,
+      taxRate: 0.21,
+      category: 'almacen',
     },
-    LockService: {
-      getScriptLock: () => ({ waitLock: () => undefined, releaseLock: () => undefined }),
+    {
+      id: 'p-004',
+      sku: 'SKU-004',
+      barcodes: '',
+      name: 'Pan (kg)',
+      price: 2200,
+      taxRate: 0.105,
+      category: 'panaderia',
     },
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (key: string) => (key === 'SHARED_SECRET' ? (sharedSecret ?? null) : null),
-      }),
+    {
+      id: 'p-005',
+      sku: 'SKU-005',
+      barcodes: '7790001000059',
+      name: 'Agua mineral 1.5L',
+      price: 1100,
+      taxRate: 0.21,
+      category: 'bebidas',
     },
-  });
-  for (const file of files) {
-    vm.runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
-  }
+  ],
+  Clientes: [
+    {
+      id: 'c-001',
+      name: 'Ana Gómez',
+      document: '30111222',
+      phone: '1155501234',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'c-002',
+      name: 'Carlos Ruiz',
+      document: '',
+      phone: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'c-003',
+      name: 'Lucía Fernández',
+      document: '27333444',
+      phone: '1155505678',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ],
+};
 
-  function raw(request: Record<string, unknown>) {
-    const body = JSON.stringify(request);
-    const output: unknown = vm.runInContext(
-      `doPost({ postData: { contents: ${JSON.stringify(body)} } })`,
-      context,
-    );
-    return responseSchema.parse(JSON.parse(outputSchema.parse(output).content));
-  }
-
-  function call(action: string, payload: unknown = {}, idempotencyKey?: string) {
-    return raw({ action, payload, idempotencyKey });
-  }
-
-  function page() {
-    return pageSchema.parse(vm.runInContext('doGet()', context));
-  }
-
-  return { spreadsheet, call, raw, page };
+/** Crea las pestañas y carga el catálogo de prueba, como si el comercio lo hubiera cargado. */
+function seedCatalog(context: Record<string, unknown>): void {
+  vm.runInContext(
+    `headerCache = {};
+    ensureSheetsExist_();
+    appendObjects_('Productos', ${JSON.stringify(CATALOG.Productos)});
+    appendObjects_('Clientes', ${JSON.stringify(CATALOG.Clientes)});`,
+    context,
+  );
 }
 
 /** Filas de datos no vacías de una pestaña, con las fechas como ISO para poder comparar. */
@@ -126,9 +130,25 @@ function pullBatch(
   return call('pullBatch', { cursors, pendingLotIds });
 }
 
+describe('seguridad', () => {
+  it('de todo el proyecto, solo son públicas doGet, doPost y las tres que llama la home', () => {
+    // El resto termina en "_": google.script.run no lo puede llamar.
+    const { context } = loadAppsScript();
+
+    expect(publicFunctions(context)).toEqual([
+      'doGet',
+      'doPost',
+      'posAgregarTablero',
+      'posInicializar',
+      'posReiniciar',
+    ]);
+  });
+});
+
 describe('arnés (humo contra el puente actual)', () => {
-  it('provisiona las pestañas al primer request y devuelve los productos sembrados', () => {
-    const { spreadsheet, call } = loadBridge();
+  it('provisiona las pestañas al primer request y devuelve los productos de la planilla', () => {
+    const { context, spreadsheet, call } = loadBridge();
+    seedCatalog(context);
 
     const response = pullBatch(call);
 
@@ -281,7 +301,8 @@ const saleEvent = (id: string, sale: unknown = SALE) => ({
 
 describe('pushBatch — un solo lote, un solo ack (#87)', () => {
   it('escribe cada línea y cada pago con valores en español y fechas reales', () => {
-    const { spreadsheet, call } = loadBridge();
+    const { context, spreadsheet, call } = loadBridge();
+    seedCatalog(context);
 
     const response = call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1')] }, 'lot-1');
 
@@ -294,7 +315,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
         1,
         'Producto',
         'p-001',
-        '',
+        'Gaseosa cola 500ml',
         1,
         1200,
         '',
@@ -401,7 +422,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
     expect(response.ok).toBe(true);
     expect(table(spreadsheet, 'Ventas')).toHaveLength(2);
-    expect(table(spreadsheet, 'Clientes')).toHaveLength(4);
+    expect(table(spreadsheet, 'Clientes')).toHaveLength(1);
     expect(table(spreadsheet, 'MovimientosCaja')).toHaveLength(1);
     expect(table(spreadsheet, 'CuentaCorriente')).toHaveLength(1);
   });
@@ -423,7 +444,7 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
     );
 
     expect(response.ok).toBe(true);
-    expect(table(spreadsheet, 'Clientes')).toHaveLength(4); // el evento que sí pudo, se aplicó
+    expect(table(spreadsheet, 'Clientes')).toHaveLength(1); // el evento que sí pudo, se aplicó
 
     const pull = pullBatch(call, {}, ['lot-1']);
     const lots = (
@@ -526,7 +547,8 @@ describe('pushBatch — un solo lote, un solo ack (#87)', () => {
 
 describe('cursor de pull (#87)', () => {
   it('el primer pull sin cursor trae todo y devuelve nextCursor', () => {
-    const { call } = loadBridge();
+    const { context, call } = loadBridge();
+    seedCatalog(context);
 
     const response = pullBatch(call);
     const products = (response.data as { products: { items: unknown[]; nextCursor?: string } })
@@ -547,7 +569,8 @@ describe('cursor de pull (#87)', () => {
   });
 
   it('modificar una fila a mano entre dos pulls la vuelve a traer en el delta', () => {
-    const { spreadsheet, call } = loadBridge();
+    const { context, spreadsheet, call } = loadBridge();
+    seedCatalog(context);
 
     const first = pullBatch(call);
     const cursor = (first.data as { products: { nextCursor: string } }).products.nextCursor;
@@ -605,7 +628,7 @@ describe('pestañas nuevas (Etapa 2d/2)', () => {
     const movimientos = spreadsheet.getSheetByName('MovimientosCaja');
     expect([movimientos?.getMaxRows(), movimientos?.getMaxColumns()]).toEqual([2, 12]);
     const productos = spreadsheet.getSheetByName('Productos');
-    expect([productos?.getMaxRows(), productos?.getMaxColumns()]).toEqual([6, 10]); // 5 sembrados
+    expect([productos?.getMaxRows(), productos?.getMaxColumns()]).toEqual([2, 10]);
   });
 
   it('el encabezado va congelado y las pestañas internas ocultas', () => {
@@ -765,7 +788,8 @@ describe('contrato v3 (#96)', () => {
   });
 
   it('informa el bloqueo con su motivo', () => {
-    const { spreadsheet, call } = loadBridge();
+    const { context, spreadsheet, call } = loadBridge();
+    seedCatalog(context);
     pullBatch(call);
     const sheet = spreadsheet.getSheetByName('Productos');
     const header = sheet?.values()[0] ?? [];
@@ -935,7 +959,7 @@ describe('contrato v3 (#96)', () => {
     const pull = pullBatch(call, {}, ['lot-1']);
 
     expect(response.ok).toBe(true);
-    expect(table(spreadsheet, 'Clientes')).toHaveLength(4);
+    expect(table(spreadsheet, 'Clientes')).toHaveLength(1);
     expect((pull.data as { lots: unknown }).lots).toEqual({
       'lot-1': {
         status: 'issues',
@@ -961,6 +985,17 @@ describe('contrato v3 (#96)', () => {
 });
 
 describe('instalación', () => {
+  it('las pestañas nacen vacías: el puente no siembra productos ni clientes', () => {
+    const { spreadsheet, call } = loadBridge();
+
+    const pull = pullBatch(call);
+
+    expect(pull.ok).toBe(true);
+    expect(pull.data).toMatchObject({ products: { items: [] }, customers: { items: [] } });
+    expect(table(spreadsheet, 'Productos')).toEqual([]);
+    expect(table(spreadsheet, 'Clientes')).toEqual([]);
+  });
+
   it('si falta columnas.gs en el proyecto de Apps Script, el error lo dice en claro', () => {
     const { call } = loadBridge({}, ['bridge.gs']);
 
@@ -1070,6 +1105,30 @@ describe('contrato 4.x (#99, #120)', () => {
     ]);
     // La acreditación va al libro de CuentaCorriente con su signo.
     expect(table(spreadsheet, 'CuentaCorriente').some((row) => row.includes(-1100))).toBe(true);
+  });
+
+  it('una línea de producto lleva en Descripción el nombre que tiene en Productos (#212)', () => {
+    const { context, spreadsheet, call } = loadBridge();
+    seedCatalog(context);
+    const sale = {
+      ...SALE,
+      lines: [...SALE.lines, { kind: 'product', productId: 'no-existe', qty: 1, unitPrice: 0 }],
+    };
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e1', sale)] }, 'lot-1');
+    const voidTicket = {
+      ...sale,
+      id: 'v1',
+      voidsSaleId: 's1',
+      lines: sale.lines.map((line) => ({ ...line, qty: -line.qty })),
+    };
+    call('pushBatch', { deviceId: 'dev-1', events: [saleEvent('e2', voidTicket)] }, 'lot-2');
+
+    // El producto de la planilla, la línea libre con su texto y un id que Productos no tiene, vacía.
+    const descriptions = ['Gaseosa cola 500ml', 'Regalo', ''];
+    expect(table(spreadsheet, 'Ventas').map((row) => row[6])).toEqual([
+      ...descriptions,
+      ...descriptions,
+    ]);
   });
 
   it('la anulación de una venta que la planilla no tiene no falla', () => {
@@ -1380,7 +1439,7 @@ describe('pestaña Configuración', () => {
     // `table` saltea la fila 1 como encabezado; acá la fila 1 ya es una clave.
     const rows = spreadsheet.getSheetByName('Configuración')?.values() ?? [];
     expect(rows[0]?.slice(0, 2)).toEqual(['URL del POS', 'https://pos.contax.ar/v4/']);
-    expect(rows.some((row) => String(row[0]).includes('Conectar el POS'))).toBe(true);
+    expect(rows.some((row) => String(row[0]).includes('tocá Abrir el POS'))).toBe(true);
   });
 
   it('nunca guarda el secreto compartido', () => {
@@ -1410,71 +1469,5 @@ describe('pestaña Configuración', () => {
       ['Notas mías', ''],
       ['URL del POS', 'https://otro.pos/v4/'],
     ]);
-  });
-});
-
-describe('Conectar el POS (doGet)', () => {
-  const hrefOf = (html: string) => (/href="([^"]+)"/.exec(html)?.[1] ?? '').replace(/&amp;/g, '&');
-
-  it('muestra la planilla, el contrato y el botón con el link del POS', () => {
-    const bridge = loadBridge({
-      name: 'Kiosco <Ana>',
-      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
-    });
-
-    const { html, title } = bridge.page();
-
-    expect(title).toBe('Conectar el POS');
-    expect(html).toContain('Kiosco &lt;Ana&gt;');
-    expect(html).toContain('4.6.0');
-    expect(html).toContain('target="_blank"');
-    const href = hrefOf(html);
-    expect(href.startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
-    expect(href).not.toMatch(/=$/); // sin el relleno
-    // El link lo lee el mismo código del POS: el contrato entre los dos, de punta a punta.
-    expect(readConnectReturn(href)).toEqual(
-      ok({ type: 'google-sheets', webAppUrl: 'https://script.google.com/macros/s/abc/exec' }),
-    );
-  });
-
-  it('nunca lleva el secreto compartido', () => {
-    const bridge = loadBridge({ sharedSecret: 'secreto-1' });
-
-    const { html } = bridge.page();
-
-    expect(html).not.toContain('secreto-1');
-    const encoded = hrefOf(html).split('#connect=')[1] ?? '';
-    expect(Buffer.from(encoded, 'base64url').toString()).not.toContain('secreto');
-  });
-
-  it('usa la URL del POS de la pestaña Configuración, encontrada por la clave', () => {
-    const bridge = loadBridge();
-    bridge.spreadsheet.addSheet('Configuración', [
-      ['Mis notas', ''],
-      ['  url del pos ', ' https://otro.pos/v4/#viejo '],
-    ]);
-
-    expect(hrefOf(bridge.page().html).startsWith('https://otro.pos/v4/#connect=')).toBe(true);
-  });
-
-  it.each([
-    ['vacía', ''],
-    ['que no es http(s)', 'javascript:alert(1)'],
-  ])('con la URL del POS %s usa la de por omisión', (_, value) => {
-    const bridge = loadBridge();
-    bridge.spreadsheet.addSheet('Configuración', [['URL del POS', value]]);
-
-    expect(hrefOf(bridge.page().html).startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
-  });
-
-  it('no crea pestañas', () => {
-    const bridge = loadBridge();
-    bridge.page();
-    expect(bridge.spreadsheet.sheetNames()).toEqual([]);
-  });
-
-  it('sin columnas.gs lo dice en la página', () => {
-    const bridge = loadBridge({}, ['bridge.gs']);
-    expect(bridge.page().html).toContain('Falta el archivo columnas.gs');
   });
 });

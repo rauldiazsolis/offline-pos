@@ -27,7 +27,8 @@ var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets).
  *
- * doGet() es la página para conectar el POS (ver abajo). La API es un solo endpoint: doPost(e).
+ * doGet() es la home para preparar la planilla y abrir el POS (más abajo). La API es un solo
+ * endpoint: doPost(e).
  * Request (Content-Type text/plain, para evitar el preflight CORS que Apps Script no maneja):
  *   { action, payload, idempotencyKey?, sharedSecret?, contractVersion? }
  * Response (siempre HTTP 200 — Apps Script no deja controlar el status):
@@ -53,11 +54,11 @@ var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
  * y hasta 3 decimales (contrato v3: se vende por peso).
  *
  * Contrato v3: una pestaña que ya existía gana sola las columnas opcionales nuevas al final
- * (ensureColumns) — así una planilla anterior se actualiza al redesplegar el puente. `Turnos` ya no
+ * (ensureColumns_) — así una planilla anterior se actualiza al redesplegar el puente. `Turnos` ya no
  * está: el contrato no tiene cash-session; si la pestaña existía, queda como estaba.
  */
 var SCHEMA = {
-  Productos: columns([
+  Productos: columns_([
     ['id', 'text'],
     ['sku', 'text'],
     ['barcodes', 'text', true],
@@ -69,7 +70,7 @@ var SCHEMA = {
     ['blocked', 'text', true],
     ['blockedReason', 'text', true],
   ]),
-  Clientes: columns([
+  Clientes: columns_([
     ['id', 'text'],
     ['name', 'text'],
     ['document', 'text', true],
@@ -81,7 +82,7 @@ var SCHEMA = {
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
   ]),
-  Ventas: columns([
+  Ventas: columns_([
     ['saleId', 'text'],
     ['fecha', 'datetime'],
     ['customerId', 'text'],
@@ -107,7 +108,7 @@ var SCHEMA = {
     ['fechaTicket', 'text', true],
     ['numeroTicket', 'integer', true],
   ]),
-  Pagos: columns([
+  Pagos: columns_([
     ['saleId', 'text'],
     ['fecha', 'datetime'],
     ['medio', 'text'],
@@ -118,7 +119,7 @@ var SCHEMA = {
     ['branch', 'text', true],
     ['pointOfSale', 'text', true],
   ]),
-  CuentaCorriente: columns([
+  CuentaCorriente: columns_([
     ['fecha', 'datetime'],
     ['holdId', 'text'],
     ['saleId', 'text'],
@@ -130,7 +131,7 @@ var SCHEMA = {
     ['pointOfSale', 'text', true],
   ]),
   // Contrato v3: ingresos/egresos de caja, incluido el ajuste por arqueo.
-  MovimientosCaja: columns([
+  MovimientosCaja: columns_([
     ['movementId', 'text'],
     ['fecha', 'datetime'],
     ['direccion', 'text'],
@@ -145,7 +146,7 @@ var SCHEMA = {
     ['pointOfSale', 'text', true],
   ]),
   // Contrato v3: cobranzas sin venta, una fila por medio de pago.
-  Cobranzas: columns([
+  Cobranzas: columns_([
     ['customerPaymentId', 'text'],
     ['fecha', 'datetime'],
     ['customerId', 'text'],
@@ -165,7 +166,7 @@ var SCHEMA = {
   ]),
   // Pestañas ocultas: la fecha queda como texto ISO a propósito (no las ve nadie).
   // Idempotencia + estado consultable por LOTE de push (antes por evento).
-  _PushLots: columns([
+  _PushLots: columns_([
     ['id', 'text'],
     ['status', 'text'],
     ['issues', 'text', true],
@@ -174,7 +175,7 @@ var SCHEMA = {
   ]),
   // Fingerprint por fila de Productos/Clientes, para poder ofrecer un cursor de pull real sin
   // depender de un trigger onEdit — ver comentario de `trackChanges` más abajo.
-  _Snapshot: columns([
+  _Snapshot: columns_([
     ['resource', 'text'],
     ['id', 'text'],
     ['fingerprint', 'text'],
@@ -182,99 +183,25 @@ var SCHEMA = {
   ]),
 };
 
-function columns(defs) {
+function columns_(defs) {
   return defs.map(function (def) {
     return { key: def[0], type: def[1], optional: def[2] === true };
   });
 }
 
-// Datos de prueba: solo se siembran cuando esta llamada CREA la pestaña. Claves internas.
-var SEED = {
-  Productos: [
-    {
-      id: 'p-001',
-      sku: 'SKU-001',
-      barcodes: '7790001000011',
-      name: 'Gaseosa cola 500ml',
-      price: 1200,
-      taxRate: 0.21,
-      category: 'bebidas',
-    },
-    {
-      id: 'p-002',
-      sku: 'SKU-002',
-      barcodes: '7790001000028,7790001000035',
-      name: 'Alfajor triple',
-      price: 900,
-      taxRate: 0.21,
-      category: 'golosinas',
-    },
-    {
-      id: 'p-003',
-      sku: 'SKU-003',
-      barcodes: '7790001000042',
-      name: 'Yerba 1kg',
-      price: 4500,
-      taxRate: 0.21,
-      category: 'almacen',
-    },
-    {
-      id: 'p-004',
-      sku: 'SKU-004',
-      barcodes: '',
-      name: 'Pan (kg)',
-      price: 2200,
-      taxRate: 0.105,
-      category: 'panaderia',
-    },
-    {
-      id: 'p-005',
-      sku: 'SKU-005',
-      barcodes: '7790001000059',
-      name: 'Agua mineral 1.5L',
-      price: 1100,
-      taxRate: 0.21,
-      category: 'bebidas',
-    },
-  ],
-  Clientes: [
-    {
-      id: 'c-001',
-      name: 'Ana Gómez',
-      document: '30111222',
-      phone: '1155501234',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'c-002',
-      name: 'Carlos Ruiz',
-      document: '',
-      phone: '',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'c-003',
-      name: 'Lucía Fernández',
-      document: '27333444',
-      phone: '1155505678',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  ],
-};
-
 // Contrato batch: dos operaciones, nada de acciones por recurso/evento. Las funciones de
-// abajo (pushSale, pullProducts, etc.) siguen existiendo, pero solo como piezas internas que
-// pushBatchAction/pullBatchAction llaman — no son alcanzables desde afuera.
+// abajo (pushSale_, pullProducts_, etc.) siguen existiendo, pero solo como piezas internas que
+// pushBatchAction_/pullBatchAction_ llaman — no son alcanzables desde afuera.
 var ACTIONS = {
-  pushBatch: pushBatchAction,
-  pullBatch: pullBatchAction,
+  pushBatch: pushBatchAction_,
+  pullBatch: pullBatchAction_,
 };
 
 /**
  * Versión, estado, capacidades y portal; la empresa (4.5.0) es la planilla. La planilla nunca está
  * en mantenimiento: siempre `ok`.
  */
-function infoAction() {
+function infoAction_() {
   var info = {
     contractVersion: CONTRACT_VERSION,
     status: 'ok',
@@ -289,67 +216,39 @@ function infoAction() {
   return info;
 }
 
-function contractMajor(version) {
+function contractMajor_(version) {
   return String(version).split('.')[0];
 }
 
 // ---------------------------------------------------------------- entrada
-
-/**
- * La página del Web App: el nombre de la planilla, la versión del contrato y "Conectar el POS", que
- * abre el POS con esta planilla precargada en su configuración. El link lleva la URL de ESTA
- * implementación (nunca sale de una celda: viajaría en cada copia de la planilla) y nunca el secreto
- * compartido, porque la página es pública. No toma el lock ni crea pestañas.
- */
-function doGet() {
-  if (typeof CONFIG_LABELS === 'undefined') {
-    return htmlPage('<p>Falta el archivo columnas.gs en el proyecto de Apps Script.</p>');
-  }
-  var pos = posUrl();
-  var link = connectLink(pos, ScriptApp.getService().getUrl());
-  var name = SpreadsheetApp.getActiveSpreadsheet().getName() || 'Esta planilla';
-  return htmlPage(
-    '<h1>' +
-      escapeHtml(name) +
-      '</h1>' +
-      '<p class="sub">Puente del POS · contrato ' +
-      escapeHtml(CONTRACT_VERSION) +
-      '</p>' +
-      '<p><a class="boton" href="' +
-      escapeHtml(link) +
-      '" target="_blank" rel="noopener">Conectar el POS</a></p>' +
-      '<p>Abre el POS (' +
-      escapeHtml(pos) +
-      ') con esta planilla en su configuración. Ahí completás la sucursal, el punto de venta y el ' +
-      'secreto compartido, si lo configuraste. Cada terminal se conecta igual: abriendo esta página ' +
-      'desde esa terminal.</p>',
-  );
-}
 
 function doPost(e) {
   var request;
   try {
     request = JSON.parse(e.postData.contents);
   } catch (error) {
-    return respond({ ok: false, error: 'El body no es JSON válido' });
+    return respond_({ ok: false, error: 'El body no es JSON válido' });
   }
   if (!request || typeof request.action !== 'string') {
-    return respond({ ok: false, error: 'Falta action' });
+    return respond_({ ok: false, error: 'Falta action' });
   }
   if (typeof COLUMN_LABELS === 'undefined' || typeof VALUE_LABELS === 'undefined') {
-    return respond({ ok: false, error: 'Falta el archivo columnas.gs en el proyecto de Apps Script' });
+    return respond_({
+      ok: false,
+      error: 'Falta el archivo columnas.gs en el proyecto de Apps Script',
+    });
   }
 
   var expectedSecret = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
   if (expectedSecret && request.sharedSecret !== expectedSecret) {
-    return respond({ ok: false, error: 'Secreto compartido inválido' });
+    return respond_({ ok: false, error: 'Secreto compartido inválido' });
   }
 
   if (
     typeof request.contractVersion === 'string' &&
-    contractMajor(request.contractVersion) !== contractMajor(CONTRACT_VERSION)
+    contractMajor_(request.contractVersion) !== contractMajor_(CONTRACT_VERSION)
   ) {
-    return respond({
+    return respond_({
       ok: false,
       code: 'incompatible-contract',
       contractVersion: CONTRACT_VERSION,
@@ -359,38 +258,39 @@ function doPost(e) {
 
   // `info` es liviano: sin lock ni auto-provisión de pestañas.
   if (request.action === 'info') {
-    return respond({ ok: true, data: infoAction() });
+    return respond_({ ok: true, data: infoAction_() });
   }
 
   // `portalLink` (4.6.0) también es liviano: la URL de esta planilla. No hay token que emitir:
   // abrirla ya exige una cuenta de Google con acceso.
   if (request.action === 'portalLink') {
-    return respond({ ok: true, data: { url: SpreadsheetApp.getActiveSpreadsheet().getUrl() } });
+    return respond_({ ok: true, data: { url: SpreadsheetApp.getActiveSpreadsheet().getUrl() } });
   }
 
   var handler = ACTIONS[request.action];
   if (!handler) {
-    return respond({ ok: false, error: 'Acción desconocida: ' + request.action });
+    return respond_({ ok: false, error: 'Acción desconocida: ' + request.action });
   }
 
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
   } catch (error) {
-    return respond({ ok: false, error: 'Planilla ocupada, reintentar' });
+    return respond_({ ok: false, error: 'Planilla ocupada, reintentar' });
   }
   try {
     headerCache = {};
-    ensureSheetsExist();
-    return respond({ ok: true, data: handler(request.payload || {}, request.idempotencyKey) });
+    productNameCache = null;
+    ensureSheetsExist_();
+    return respond_({ ok: true, data: handler(request.payload || {}, request.idempotencyKey) });
   } catch (error) {
-    return respond({ ok: false, error: String(error && error.message ? error.message : error) });
+    return respond_({ ok: false, error: String(error && error.message ? error.message : error) });
   } finally {
     lock.releaseLock();
   }
 }
 
-function respond(body) {
+function respond_(body) {
   return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(
     ContentService.MimeType.JSON,
   );
@@ -399,16 +299,16 @@ function respond(body) {
 // ------------------------------------------------------ página del Web App
 
 /** El valor de una clave de la pestaña Configuración (por etiqueta o clave interna); '' si no está. */
-function readConfigValue(key) {
-  var sheet = getSheet(CONFIG_SHEET);
+function readConfigValue_(key) {
+  var sheet = getSheet_(CONFIG_SHEET);
   if (!sheet || sheet.getLastRow() === 0) {
     return '';
   }
-  var wanted = [normalize(CONFIG_LABELS[key]), normalize(key)];
+  var wanted = [normalize_(CONFIG_LABELS[key]), normalize_(key)];
   var width = Math.min(2, sheet.getMaxColumns());
   var rows = sheet.getRange(1, 1, sheet.getLastRow(), width).getValues();
   for (var i = 0; i < rows.length; i++) {
-    if (wanted.indexOf(normalize(rows[i][0])) !== -1) {
+    if (wanted.indexOf(normalize_(rows[i][0])) !== -1) {
       return rows[i][1] === undefined ? '' : String(rows[i][1]).trim();
     }
   }
@@ -416,34 +316,9 @@ function readConfigValue(key) {
 }
 
 /** La URL del POS de la pestaña Configuración, sin fragmento; si no es http(s), la de por omisión. */
-function posUrl() {
-  var value = readConfigValue('posUrl');
+function posUrl_() {
+  var value = readConfigValue_('posUrl');
   return /^https?:\/\//i.test(value) ? value.split('#')[0] : DEFAULT_POS_URL;
-}
-
-/** `<POS>#connect=<base64url sin relleno>` con lo único que el POS necesita de esta planilla. */
-function connectLink(pos, webAppUrl) {
-  var json = JSON.stringify({ type: 'google-sheets', webAppUrl: webAppUrl });
-  var encoded = Utilities.base64EncodeWebSafe(json, Utilities.Charset.UTF_8).replace(/=+$/, '');
-  return pos + '#connect=' + encoded;
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function htmlPage(body) {
-  var style =
-    '<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:0 1rem;' +
-    'color:#1f2937}.sub{color:#6b7280}.boton{display:inline-block;padding:.75rem 1.25rem;' +
-    'border-radius:.5rem;background:#2563eb;color:#fff;text-decoration:none;font-weight:600}</style>';
-  return HtmlService.createHtmlOutput(style + body)
-    .setTitle('Conectar el POS')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ------------------------------------------------------- auto-provisión
@@ -460,7 +335,7 @@ var NUMBER_FORMATS = {
 };
 
 /** Lista desplegable para las columnas cuyos valores están en VALUE_LABELS; `null` si no aplica. */
-function validationFor(column) {
+function validationFor_(column) {
   var labels = VALUE_LABELS[column.key];
   if (!labels) {
     return null;
@@ -474,40 +349,40 @@ function validationFor(column) {
     .build();
 }
 
-function ensureSheetsExist() {
+function ensureSheetsExist_() {
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(SCHEMA).forEach(function (name) {
     var sheet = spreadsheet.getSheetByName(name);
     if (!sheet) {
-      createSheet(spreadsheet, name);
+      createSheet_(spreadsheet, name);
     } else {
-      ensureColumns(sheet, name);
+      ensureColumns_(sheet, name);
     }
   });
-  ensureConfigSheet(spreadsheet);
+  ensureConfigSheet_(spreadsheet);
 }
 
 /**
  * Agrega al final de una pestaña existente las columnas OPCIONALES del SCHEMA que le faltan
  * (contrato v3): así una planilla anterior se actualiza sola al redesplegar el puente, sin
- * tocar datos. Una requerida que falta no se agrega: sigue siendo el error claro de headerMap (una
+ * tocar datos. Una requerida que falta no se agrega: sigue siendo el error claro de headerMap_ (una
  * columna Precio vacía haría viajar productos a $0). La columna nueva lleva formato y validación en
- * la fila plantilla (2) según su tipo, igual que createSheet. Se reconoce por etiqueta o clave.
+ * la fila plantilla (2) según su tipo, igual que createSheet_. Se reconoce por etiqueta o clave.
  */
-function ensureColumns(sheet, name) {
+function ensureColumns_(sheet, name) {
   var width = Math.max(sheet.getLastColumn(), 1);
   var present = {};
   sheet
     .getRange(1, 1, 1, width)
     .getValues()[0]
     .forEach(function (cell) {
-      present[normalize(cell)] = true;
+      present[normalize_(cell)] = true;
     });
   var missing = SCHEMA[name].filter(function (column) {
     return (
       column.optional &&
-      !present[normalize(column.key)] &&
-      !present[normalize(COLUMN_LABELS[name][column.key])]
+      !present[normalize_(column.key)] &&
+      !present[normalize_(COLUMN_LABELS[name][column.key])]
     );
   });
   if (missing.length === 0) {
@@ -525,16 +400,16 @@ function ensureColumns(sheet, name) {
     sheet.getRange(1, position).setValue(COLUMN_LABELS[name][column.key]).setFontWeight('bold');
     var template = sheet.getRange(2, position);
     template.setNumberFormat(NUMBER_FORMATS[column.type]);
-    template.setDataValidations([[validationFor(column)]]);
+    template.setDataValidations([[validationFor_(column)]]);
   });
 }
 
 /**
  * Crea una pestaña con el tamaño exacto: el encabezado y UNA fila de datos vacía — la plantilla — que
  * lleva el formato y la validación de cada columna. Las filas que se agreguen después los copian de
- * ahí (appendObjects). No se toca ninguna pestaña que ya existe.
+ * ahí (appendObjects_). No se toca ninguna pestaña que ya existe.
  */
-function createSheet(spreadsheet, name) {
+function createSheet_(spreadsheet, name) {
   var defs = SCHEMA[name];
   var labels = defs.map(function (column) {
     return COLUMN_LABELS[name][column.key];
@@ -554,12 +429,9 @@ function createSheet(spreadsheet, name) {
       return NUMBER_FORMATS[column.type];
     }),
   ]);
-  template.setDataValidations([defs.map(validationFor)]);
+  template.setDataValidations([defs.map(validationFor_)]);
   if (name === '_PushLots' || name === '_Snapshot') {
     sheet.hideSheet();
-  }
-  if (SEED[name]) {
-    appendObjects(name, SEED[name]);
   }
 }
 
@@ -568,11 +440,14 @@ function createSheet(spreadsheet, name) {
  * mover o darle formato, y la portada de la planilla es suya). Lleva los pares clave/valor que el
  * puente lee y, abajo, los pasos para conectar una terminal.
  */
-function ensureConfigSheet(spreadsheet) {
+function ensureConfigSheet_(spreadsheet) {
   if (spreadsheet.getSheetByName(CONFIG_SHEET)) {
     return;
   }
-  var rows = [[CONFIG_LABELS.posUrl, DEFAULT_POS_URL], ['', '']].concat(
+  var rows = [
+    [CONFIG_LABELS.posUrl, DEFAULT_POS_URL],
+    ['', ''],
+  ].concat(
     CONFIG_STEPS.map(function (step) {
       return [step, ''];
     }),
@@ -586,7 +461,7 @@ function ensureConfigSheet(spreadsheet) {
 
 // --------------------------------------------------------------- helpers
 
-function getSheet(name) {
+function getSheet_(name) {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
 }
 
@@ -594,9 +469,11 @@ function getSheet(name) {
 
 // Se rearma en cada request (doPost): dentro de uno, la fila 1 no cambia.
 var headerCache = {};
+// Los nombres de Productos (pushSale_), también por request.
+var productNameCache = null;
 
 /** Minúsculas, sin acentos ni signos: "Códigos de barras" y "codigosdebarras" son la misma columna. */
-function normalize(text) {
+function normalize_(text) {
   return String(text)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -611,7 +488,7 @@ function normalize(text) {
  * que el usuario renombró a otra cosa no se toca. Las columnas que no conocemos se ignoran.
  * Falta una columna requerida → error que dice cuál.
  */
-function headerMap(sheet, name) {
+function headerMap_(sheet, name) {
   if (headerCache[name]) {
     return headerCache[name];
   }
@@ -619,12 +496,12 @@ function headerMap(sheet, name) {
   var cells = sheet.getRange(1, 1, 1, width).getValues()[0];
   var lookup = Object.create(null);
   SCHEMA[name].forEach(function (column) {
-    lookup[normalize(column.key)] = column;
-    lookup[normalize(COLUMN_LABELS[name][column.key])] = column;
+    lookup[normalize_(column.key)] = column;
+    lookup[normalize_(COLUMN_LABELS[name][column.key])] = column;
   });
   var map = Object.create(null);
   cells.forEach(function (cell, index) {
-    var column = lookup[normalize(cell)];
+    var column = lookup[normalize_(cell)];
     if (column === undefined || map[column.key] !== undefined) {
       return;
     }
@@ -646,22 +523,22 @@ function headerMap(sheet, name) {
 }
 
 /** Valor de celda → valor interno: "Efectivo" (o el viejo "cash") → "cash". Lo desconocido pasa igual. */
-function fromCell(key, cell) {
+function fromCell_(key, cell) {
   var labels = VALUE_LABELS[key];
   if (!labels || typeof cell !== 'string') {
     return cell;
   }
-  var wanted = normalize(cell);
+  var wanted = normalize_(cell);
   var internal = Object.keys(labels).filter(function (candidate) {
-    return normalize(labels[candidate]) === wanted || normalize(candidate) === wanted;
+    return normalize_(labels[candidate]) === wanted || normalize_(candidate) === wanted;
   })[0];
   return internal === undefined ? cell : internal;
 }
 
 /** Filas de datos como objetos { clave interna: valor, _row: nº de fila en la hoja }. */
-function readRows(name) {
-  var sheet = getSheet(name);
-  var header = headerMap(sheet, name);
+function readRows_(name) {
+  var sheet = getSheet_(name);
+  var header = headerMap_(sheet, name);
   var last = sheet.getLastRow();
   if (last < 2) {
     return [];
@@ -673,14 +550,14 @@ function readRows(name) {
       var row = { _row: index + 2 };
       SCHEMA[name].forEach(function (column) {
         var position = header.map[column.key];
-        row[column.key] = position === undefined ? '' : fromCell(column.key, cells[position - 1]);
+        row[column.key] = position === undefined ? '' : fromCell_(column.key, cells[position - 1]);
       });
       return row;
     });
 }
 
 /** Valor interno → valor de celda: traduce, convierte ISO 8601 a Date en columnas datetime, vacío → ''. */
-function toCell(column, value) {
+function toCell_(column, value) {
   if (value === undefined || value === null) {
     return '';
   }
@@ -696,7 +573,7 @@ function toCell(column, value) {
 }
 
 /** Primera fila donde escribir: la plantilla (fila 2) si está vacía, si no, la que sigue a la última con datos. */
-function firstFreeRow(sheet, width) {
+function firstFreeRow_(sheet, width) {
   var last = sheet.getLastRow();
   if (last < 2) {
     return 2;
@@ -714,12 +591,12 @@ function firstFreeRow(sheet, width) {
  * Agrega filas a una pestaña. Cada objeto usa claves internas; cada valor va a la columna que indica
  * el encabezado (una columna ausente se omite; las columnas del usuario quedan vacías).
  */
-function appendObjects(name, objects) {
+function appendObjects_(name, objects) {
   if (objects.length === 0) {
     return;
   }
-  var sheet = getSheet(name);
-  var header = headerMap(sheet, name);
+  var sheet = getSheet_(name);
+  var header = headerMap_(sheet, name);
   var rows = objects.map(function (object) {
     var cells = [];
     for (var i = 0; i < header.width; i++) {
@@ -728,12 +605,12 @@ function appendObjects(name, objects) {
     SCHEMA[name].forEach(function (column) {
       var position = header.map[column.key];
       if (position !== undefined && object[column.key] !== undefined) {
-        cells[position - 1] = toCell(column, object[column.key]);
+        cells[position - 1] = toCell_(column, object[column.key]);
       }
     });
     return cells;
   });
-  var first = firstFreeRow(sheet, header.width);
+  var first = firstFreeRow_(sheet, header.width);
   var needed = first + rows.length - 1 - sheet.getMaxRows();
   if (needed > 0) {
     sheet.insertRowsAfter(sheet.getMaxRows(), needed);
@@ -757,19 +634,19 @@ function appendObjects(name, objects) {
   block.setValues(rows);
 }
 
-function setCells(name, rowNumber, values) {
-  var sheet = getSheet(name);
-  var header = headerMap(sheet, name);
+function setCells_(name, rowNumber, values) {
+  var sheet = getSheet_(name);
+  var header = headerMap_(sheet, name);
   SCHEMA[name].forEach(function (column) {
     var position = header.map[column.key];
     if (position !== undefined && Object.prototype.hasOwnProperty.call(values, column.key)) {
-      sheet.getRange(rowNumber, position).setValue(toCell(column, values[column.key]));
+      sheet.getRange(rowNumber, position).setValue(toCell_(column, values[column.key]));
     }
   });
 }
 
 /** Devuelve un objeto sin las claves vacías — así el JSON no manda '' donde el POS espera "ausente". */
-function compact(object) {
+function compact_(object) {
   var result = {};
   Object.keys(object).forEach(function (key) {
     var value = object[key];
@@ -789,11 +666,11 @@ function compact(object) {
  * falla dentro del lote no tumba el resto ni el ack: queda como `issue` del
  * lote, consultable después vía `pullBatch` (el backend nunca rechaza).
  */
-function pushBatchAction(payload, idempotencyKey) {
+function pushBatchAction_(payload, idempotencyKey) {
   if (!idempotencyKey) {
     throw new Error('Falta idempotencyKey');
   }
-  if (findLot(idempotencyKey)) {
+  if (findLot_(idempotencyKey)) {
     return {};
   }
   // Contrato v3: el dispositivo viaja una vez por lote; el origen, en cada evento.
@@ -801,15 +678,16 @@ function pushBatchAction(payload, idempotencyKey) {
   var issues = [];
   (payload.events || []).forEach(function (event) {
     try {
-      applyBatchEvent(event, stampOf(deviceId, event));
+      applyBatchEvent_(event, stampOf_(deviceId, event));
     } catch (error) {
       issues.push({
-        message: (event.type || '?') + ': ' + (error && error.message ? error.message : String(error)),
+        message:
+          (event.type || '?') + ': ' + (error && error.message ? error.message : String(error)),
         eventId: event.id,
       });
     }
   });
-  appendObjects('_PushLots', [
+  appendObjects_('_PushLots', [
     {
       id: idempotencyKey,
       status: issues.length > 0 ? 'issues' : 'ok',
@@ -822,12 +700,12 @@ function pushBatchAction(payload, idempotencyKey) {
 }
 
 /** Columnas de identidad de un evento (contrato v3): dispositivo del lote, origen del evento. */
-function stampOf(deviceId, event) {
+function stampOf_(deviceId, event) {
   var origin = event.origin || {};
   return { deviceId: deviceId, branch: origin.branch, pointOfSale: origin.pointOfSale };
 }
 
-function withStamp(object, stamp) {
+function withStamp_(object, stamp) {
   return Object.assign({}, object, stamp);
 }
 
@@ -836,22 +714,22 @@ function withStamp(object, stamp) {
  * contrato v3 no tiene (p. ej. un `cash-session` viejo) lanza: queda como issue del lote con su
  * eventId, sin tumbar el resto.
  */
-function applyBatchEvent(event, stamp) {
+function applyBatchEvent_(event, stamp) {
   switch (event.type) {
     case 'sale':
-      pushSale(event.sale, stamp);
+      pushSale_(event.sale, stamp);
       return;
     case 'customer':
-      pushCustomer(event.customer, stamp);
+      pushCustomer_(event.customer, stamp);
       return;
     case 'account-hold-confirm':
-      pushAccountHoldConfirm(event, stamp);
+      pushAccountHoldConfirm_(event, stamp);
       return;
     case 'cash-movement':
-      pushCashMovement(event.movement, stamp);
+      pushCashMovement_(event.movement, stamp);
       return;
     case 'customer-payment':
-      pushCustomerPayment(event.payment, stamp);
+      pushCustomerPayment_(event.payment, stamp);
       return;
     case 'stock-movement':
     case 'account-hold-release':
@@ -862,8 +740,8 @@ function applyBatchEvent(event, stamp) {
   }
 }
 
-function findLot(id) {
-  return readRows('_PushLots').filter(function (row) {
+function findLot_(id) {
+  return readRows_('_PushLots').filter(function (row) {
     return String(row.id) === id;
   })[0];
 }
@@ -882,14 +760,14 @@ function findLot(id) {
  * `onEdit` (más difícil de probar y que no cubriría las escrituras propias
  * de todos modos).
  */
-function trackChanges(resource, items) {
+function trackChanges_(resource, items) {
   var existing = {};
-  readRows('_Snapshot').forEach(function (row) {
+  readRows_('_Snapshot').forEach(function (row) {
     if (row.resource === resource) {
       existing[row.id] = row;
     }
   });
-  var now = nextTimestamp();
+  var now = nextTimestamp_();
   var updatedAtById = {};
   var toAppend = [];
   items.forEach(function (item) {
@@ -900,12 +778,12 @@ function trackChanges(resource, items) {
       toAppend.push({ resource: resource, id: item.id, fingerprint: fingerprint, updatedAt: now });
     } else if (previous.fingerprint !== fingerprint) {
       updatedAtById[item.id] = now;
-      setCells('_Snapshot', previous._row, { fingerprint: fingerprint, updatedAt: now });
+      setCells_('_Snapshot', previous._row, { fingerprint: fingerprint, updatedAt: now });
     } else {
       updatedAtById[item.id] = String(previous.updatedAt);
     }
   });
-  appendObjects('_Snapshot', toAppend);
+  appendObjects_('_Snapshot', toAppend);
   return updatedAtById;
 }
 
@@ -918,9 +796,9 @@ function trackChanges(resource, items) {
  * `_Snapshot` (todos los recursos) y lo empuja 1ms para adelante si hiciera
  * falta — nunca antes del reloj real, solo lo suficiente para ser único.
  */
-function nextTimestamp() {
+function nextTimestamp_() {
   var now = new Date().toISOString();
-  var last = readRows('_Snapshot').reduce(function (max, row) {
+  var last = readRows_('_Snapshot').reduce(function (max, row) {
     return String(row.updatedAt) > max ? String(row.updatedAt) : max;
   }, '');
   if (last !== '' && now <= last) {
@@ -933,29 +811,29 @@ function nextTimestamp() {
  * Alta de la fila como ISO (contrato v3: obligatoria en el pull). Si la celda está vacía la completa
  * ahora y queda fija en la planilla. Al segundo, porque es lo que conserva una celda de fecha.
  */
-function createdAtOf(name, row, now) {
+function createdAtOf_(name, row, now) {
   if (Object.prototype.toString.call(row.createdAt) === '[object Date]') {
     return row.createdAt.toISOString();
   }
   if (row.createdAt !== '' && row.createdAt !== undefined && row.createdAt !== null) {
     return String(row.createdAt);
   }
-  setCells(name, row._row, { createdAt: now });
+  setCells_(name, row._row, { createdAt: now });
   return now;
 }
 
 /** Bloqueo informativo: "Sí" en Bloqueado, con el motivo (puede quedar vacío). */
-function blockedOf(row) {
+function blockedOf_(row) {
   return row.blocked === 'yes' ? { reason: String(row.blockedReason || '') } : undefined;
 }
 
-function nowToTheSecond() {
+function nowToTheSecond_() {
   return new Date(Math.floor(Date.now() / 1000) * 1000).toISOString();
 }
 
-function pullProducts() {
-  var now = nowToTheSecond();
-  return readRows('Productos')
+function pullProducts_() {
+  var now = nowToTheSecond_();
+  return readRows_('Productos')
     .filter(function (row) {
       return row.id !== '' && row.name !== '' && !isNaN(Number(row.price));
     })
@@ -975,9 +853,9 @@ function pullProducts() {
         price: Number(row.price),
         taxRate: Number(row.taxRate),
         category: String(row.category),
-        createdAt: createdAtOf('Productos', row, now),
+        createdAt: createdAtOf_('Productos', row, now),
       };
-      var blocked = blockedOf(row);
+      var blocked = blockedOf_(row);
       if (blocked !== undefined) {
         product.blocked = blocked;
       }
@@ -989,9 +867,9 @@ function pullProducts() {
  * Saldo por cliente (4.2.0): la suma del libro CuentaCorriente (ventas a cuenta, holds
  * confirmados, acreditaciones y cobranzas en negativo), tenga o no crédito. Una lectura por pull.
  */
-function customerBalances() {
+function customerBalances_() {
   var totals = {};
-  readRows('CuentaCorriente').forEach(function (row) {
+  readRows_('CuentaCorriente').forEach(function (row) {
     if (row.customerId === '') {
       return;
     }
@@ -1001,21 +879,21 @@ function customerBalances() {
   return totals;
 }
 
-function pullCustomers() {
-  var now = nowToTheSecond();
-  var balances = customerBalances();
-  return readRows('Clientes')
+function pullCustomers_() {
+  var now = nowToTheSecond_();
+  var balances = customerBalances_();
+  return readRows_('Clientes')
     .filter(function (row) {
       return row.id !== '' && row.name !== '';
     })
     .map(function (row) {
-      return compact({
+      return compact_({
         id: String(row.id),
         name: String(row.name),
         document: String(row.document),
         phone: String(row.phone),
-        createdAt: createdAtOf('Clientes', row, now),
-        blocked: blockedOf(row),
+        createdAt: createdAtOf_('Clientes', row, now),
+        blocked: blockedOf_(row),
         // `compact` conserva el 0: un cliente sin movimientos informa saldo 0, no "ausente".
         balance: Math.round((balances[String(row.id)] || 0) * 100) / 100,
       });
@@ -1023,8 +901,8 @@ function pullCustomers() {
 }
 
 /** Combina el fingerprint de cambios con el filtro de cursor — misma forma que `ConnectorPullResult<T>`. */
-function pullResource(resource, since, items) {
-  var updatedAtById = trackChanges(resource, items);
+function pullResource_(resource, since, items) {
+  var updatedAtById = trackChanges_(resource, items);
   var withTimestamps = items
     .map(function (item) {
       return { item: item, updatedAt: updatedAtById[item.id] };
@@ -1049,13 +927,13 @@ function pullResource(resource, since, items) {
   return result;
 }
 
-function pullBatchAction(payload) {
+function pullBatchAction_(payload) {
   var cursors = payload.cursors || {};
-  var products = pullResource('Productos', cursors.products, pullProducts());
-  var customers = pullResource('Clientes', cursors.customers, pullCustomers());
+  var products = pullResource_('Productos', cursors.products, pullProducts_());
+  var customers = pullResource_('Clientes', cursors.customers, pullCustomers_());
   var lots = {};
   (payload.pendingLotIds || []).forEach(function (id) {
-    var row = findLot(id);
+    var row = findLot_(id);
     if (row !== undefined) {
       lots[id] =
         row.status === 'issues'
@@ -1074,13 +952,14 @@ function pullBatchAction(payload) {
 
 // ---------------------------------------------------------------- pushes
 
-function pushSale(sale, stamp) {
+function pushSale_(sale, stamp) {
   if (!sale || !sale.id) {
     throw new Error('Falta sale');
   }
+  var names = productNames_();
   var lines = sale.lines.map(function (line, index) {
     var discount = line.discount || {};
-    return withStamp(
+    return withStamp_(
       {
         saleId: sale.id,
         fecha: sale.createdAt,
@@ -1088,7 +967,9 @@ function pushSale(sale, stamp) {
         linea: index + 1,
         tipo: line.kind,
         productId: line.productId,
-        descripcion: line.description,
+        // Una línea de producto viaja sin descripción: va el nombre que tiene en Productos al
+        // venderse (una foto, como el precio unitario). Un id que Productos no tiene queda vacío.
+        descripcion: line.kind === 'product' ? names[line.productId] : line.description,
         cantidad: line.qty,
         precioUnitario: line.unitPrice,
         descuentoTipo: discount.type,
@@ -1105,7 +986,7 @@ function pushSale(sale, stamp) {
     );
   });
   var payments = sale.payments.map(function (payment) {
-    return withStamp(
+    return withStamp_(
       {
         saleId: sale.id,
         fecha: sale.createdAt,
@@ -1124,41 +1005,59 @@ function pushSale(sale, stamp) {
       return payment.method === 'account' && !payment.reference;
     })
     .map(function (payment) {
-      return withStamp(
-        { fecha: sale.createdAt, saleId: sale.id, customerId: sale.customerId, monto: payment.amount },
+      return withStamp_(
+        {
+          fecha: sale.createdAt,
+          saleId: sale.id,
+          customerId: sale.customerId,
+          monto: payment.amount,
+        },
         stamp,
       );
     });
-  appendObjects('Ventas', lines);
-  appendObjects('Pagos', payments);
-  appendObjects('CuentaCorriente', ledger);
+  appendObjects_('Ventas', lines);
+  appendObjects_('Pagos', payments);
+  appendObjects_('CuentaCorriente', ledger);
   // 4.0.0: la anulación es un ticket propio; el original se marca (no se borra: un evento nunca se
   // modifica). Si la planilla todavía no lo tiene, no es un error: el ticket de anulación ya quedó
   // registrado.
   if (sale.voidsSaleId) {
-    markRows('Ventas', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
-    markRows('Pagos', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
+    markRows_('Ventas', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
+    markRows_('Pagos', 'saleId', sale.voidsSaleId, { estado: 'anulada' });
   }
 }
 
+/** Nombre de cada producto de la pestaña Productos, por id. Una lectura por request. */
+function productNames_() {
+  if (productNameCache === null) {
+    productNameCache = {};
+    readRows_('Productos').forEach(function (row) {
+      if (row.id !== '') {
+        productNameCache[String(row.id)] = String(row.name);
+      }
+    });
+  }
+  return productNameCache;
+}
+
 /** Marca (no borra: un evento nunca se modifica) las filas cuyo `key` es `id`; devuelve cuántas encontró. */
-function markRows(sheetName, key, id, values) {
+function markRows_(sheetName, key, id, values) {
   var count = 0;
-  readRows(sheetName).forEach(function (row) {
+  readRows_(sheetName).forEach(function (row) {
     if (String(row[key]) === id) {
-      setCells(sheetName, row._row, values);
+      setCells_(sheetName, row._row, values);
       count++;
     }
   });
   return count;
 }
 
-function pushCustomer(customer, stamp) {
+function pushCustomer_(customer, stamp) {
   if (!customer || !customer.id) {
     throw new Error('Falta customer');
   }
-  appendObjects('Clientes', [
-    withStamp(
+  appendObjects_('Clientes', [
+    withStamp_(
       {
         id: customer.id,
         name: customer.name,
@@ -1175,19 +1074,19 @@ function pushCustomer(customer, stamp) {
  * Ledger de fiado. El POS solo manda { holdId, saleId }: el cliente sale de la
  * fila de Ventas y el monto de la fila de Pagos (medio "account") de esa venta.
  */
-function pushAccountHoldConfirm(payload, stamp) {
+function pushAccountHoldConfirm_(payload, stamp) {
   var saleId = payload.saleId;
-  var saleRow = readRows('Ventas').filter(function (row) {
+  var saleRow = readRows_('Ventas').filter(function (row) {
     return String(row.saleId) === saleId;
   })[0];
-  var paymentRow = readRows('Pagos').filter(function (row) {
+  var paymentRow = readRows_('Pagos').filter(function (row) {
     return String(row.saleId) === saleId && row.medio === 'account';
   })[0];
   if (!saleRow || !paymentRow) {
     throw new Error('Venta a cuenta no encontrada: ' + saleId);
   }
-  appendObjects('CuentaCorriente', [
-    withStamp(
+  appendObjects_('CuentaCorriente', [
+    withStamp_(
       {
         fecha: new Date().toISOString(),
         holdId: payload.holdId,
@@ -1201,13 +1100,13 @@ function pushAccountHoldConfirm(payload, stamp) {
 }
 
 /** Ingreso/egreso de caja (contrato v3); el ajuste por arqueo lleva lo esperado y lo contado. */
-function pushCashMovement(movement, stamp) {
+function pushCashMovement_(movement, stamp) {
   if (!movement || !movement.id) {
     throw new Error('Falta movement');
   }
   var count = movement.count || {};
-  appendObjects('MovimientosCaja', [
-    withStamp(
+  appendObjects_('MovimientosCaja', [
+    withStamp_(
       {
         movementId: movement.id,
         fecha: movement.createdAt,
@@ -1225,14 +1124,14 @@ function pushCashMovement(movement, stamp) {
 }
 
 /** Una fila por medio en Cobranzas y el total en negativo en el libro de CuentaCorriente. */
-function pushCustomerPayment(payment, stamp) {
+function pushCustomerPayment_(payment, stamp) {
   if (!payment || !payment.id) {
     throw new Error('Falta payment');
   }
-  appendObjects(
+  appendObjects_(
     'Cobranzas',
     payment.payments.map(function (line) {
-      return withStamp(
+      return withStamp_(
         {
           customerPaymentId: payment.id,
           fecha: payment.createdAt,
@@ -1249,8 +1148,8 @@ function pushCustomerPayment(payment, stamp) {
       );
     }),
   );
-  appendObjects('CuentaCorriente', [
-    withStamp(
+  appendObjects_('CuentaCorriente', [
+    withStamp_(
       {
         fecha: payment.createdAt,
         customerId: payment.customerId,
@@ -1263,6 +1162,6 @@ function pushCustomerPayment(payment, stamp) {
   // 4.3.0: la original se marca, nunca se borra. Si la planilla no la tiene, no es un error: la
   // anulación ya quedó registrada.
   if (payment.voidsPaymentId) {
-    markRows('Cobranzas', 'customerPaymentId', payment.voidsPaymentId, { estado: 'anulada' });
+    markRows_('Cobranzas', 'customerPaymentId', payment.voidsPaymentId, { estado: 'anulada' });
   }
 }

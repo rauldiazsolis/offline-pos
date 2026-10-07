@@ -24,6 +24,10 @@ test('la home lista el backend local con su demo en el canal', async ({ page }) 
     `${CHANNEL}/docs/`,
   );
   await expect(page.locator('a[href$=".zip"]')).toHaveCount(0);
+  // #219: "Con Google Sheets", a las instrucciones del puente del canal.
+  await expect(
+    page.getByRole('link', { name: 'Instrucciones y el código para copiar' }),
+  ).toHaveAttribute('href', `${CHANNEL}/docs/google-sheets/`);
 });
 
 test('el canal arranca con el link de demo y guarda todo en su propio almacenamiento', async ({
@@ -58,7 +62,7 @@ test('/v4/docs/ muestra la guía y enlaza el OpenAPI y llms.txt', async ({ page 
   }
 });
 
-test('desde /v4/docs/ se llega a la guía del puente de Sheets y a sus archivos', async ({
+test('desde /v4/docs/ se llega a la guía del puente de Sheets y a pos-sheets.gs', async ({
   page,
 }) => {
   await page.goto(`${SITE}/${CHANNEL}/docs/`);
@@ -68,9 +72,10 @@ test('desde /v4/docs/ se llega a la guía del puente de Sheets y a sus archivos'
     page.getByRole('heading', { level: 1, name: 'Google Sheets: el puente de Apps Script' }),
   ).toBeVisible();
 
+  // #219: el puente en un solo archivo, con "Copiar el código" (se habilita al bajarlo).
+  await expect(page.getByRole('button', { name: 'Copiar el código' })).toBeEnabled();
   const hrefs = [
-    await page.getByRole('link', { name: 'bridge.gs' }).first().getAttribute('href'),
-    await page.getByRole('link', { name: 'columnas.gs' }).first().getAttribute('href'),
+    await page.getByRole('link', { name: 'pos-sheets.gs' }).first().getAttribute('href'),
     await page.getByRole('link', { name: 'OpenAPI' }).first().getAttribute('href'),
   ];
   for (const href of hrefs) {

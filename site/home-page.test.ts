@@ -54,6 +54,16 @@ describe('renderHomePage', () => {
     expect(html).not.toContain('../');
   });
 
+  it('"Con Google Sheets": el puente del canal más nuevo, antes de lo de integradores (#219)', () => {
+    expect(html).toContain('<h2>Con Google Sheets</h2>');
+    expect(html).toContain('href="v4/docs/google-sheets/"');
+    expect(html.indexOf('Con Google Sheets')).toBeLessThan(html.indexOf('Para integradores'));
+  });
+
+  it('sin canales publicados, no hay sección de Google Sheets', () => {
+    expect(renderHomePage([], [], '2026-10-03T12:00:00.000Z')).not.toContain('Google Sheets');
+  });
+
   it('escapa lo que viene de la lista', () => {
     expect(html).toContain('Demo &lt;local&gt;');
     expect(html).not.toContain('<b>ojo</b>');

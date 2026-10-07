@@ -11,15 +11,18 @@ import {
 } from './channel-info.ts';
 import { isMain } from './cli.ts';
 import { renderGuidePage } from './guide-page.ts';
+import { buildSheetsBundle } from './sheets-bundle.ts';
 
-/** Las docs de cada canal (#54); `sheets*`, la guía y los archivos del puente de Google Sheets (#180). */
+/**
+ * Las docs de cada canal (#54); `sheets*`, la guía del puente de Google Sheets (#180) y la carpeta
+ * de sus `.gs`, que se publican juntos en `pos-sheets.gs` (#219).
+ */
 export type DocsSources = {
   guide: string;
   llms: string;
   openapi: string;
   sheetsGuide: string;
-  sheetsBridge: string;
-  sheetsColumns: string;
+  sheetsSources: string;
 };
 
 const repo = (path: string): string => fileURLToPath(new URL(`../${path}`, import.meta.url));
@@ -29,8 +32,7 @@ const DEFAULT_DOCS: DocsSources = {
   llms: repo('docs/integradores/llms.txt'),
   openapi: repo('docs/connector-api.openapi.yaml'),
   sheetsGuide: repo('docs/integradores/google-sheets.md'),
-  sheetsBridge: repo('src/connectors/google-sheets/bridge.gs'),
-  sheetsColumns: repo('src/connectors/google-sheets/columnas.gs'),
+  sheetsSources: repo('src/connectors/google-sheets/'),
 };
 
 /** Dónde están los `.gs` en el repo, visto desde `docs/integradores/`. */
@@ -48,19 +50,25 @@ const localizeOpenapi = (text: string): string =>
 const localizeGuide = (text: string): string =>
   localizeOpenapi(text).replaceAll('](google-sheets.md)', '](google-sheets/)');
 
-/** `docs/llms.txt`: la guía del puente en Markdown y los `.gs` en su carpeta. */
+/** El archivo único del puente, en la carpeta de su guía: en el repo, el link va a sus fuentes. */
+const SHEETS_FILE = 'pos-sheets.gs';
+
+/** `docs/llms.txt`: la guía del puente en Markdown y `pos-sheets.gs` en su carpeta. */
 const localizeLlms = (text: string): string =>
   localizeOpenapi(text)
     .replaceAll('](google-sheets.md)', '](google-sheets/guia.md)')
-    .replaceAll(SHEETS_SOURCES, 'google-sheets/');
+    .replaceAll(`](${SHEETS_SOURCES})`, `](google-sheets/${SHEETS_FILE})`);
 
-/** `docs/google-sheets/guia.md`: los `.gs` al lado, la otra guía un nivel arriba (el OpenAPI ya). */
+/** `docs/google-sheets/guia.md`: `pos-sheets.gs` al lado, la otra guía un nivel arriba. */
 const localizeSheetsGuide = (text: string): string =>
-  text.replaceAll(SHEETS_SOURCES, '').replaceAll('](guia.md)', '](../guia.md)');
+  text
+    .replaceAll(`](${SHEETS_SOURCES})`, `](${SHEETS_FILE})`)
+    .replaceAll('](guia.md)', '](../guia.md)');
 
 /**
  * Arma el canal `v<major del contrato>/` (#54): lo reemplaza entero con el build, `version.json`
- * (hechos del POS) y `docs/`, con el puente de Google Sheets y su guía en `docs/google-sheets/`.
+ * (hechos del POS) y `docs/`, con el puente de Google Sheets (en un solo archivo, `pos-sheets.gs`) y
+ * su guía en `docs/google-sheets/`.
  * Nunca baja ni repite la versión publicada en el canal: volver atrás es un revert y un tag de
  * parche (además, una versión vieja no abre una base de Dexie ya migrada).
  */
@@ -96,9 +104,14 @@ export function buildChannel(options: {
   mkdirSync(sheetsDir);
   const sheetsGuide = localizeSheetsGuide(readFileSync(docs.sheetsGuide, 'utf8'));
   writeFileSync(join(sheetsDir, 'guia.md'), sheetsGuide);
-  writeFileSync(join(sheetsDir, 'index.html'), renderGuidePage(sheetsGuide, info.version, '../'));
-  cpSync(docs.sheetsBridge, join(sheetsDir, 'bridge.gs'));
-  cpSync(docs.sheetsColumns, join(sheetsDir, 'columnas.gs'));
+  writeFileSync(
+    join(sheetsDir, 'index.html'),
+    renderGuidePage(sheetsGuide, info.version, '../', SHEETS_FILE),
+  );
+  writeFileSync(
+    join(sheetsDir, SHEETS_FILE),
+    buildSheetsBundle({ sourcesDir: docs.sheetsSources, version: info.version }),
+  );
   return folder;
 }
 

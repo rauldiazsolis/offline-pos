@@ -12,8 +12,9 @@ reglas están acá.
 `connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
 `connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
 de un puente Apps Script (`bridge.gs`; lo que ve quien lo usa, en la guía pública
-`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus dos archivos
-(`bridge.gs` y `columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene
+`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus archivos
+(`apps-script-files.ts` tiene la lista y el orden) se publican juntos en `pos-sheets.gs`, que se pega
+en el `Código.gs` de la planilla (#219): `columnas.gs` solo tiene
 los textos visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves
 internas y encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en
 Vitest con una planilla falsa (`src/test/fake-spreadsheet.ts`). Desde la Etapa 2 de #87, `bridge.gs` expone
@@ -28,22 +29,44 @@ propio bridge de todos modos) — ver la guía del puente, "Cursor del pull". Co
 Punto de venta) en lo que escribe, Alta/Bloqueado/Motivo del bloqueo en Productos y Clientes (Alta se
 completa sola la primera vez que se lee la fila); `CuentaCorriente` pasa a ser el libro completo
 (holds confirmados, pagos a cuenta sin hold con su signo, cobranzas en negativo); `Turnos` sale del
-schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns` agrega al
+schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns_` agrega al
 final de cada pestaña existente las columnas **opcionales** que le faltan (una requerida que falta
 sigue siendo el error de siempre — agregarla vacía haría viajar productos a $0). Sheets procesa cada
 lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
 `customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
-Anulada, como una venta. "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
-nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
-`{ type: 'google-sheets', webAppUrl }`; `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de
-esa implementación: una copia nunca conecta a la original; sin permiso extra, verificado) y nunca
-viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet`: se crea al
-final con el índice explícito, solo si no existe; claves por texto con `readConfigValue`; con la celda
-vacía o algo que no sea `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs`
-(`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
-canal sirve los dos `.gs` con la guía en `/v4/docs/google-sheets/`, así que sus comentarios no citan
-issues ni archivos del repo (la versión del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`.
+Anulada, como una venta. **Funciones públicas**: `doGet`, `doPost` y las tres que llama la home (`posInicializar`,
+`posReiniciar`, `posAgregarTablero`); todo lo demás termina en `_`. Desde la
+página del Web App (`HtmlService`), `google.script.run` llama a cualquier función cuyo nombre no
+termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.test.ts` (#219). **Preparar la planilla** (#219, spec `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`):
+`inicio.gs::posInicializar` crea las pestañas vacías (la primera hoja vacía pasa a ser el Tablero),
+le pone a la planilla el nombre del comercio, guarda comercio, sucursal y caja en Configuración
+(`CONFIG_LABELS`) y carga los datos de prueba del rubro elegido (`datos-*.gs`, uno por rubro) con una
+historia de 10 días hasta ayer, relativa a hoy y siempre igual para un rubro (semilla fija);
+`posReiniciar` la vuelve a cero solo con "Permitir reiniciar" = Sí. El **Tablero** (`tablero.gs`)
+son fórmulas vivas armadas con las columnas que `headerMap_` encuentra al crearlo (Sheets las ajusta
+si después se mueven); los nombres de función van en inglés, pero el separador depende del idioma de
+la planilla (`;` y `\` en español, `,` en inglés): `usaComa_` prueba `=SUM(1,2)` en una celda y la
+borra. `posAgregarTablero` lo suma a una planilla preparada antes, sin tocar nada más. Las tres son
+públicas (las llama la home) y se cuidan solas. Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
+en Descripción el nombre que tiene en Productos al registrarse (`productNames_`, una lectura por
+request; un id que no está queda vacío, #212). **La home** (`home.gs::doGet`, #133 y #219): una página (`HtmlService`) que se dibuja en el
+navegador con `estadoDeLaHome_` y se redibuja con el estado que devuelve cada acción. Sin preparar,
+el formulario (comercio, sucursal, caja y rubro, que llama a `posInicializar`); preparada, "Abrir la
+planilla" (con el `#gid=` del Tablero) y "Abrir el POS", que arma en el navegador
+`<URL del POS>#connect=<base64url>` con `{ type: 'google-sheets', webAppUrl, branch, pointOfSale }`
+y la caja tipeada; sin Tablero, "Agregar el tablero"; con "Permitir reiniciar" = Sí, "Reiniciar la
+planilla". `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de esa implementación: una
+copia nunca conecta a la original) y nunca viaja el secreto: la página es pública. La URL del POS
+sale de la pestaña Configuración (`ensureConfigSheet_`: se crea al final con el índice explícito,
+solo si no existe; claves por texto con `readConfigValue_`; con la celda vacía o algo que no sea
+`http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs` (`CONFIG_SHEET`, `CONFIG_LABELS`,
+`CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180, #219): el canal sirve
+`pos-sheets.gs` (`site/sheets-bundle.ts`: una cabecera con `@OnlyCurrentDoc` en el primer comentario
+y las instrucciones, y los `.gs` en orden) con la guía y "Copiar el código" en
+`/v4/docs/google-sheets/`, así que sus comentarios no citan issues ni archivos del repo (la versión
+del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`. Los `.gs` están en `.prettierignore`
+(se pegan tal cual): se formatean con `prettier --ignore-path /dev/null --parser babel`.
 Un cambio del puente que se ve desde afuera va también a la guía. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige

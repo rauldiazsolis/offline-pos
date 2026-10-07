@@ -395,4 +395,84 @@ describe('runOnboardingFromUrl — Conectar el POS desde una planilla (#133)', (
     const outcome = await runOnboardingFromUrl(sheetsLink, { config, hasUserData: false }, deps);
     expect(outcome).toMatchObject({ candidate: { locale: 'es-AR' } });
   });
+  describe('con la sucursal y la caja en el link', () => {
+    const link = `https://pos.x/#connect=${encode({
+      type: 'google-sheets',
+      webAppUrl,
+      branch: 'Centro',
+      pointOfSale: 'Caja 2',
+    })}`;
+    const candidate: SyncConfig = {
+      type: 'google-sheets',
+      webAppUrl,
+      branch: 'Centro',
+      pointOfSale: 'Caja 2',
+    };
+
+    it.each([
+      ['sin config', NO_CONFIG],
+      ['en demo', DEMO_CONFIG],
+      ['con una conexión real', REAL_CONFIG],
+    ])('%s y sin datos del usuario: prueba y aplica borrando', async (_, config) => {
+      const outcome = await runOnboardingFromUrl(link, { config, hasUserData: false }, deps);
+
+      expect(outcome).toEqual({ kind: 'applied' });
+      expect(deps.probeConnection).toHaveBeenCalledWith(candidate);
+      const params = deps.applyConnection.mock.calls[0]?.[0];
+      expect(params).toMatchObject({ candidate, local: 'wipe', originChanged: true });
+      expect(deps.consumeWipeKey).not.toHaveBeenCalled();
+    });
+
+    it('con datos del usuario: review con la identidad precargada, sin probar', async () => {
+      const outcome = await runOnboardingFromUrl(
+        link,
+        { config: REAL_CONFIG, hasUserData: true },
+        deps,
+      );
+
+      expect(outcome).toEqual({
+        kind: 'review',
+        candidate,
+        notice:
+          'Conexión con la planilla precargada. Esta terminal tiene datos locales: revisá la conexión y elegí qué hacer con ellos.',
+      });
+      expect(deps.probeConnection).not.toHaveBeenCalled();
+      expect(deps.applyConnection).not.toHaveBeenCalled();
+    });
+
+    it('si la prueba falla (p. ej. falta el secreto): review sin aplicar nada', async () => {
+      deps.probeConnection.mockResolvedValue(
+        err('sync/remote-error', { message: 'Secreto compartido inválido' }),
+      );
+
+      const outcome = await runOnboardingFromUrl(
+        link,
+        { config: NO_CONFIG, hasUserData: false },
+        deps,
+      );
+
+      expect(outcome).toMatchObject({ kind: 'review', candidate });
+      expect(outcome.kind === 'review' && outcome.notice).toContain(
+        'No se pudo probar la conexión con la planilla',
+      );
+      expect(deps.applyConnection).not.toHaveBeenCalled();
+    });
+
+    it('sin la caja: review como siempre, sin probar', async () => {
+      const sinCaja = `https://pos.x/#connect=${encode({ type: 'google-sheets', webAppUrl, branch: 'Centro' })}`;
+
+      const outcome = await runOnboardingFromUrl(
+        sinCaja,
+        { config: NO_CONFIG, hasUserData: false },
+        deps,
+      );
+
+      expect(outcome).toEqual({
+        kind: 'review',
+        candidate: { type: 'google-sheets', webAppUrl, branch: 'Centro' },
+        notice,
+      });
+      expect(deps.probeConnection).not.toHaveBeenCalled();
+    });
+  });
 });
