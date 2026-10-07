@@ -1,7 +1,7 @@
 # Google Sheets: la planilla lista en un paso
 
 Fecha: 2026-10-07
-Estado: diseño aprobado en la prueba con el usuario; plan en `docs/superpowers/plans/`.
+Estado: implementado (PR de la rama `claude/vibrant-pasteur-000khw`); el plan y el prototipo quedan en el historial de git.
 Issue: #219. Antecedentes: epic #180 (el puente en 4.6.0, "Conectar el POS" y el puente publicado),
 #212 (la Descripción de una línea de producto). La forma final salió de un prototipo fuera del repo
 (`pos-sheets.gs`, versiones 1 a 5, pegado a mano en Apps Script) probado con el usuario el 2026-10-06
