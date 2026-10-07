@@ -11,6 +11,7 @@
         --fg: #1a1a1a;
         --muted: #666;
         --code: #f3f3f3;
+        --border: #ddd;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -18,6 +19,7 @@
           --fg: #e8e8e8;
           --muted: #999;
           --code: #262626;
+          --border: #3a3a3a;
         }
       }
       body {
@@ -53,6 +55,19 @@
       a {
         color: inherit;
       }
+      img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 8px 0 4px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      h2 {
+        margin-top: 2.5em;
+        padding-top: 0.5em;
+        border-top: 1px solid var(--border);
+      }
       .copy button {
         font: inherit;
         font-weight: 600;
@@ -68,7 +83,7 @@
   <body>
     <main>
       <header>
-        offline-pos {{version}} · <a href="guia.md">Markdown</a> ·
+        offline-pos {{version}} · <a href="{{markdown}}">Markdown</a> ·
         <a href="{{docsRoot}}connector-api.openapi.yaml">OpenAPI</a> ·
         <a href="{{docsRoot}}llms.txt">llms.txt</a> ·
         <a href="{{docsRoot}}../../">Backends y canales</a>

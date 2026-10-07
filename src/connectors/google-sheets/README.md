@@ -8,12 +8,14 @@ Script** implementado como Web App, que habla el contrato **4.6.0**. Se publica 
 inicialización (`inicio.gs`), el Tablero (`tablero.gs`), la home de la aplicación web (`home.gs`) y
 los datos de prueba de cada rubro (`datos-*.gs`).
 
-**Todo lo que ve quien usa el puente está en la guía pública,
-[`docs/integradores/google-sheets.md`](../../../docs/integradores/google-sheets.md)**, que se publica
-con `pos-sheets.gs` en `/v4/docs/google-sheets/`: qué hace y qué no, instalar, preparar la planilla,
-abrir el POS en cada terminal, el Tablero, la pestaña Configuración, probar de nuevo, el portal
-`/PLANILLA`, actualizar el puente, cómo se ve y se edita la planilla, qué guarda cada evento, el
-contrato del puente (transporte y acciones), el cursor del pull y las limitaciones. Este README queda para el desarrollo; las reglas del conector, en
+**Todo lo que ve quien usa el puente está en dos páginas públicas**, que se publican con
+`pos-sheets.gs` en `/v4/docs/google-sheets/`:
+[el setup](../../../docs/integradores/google-sheets.md) (instalar, preparar la planilla, conectar
+cada caja, actualizar, volver a empezar y el secreto, paso a paso y con imágenes) y
+[la referencia](../../../docs/integradores/google-sheets-referencia.md) (qué hace y qué no, permisos,
+el Tablero, la pestaña Configuración, el portal `/PLANILLA`, cómo se ve y se edita la planilla, qué
+guarda cada evento, el contrato del puente, el cursor del pull y las limitaciones). Las capturas del
+setup salen de `scripts/sheets-guide-images.ts` (a mano, con el POS servido por `pnpm preview`). Este README queda para el desarrollo; las reglas del conector, en
 `src/connectors/AGENTS.md`.
 
 Los `.gs` se publican **tal cual** dentro de `pos-sheets.gs`: sus comentarios no citan issues ni

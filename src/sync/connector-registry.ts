@@ -94,11 +94,11 @@ export const CONNECTOR_TYPES: ConnectorTypeInfo[] = [
     commands: [],
     description: 'Una planilla de Google Sheets, a través de un puente de Apps Script.',
     setupHelp: [
-      'En la planilla: Extensiones → Apps Script. Reemplazá el contenido de Código.gs con pos-sheets.gs, de las docs del canal del POS (por ejemplo https://pos.contax.ar/v4/docs/google-sheets/).',
-      'Implementar → Nueva implementación → Aplicación web. Ejecutar como: yo. Quién tiene acceso: cualquier persona.',
-      'Abrí la URL de la aplicación web (termina en /exec): ahí se prepara la planilla y "Abrir el POS" conecta esta terminal sola. Para hacerlo a mano, copiá esa URL acá.',
-      'Si configuraste SHARED_SECRET en las propiedades del script, cargá el mismo valor como secreto compartido.',
-      'Detalle completo en la guía del puente, en la misma página que pos-sheets.gs.',
+      'Lo más simple: abrí el POS desde la página de la planilla, con "Abrir el POS": esta configuración se completa sola.',
+      'Para instalar el puente: en la planilla, Extensiones → Apps Script, pegá pos-sheets.gs en Código.gs e implementalo como aplicación web (Ejecutar como: yo; Quién tiene acceso: cualquier persona).',
+      'A mano: copiá acá la URL de la aplicación web (termina en /exec).',
+      'Si configuraste SHARED_SECRET en el script, cargá el mismo valor como secreto compartido.',
+      'Paso a paso y con imágenes, en las docs del canal del POS (por ejemplo https://pos.contax.ar/v4/docs/google-sheets/).',
     ],
   },
 ];

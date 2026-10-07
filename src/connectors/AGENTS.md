@@ -11,8 +11,9 @@ reglas están acá.
 
 `connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
 `connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
-de un puente Apps Script (`bridge.gs`; lo que ve quien lo usa, en la guía pública
-`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus archivos
+de un puente Apps Script (`bridge.gs`; lo que ve quien lo usa, en dos páginas públicas desde #221:
+el setup con imágenes, `docs/integradores/google-sheets.md`, y la referencia,
+`google-sheets-referencia.md`; el desarrollo, en el README del conector). Sus archivos
 (`apps-script-files.ts` tiene la lista y el orden) se publican juntos en `pos-sheets.gs`, que se pega
 en el `Código.gs` de la planilla (#219): `columnas.gs` solo tiene
 los textos visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves
@@ -63,11 +64,14 @@ solo si no existe; claves por texto con `readConfigValue_`; con la celda vacía 
 `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs` (`CONFIG_SHEET`, `CONFIG_LABELS`,
 `CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180, #219): el canal sirve
 `pos-sheets.gs` (`site/sheets-bundle.ts`: una cabecera con `@OnlyCurrentDoc` en el primer comentario
-y las instrucciones, y los `.gs` en orden) con la guía y "Copiar el código" en
+y los pasos para instalar, y los `.gs` en orden) con el setup, "Copiar el código" y la referencia en
 `/v4/docs/google-sheets/`, así que sus comentarios no citan issues ni archivos del repo (la versión
 del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`. Los `.gs` están en `.prettierignore`
 (se pegan tal cual): se formatean con `prettier --ignore-path /dev/null --parser babel`.
-Un cambio del puente que se ve desde afuera va también a la guía. Cada conector es dueño de su schema de config
+Un cambio del puente que se ve desde afuera va también a la guía: al setup si cambia un paso (y a
+sus imágenes: las capturas de la página de la planilla y del POS salen de
+`scripts/sheets-guide-images.ts`, que se corre a mano; las pantallas de Google son SVG esquemáticos
+en `docs/integradores/img/google-sheets/`), y si no, a la referencia. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y

@@ -34,6 +34,7 @@ describe('buildSheetsBundle (#219)', () => {
     expect(cabecera).toContain('Código.gs');
     expect(cabecera).toContain('Nueva implementación');
     expect(cabecera).toContain('Nueva versión');
+    expect(cabecera).toContain('https://pos.contax.ar/v4/docs/google-sheets/');
   });
 
   it('trae cada archivo del proyecto entero, en el orden de publicación', () => {
