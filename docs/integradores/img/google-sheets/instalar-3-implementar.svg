@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="232" viewBox="0 0 760 232" role="img">
+<title>Implementar &gt; Nueva implementación</title>
+<rect x="0.5" y="0.5" width="759" height="231" rx="10" fill="#fff" stroke="#c4c7c5" stroke-width="1"/>
+<path d="M1 36 V10.5 A10 10 0 0 1 11 0.5 H749 A10 10 0 0 1 759 10.5 V36 Z" fill="#f1f3f4"/>
+<line x1="1" y1="36" x2="759" y2="36" stroke="#dadce0"/>
+<circle cx="18" cy="18" r="5.5" fill="#ff5f57"/>
+<circle cx="36" cy="18" r="5.5" fill="#febc2e"/>
+<circle cx="54" cy="18" r="5.5" fill="#28c840"/>
+<rect x="80" y="8" width="660" height="20" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="94" y="22" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">script.google.com/home/projects/…/edit</text>
+<rect x="1" y="37" width="758" height="48" fill="#fff"/>
+<line x1="1" y1="85" x2="759" y2="85" stroke="#dadce0"/>
+<path d="M18 50 l12 0 l6 10 l-6 10 l-12 0 l6 -10 z" fill="#4285f4"/>
+<text x="48" y="60" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#5f6368" text-anchor="start">Apps Script</text>
+<text x="48" y="77" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#202124" text-anchor="start">Proyecto sin título</text>
+<rect x="632" y="46" width="112" height="34" rx="4" fill="#1a73e8" stroke="#1a73e8" stroke-width="1"/>
+<text x="688.0" y="68.0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Implementar ▾</text>
+<rect x="628" y="42" width="120" height="42" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="748" cy="42" r="12" fill="#e8590c"/>
+<text x="748" y="47" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<rect x="470" y="92" width="274" height="126" rx="6" fill="#fff" stroke="#dadce0" style="filter:drop-shadow(0 2px 6px rgba(0,0,0,.2))"/>
+<text x="488" y="125" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Nueva implementación</text>
+<rect x="476" y="101" width="262" height="38" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="738" cy="101" r="12" fill="#e8590c"/>
+<text x="738" y="106" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="488" y="161" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Administrar implementaciones</text>
+<text x="488" y="197" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Probar implementaciones</text>
+<text x="22" y="120" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="108" width="300" height="9" rx="4" fill="#e8eaed"/>
+<text x="22" y="141" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="132" width="240" height="9" rx="4" fill="#e8eaed"/>
+<text x="22" y="162" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="156" width="180" height="9" rx="4" fill="#e8eaed"/>
+<text x="22" y="183" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="180" width="300" height="9" rx="4" fill="#e8eaed"/>
+<text x="22" y="204" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="204" width="240" height="9" rx="4" fill="#e8eaed"/>
+<text x="22" y="225" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<rect x="40" y="228" width="180" height="9" rx="4" fill="#e8eaed"/>
+</svg>

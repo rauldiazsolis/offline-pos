@@ -62,14 +62,14 @@ test('/v4/docs/ muestra la guía y enlaza el OpenAPI y llms.txt', async ({ page 
   }
 });
 
-test('desde /v4/docs/ se llega a la guía del puente de Sheets y a pos-sheets.gs', async ({
+test('desde /v4/docs/ se llega al setup de Sheets, con sus imágenes, pos-sheets.gs y la referencia', async ({
   page,
 }) => {
   await page.goto(`${SITE}/${CHANNEL}/docs/`);
-  await page.getByRole('link', { name: 'guía del puente de Google Sheets' }).click();
+  await page.getByRole('link', { name: 'setup de Google Sheets' }).click();
   await expect(page).toHaveURL(`${SITE}/${CHANNEL}/docs/google-sheets/`);
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Google Sheets: el puente de Apps Script' }),
+    page.getByRole('heading', { level: 1, name: 'Google Sheets: conectar el POS a una planilla' }),
   ).toBeVisible();
 
   // #219: el puente en un solo archivo, con "Copiar el código" (se habilita al bajarlo).
@@ -82,4 +82,20 @@ test('desde /v4/docs/ se llega a la guía del puente de Sheets y a pos-sheets.gs
     expect(href).not.toBeNull();
     expect((await page.request.get(new URL(href ?? '', page.url()).href)).ok()).toBe(true);
   }
+
+  // #221: el índice lleva a su sección y cada imagen carga.
+  await page.getByRole('link', { name: 'Conectar cada caja' }).click();
+  await expect(page).toHaveURL(/#3-conectar-cada-caja$/);
+  const images = page.locator('main img');
+  expect(await images.count()).toBeGreaterThan(5);
+  for (const image of await images.all()) {
+    await image.scrollIntoViewIfNeeded();
+    expect(await image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  }
+
+  await page.getByRole('link', { name: 'referencia del puente' }).click();
+  await expect(page).toHaveURL(`${SITE}/${CHANNEL}/docs/google-sheets/referencia.html`);
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Google Sheets: referencia del puente' }),
+  ).toBeVisible();
 });

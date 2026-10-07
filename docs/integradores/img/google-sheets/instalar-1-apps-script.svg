@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img">
+<title>Extensiones &gt; Apps Script en la planilla</title>
+<rect x="0.5" y="0.5" width="759" height="331" rx="10" fill="#fff" stroke="#c4c7c5" stroke-width="1"/>
+<path d="M1 36 V10.5 A10 10 0 0 1 11 0.5 H749 A10 10 0 0 1 759 10.5 V36 Z" fill="#f1f3f4"/>
+<line x1="1" y1="36" x2="759" y2="36" stroke="#dadce0"/>
+<circle cx="18" cy="18" r="5.5" fill="#ff5f57"/>
+<circle cx="36" cy="18" r="5.5" fill="#febc2e"/>
+<circle cx="54" cy="18" r="5.5" fill="#28c840"/>
+<rect x="80" y="8" width="660" height="20" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="94" y="22" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">docs.google.com/spreadsheets/d/…/edit</text>
+<rect x="1" y="37" width="758" height="40" fill="#fff"/>
+<rect x="16" y="46" width="22" height="26" rx="3" fill="#0f9d58"/>
+<rect x="21" y="53" width="12" height="2" fill="#fff"/>
+<rect x="21" y="58" width="12" height="2" fill="#fff"/>
+<rect x="21" y="63" width="12" height="2" fill="#fff"/>
+<text x="50" y="58" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="400" fill="#202124" text-anchor="start">Planilla sin título</text>
+<text x="53" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Archivo</text>
+<text x="120.19999999999999" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Editar</text>
+<text x="179.79999999999998" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Ver</text>
+<text x="216.59999999999997" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Insertar</text>
+<text x="291.4" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Formato</text>
+<text x="358.59999999999997" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Datos</text>
+<text x="410.59999999999997" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Herramientas</text>
+<rect x="508.79999999999995" y="64" width="97.6" height="22" rx="4" fill="#e8eaed" stroke="#e8eaed" stroke-width="1"/>
+<text x="515.8" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Extensiones</text>
+<text x="613.4" y="80" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#202124" text-anchor="start">Ayuda</text>
+<rect x="504.79999999999995" y="60" width="105.6" height="30" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="610.4" cy="60" r="12" fill="#e8590c"/>
+<text x="610.4" y="65" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<rect x="1" y="96" width="758" height="234" fill="#fff"/>
+<line x1="1" y1="96" x2="759" y2="96" stroke="#e8eaed"/>
+<line x1="1" y1="122" x2="759" y2="122" stroke="#e8eaed"/>
+<line x1="1" y1="148" x2="759" y2="148" stroke="#e8eaed"/>
+<line x1="1" y1="174" x2="759" y2="174" stroke="#e8eaed"/>
+<line x1="1" y1="200" x2="759" y2="200" stroke="#e8eaed"/>
+<line x1="1" y1="226" x2="759" y2="226" stroke="#e8eaed"/>
+<line x1="1" y1="252" x2="759" y2="252" stroke="#e8eaed"/>
+<line x1="1" y1="278" x2="759" y2="278" stroke="#e8eaed"/>
+<line x1="1" y1="304" x2="759" y2="304" stroke="#e8eaed"/>
+<line x1="46" y1="96" x2="46" y2="330" stroke="#e8eaed"/>
+<line x1="146" y1="96" x2="146" y2="330" stroke="#e8eaed"/>
+<line x1="246" y1="96" x2="246" y2="330" stroke="#e8eaed"/>
+<line x1="346" y1="96" x2="346" y2="330" stroke="#e8eaed"/>
+<line x1="446" y1="96" x2="446" y2="330" stroke="#e8eaed"/>
+<line x1="546" y1="96" x2="546" y2="330" stroke="#e8eaed"/>
+<line x1="646" y1="96" x2="646" y2="330" stroke="#e8eaed"/>
+<line x1="746" y1="96" x2="746" y2="330" stroke="#e8eaed"/>
+<text x="96" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">A</text>
+<text x="196" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">B</text>
+<text x="296" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">C</text>
+<text x="396" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">D</text>
+<text x="496" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">E</text>
+<text x="596" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">F</text>
+<text x="696" y="114" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="middle">G</text>
+<rect x="506.79999999999995" y="92" width="220" height="150" rx="6" fill="#fff" stroke="#dadce0" style="filter:drop-shadow(0 2px 6px rgba(0,0,0,.2))"/>
+<text x="524.8" y="125" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Complementos</text>
+<text x="706.8" y="125" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#5f6368" text-anchor="end">›</text>
+<text x="524.8" y="159" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Macros</text>
+<text x="706.8" y="159" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#5f6368" text-anchor="end">›</text>
+<text x="524.8" y="193" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Apps Script</text>
+<rect x="512.8" y="170" width="208" height="36" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="720.8" cy="170" r="12" fill="#e8590c"/>
+<text x="720.8" y="175" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="524.8" y="227" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">AppSheet</text>
+<text x="706.8" y="227" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#5f6368" text-anchor="end">›</text>
+</svg>
