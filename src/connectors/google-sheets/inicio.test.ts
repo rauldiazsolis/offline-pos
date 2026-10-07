@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { loadAppsScript, publicFunctions } from '../../test/apps-script.ts';
+import { loadAppsScript } from '../../test/apps-script.ts';
 
 // Miércoles 7/10/2026 a la tarde, hora local: hace 3 días fue domingo (la ferretería cierra).
 const HOY = new Date(2026, 9, 7, 15, 0, 0);
@@ -30,9 +30,10 @@ function planillaNueva() {
 }
 
 function preparar(app: ReturnType<typeof planillaNueva>, opciones: Record<string, unknown>) {
-  return z
-    .object({ resumen: z.string() })
+  const { mensaje } = z
+    .object({ mensaje: z.string() })
     .parse(app.run(`posInicializar(${JSON.stringify(opciones)})`));
+  return { resumen: mensaje };
 }
 
 type Fila = Record<string, unknown>;
@@ -46,20 +47,6 @@ function configuracion(app: ReturnType<typeof planillaNueva>, clave: string): un
 }
 
 const redondear = (valor: number) => Math.round(valor * 100) / 100;
-
-describe('seguridad', () => {
-  it('de todo el proyecto, solo son públicas doGet, doPost y las tres que llama la home', () => {
-    const { context } = planillaNueva();
-
-    expect(publicFunctions(context)).toEqual([
-      'doGet',
-      'doPost',
-      'posAgregarTablero',
-      'posInicializar',
-      'posReiniciar',
-    ]);
-  });
-});
 
 describe('posInicializar: la planilla', () => {
   it('pestañas en orden, y la "Hoja 1" pasa a ser el Tablero (las otras vacías se borran)', () => {

@@ -27,7 +27,8 @@ var DEFAULT_POS_URL = 'https://pos.contax.ar/v4/';
 /**
  * Puente HTTP entre el POS y esta planilla (conector de Google Sheets).
  *
- * doGet() es la página para conectar el POS (ver abajo). La API es un solo endpoint: doPost(e).
+ * doGet() es la home para preparar la planilla y abrir el POS (más abajo). La API es un solo
+ * endpoint: doPost(e).
  * Request (Content-Type text/plain, para evitar el preflight CORS que Apps Script no maneja):
  *   { action, payload, idempotencyKey?, sharedSecret?, contractVersion? }
  * Response (siempre HTTP 200 — Apps Script no deja controlar el status):
@@ -221,37 +222,6 @@ function contractMajor_(version) {
 
 // ---------------------------------------------------------------- entrada
 
-/**
- * La página del Web App: el nombre de la planilla, la versión del contrato y "Conectar el POS", que
- * abre el POS con esta planilla precargada en su configuración. El link lleva la URL de ESTA
- * implementación (nunca sale de una celda: viajaría en cada copia de la planilla) y nunca el secreto
- * compartido, porque la página es pública. No toma el lock ni crea pestañas.
- */
-function doGet() {
-  if (typeof CONFIG_LABELS === 'undefined') {
-    return htmlPage_('<p>Falta el archivo columnas.gs en el proyecto de Apps Script.</p>');
-  }
-  var pos = posUrl_();
-  var link = connectLink_(pos, ScriptApp.getService().getUrl());
-  var name = SpreadsheetApp.getActiveSpreadsheet().getName() || 'Esta planilla';
-  return htmlPage_(
-    '<h1>' +
-      escapeHtml_(name) +
-      '</h1>' +
-      '<p class="sub">Puente del POS · contrato ' +
-      escapeHtml_(CONTRACT_VERSION) +
-      '</p>' +
-      '<p><a class="boton" href="' +
-      escapeHtml_(link) +
-      '" target="_blank" rel="noopener">Conectar el POS</a></p>' +
-      '<p>Abre el POS (' +
-      escapeHtml_(pos) +
-      ') con esta planilla en su configuración. Ahí completás la sucursal, el punto de venta y el ' +
-      'secreto compartido, si lo configuraste. Cada terminal se conecta igual: abriendo esta página ' +
-      'desde esa terminal.</p>',
-  );
-}
-
 function doPost(e) {
   var request;
   try {
@@ -263,7 +233,10 @@ function doPost(e) {
     return respond_({ ok: false, error: 'Falta action' });
   }
   if (typeof COLUMN_LABELS === 'undefined' || typeof VALUE_LABELS === 'undefined') {
-    return respond_({ ok: false, error: 'Falta el archivo columnas.gs en el proyecto de Apps Script' });
+    return respond_({
+      ok: false,
+      error: 'Falta el archivo columnas.gs en el proyecto de Apps Script',
+    });
   }
 
   var expectedSecret = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
@@ -346,31 +319,6 @@ function readConfigValue_(key) {
 function posUrl_() {
   var value = readConfigValue_('posUrl');
   return /^https?:\/\//i.test(value) ? value.split('#')[0] : DEFAULT_POS_URL;
-}
-
-/** `<POS>#connect=<base64url sin relleno>` con lo único que el POS necesita de esta planilla. */
-function connectLink_(pos, webAppUrl) {
-  var json = JSON.stringify({ type: 'google-sheets', webAppUrl: webAppUrl });
-  var encoded = Utilities.base64EncodeWebSafe(json, Utilities.Charset.UTF_8).replace(/=+$/, '');
-  return pos + '#connect=' + encoded;
-}
-
-function escapeHtml_(text) {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function htmlPage_(body) {
-  var style =
-    '<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:2rem auto;padding:0 1rem;' +
-    'color:#1f2937}.sub{color:#6b7280}.boton{display:inline-block;padding:.75rem 1.25rem;' +
-    'border-radius:.5rem;background:#2563eb;color:#fff;text-decoration:none;font-weight:600}</style>';
-  return HtmlService.createHtmlOutput(style + body)
-    .setTitle('Conectar el POS')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 // ------------------------------------------------------- auto-provisión
@@ -496,7 +444,10 @@ function ensureConfigSheet_(spreadsheet) {
   if (spreadsheet.getSheetByName(CONFIG_SHEET)) {
     return;
   }
-  var rows = [[CONFIG_LABELS.posUrl, DEFAULT_POS_URL], ['', '']].concat(
+  var rows = [
+    [CONFIG_LABELS.posUrl, DEFAULT_POS_URL],
+    ['', ''],
+  ].concat(
     CONFIG_STEPS.map(function (step) {
       return [step, ''];
     }),
@@ -730,7 +681,8 @@ function pushBatchAction_(payload, idempotencyKey) {
       applyBatchEvent_(event, stampOf_(deviceId, event));
     } catch (error) {
       issues.push({
-        message: (event.type || '?') + ': ' + (error && error.message ? error.message : String(error)),
+        message:
+          (event.type || '?') + ': ' + (error && error.message ? error.message : String(error)),
         eventId: event.id,
       });
     }
@@ -1054,7 +1006,12 @@ function pushSale_(sale, stamp) {
     })
     .map(function (payment) {
       return withStamp_(
-        { fecha: sale.createdAt, saleId: sale.id, customerId: sale.customerId, monto: payment.amount },
+        {
+          fecha: sale.createdAt,
+          saleId: sale.id,
+          customerId: sale.customerId,
+          monto: payment.amount,
+        },
         stamp,
       );
     });

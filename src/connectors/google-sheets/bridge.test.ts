@@ -1,8 +1,6 @@
 /// <reference types="node" />
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { ok } from '../../domain/result.ts';
-import { readConnectReturn } from '../../sync/demo-link.ts';
 import { loadAppsScript, publicFunctions, type AppsScriptOptions } from '../../test/apps-script.ts';
 import type { FakeSpreadsheet } from '../../test/fake-spreadsheet.ts';
 
@@ -133,10 +131,17 @@ function pullBatch(
 }
 
 describe('seguridad', () => {
-  it('solo doGet y doPost son públicas: el resto no se puede llamar con google.script.run', () => {
-    const { context } = loadBridge();
+  it('de todo el proyecto, solo son públicas doGet, doPost y las tres que llama la home', () => {
+    // El resto termina en "_": google.script.run no lo puede llamar.
+    const { context } = loadAppsScript();
 
-    expect(publicFunctions(context)).toEqual(['doGet', 'doPost']);
+    expect(publicFunctions(context)).toEqual([
+      'doGet',
+      'doPost',
+      'posAgregarTablero',
+      'posInicializar',
+      'posReiniciar',
+    ]);
   });
 });
 
@@ -1434,7 +1439,7 @@ describe('pestaña Configuración', () => {
     // `table` saltea la fila 1 como encabezado; acá la fila 1 ya es una clave.
     const rows = spreadsheet.getSheetByName('Configuración')?.values() ?? [];
     expect(rows[0]?.slice(0, 2)).toEqual(['URL del POS', 'https://pos.contax.ar/v4/']);
-    expect(rows.some((row) => String(row[0]).includes('Conectar el POS'))).toBe(true);
+    expect(rows.some((row) => String(row[0]).includes('tocá Abrir el POS'))).toBe(true);
   });
 
   it('nunca guarda el secreto compartido', () => {
@@ -1464,71 +1469,5 @@ describe('pestaña Configuración', () => {
       ['Notas mías', ''],
       ['URL del POS', 'https://otro.pos/v4/'],
     ]);
-  });
-});
-
-describe('Conectar el POS (doGet)', () => {
-  const hrefOf = (html: string) => (/href="([^"]+)"/.exec(html)?.[1] ?? '').replace(/&amp;/g, '&');
-
-  it('muestra la planilla, el contrato y el botón con el link del POS', () => {
-    const bridge = loadBridge({
-      name: 'Kiosco <Ana>',
-      webAppUrl: 'https://script.google.com/macros/s/abc/exec',
-    });
-
-    const { html, title } = bridge.page();
-
-    expect(title).toBe('Conectar el POS');
-    expect(html).toContain('Kiosco &lt;Ana&gt;');
-    expect(html).toContain('4.6.0');
-    expect(html).toContain('target="_blank"');
-    const href = hrefOf(html);
-    expect(href.startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
-    expect(href).not.toMatch(/=$/); // sin el relleno
-    // El link lo lee el mismo código del POS: el contrato entre los dos, de punta a punta.
-    expect(readConnectReturn(href)).toEqual(
-      ok({ type: 'google-sheets', webAppUrl: 'https://script.google.com/macros/s/abc/exec' }),
-    );
-  });
-
-  it('nunca lleva el secreto compartido', () => {
-    const bridge = loadBridge({ sharedSecret: 'secreto-1' });
-
-    const { html } = bridge.page();
-
-    expect(html).not.toContain('secreto-1');
-    const encoded = hrefOf(html).split('#connect=')[1] ?? '';
-    expect(Buffer.from(encoded, 'base64url').toString()).not.toContain('secreto');
-  });
-
-  it('usa la URL del POS de la pestaña Configuración, encontrada por la clave', () => {
-    const bridge = loadBridge();
-    bridge.spreadsheet.addSheet('Configuración', [
-      ['Mis notas', ''],
-      ['  url del pos ', ' https://otro.pos/v4/#viejo '],
-    ]);
-
-    expect(hrefOf(bridge.page().html).startsWith('https://otro.pos/v4/#connect=')).toBe(true);
-  });
-
-  it.each([
-    ['vacía', ''],
-    ['que no es http(s)', 'javascript:alert(1)'],
-  ])('con la URL del POS %s usa la de por omisión', (_, value) => {
-    const bridge = loadBridge();
-    bridge.spreadsheet.addSheet('Configuración', [['URL del POS', value]]);
-
-    expect(hrefOf(bridge.page().html).startsWith('https://pos.contax.ar/v4/#connect=')).toBe(true);
-  });
-
-  it('no crea pestañas', () => {
-    const bridge = loadBridge();
-    bridge.page();
-    expect(bridge.spreadsheet.sheetNames()).toEqual([]);
-  });
-
-  it('sin columnas.gs lo dice en la página', () => {
-    const bridge = loadBridge({}, ['bridge.gs']);
-    expect(bridge.page().html).toContain('Falta el archivo columnas.gs');
   });
 });

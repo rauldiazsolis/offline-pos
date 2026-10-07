@@ -44,7 +44,7 @@ function inicializada_() {
  * Crea las pestañas (vacías), le pone a la planilla el nombre del comercio (la empresa que muestra
  * el POS), guarda comercio, sucursal y caja en Configuración y, si se eligió un modelo, carga sus
  * datos de prueba. opciones: { comercio, sucursal, caja, modelo: 'ferreteria' | 'kiosco' |
- * 'almacen' | '' }. Devuelve { resumen } con lo que cargó.
+ * 'almacen' | '' }. Devuelve el estado de la home, con lo que cargó en `mensaje`.
  */
 function posInicializar(opciones) {
   var o = opciones || {};
@@ -85,12 +85,14 @@ function posInicializar(opciones) {
     planilla.setActiveSheet(crearTablero_(planilla, comercio, tablero));
     return texto;
   });
-  return { resumen: resumen };
+  var estado = estadoDeLaHome_();
+  estado.mensaje = resumen;
+  return estado;
 }
 
 /**
  * Vuelve la planilla a cero, para probar: borra todas las pestañas y deja una hoja vacía. Exige
- * "Permitir reiniciar" = Sí en Configuración.
+ * "Permitir reiniciar" = Sí en Configuración. Devuelve el estado de la home.
  */
 function posReiniciar() {
   conLock_(function () {
@@ -110,6 +112,7 @@ function posReiniciar() {
     });
     planilla.rename(PLANILLA_SIN_INICIALIZAR);
   });
+  return estadoDeLaHome_();
 }
 
 function ordenarPestanas_(planilla) {

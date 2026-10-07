@@ -6,7 +6,7 @@
 
 /**
  * Agrega el Tablero a una planilla preparada que no lo tiene (una de antes), primero en el orden y
- * sin tocar nada más. Pública: la home la ofrece en esa planilla.
+ * sin tocar nada más. Pública: la home la ofrece en esa planilla. Devuelve el estado de la home.
  */
 function posAgregarTablero() {
   conLock_(function () {
@@ -15,6 +15,9 @@ function posAgregarTablero() {
     if (planilla.getSheetByName(TABLERO)) throw new Error('Esta planilla ya tiene tablero.');
     crearTablero_(planilla, readConfigValue_('comercio') || planilla.getName());
   });
+  var estado = estadoDeLaHome_();
+  estado.mensaje = 'Se agregó el tablero.';
+  return estado;
 }
 
 /** Los 10 productos que más facturaron (cantidad × precio, sin descuentos) en los 7 días. */

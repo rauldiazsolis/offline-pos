@@ -157,11 +157,9 @@ var CONFIG_LABELS = {
 // Lo que se escribe debajo de las claves al crear la pestaña. El primero es el título.
 var CONFIG_STEPS = [
   'Cómo conectar una terminal',
-  '1. Si esta planilla es una plantilla compartida, hacé tu copia (Archivo > Hacer una copia) y seguí en la copia.',
-  '2. Extensiones > Apps Script > Implementar > Nueva implementación > Aplicación web. Ejecutar como: Yo. Quién tiene acceso: Cualquier persona. Autorizá el acceso a esta planilla.',
-  '3. Desde la terminal, abrí la URL de la aplicación web y tocá Conectar el POS.',
-  '4. En el POS, completá la sucursal y el punto de venta (y el secreto compartido, si lo configuraste) y probá la conexión.',
-  'Cada terminal se conecta igual: abriendo la URL de la aplicación web desde esa terminal.',
-  'URL del POS: adónde lleva el botón Conectar el POS. Vacía, se usa https://pos.contax.ar/v4/.',
+  '1. Desde la terminal, abrí la URL de la aplicación web (en Apps Script: Implementar > Administrar implementaciones).',
+  '2. Poné el nombre de la caja y tocá Abrir el POS.',
+  'URL del POS: adónde lleva Abrir el POS. Vacía, se usa https://pos.contax.ar/v4/.',
+  'Permitir reiniciar: con Sí, la página de la aplicación web ofrece Reiniciar la planilla, que borra todo. Solo para probar.',
   'El secreto compartido no va en esta pestaña: se configura en Apps Script (Configuración del proyecto > Propiedades de la secuencia de comandos > SHARED_SECRET).',
 ];

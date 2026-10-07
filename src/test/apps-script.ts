@@ -18,6 +18,7 @@ export const ALL_SOURCE_FILES = [
   'columnas.gs',
   'inicio.gs',
   'tablero.gs',
+  'home.gs',
   'datos-ferreteria.gs',
   'datos-kiosco.gs',
   'datos-almacen.gs',

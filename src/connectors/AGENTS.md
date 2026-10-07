@@ -34,7 +34,8 @@ sigue siendo el error de siempre — agregarla vacía haría viajar productos a 
 lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
 `customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
-Anulada, como una venta. **Funciones públicas**: solo `doGet` y `doPost`; todo lo demás del puente termina en `_`. Desde la
+Anulada, como una venta. **Funciones públicas**: `doGet`, `doPost` y las tres que llama la home (`posInicializar`,
+`posReiniciar`, `posAgregarTablero`); todo lo demás termina en `_`. Desde la
 página del Web App (`HtmlService`), `google.script.run` llama a cualquier función cuyo nombre no
 termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.test.ts` (#219). **Preparar la planilla** (#219, spec `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`):
 `inicio.gs::posInicializar` crea las pestañas vacías (la primera hoja vacía pasa a ser el Tablero),
@@ -48,14 +49,18 @@ la planilla (`;` y `\` en español, `,` en inglés): `usaComa_` prueba `=SUM(1,2
 borra. `posAgregarTablero` lo suma a una planilla preparada antes, sin tocar nada más. Las tres son
 públicas (las llama la home) y se cuidan solas. Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
 en Descripción el nombre que tiene en Productos al registrarse (`productNames_`, una lectura por
-request; un id que no está queda vacío, #212). "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
-nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
-`{ type: 'google-sheets', webAppUrl }`; `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de
-esa implementación: una copia nunca conecta a la original; sin permiso extra, verificado) y nunca
-viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet_`: se crea al
-final con el índice explícito, solo si no existe; claves por texto con `readConfigValue_`; con la celda
-vacía o algo que no sea `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs`
-(`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
+request; un id que no está queda vacío, #212). **La home** (`home.gs::doGet`, #133 y #219): una página (`HtmlService`) que se dibuja en el
+navegador con `estadoDeLaHome_` y se redibuja con el estado que devuelve cada acción. Sin preparar,
+el formulario (comercio, sucursal, caja y rubro, que llama a `posInicializar`); preparada, "Abrir la
+planilla" (con el `#gid=` del Tablero) y "Abrir el POS", que arma en el navegador
+`<URL del POS>#connect=<base64url>` con `{ type: 'google-sheets', webAppUrl, branch, pointOfSale }`
+y la caja tipeada; sin Tablero, "Agregar el tablero"; con "Permitir reiniciar" = Sí, "Reiniciar la
+planilla". `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de esa implementación: una
+copia nunca conecta a la original) y nunca viaja el secreto: la página es pública. La URL del POS
+sale de la pestaña Configuración (`ensureConfigSheet_`: se crea al final con el índice explícito,
+solo si no existe; claves por texto con `readConfigValue_`; con la celda vacía o algo que no sea
+`http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs` (`CONFIG_SHEET`, `CONFIG_LABELS`,
+`CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
 canal sirve los dos `.gs` con la guía en `/v4/docs/google-sheets/`, así que sus comentarios no citan
 issues ni archivos del repo (la versión del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`.
 Un cambio del puente que se ve desde afuera va también a la guía. Cada conector es dueño de su schema de config
