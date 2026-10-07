@@ -148,6 +148,10 @@ var CONFIG_SHEET = 'Configuración';
 
 var CONFIG_LABELS = {
   posUrl: 'URL del POS',
+  comercio: 'Comercio',
+  sucursal: 'Sucursal',
+  caja: 'Caja',
+  permitirReiniciar: 'Permitir reiniciar',
 };
 
 // Lo que se escribe debajo de las claves al crear la pestaña. El primero es el título.

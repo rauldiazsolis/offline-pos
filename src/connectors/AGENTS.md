@@ -36,7 +36,13 @@ lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180)
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
 Anulada, como una venta. **Funciones públicas**: solo `doGet` y `doPost`; todo lo demás del puente termina en `_`. Desde la
 página del Web App (`HtmlService`), `google.script.run` llama a cualquier función cuyo nombre no
-termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.test.ts` (#219). Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
+termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.test.ts` (#219). **Preparar la planilla** (#219, spec `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`):
+`inicio.gs::posInicializar` crea las pestañas vacías (la primera hoja vacía pasa a ser el Tablero),
+le pone a la planilla el nombre del comercio, guarda comercio, sucursal y caja en Configuración
+(`CONFIG_LABELS`) y carga los datos de prueba del rubro elegido (`datos-*.gs`, uno por rubro) con una
+historia de 10 días hasta ayer, relativa a hoy y siempre igual para un rubro (semilla fija);
+`posReiniciar` la vuelve a cero solo con "Permitir reiniciar" = Sí. Las dos se cuidan solas porque
+son públicas. Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
 en Descripción el nombre que tiene en Productos al registrarse (`productNames_`, una lectura por
 request; un id que no está queda vacío, #212). "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
 nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
