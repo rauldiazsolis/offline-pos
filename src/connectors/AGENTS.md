@@ -41,8 +41,12 @@ termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.
 le pone a la planilla el nombre del comercio, guarda comercio, sucursal y caja en Configuración
 (`CONFIG_LABELS`) y carga los datos de prueba del rubro elegido (`datos-*.gs`, uno por rubro) con una
 historia de 10 días hasta ayer, relativa a hoy y siempre igual para un rubro (semilla fija);
-`posReiniciar` la vuelve a cero solo con "Permitir reiniciar" = Sí. Las dos se cuidan solas porque
-son públicas. Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
+`posReiniciar` la vuelve a cero solo con "Permitir reiniciar" = Sí. El **Tablero** (`tablero.gs`)
+son fórmulas vivas armadas con las columnas que `headerMap_` encuentra al crearlo (Sheets las ajusta
+si después se mueven); los nombres de función van en inglés, pero el separador depende del idioma de
+la planilla (`;` y `\` en español, `,` en inglés): `usaComa_` prueba `=SUM(1,2)` en una celda y la
+borra. `posAgregarTablero` lo suma a una planilla preparada antes, sin tocar nada más. Las tres son
+públicas (las llama la home) y se cuidan solas. Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
 en Descripción el nombre que tiene en Productos al registrarse (`productNames_`, una lectura por
 request; un id que no está queda vacío, #212). "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
 nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con

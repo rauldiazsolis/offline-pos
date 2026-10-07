@@ -17,6 +17,7 @@ export const ALL_SOURCE_FILES = [
   'bridge.gs',
   'columnas.gs',
   'inicio.gs',
+  'tablero.gs',
   'datos-ferreteria.gs',
   'datos-kiosco.gs',
   'datos-almacen.gs',

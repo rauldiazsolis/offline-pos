@@ -19,7 +19,12 @@ const FORMULARIO = { comercio: 'El Tornillo', sucursal: 'Centro', caja: 'Caja 1'
 
 /** Una planilla recién creada: una sola pestaña vacía, "Hoja 1". */
 function planillaNueva() {
-  const app = loadAppsScript({ useTestClock: true, name: 'Hoja de cálculo sin título' });
+  // 100 filas: el Tablero llega a la 60 (en Sheets, una pestaña nueva tiene 1000).
+  const app = loadAppsScript({
+    useTestClock: true,
+    name: 'Hoja de cálculo sin título',
+    defaultRows: 100,
+  });
   app.spreadsheet.insertSheet('Hoja 1');
   return app;
 }
@@ -43,10 +48,16 @@ function configuracion(app: ReturnType<typeof planillaNueva>, clave: string): un
 const redondear = (valor: number) => Math.round(valor * 100) / 100;
 
 describe('seguridad', () => {
-  it('de todo el proyecto, solo son públicas doGet, doPost y las dos de la inicialización', () => {
+  it('de todo el proyecto, solo son públicas doGet, doPost y las tres que llama la home', () => {
     const { context } = planillaNueva();
 
-    expect(publicFunctions(context)).toEqual(['doGet', 'doPost', 'posInicializar', 'posReiniciar']);
+    expect(publicFunctions(context)).toEqual([
+      'doGet',
+      'doPost',
+      'posAgregarTablero',
+      'posInicializar',
+      'posReiniciar',
+    ]);
   });
 });
 

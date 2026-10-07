@@ -3,7 +3,8 @@
 // cualquiera que abra la URL puede llamar a cualquier función del proyecto cuyo nombre no termine
 // en "_" (google.script.run), así que las únicas públicas de acá se cuidan solas: posInicializar se
 // niega si la planilla ya está inicializada, y posReiniciar exige "Permitir reiniciar" = Sí en
-// Configuración, que solo puede poner quien edita la planilla.
+// Configuración, que solo puede poner quien edita la planilla (posAgregarTablero, en tablero.gs,
+// solo agrega una pestaña que falta).
 
 /** El dispositivo de las filas de prueba: así se distinguen de lo que escriben las terminales. */
 var DISPOSITIVO_DE_PRUEBA = 'datos-de-prueba';
@@ -81,7 +82,7 @@ function posInicializar(opciones) {
     var texto = fuente
       ? cargarDatos_(fuente(), { branch: sucursal, pointOfSale: caja })
       : 'Planilla vacía, lista para cargar productos y clientes.';
-    if (tablero) planilla.setActiveSheet(tablero);
+    planilla.setActiveSheet(crearTablero_(planilla, comercio, tablero));
     return texto;
   });
   return { resumen: resumen };
