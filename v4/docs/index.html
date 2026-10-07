@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guía para integradores · offline-pos 0.6.0</title>
+    <title>Guía para integradores · offline-pos 0.7.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -53,17 +53,27 @@
       a {
         color: inherit;
       }
+      .copy button {
+        font: inherit;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: 1px solid currentColor;
+        background: var(--code);
+        color: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
     <main>
       <header>
-        offline-pos 0.6.0 · <a href="guia.md">Markdown</a> ·
+        offline-pos 0.7.0 · <a href="guia.md">Markdown</a> ·
         <a href="connector-api.openapi.yaml">OpenAPI</a> ·
         <a href="llms.txt">llms.txt</a> ·
         <a href="../../">Backends y canales</a>
       </header>
-      <h1>Guía para integradores</h1>
+       <h1>Guía para integradores</h1>
 <p>offline-pos es un punto de venta web para comercios minoristas (kiosco, tienda). Funciona <strong>offline
 primero</strong>: una venta queda cerrada y guardada en el navegador aunque no haya red, y viaja al backend
 cuando vuelve la conexión. Se opera 100% con teclado (y también con mouse).</p>
