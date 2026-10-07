@@ -156,10 +156,11 @@ var CONFIG_LABELS = {
 
 // Lo que se escribe debajo de las claves al crear la pestaña. El primero es el título.
 var CONFIG_STEPS = [
-  'Cómo conectar una terminal',
-  '1. Desde la terminal, abrí la URL de la aplicación web (en Apps Script: Implementar > Administrar implementaciones).',
+  'Cómo conectar una caja',
+  '1. En la caja, abrí la página de la planilla (en el Tablero: Abrir el POS en una caja).',
   '2. Poné el nombre de la caja y tocá Abrir el POS.',
-  'URL del POS: adónde lleva Abrir el POS. Vacía, se usa https://pos.contax.ar/v4/.',
-  'Permitir reiniciar: con Sí, la página de la aplicación web ofrece Reiniciar la planilla, que borra todo. Solo para probar.',
-  'El secreto compartido no va en esta pestaña: se configura en Apps Script (Configuración del proyecto > Propiedades de la secuencia de comandos > SHARED_SECRET).',
+  'URL del POS: adónde lleva Abrir el POS. Vacía, https://pos.contax.ar/v4/.',
+  'Permitir reiniciar: con Sí, la página ofrece Reiniciar la planilla, que borra todo.',
+  'El secreto compartido no va en esta pestaña: se configura en Apps Script.',
+  'Instrucciones con imágenes: https://pos.contax.ar/v4/docs/google-sheets/',
 ];
