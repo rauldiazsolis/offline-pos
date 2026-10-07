@@ -1,0 +1,136 @@
+// Datos de prueba para preparar la planilla: Kiosco.
+// Todos los días de 7 a 23, muchas ventas chicas, casi todo en efectivo o QR.
+//
+// Productos y clientes usan las claves internas de las pestañas (columnas.gs dice cómo se ven), más
+// lo que solo sirve para armar la historia, que no va a la planilla:
+// - producto: frecuencia (cuánto sale comparado con los demás) y cantidades (las típicas de una
+//   venta; con decimales, lo que se vende por peso o por metro, que no lleva código de barras);
+// - cliente: fia (compra a cuenta corriente) y saldoInicial (lo que ya debía antes de la historia).
+// Precios de referencia de octubre de 2026, aproximados; ids y códigos de barras inventados.
+function datosKiosco_() {
+  return {
+    nombre: 'Kiosco',
+    productos: [
+      {id: 'k-001', sku: 'BEB-001', barcodes: '7799883000018', name: 'Gaseosa cola 500 ml', price: 1800, taxRate: 0.21, category: 'bebidas', frecuencia: 9},
+      {id: 'k-002', sku: 'BEB-002', barcodes: '7799883000025', name: 'Gaseosa cola 2,25 L', price: 4200, taxRate: 0.21, category: 'bebidas', frecuencia: 5},
+      {id: 'k-003', sku: 'BEB-003', barcodes: '7799883000032', name: 'Agua mineral 500 ml', price: 1200, taxRate: 0.21, category: 'bebidas', frecuencia: 8},
+      {id: 'k-004', sku: 'BEB-004', barcodes: '7799883000049', name: 'Agua saborizada 1,5 L', price: 2600, taxRate: 0.21, category: 'bebidas', frecuencia: 4},
+      {id: 'k-005', sku: 'BEB-005', barcodes: '7799883000056', name: 'Jugo en caja 1 L', price: 1900, taxRate: 0.21, category: 'bebidas', frecuencia: 3},
+      {id: 'k-006', sku: 'BEB-006', barcodes: '7799883000063', name: 'Bebida energizante 473 ml', price: 3200, taxRate: 0.21, category: 'bebidas', frecuencia: 4, blocked: true, blockedReason: 'Lote vencido: no vender'},
+      {id: 'k-007', sku: 'BEB-007', barcodes: '7799883000070', name: 'Cerveza lata 473 ml', price: 2500, taxRate: 0.21, category: 'bebidas', frecuencia: 6, cantidades: [1, 1, 2, 4]},
+      {id: 'k-008', sku: 'BEB-008', barcodes: '7799883000087', name: 'Agua con gas 1,5 L', price: 1700, taxRate: 0.21, category: 'bebidas', frecuencia: 2},
+      {id: 'k-009', sku: 'GOL-001', barcodes: '7799883000094', name: 'Alfajor triple de chocolate', price: 1500, taxRate: 0.21, category: 'golosinas', frecuencia: 9, cantidades: [1, 1, 2]},
+      {id: 'k-010', sku: 'GOL-002', barcodes: '7799883000100', name: 'Alfajor simple', price: 900, taxRate: 0.21, category: 'golosinas', frecuencia: 7, cantidades: [1, 1, 2, 3]},
+      {id: 'k-011', sku: 'GOL-003', barcodes: '7799883000117', name: 'Chocolate con leche 80 g', price: 2800, taxRate: 0.21, category: 'golosinas', frecuencia: 4},
+      {id: 'k-012', sku: 'GOL-004', barcodes: '', name: 'Caramelo masticable', price: 100, taxRate: 0.21, category: 'golosinas', frecuencia: 5, cantidades: [5, 10, 20]},
+      {id: 'k-013', sku: 'GOL-005', barcodes: '7799883000131', name: 'Chicles x5', price: 900, taxRate: 0.21, category: 'golosinas', frecuencia: 6},
+      {id: 'k-014', sku: 'GOL-006', barcodes: '7799883000148', name: 'Turrón de maní', price: 600, taxRate: 0.21, category: 'golosinas', frecuencia: 5, cantidades: [1, 2]},
+      {id: 'k-015', sku: 'GOL-007', barcodes: '7799883000155', name: 'Barra de cereal', price: 900, taxRate: 0.21, category: 'golosinas', frecuencia: 4},
+      {id: 'k-016', sku: 'GOL-008', barcodes: '7799883000162', name: 'Chupetín', price: 300, taxRate: 0.21, category: 'golosinas', frecuencia: 4, cantidades: [1, 2, 3]},
+      {id: 'k-017', sku: 'GOL-009', barcodes: '7799883000179', name: 'Galletitas dulces rellenas', price: 1800, taxRate: 0.21, category: 'golosinas', frecuencia: 5},
+      {id: 'k-018', sku: 'GOL-010', barcodes: '7799883000186', name: 'Bombón de chocolate', price: 700, taxRate: 0.21, category: 'golosinas', frecuencia: 3, cantidades: [1, 2]},
+      {id: 'k-019', sku: 'SNK-001', barcodes: '7799883000193', name: 'Papas fritas 80 g', price: 2400, taxRate: 0.21, category: 'snacks', frecuencia: 5},
+      {id: 'k-020', sku: 'SNK-002', barcodes: '7799883000209', name: 'Maní salado 120 g', price: 1600, taxRate: 0.21, category: 'snacks', frecuencia: 3},
+      {id: 'k-021', sku: 'SNK-003', barcodes: '7799883000216', name: 'Palitos salados', price: 1300, taxRate: 0.21, category: 'snacks', frecuencia: 3},
+      {id: 'k-022', sku: 'ALM-001', barcodes: '7799883000223', name: 'Galletitas de agua', price: 1500, taxRate: 0.21, category: 'almacen', frecuencia: 3},
+      {id: 'k-023', sku: 'ALM-002', barcodes: '7799883000230', name: 'Yerba 500 g', price: 3600, taxRate: 0.21, category: 'almacen', frecuencia: 3},
+      {id: 'k-024', sku: 'ALM-003', barcodes: '7799883000247', name: 'Azúcar 1 kg', price: 1500, taxRate: 0.21, category: 'almacen', frecuencia: 2},
+      {id: 'k-025', sku: 'ALM-004', barcodes: '7799883000254', name: 'Leche larga vida 1 L', price: 1700, taxRate: 0.105, category: 'almacen', frecuencia: 3},
+      {id: 'k-026', sku: 'CIG-001', barcodes: '7799883000261', name: 'Cigarrillos box x20', price: 7200, taxRate: 0.21, category: 'cigarrillos', frecuencia: 8, cantidades: [1, 1, 2]},
+      {id: 'k-027', sku: 'CIG-002', barcodes: '7799883000278', name: 'Encendedor', price: 1200, taxRate: 0.21, category: 'cigarrillos', frecuencia: 4},
+      {id: 'k-028', sku: 'VAR-001', barcodes: '7799883000285', name: 'Pilas AA x2', price: 3800, taxRate: 0.21, category: 'varios', frecuencia: 2},
+      {id: 'k-029', sku: 'VAR-002', barcodes: '7799883000292', name: 'Pañuelos descartables', price: 800, taxRate: 0.21, category: 'varios', frecuencia: 3},
+      {id: 'k-030', sku: 'VAR-003', barcodes: '7799883000308', name: 'Preservativos x3', price: 3500, taxRate: 0.21, category: 'varios', frecuencia: 2},
+    ],
+    clientes: [
+      {id: 'kc-001', name: 'Martín Gómez', document: '', phone: '1155003344', fia: true, saldoInicial: 8500},
+      {id: 'kc-002', name: 'Taller Mecánico Ruta 2', document: '20301234567', phone: '1144332211', fia: true},
+      {id: 'kc-003', name: 'Sofía Herrera', document: '', phone: ''},
+      {id: 'kc-004', name: 'Diego López', document: '', phone: '1166001122', fia: true, saldoInicial: 15600, blocked: true, blockedReason: 'No fiar hasta que pague'},
+      {id: 'kc-005', name: 'Paula Díaz', document: '', phone: ''},
+    ],
+    historia: {
+      semilla: 20261007,
+      dias: 10,
+      cerrado: [],
+      turnos: [
+        [
+          7,
+          23
+        ]
+      ],
+      ventasPorDia: [
+        45,
+        70
+      ],
+      factorSabado: 1.1,
+      lineasPorVenta: [
+        1,
+        2
+      ],
+      medios: {
+        cash: 55,
+        qr: 25,
+        debit: 15,
+        transfer: 5
+      },
+      pagoDivididoDesde: 15000,
+      proporcionConCliente: 0.08,
+      proporcionFiada: 0.7,
+      probabilidadDeDescuento: 0.01,
+      descuentos: [
+        10
+      ],
+      probabilidadDeLineaLibre: 0.04,
+      lineasLibres: [
+        {
+          descripcion: 'Carga de celular',
+          precios: [
+            1000,
+            5000
+          ]
+        },
+        {
+          descripcion: 'Fotocopia',
+          precios: [
+            100,
+            400
+          ]
+        }
+      ],
+      cobranzasPorDia: 0.3,
+      diaDeLaAnulacion: 4,
+      fondoInicial: 30000,
+      retiroAlCerrar: true,
+      egresos: [
+        {
+          concepto: 'Pago a proveedor',
+          descripcion: 'Distribuidora de golosinas',
+          probabilidad: 0.3,
+          montos: [
+            20000,
+            70000
+          ]
+        },
+        {
+          concepto: 'Hielo',
+          probabilidad: 0.15,
+          montos: [
+            3000,
+            6000
+          ]
+        }
+      ],
+      arqueoProbabilidad: 0.8,
+      diferenciasDeArqueo: [
+        0,
+        0,
+        0,
+        -100,
+        -200,
+        100,
+        50
+      ]
+    },
+  };
+}
