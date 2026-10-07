@@ -71,6 +71,16 @@ export function renderHomePage(
         ${renderAction(actionFor(backend, channels))}</tr>`,
     )
     .join('\n');
+  // #219: el puente de Sheets del canal más nuevo (los canales vienen del más nuevo al más viejo).
+  const latest = channels[0];
+  const sheets =
+    latest === undefined
+      ? ''
+      : `<h2>Con Google Sheets</h2>
+<p>Sin servidor y gratis: una planilla de Google como backend, con datos de prueba de un rubro y un
+tablero. Se pega un archivo en la planilla y ella misma se prepara y abre el POS.
+<a href="${escape(latest.channel)}/docs/google-sheets/">Instrucciones y el código para copiar</a>.</p>
+`;
   const channelList = channels
     .map(
       (c) =>
@@ -110,7 +120,7 @@ ${rows}
 </table>
 </div>
 <p class="muted">Consultados el <time data-generated datetime="${escape(generatedAt)}">${escape(generatedAt)}</time>.</p>
-<h2>Para integradores</h2>
+${sheets}<h2>Para integradores</h2>
 <ul>
 ${channelList}
 </ul>

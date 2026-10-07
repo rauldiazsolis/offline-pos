@@ -2,16 +2,12 @@
 
 Una planilla de Google Sheets puede ser el backend del POS, sin servidor y sin costo: el catálogo y
 los clientes se cargan en la planilla, y las ventas, cobranzas y movimientos de caja llegan solos a
-sus pestañas. El POS habla con la planilla a través de un **puente de Apps Script**, dos archivos que
-se pegan en la planilla y se implementan como aplicación web:
-
-- [`bridge.gs`](../../src/connectors/google-sheets/bridge.gs): el puente.
-- [`columnas.gs`](../../src/connectors/google-sheets/columnas.gs): los textos que se ven en la
-  planilla (pestañas, encabezados y valores, en español). Es el único archivo que hace falta tocar
-  para renombrar algo.
+sus pestañas. El POS habla con la planilla a través de un **puente de Apps Script**, un solo archivo
+que se pega en la planilla y se implementa como aplicación web:
+[`pos-sheets.gs`](../../src/connectors/google-sheets/).
 
 Esta página acompaña al contrato **4.6.0** (el mismo que la [guía para integradores](guia.md)). Bajá
-siempre los dos archivos de las docs del canal donde están tus terminales.
+siempre el archivo de las docs del canal donde están tus terminales.
 
 ## Qué hace y qué no
 

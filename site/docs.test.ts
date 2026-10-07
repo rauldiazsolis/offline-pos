@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { APPS_SCRIPT_FILES } from '../src/connectors/google-sheets/apps-script-files.ts';
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -27,18 +28,17 @@ describe('docs publicadas para integradores (#148)', () => {
 const INTERNAL =
   /\(#\d|#\d{2,}\b|, #\d|superpowers|AGENTS\.md|pos-web-diseno|historia\.md|demo-backend|RNF-\d/;
 
-describe('el puente de Google Sheets publicado (#180)', () => {
-  it.each(['bridge.gs', 'columnas.gs'])('%s no cita issues ni archivos internos', (file) => {
+describe('el puente de Google Sheets publicado (#180, #219)', () => {
+  it.each(APPS_SCRIPT_FILES)('%s no cita issues ni archivos internos', (file) => {
     expect(read(`../src/connectors/google-sheets/${file}`)).not.toMatch(INTERNAL);
   });
 
   const SOURCES = '../../src/connectors/google-sheets/';
   const guide = read('../docs/integradores/google-sheets.md');
 
-  it('la guía del puente enlaza los dos .gs y no cita nada interno fuera de esos links', () => {
+  it('la guía del puente enlaza pos-sheets.gs y no cita nada interno fuera de ese link', () => {
     expect(guide.startsWith('# Google Sheets: el puente de Apps Script')).toBe(true);
-    expect(guide).toContain(`](${SOURCES}bridge.gs)`);
-    expect(guide).toContain(`](${SOURCES}columnas.gs)`);
+    expect(guide).toContain(`](${SOURCES})`);
     expect(guide.replaceAll(SOURCES, '')).not.toMatch(INTERNAL);
     expect(guide.replaceAll(SOURCES, '')).not.toContain('src/');
   });
@@ -54,7 +54,6 @@ describe('el puente de Google Sheets publicado (#180)', () => {
     expect(read('../docs/integradores/guia.md')).toContain('](google-sheets.md)');
     const llms = read('../docs/integradores/llms.txt');
     expect(llms).toContain('](google-sheets.md)');
-    expect(llms).toContain(`](${SOURCES}bridge.gs)`);
-    expect(llms).toContain(`](${SOURCES}columnas.gs)`);
+    expect(llms).toContain(`](${SOURCES})`);
   });
 });

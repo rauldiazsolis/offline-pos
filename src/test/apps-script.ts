@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { z } from 'zod';
+import { APPS_SCRIPT_FILES } from '../connectors/google-sheets/apps-script-files.ts';
 import { FakeSpreadsheet, type FakeOptions } from './fake-spreadsheet.ts';
 
 /**
@@ -12,17 +13,8 @@ import { FakeSpreadsheet, type FakeOptions } from './fake-spreadsheet.ts';
 
 const SOURCES_DIR = join(process.cwd(), 'src/connectors/google-sheets');
 
-/** Todos los archivos del proyecto de Apps Script, en el orden en que se publican. */
-export const ALL_SOURCE_FILES = [
-  'bridge.gs',
-  'columnas.gs',
-  'inicio.gs',
-  'tablero.gs',
-  'home.gs',
-  'datos-ferreteria.gs',
-  'datos-kiosco.gs',
-  'datos-almacen.gs',
-];
+/** Todos los archivos del proyecto, en el orden en que se publican. */
+export const ALL_SOURCE_FILES: readonly string[] = APPS_SCRIPT_FILES;
 
 const outputSchema = z.object({ content: z.string() });
 const pageSchema = z.object({ html: z.string(), title: z.string() });
@@ -42,6 +34,15 @@ export type AppsScriptOptions = FakeOptions & {
 };
 
 export function loadAppsScript(options: AppsScriptOptions = {}, files = ALL_SOURCE_FILES) {
+  // Desde la raíz del repo, donde corre vitest (`import.meta.url` no sirve en un módulo de apoyo).
+  return loadAppsScriptCode(
+    files.map((file) => readFileSync(join(SOURCES_DIR, file), 'utf8')),
+    options,
+  );
+}
+
+/** Lo mismo con el código ya leído: cada elemento, como un archivo del proyecto. */
+export function loadAppsScriptCode(sources: readonly string[], options: AppsScriptOptions = {}) {
   const {
     sharedSecret,
     webAppUrl = 'https://script.google.com/macros/s/fake/exec',
@@ -90,9 +91,8 @@ export function loadAppsScript(options: AppsScriptOptions = {}, files = ALL_SOUR
     },
     Charts: { ChartType: { COLUMN: 'COLUMN' } },
   });
-  for (const file of files) {
-    // Desde la raíz del repo, donde corre vitest (`import.meta.url` no sirve en un módulo de apoyo).
-    vm.runInContext(readFileSync(join(SOURCES_DIR, file), 'utf8'), context);
+  for (const source of sources) {
+    vm.runInContext(source, context);
   }
 
   /** Evalúa una expresión en el contexto (para llamar a una función del proyecto). */

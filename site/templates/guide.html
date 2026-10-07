@@ -53,6 +53,16 @@
       a {
         color: inherit;
       }
+      .copy button {
+        font: inherit;
+        font-weight: 600;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: 1px solid currentColor;
+        background: var(--code);
+        color: inherit;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -63,7 +73,7 @@
         <a href="{{docsRoot}}llms.txt">llms.txt</a> ·
         <a href="{{docsRoot}}../../">Backends y canales</a>
       </header>
-      {{content}}
+      {{copy}} {{content}}
     </main>
   </body>
 </html>

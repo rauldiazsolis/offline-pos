@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildChannel } from './build-channel.ts';
 import { renderGuidePage } from './guide-page.ts';
+import { buildSheetsBundle } from './sheets-bundle.ts';
 
 const INFO = { version: '0.3.0', contract: '4.5.0', minBackendContract: '4.0.0' };
 
@@ -47,8 +48,7 @@ describe('buildChannel (#54)', () => {
     const llms = readFileSync(join(folder, 'docs', 'llms.txt'), 'utf8');
     expect(llms).not.toContain('../');
     expect(llms).toContain('](google-sheets/guia.md)');
-    expect(llms).toContain('](google-sheets/bridge.gs)');
-    expect(llms).toContain('](google-sheets/columnas.gs)');
+    expect(llms).toContain('](google-sheets/pos-sheets.gs)');
     expect(existsSync(join(folder, 'docs', 'connector-api.openapi.yaml'))).toBe(true);
     expect(readFileSync(join(folder, 'docs', 'index.html'), 'utf8')).toContain(
       '<h1>Guía para integradores</h1>',
@@ -56,31 +56,27 @@ describe('buildChannel (#54)', () => {
     expect(readdirSync(join(folder, 'docs')).filter((file) => file.endsWith('.gs'))).toEqual([]);
   });
 
-  it('publica el puente de Sheets y su guía en docs/google-sheets/ (#180)', () => {
+  it('publica el puente de Sheets en un solo archivo, con su guía, en docs/google-sheets/ (#219)', () => {
     const { distDir, siteDir } = fixture();
     const sheets = join(buildChannel({ distDir, siteDir, info: INFO }), 'docs', 'google-sheets');
 
-    expect(readdirSync(sheets).sort()).toEqual([
-      'bridge.gs',
-      'columnas.gs',
-      'guia.md',
-      'index.html',
-    ]);
-    for (const file of ['bridge.gs', 'columnas.gs']) {
-      expect(readFileSync(join(sheets, file), 'utf8')).toBe(
-        readFileSync(new URL(`../src/connectors/google-sheets/${file}`, import.meta.url), 'utf8'),
-      );
-    }
+    expect(readdirSync(sheets).sort()).toEqual(['guia.md', 'index.html', 'pos-sheets.gs']);
+    expect(readFileSync(join(sheets, 'pos-sheets.gs'), 'utf8')).toBe(
+      buildSheetsBundle({
+        sourcesDir: new URL('../src/connectors/google-sheets/', import.meta.url).pathname,
+        version: INFO.version,
+      }),
+    );
     const guide = readFileSync(join(sheets, 'guia.md'), 'utf8');
     expect(guide).not.toContain('src/');
-    expect(guide).toContain('](bridge.gs)');
-    expect(guide).toContain('](columnas.gs)');
+    expect(guide).toContain('](pos-sheets.gs)');
     expect(guide).toContain('](../guia.md)');
     expect(guide).toContain('](../connector-api.openapi.yaml)');
     const html = readFileSync(join(sheets, 'index.html'), 'utf8');
     expect(html).toContain('<h1>Google Sheets: el puente de Apps Script</h1>');
     expect(html).toContain('href="../connector-api.openapi.yaml"');
-    expect(html).toContain('href="bridge.gs"');
+    expect(html).toContain('href="pos-sheets.gs"');
+    expect(html).toContain('id="copiar"');
   });
 
   it('reemplaza el canal entero con una versión más nueva', () => {
@@ -114,6 +110,19 @@ describe('renderGuidePage', () => {
     expect(html).toContain('href="../connector-api.openapi.yaml"');
     expect(html).toContain('href="../llms.txt"');
     expect(html).toContain('href="../../../"');
+  });
+
+  it('con un archivo para copiar, el botón "Copiar el código", el link y su script', () => {
+    const html = renderGuidePage('# Google Sheets', '0.1.0', '../', 'pos-sheets.gs');
+    expect(html).toContain('<button type="button" id="copiar" disabled>Copiar el código</button>');
+    expect(html).toContain('<a href="pos-sheets.gs" download>pos-sheets.gs</a>');
+    expect(html).toContain("fetch('pos-sheets.gs')");
+  });
+
+  it('sin archivo para copiar, ni botón ni script', () => {
+    const html = renderGuidePage('# Guía para integradores', '0.1.0');
+    expect(html).not.toContain('id="copiar"');
+    expect(html).not.toContain('<script');
   });
 
   it('sin docsRoot, el encabezado es el de docs/', () => {
