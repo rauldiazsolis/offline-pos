@@ -2,25 +2,35 @@
 
 Backend completo para un micro-comercio sin ERP: el catálogo y las ventas viven en una planilla de
 Google Sheets. Implementa el puerto `Connector` (`src/sync/connector.ts`) contra un **puente Apps
-Script** (`bridge.gs` y `columnas.gs`) implementado como Web App, que habla el contrato **4.6.0**.
+Script** implementado como Web App, que habla el contrato **4.6.0**. Se publica en un solo archivo,
+`pos-sheets.gs` (lo arma `site/sheets-bundle.ts`), pero en el repo son varias partes, en el orden de
+`apps-script-files.ts`: el puente (`bridge.gs`), los textos de la planilla (`columnas.gs`), la
+inicialización (`inicio.gs`), el Tablero (`tablero.gs`), la home de la aplicación web (`home.gs`) y
+los datos de prueba de cada rubro (`datos-*.gs`).
 
 **Todo lo que ve quien usa el puente está en la guía pública,
 [`docs/integradores/google-sheets.md`](../../../docs/integradores/google-sheets.md)**, que se publica
-con los dos `.gs` en `/v4/docs/google-sheets/`: qué hace y qué no, instalar, permisos, Conectar el
-POS y la pestaña Configuración, el portal `/PLANILLA`, actualizar el puente, cómo se ve y se edita la
-planilla, qué guarda cada evento, el contrato del puente (transporte y acciones), el cursor del pull
-y las limitaciones. Este README queda para el desarrollo; las reglas del conector, en
+con `pos-sheets.gs` en `/v4/docs/google-sheets/`: qué hace y qué no, instalar, preparar la planilla,
+abrir el POS en cada terminal, el Tablero, la pestaña Configuración, probar de nuevo, el portal
+`/PLANILLA`, actualizar el puente, cómo se ve y se edita la planilla, qué guarda cada evento, el
+contrato del puente (transporte y acciones), el cursor del pull y las limitaciones. Este README queda para el desarrollo; las reglas del conector, en
 `src/connectors/AGENTS.md`.
 
-`bridge.gs` y `columnas.gs` se publican **tal cual**: sus comentarios no citan issues ni archivos del
-repo (lo vigila `site/docs.test.ts`), y la historia de cada versión del contrato vive en el historial
-de git, no en ellos.
+Los `.gs` se publican **tal cual** dentro de `pos-sheets.gs`: sus comentarios no citan issues ni
+archivos del repo (lo vigila `site/docs.test.ts`), y la historia de cada versión del contrato vive en
+el historial de git, no en ellos. Solo `doGet`, `doPost` y las tres acciones de la home
+(`posInicializar`, `posReiniciar`, `posAgregarTablero`) son públicas; todo lo demás termina en `_`,
+porque `google.script.run` puede llamar desde la página a cualquier otra función.
 
 ## Desarrollo
 
-`bridge.gs` y `columnas.gs` son JS plano para el motor V8 de Google — no pasan por TypeScript ni
-ESLint. Sí tienen tests automáticos (`bridge.test.ts`): se cargan en un contexto `node:vm` contra una
-planilla falsa en memoria (`src/test/fake-spreadsheet.ts`). El lado TS (`bridge-client.ts`,
+Los `.gs` son JS plano para el motor V8 de Google — no pasan por TypeScript ni ESLint (ni por
+prettier al guardar: están en `.prettierignore`; se formatean con
+`prettier --ignore-path /dev/null --parser babel`). Sí tienen tests automáticos (`bridge.test.ts`,
+`inicio.test.ts`, `tablero.test.ts`, `home.test.ts`, `datos.test.ts`): se cargan en un contexto
+`node:vm` (`src/test/apps-script.ts`) contra una planilla falsa en memoria
+(`src/test/fake-spreadsheet.ts`), que como Apps Script devuelve otro objeto por pestaña en cada
+llamada (se comparan por `getSheetId()`) y calcula `=SUM` con el separador del idioma. El lado TS (`bridge-client.ts`,
 `google-sheets-connector.ts`) se testea con `fetch` mockeado. **Lo que la planilla falsa no puede probar
 (CORS, formatos y fechas reales, permisos) se valida contra un despliegue real con este checklist:**
 
@@ -29,9 +39,10 @@ planilla falsa en memoria (`src/test/fake-spreadsheet.ts`). El lado TS (`bridge-
 Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejemplo para `pushBatch`:
 `{ action: 'pushBatch', payload: { deviceId: 'prueba', events: [{ type: 'sale', id: '01J...', createdAt: '…', origin: {}, sale: {...} }] }, idempotencyKey: '01J...' }`.
 
-1. Página: abrir `$URL` en el navegador → el nombre de la planilla, "contrato 4.6.0" y **Conectar el
-   POS**; el botón abre el POS en una pestaña nueva, con el wizard de `/CONFIG` en el paso Terminal,
-   el aviso "Conexión con la planilla precargada" y la URL del Web App en los datos del conector.
+1. Página: en una planilla nueva, abrir `$URL` → "Preparar la planilla"; prepararla con cada rubro
+   → la home preparada con el resumen, el Tablero primero y seleccionado, sin `#ERROR!` (también
+   con la planilla en inglés) y el link de L1 a `$URL`. "Abrir el POS" con un POS sin datos entra
+   directo a la venta, con la empresa, la sucursal y la caja; con datos, abre el wizard precargado.
 2. **CORS desde un navegador** (la asunción crítica del diseño). Abrir cualquier página `http(s)` (por
    ejemplo el POS con `pnpm build && pnpm preview`), DevTools > Console:
    ```js
@@ -70,8 +81,7 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     filas mezcladas.
 11. Provisión: borrar todas las pestañas del puente y llamar `pullBatch` → pestañas con
     encabezados en español, congeladas y en negrita, **sin filas ni columnas de sobra**
-    (`MovimientosCaja`: 2 filas × 12 columnas; `Productos`: 6 filas × 10 columnas con los 5 productos
-    de prueba).
+    (`MovimientosCaja`: 2 filas × 12 columnas; `Productos`: 2 filas × 10 columnas, vacía).
 12. Formato: Precio con miles y decimales, IVA como `21,0%`, Fecha como `dd/mm/aaaa hh:mm`, un código de
     barras con ceros a la izquierda no los pierde. Desplegables en Estado, Medio de pago y Tipo.
 13. Fechas: la hora que muestra `Fecha` coincide con la hora local de la venta en el POS. Si difiere,
@@ -81,9 +91,9 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     un `pushBatch` con `customer`/`sale` escribe en las columnas correctas.
 15. Borrar o renombrar `Precio` → `pullBatch` responde `ok: false` con "Falta la columna 'Precio' en la
     pestaña Productos". Borrar `Teléfono` → sigue funcionando.
-16. Convertir `Clientes` en tabla nativa (Formato > Convertir en tabla) y hacer un `pushBatch` con un
-    `customer` → anotar si la tabla se expande sola con la fila nueva. Si no, dejarlo como limitación
-    en la guía.
+16. Tablas nativas (Formato > Convertir en tabla): probado el 2026-10-07, una venta en Ventas como
+    tabla queda en una fila vacía ("No puedes configurar el formato de número de las celdas de una
+    columna con texto"). Es una limitación de la guía; no hace falta repetirlo.
 17. Planilla de una etapa anterior (encabezados viejos, sin `_PushLots`/`_Snapshot`): llamar cualquier
     acción → los encabezados pasan a español, los datos y valores viejos (`cash`, `cerrada`) se leen,
     las pestañas nuevas se crean solas y la anulación de una venta vieja (un `sale` con `voidsSaleId`)
@@ -109,10 +119,17 @@ Reemplazar `$URL` por la URL del Web App de una copia de prueba. Payload de ejem
     `/ANULAR` escribe la fila negativa con Anula a, deja la original en Anulada y en el siguiente pull
     el saldo del cliente vuelve a subir.
 
-23. Conectar el POS: en una planilla nueva, el primer request crea la pestaña Configuración al final,
-    con "URL del POS" y los pasos; cambiar "URL del POS" (por ejemplo a un POS local) y recargar la
-    página del paso 1 cambia adónde lleva el botón. En una copia de la planilla ("Hacer una copia" e
-    implementarla), el botón de la copia lleva la URL del Web App de la copia, no la de la original.
+23. Configuración: cambiar "URL del POS" (por ejemplo a un POS local) y recargar la página cambia
+    adónde lleva "Abrir el POS". En una copia de la planilla ("Hacer una copia" e implementarla), el
+    link de la copia lleva la URL del Web App de la copia, no la de la original.
+
+24. Reiniciar: con "Permitir reiniciar" = Sí, "Reiniciar la planilla" deja una sola "Hoja 1", la
+    planilla "Planilla sin inicializar" y el formulario; se puede preparar de nuevo. Sin el Sí, la
+    página no lo ofrece.
+
+25. Agregar el tablero: borrar la pestaña Tablero y recargar la página → "Agregar el tablero"; al
+    tocarlo, el Tablero vuelve primero, sin tocar las demás pestañas.
 
 Registrar el resultado de esta lista en el issue #87 (y, para el paso 18, en #96; para el 19, en #99;
-para el 20, en #120; para el 21, en #101; para el 22, en #180; para el 1 y el 23, en #133).
+para el 20, en #120; para el 21, en #101; para el 22, en #180; para el 23, en #133; para el 1, el 24
+y el 25, en #219).

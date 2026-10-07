@@ -12,8 +12,9 @@ reglas están acá.
 `connectors/rest/rest-fetch-connector.ts` es la implementación de referencia sobre `fetch`;
 `connectors/google-sheets/` implementa el mismo puerto contra una planilla de Google Sheets a través
 de un puente Apps Script (`bridge.gs`; lo que ve quien lo usa, en la guía pública
-`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus dos archivos
-(`bridge.gs` y `columnas.gs`) se pegan en el mismo proyecto de Apps Script: `columnas.gs` solo tiene
+`docs/integradores/google-sheets.md`, y el desarrollo, en el README del conector). Sus archivos
+(`apps-script-files.ts` tiene la lista y el orden) se publican juntos en `pos-sheets.gs`, que se pega
+en el `Código.gs` de la planilla (#219): `columnas.gs` solo tiene
 los textos visibles (etiquetas de columna y de valor, en español), `bridge.gs` trabaja con claves
 internas y encuentra cada columna por su encabezado, no por posición (Etapa 2d, #80); se prueban en
 Vitest con una planilla falsa (`src/test/fake-spreadsheet.ts`). Desde la Etapa 2 de #87, `bridge.gs` expone
@@ -60,9 +61,12 @@ copia nunca conecta a la original) y nunca viaja el secreto: la página es públ
 sale de la pestaña Configuración (`ensureConfigSheet_`: se crea al final con el índice explícito,
 solo si no existe; claves por texto con `readConfigValue_`; con la celda vacía o algo que no sea
 `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs` (`CONFIG_SHEET`, `CONFIG_LABELS`,
-`CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
-canal sirve los dos `.gs` con la guía en `/v4/docs/google-sheets/`, así que sus comentarios no citan
-issues ni archivos del repo (la versión del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`.
+`CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180, #219): el canal sirve
+`pos-sheets.gs` (`site/sheets-bundle.ts`: una cabecera con `@OnlyCurrentDoc` en el primer comentario
+y las instrucciones, y los `.gs` en orden) con la guía y "Copiar el código" en
+`/v4/docs/google-sheets/`, así que sus comentarios no citan issues ni archivos del repo (la versión
+del contrato sí: "4.0.0: …"); lo vigila `site/docs.test.ts`. Los `.gs` están en `.prettierignore`
+(se pegan tal cual): se formatean con `prettier --ignore-path /dev/null --parser babel`.
 Un cambio del puente que se ve desde afuera va también a la guía. Cada conector es dueño de su schema de config
 y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
