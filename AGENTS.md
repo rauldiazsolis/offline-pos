@@ -423,8 +423,10 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
   arman y sirven el sitio en local (`4174`); con `--only-local`, la home consulta solo los backends
   locales (lo usa el e2e, para no depender de uno publicado).
 - **Docs para integradores** en `docs/integradores/` (guía y `llms.txt`), publicadas con el OpenAPI en
-  `/v4/docs/`; la guía del puente de Google Sheets (`google-sheets.md`) va con `pos-sheets.gs` y el
-  botón "Copiar el código" en `/v4/docs/google-sheets/` (#180, #219). Los links se escriben para el repo y
+  `/v4/docs/`; el puente de Google Sheets tiene dos páginas (#221): el setup para el comercio
+  (`google-sheets.md`, con un índice, pasos e imágenes de `img/google-sheets/`), que va con
+  `pos-sheets.gs` y el botón "Copiar el código" en `/v4/docs/google-sheets/` (#180, #219), y la
+  referencia para integradores (`google-sheets-referencia.md`, en `referencia.html` al lado). Los links se escriben para el repo y
   `site/build-channel.ts` los localiza al publicar. Ni el OpenAPI, ni los `.gs`, ni la guía del
   puente llevan referencias internas (issues, specs, `AGENTS.md`, archivos del repo salvo los `.gs`):
   lo vigila `site/docs.test.ts`.
@@ -644,6 +646,7 @@ en el historial de git).
 | Epic #180, etapa B (#133) | "Conectar el POS": la página del Web App abre el POS con la planilla precargada en `/CONFIG` (sin secreto), y la pestaña Configuración con la URL del POS | PR #213 |
 | Epic #180, etapa C | El puente publicado: guía pública `docs/integradores/google-sheets.md` y `/v4/docs/google-sheets/` con los `.gs`, sin referencias internas | PR #216 |
 | #219 + #212 | La planilla lista en un paso: `pos-sheets.gs` (un archivo), la home que la prepara con datos de prueba de un rubro y el Tablero, "Abrir el POS" con la sucursal y la caja que el POS aplica solo, solo cinco funciones públicas, la Descripción de las líneas de producto y "Con Google Sheets" en la home del sitio | PR #220 |
+| #221 | La guía de Sheets en dos páginas: el setup al grano, con índice e imágenes (capturas reales de lo nuestro, SVG esquemáticos de Google), y la referencia para integradores | — |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
