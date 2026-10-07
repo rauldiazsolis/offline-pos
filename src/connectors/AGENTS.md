@@ -28,20 +28,22 @@ propio bridge de todos modos) — ver la guía del puente, "Cursor del pull". Co
 Punto de venta) en lo que escribe, Alta/Bloqueado/Motivo del bloqueo en Productos y Clientes (Alta se
 completa sola la primera vez que se lee la fila); `CuentaCorriente` pasa a ser el libro completo
 (holds confirmados, pagos a cuenta sin hold con su signo, cobranzas en negativo); `Turnos` sale del
-schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns` agrega al
+schema. Una planilla anterior se actualiza sola al redesplegar el puente: `ensureColumns_` agrega al
 final de cada pestaña existente las columnas **opcionales** que le faltan (una requerida que falta
 sigue siendo el error de siempre — agregarla vacía haría viajar productos a $0). Sheets procesa cada
 lote dentro del request: nunca informa `queued`/`processing`. Desde 4.6.0 (#180) el puente declara
 `customer-payment-void` y `portal` (comando `PLANILLA`) y la planilla como empresa; su acción liviana
 `portalLink` devuelve la URL de la planilla, y una cobranza anulada marca la original con Estado =
-Anulada, como una venta. Una línea de producto viaja sin descripción (contrato): `pushSale` escribe
-en Descripción el nombre que tiene en Productos al registrarse (`productNames`, una lectura por
+Anulada, como una venta. **Funciones públicas**: solo `doGet` y `doPost`; todo lo demás del puente termina en `_`. Desde la
+página del Web App (`HtmlService`), `google.script.run` llama a cualquier función cuyo nombre no
+termine en `_`, con los permisos del dueño y sin el secreto: lo vigila `bridge.test.ts` (#219). Una línea de producto viaja sin descripción (contrato): `pushSale_` escribe
+en Descripción el nombre que tiene en Productos al registrarse (`productNames_`, una lectura por
 request; un id que no está queda vacío, #212). "Conectar el POS" (#133): `doGet` es una página (`HtmlService`) con el
 nombre de la planilla, la versión y un botón que abre `<URL del POS>#connect=<base64url>` con
 `{ type: 'google-sheets', webAppUrl }`; `webAppUrl` sale de `ScriptApp.getService().getUrl()` (la de
 esa implementación: una copia nunca conecta a la original; sin permiso extra, verificado) y nunca
-viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet`: se crea al
-final con el índice explícito, solo si no existe; claves por texto con `readConfigValue`; con la celda
+viaja el secreto. La URL del POS sale de la pestaña Configuración (`ensureConfigSheet_`: se crea al
+final con el índice explícito, solo si no existe; claves por texto con `readConfigValue_`; con la celda
 vacía o algo que no sea `http(s)://`, `DEFAULT_POS_URL`); sus textos, en `columnas.gs`
 (`CONFIG_SHEET`, `CONFIG_LABELS`, `CONFIG_STEPS`). **Publicados tal cual** (etapa C de #180): el
 canal sirve los dos `.gs` con la guía en `/v4/docs/google-sheets/`, así que sus comentarios no citan

@@ -28,7 +28,7 @@ function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES)
     ...spreadsheetOptions
   } = options;
   const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
-  const context = vm.createContext({
+  const context: Record<string, unknown> = vm.createContext({
     SpreadsheetApp: spreadsheet.app(),
     ScriptApp: { getService: () => ({ getUrl: () => webAppUrl }) },
     HtmlService: {
@@ -88,7 +88,18 @@ function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES)
     return pageSchema.parse(vm.runInContext('doGet()', context));
   }
 
-  return { spreadsheet, call, raw, page };
+  return { spreadsheet, call, raw, page, context };
+}
+
+/**
+ * Las funciones que se pueden llamar desde afuera: desde una página de HtmlService,
+ * `google.script.run` llama a cualquier función del proyecto cuyo nombre no termine en `_`, con los
+ * permisos del dueño y sin el secreto compartido.
+ */
+function publicFunctions(context: Record<string, unknown>): string[] {
+  return Object.keys(context)
+    .filter((name) => typeof context[name] === 'function' && !name.endsWith('_'))
+    .sort();
 }
 
 /** Filas de datos no vacías de una pestaña, con las fechas como ISO para poder comparar. */
@@ -125,6 +136,14 @@ function pullBatch(
 ) {
   return call('pullBatch', { cursors, pendingLotIds });
 }
+
+describe('seguridad', () => {
+  it('solo doGet y doPost son públicas: el resto no se puede llamar con google.script.run', () => {
+    const { context } = loadBridge();
+
+    expect(publicFunctions(context)).toEqual(['doGet', 'doPost']);
+  });
+});
 
 describe('arnés (humo contra el puente actual)', () => {
   it('provisiona las pestañas al primer request y devuelve los productos sembrados', () => {
