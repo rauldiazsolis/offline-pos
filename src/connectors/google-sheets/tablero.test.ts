@@ -109,6 +109,22 @@ describe('el Tablero al preparar la planilla', () => {
     expect(formula(tablero, 'L8')).toContain('"select * where Col2 <> 0"');
   });
 
+  it('en L1, un link a la página de la planilla, para abrir el POS en una caja', () => {
+    const { tablero } = preparada();
+
+    expect(formula(tablero, 'L1')).toBe(
+      '=HYPERLINK("https://script.google.com/macros/s/fake/exec","Abrir el POS en una caja →")',
+    );
+  });
+
+  it('en español, el link también con ";"', () => {
+    const { tablero } = preparada('es');
+
+    expect(formula(tablero, 'L1')).toBe(
+      '=HYPERLINK("https://script.google.com/macros/s/fake/exec";"Abrir el POS en una caja →")',
+    );
+  });
+
   it('un gráfico de columnas con lo vendido por día, debajo de la tabla', () => {
     const { tablero } = preparada();
 

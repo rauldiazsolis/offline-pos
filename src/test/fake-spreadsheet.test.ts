@@ -19,7 +19,7 @@ describe('FakeSpreadsheet: pestañas', () => {
     sheet.setName('Tablero');
 
     expect(spreadsheet.getSheetByName('Hoja 1')).toBeNull();
-    expect(spreadsheet.getSheetByName('Tablero')).toBe(sheet);
+    expect(spreadsheet.getSheetByName('Tablero')?.getSheetId()).toBe(sheet.getSheetId());
   });
 
   it('deleteSheet la saca, pero nunca la última', () => {
@@ -45,7 +45,7 @@ describe('FakeSpreadsheet: pestañas', () => {
     spreadsheet.moveActiveSheet(1);
 
     expect(spreadsheet.sheetNames()).toEqual(['C', 'A', 'B']);
-    expect(spreadsheet.getActiveSheet()).toBe(c);
+    expect(spreadsheet.getActiveSheet()?.getSheetId()).toBe(c.getSheetId());
   });
 
   it('cada pestaña tiene un id propio que no cambia al renombrarla', () => {
@@ -58,6 +58,40 @@ describe('FakeSpreadsheet: pestañas', () => {
 
     expect(a.getSheetId()).toBe(id);
     expect(b.getSheetId()).not.toBe(id);
+  });
+
+  it('como Apps Script, cada llamada devuelve otro objeto para la misma pestaña: se compara por id', () => {
+    const spreadsheet = new FakeSpreadsheet();
+    const insertada = spreadsheet.insertSheet('A');
+    const [deGetSheets] = spreadsheet.getSheets();
+    const deGetSheetByName = spreadsheet.getSheetByName('A');
+
+    expect(deGetSheets).not.toBe(deGetSheetByName);
+    expect(deGetSheets).not.toBe(insertada);
+    expect(deGetSheets?.getSheetId()).toBe(insertada.getSheetId());
+    // Pero es la misma pestaña: lo que se hace con uno se ve en el otro.
+    deGetSheets?.getRange('A1').setValue('x');
+    insertada.setName('B');
+    expect(deGetSheetByName?.getRange('A1').getValue()).toBe('x');
+    expect(spreadsheet.sheetNames()).toEqual(['B']);
+  });
+
+  it('deleteSheet y setActiveSheet aceptan cualquiera de los objetos de la pestaña', () => {
+    const spreadsheet = new FakeSpreadsheet();
+    spreadsheet.insertSheet('A');
+    spreadsheet.insertSheet('B');
+
+    const b = spreadsheet.getSheets()[1];
+    const a = spreadsheet.getSheetByName('A');
+    if (b === undefined || a === null) {
+      throw new Error('Faltan las pestañas');
+    }
+
+    spreadsheet.setActiveSheet(b);
+    spreadsheet.moveActiveSheet(1);
+    spreadsheet.deleteSheet(a);
+
+    expect(spreadsheet.sheetNames()).toEqual(['B']);
   });
 
   it('rename cambia el nombre de la planilla', () => {

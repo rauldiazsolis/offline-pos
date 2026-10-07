@@ -71,7 +71,7 @@ describe('posInicializar: la planilla', () => {
       '_PushLots',
       '_Snapshot',
     ]);
-    expect(app.spreadsheet.getSheetByName('Tablero')).toBe(hoja1);
+    expect(app.spreadsheet.getSheetByName('Tablero')?.getSheetId()).toBe(hoja1?.getSheetId());
   });
 
   it('la planilla toma el nombre del comercio y Configuración guarda lo del formulario', () => {

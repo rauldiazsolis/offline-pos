@@ -57,6 +57,16 @@ function crearTablero_(planilla, comercio, hoja) {
     )
     .setFontColor('#6b7280');
 
+  // Un atajo a la home (la página de esta planilla), para abrir el POS en una caja. La URL es la de
+  // la implementación que está armando el Tablero; las comillas no pueden aparecer en ella.
+  var home = ScriptApp.getService().getUrl();
+  if (home) {
+    hoja
+      .getRange('L1')
+      .setFormula(formula_('=HYPERLINK("' + home + '";"Abrir el POS en una caja →")'))
+      .setFontWeight('bold');
+  }
+
   // Indicadores.
   var hoy = '">="&TODAY()';
   var manana = '"<"&(TODAY()+1)';

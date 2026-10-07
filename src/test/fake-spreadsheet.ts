@@ -430,11 +430,34 @@ export class FakeSpreadsheet {
     });
   }
 
+  /**
+   * Como en Apps Script, cada llamada devuelve otro objeto para la misma pestaña (con el mismo
+   * comportamiento): dos pestañas se comparan por `getSheetId()`, nunca con `===`.
+   */
+  private handle(sheet: FakeSheet): FakeSheet {
+    return new Proxy(sheet, {
+      get: (target, property) => {
+        const value: unknown = Reflect.get(target, property, target);
+        if (typeof value !== 'function') {
+          return value;
+        }
+        const method = value as (...args: unknown[]) => unknown;
+        return method.bind(target);
+      },
+      set: (target, property, value) => Reflect.set(target, property, value, target),
+    });
+  }
+  /** La pestaña de verdad detrás de cualquiera de sus objetos. */
+  private find(sheet: FakeSheet): FakeSheet | undefined {
+    return this.sheets.find((own) => own.getSheetId() === sheet.getSheetId());
+  }
+
   getSheetByName(name: string): FakeSheet | null {
-    return this.sheets.find((sheet) => sheet.getName() === name) ?? null;
+    const sheet = this.sheets.find((own) => own.getName() === name);
+    return sheet === undefined ? null : this.handle(sheet);
   }
   getSheets(): FakeSheet[] {
-    return [...this.sheets];
+    return this.sheets.map((sheet) => this.handle(sheet));
   }
   /**
    * Con índice (desde 0), en esa posición. Sin índice, al final: el Sheets real la pone al lado de
@@ -448,7 +471,7 @@ export class FakeSpreadsheet {
     );
     this.sheets.splice(index ?? this.sheets.length, 0, sheet);
     this.active = sheet;
-    return sheet;
+    return this.handle(sheet);
   }
   /** Solo tests: una pestaña "ya existente" con exactamente estas filas. */
   addSheet(name: string, rows: unknown[][]): FakeSheet {
@@ -461,10 +484,11 @@ export class FakeSpreadsheet {
     return sheet;
   }
   /** Como Sheets: nunca la última. */
-  deleteSheet(sheet: FakeSheet): void {
-    const index = this.sheets.indexOf(sheet);
-    if (index === -1) {
-      throw new Error(`La pestaña ${sheet.getName()} no es de esta planilla`);
+  deleteSheet(handle: FakeSheet): void {
+    const sheet = this.find(handle);
+    const index = sheet === undefined ? -1 : this.sheets.indexOf(sheet);
+    if (sheet === undefined || index === -1) {
+      throw new Error(`La pestaña ${handle.getName()} no es de esta planilla`);
     }
     if (this.sheets.length === 1) {
       throw new Error('No se puede borrar la única pestaña de la planilla');
@@ -474,12 +498,12 @@ export class FakeSpreadsheet {
       this.active = this.sheets[0] ?? null;
     }
   }
-  setActiveSheet(sheet: FakeSheet): FakeSheet {
-    this.active = sheet;
-    return sheet;
+  setActiveSheet(handle: FakeSheet): FakeSheet {
+    this.active = this.find(handle) ?? null;
+    return handle;
   }
   getActiveSheet(): FakeSheet | null {
-    return this.active;
+    return this.active === null ? null : this.handle(this.active);
   }
   /** Mueve la pestaña activa a esa posición (desde 1). */
   moveActiveSheet(position: number): void {

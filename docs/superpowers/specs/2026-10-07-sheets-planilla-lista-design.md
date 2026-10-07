@@ -130,6 +130,8 @@ Pestaña "Tablero" con fórmulas vivas, armadas con las columnas que el puente e
 
 - A1 el comercio; A2 "Se actualiza solo con cada venta que llega del POS. Los montos ya descuentan
   las anulaciones."
+- L1 "Abrir el POS en una caja →", un link (`HYPERLINK`) a la home: la URL de la implementación que
+  arma el Tablero (pedido del usuario en la prueba del 2026-10-07).
 - Indicadores (fila 4 el título, fila 5 el valor): Vendido hoy (A), Tickets hoy (C), Vendido en 7
   días (E) y Fiado pendiente (L, arriba de "Fiado por cliente"). Lo vendido sale de Pagos (las
   anulaciones restan solas); los tickets, de los ids distintos de Ventas.

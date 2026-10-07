@@ -107,8 +107,10 @@ function posReiniciar() {
     }
     var planilla = SpreadsheetApp.getActiveSpreadsheet();
     var nueva = planilla.getSheetByName(HOJA_NUEVA) || planilla.insertSheet(HOJA_NUEVA, 0);
+    // Por id: Apps Script devuelve otro objeto en cada llamada, así que `!==` borraría también la
+    // nueva (y Sheets frena al llegar a la última pestaña visible).
     planilla.getSheets().forEach(function (hoja) {
-      if (hoja !== nueva) planilla.deleteSheet(hoja);
+      if (hoja.getSheetId() !== nueva.getSheetId()) planilla.deleteSheet(hoja);
     });
     planilla.rename(PLANILLA_SIN_INICIALIZAR);
   });
