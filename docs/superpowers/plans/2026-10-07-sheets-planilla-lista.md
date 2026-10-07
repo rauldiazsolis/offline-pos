@@ -23,10 +23,11 @@ las `var` globales no se pueden llamar y quedan). Test en `bridge.test.ts`: la l
 funciones públicas del contexto después de cargar los archivos. Los tests que llaman funciones
 internas por nombre se actualizan.
 
-## Tarea 3: sin `SEED` y los pasos nuevos de Configuración
+## Tarea 3: sin `SEED`
 
-Sale `SEED` (las pestañas nacen vacías) y `CONFIG_STEPS` describe el flujo nuevo. Se ajustan los
-tests que contaban con los productos de ejemplo (el de #212 siembra su propio producto).
+Sale `SEED` (las pestañas nacen vacías). Los tests que contaban con los productos de ejemplo cargan
+su propio catálogo (`seedCatalog`). `CONFIG_STEPS` pasa a la tarea 7: describe la home, que todavía
+no existe.
 
 ## Tarea 4: los datos de prueba
 
@@ -47,7 +48,8 @@ Tests de la spec ("Tablero").
 
 ## Tarea 7: la home
 
-`home.gs`: `estadoDeLaHome_`, `doGet` y la página (sale el `doGet` de `bridge.gs`). Tests del estado
+`home.gs`: `estadoDeLaHome_`, `doGet` y la página (sale el `doGet` de `bridge.gs`), y `CONFIG_STEPS`
+con el flujo nuevo. Tests del estado
 y de la página con jsdom: formulario, preparar, link al POS con la caja, reiniciar, agregar el
 tablero. Lista de funciones públicas final (`doGet`, `doPost`, `posInicializar`, `posReiniciar`,
 `posAgregarTablero`) sobre todos los archivos.

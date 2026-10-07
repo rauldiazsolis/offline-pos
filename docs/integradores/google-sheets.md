@@ -52,8 +52,8 @@ En los dos casos, después:
 permisos y solo expone las acciones del puente. Es la única forma de que el POS escriba sin que nadie
 tenga que iniciar sesión en Google. Con `SHARED_SECRET`, además, hace falta conocer el secreto.
 
-En el primer pedido del POS, el puente crea las pestañas que falten (con datos de prueba en
-Productos y Clientes, si las crea él) y, al final, la pestaña **Configuración**.
+En el primer pedido del POS, el puente crea las pestañas que falten, vacías, y, al final, la pestaña
+**Configuración**.
 
 ## Conectar el POS
 

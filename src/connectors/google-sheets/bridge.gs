@@ -188,80 +188,6 @@ function columns_(defs) {
   });
 }
 
-// Datos de prueba: solo se siembran cuando esta llamada CREA la pestaña. Claves internas.
-var SEED = {
-  Productos: [
-    {
-      id: 'p-001',
-      sku: 'SKU-001',
-      barcodes: '7790001000011',
-      name: 'Gaseosa cola 500ml',
-      price: 1200,
-      taxRate: 0.21,
-      category: 'bebidas',
-    },
-    {
-      id: 'p-002',
-      sku: 'SKU-002',
-      barcodes: '7790001000028,7790001000035',
-      name: 'Alfajor triple',
-      price: 900,
-      taxRate: 0.21,
-      category: 'golosinas',
-    },
-    {
-      id: 'p-003',
-      sku: 'SKU-003',
-      barcodes: '7790001000042',
-      name: 'Yerba 1kg',
-      price: 4500,
-      taxRate: 0.21,
-      category: 'almacen',
-    },
-    {
-      id: 'p-004',
-      sku: 'SKU-004',
-      barcodes: '',
-      name: 'Pan (kg)',
-      price: 2200,
-      taxRate: 0.105,
-      category: 'panaderia',
-    },
-    {
-      id: 'p-005',
-      sku: 'SKU-005',
-      barcodes: '7790001000059',
-      name: 'Agua mineral 1.5L',
-      price: 1100,
-      taxRate: 0.21,
-      category: 'bebidas',
-    },
-  ],
-  Clientes: [
-    {
-      id: 'c-001',
-      name: 'Ana Gómez',
-      document: '30111222',
-      phone: '1155501234',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'c-002',
-      name: 'Carlos Ruiz',
-      document: '',
-      phone: '',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-    {
-      id: 'c-003',
-      name: 'Lucía Fernández',
-      document: '27333444',
-      phone: '1155505678',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    },
-  ],
-};
-
 // Contrato batch: dos operaciones, nada de acciones por recurso/evento. Las funciones de
 // abajo (pushSale_, pullProducts_, etc.) siguen existiendo, pero solo como piezas internas que
 // pushBatchAction_/pullBatchAction_ llaman — no son alcanzables desde afuera.
@@ -558,9 +484,6 @@ function createSheet_(spreadsheet, name) {
   template.setDataValidations([defs.map(validationFor_)]);
   if (name === '_PushLots' || name === '_Snapshot') {
     sheet.hideSheet();
-  }
-  if (SEED[name]) {
-    appendObjects_(name, SEED[name]);
   }
 }
 
