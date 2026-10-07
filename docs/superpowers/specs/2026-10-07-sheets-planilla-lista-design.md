@@ -78,12 +78,16 @@ Una sola página de `HtmlService` que se dibuja con el estado que le pasa el ser
 
 Con el cerrojo del script (el mismo de `doPost`), y negándose si la planilla ya está inicializada:
 
-1. Crea las pestañas del puente (`ensureSheetsExist`), sin datos de ejemplo (sale `SEED`).
-2. Borra las hojas vacías de una planilla nueva ("Hoja 1").
+1. La primera hoja vacía de una planilla nueva ("Hoja 1") pasa a llamarse Tablero, y las otras
+   vacías se borran. El script no puede elegir qué pestaña ve quien ya tiene la planilla abierta
+   (probado: al borrar "Hoja 1", Sheets lo pasaba a Productos); renombrándola, termina viendo el
+   Tablero. Quien la abre después entra por "Abrir la planilla", con el `#gid=` del Tablero.
+2. Crea las pestañas del puente (`ensureSheetsExist`), sin datos de ejemplo (sale `SEED`).
 3. Renombra la planilla con el comercio: es la empresa que muestra el POS (`info.company`).
 4. Escribe en Configuración, arriba: Comercio, Sucursal, Caja y "Permitir reiniciar" = No.
 5. Si se eligió un modelo, carga sus datos (abajo).
-6. Crea el Tablero, primero en el orden: Tablero, Productos, Clientes, Ventas, Pagos,
+6. Arma el Tablero (en la hoja renombrada, o en una nueva si no había ninguna vacía), primero en el
+   orden: Tablero, Productos, Clientes, Ventas, Pagos,
    CuentaCorriente, MovimientosCaja, Cobranzas, Configuración (y las dos ocultas).
 
 Devuelve el estado de la home con el resumen ("Ferretería: 42 productos, 7 clientes, 150 ventas, 1
@@ -178,7 +182,7 @@ Pestaña "Tablero" con fórmulas vivas, armadas con las columnas que el puente e
   que suma lo que usa lo nuevo: `getSheets`, `deleteSheet`, `rename`, `setActiveSheet`,
   `moveActiveSheet`, `getSheetId`, rangos en notación A1, `setFormula`, `getValue`, `clear`,
   `setFontSize`, `setFontColor`, `setColumnWidth` y un `newChart`/`insertChart` de mentira.
-- **Inicialización**: crea las pestañas en orden y borra "Hoja 1"; renombra; escribe Configuración;
+- **Inicialización**: crea las pestañas en orden y "Hoja 1" pasa a ser el Tablero; renombra; escribe Configuración;
   se niega si ya está inicializada; vacía no carga nada. Con cada rubro: los totales de cada venta
   coinciden con sus pagos, los tickets son correlativos por día, hay exactamente una anulación (también
   si el día elegido cae cerrado), ningún código de barras repetido, ningún cobro al bloqueado, y un

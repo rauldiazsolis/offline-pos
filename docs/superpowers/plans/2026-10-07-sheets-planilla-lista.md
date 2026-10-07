@@ -3,9 +3,9 @@
 Spec: `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`. Rama
 `claude/vibrant-pasteur-000khw`, que ya tiene la vuelta con sucursal y caja y el #212. Se ejecuta
 inline, tarea por tarea; cada tarea termina con `pnpm lint && pnpm typecheck && pnpm test` (y
-`pnpm build` donde toca el sitio) y su commit. El prototipo de referencia (`pos-sheets.gs` v5 y sus
-partes) está en el scratchpad de la sesión; se porta, no se copia: con tests y con los nombres
-privados.
+`pnpm build` donde toca el sitio) y su commit. El prototipo de referencia (`pos-sheets.gs` y sus partes)
+está en `docs/superpowers/prototipo-sheets/`; se porta, no se copia: con tests y con los nombres
+privados. Esa carpeta se borra en el PR, como este plan.
 
 ## Tarea 1: la planilla falsa sabe lo que usa lo nuevo
 
@@ -69,4 +69,5 @@ conector, `src/connectors/AGENTS.md` y `AGENTS.md` (Connector API, estado del pr
 `package.json` a `0.7.0`.
 
 **Checkpoint final**: informe y prueba manual; después, revisión del usuario, PR (Closes #219,
-Closes #212) y el tag con `pnpm release:tag` cuando el usuario lo decida. El plan se borra en el PR.
+Closes #212) y el tag con `pnpm release:tag` cuando el usuario lo decida. El plan y
+`docs/superpowers/prototipo-sheets/` se borran en el PR.
