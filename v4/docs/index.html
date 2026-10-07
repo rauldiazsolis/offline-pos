@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Guía para integradores · offline-pos 0.7.0</title>
+    <title>Guía para integradores · offline-pos 0.8.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -11,6 +11,7 @@
         --fg: #1a1a1a;
         --muted: #666;
         --code: #f3f3f3;
+        --border: #ddd;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -18,6 +19,7 @@
           --fg: #e8e8e8;
           --muted: #999;
           --code: #262626;
+          --border: #3a3a3a;
         }
       }
       body {
@@ -53,6 +55,19 @@
       a {
         color: inherit;
       }
+      img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 8px 0 4px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      h2 {
+        margin-top: 2.5em;
+        padding-top: 0.5em;
+        border-top: 1px solid var(--border);
+      }
       .copy button {
         font: inherit;
         font-weight: 600;
@@ -68,7 +83,7 @@
   <body>
     <main>
       <header>
-        offline-pos 0.7.0 · <a href="guia.md">Markdown</a> ·
+        offline-pos 0.8.0 · <a href="guia.md">Markdown</a> ·
         <a href="connector-api.openapi.yaml">OpenAPI</a> ·
         <a href="llms.txt">llms.txt</a> ·
         <a href="../../">Backends y canales</a>
@@ -82,7 +97,7 @@ ningún backend en particular. Se conecta a cualquier sistema (ERP, e-commerce, 
 inventario) que implemente el <strong>Connector API</strong>, un contrato REST/JSON versionado. Esta guía
 acompaña a la versión del contrato <strong>4.6.0</strong>; el detalle de cada operación está en
 <a href="connector-api.openapi.yaml"><code>connector-api.openapi.yaml</code></a>.</p>
-<h2>Probarlo en 5 minutos</h2>
+<h2 id="probarlo-en-5-minutos">Probarlo en 5 minutos</h2>
 <p>El repo incluye un <strong>demo-backend</strong>: la implementación de referencia del contrato, en Node y
 SQLite, sin dependencias externas.</p>
 <ol>
@@ -109,7 +124,7 @@ Configuración del sitio → &quot;Acceso a la red local&quot; → Permitir, y r
 </ol>
 <p>El POS arranca en modo demo, ya conectado, con un catálogo de ejemplo. El navegador de referencia es
 Chromium (Chrome, Edge); el POS anda en Firefox y Safari, pero se prueba en Chromium.</p>
-<h2>Cómo entra un comercio: el link de demo y el alta</h2>
+<h2 id="cómo-entra-un-comercio-el-link-de-demo-y-el-alta">Cómo entra un comercio: el link de demo y el alta</h2>
 <p>Un comercio llega al POS por un <strong>link de demo</strong> que arma el backend:</p>
 <pre><code>&lt;pos&gt;/?demo=true&amp;backend=&lt;base URL&gt;&amp;template=&lt;opcional&gt;
 </code></pre>
@@ -140,7 +155,7 @@ ofrece demos conviene que limite los pedidos por IP (<code>429</code> con <code>
 <code>{ &quot;code&quot;: &quot;rate-limited&quot; }</code>) y la cantidad de demos abiertas (<code>503</code> con
 <code>{ &quot;code&quot;: &quot;demo-capacity&quot; }</code>). El POS muestra un mensaje claro (&quot;probá de nuevo en 10 minutos&quot;) y no
 reintenta solo.</p>
-<h2>Implementar el contrato</h2>
+<h2 id="implementar-el-contrato">Implementar el contrato</h2>
 <p>Principio central: <strong>el backend nunca rechaza el contenido de lo que manda el POS</strong>. No hay forma de
 que una venta, un cliente o un movimiento de caja sea &quot;rechazado&quot; de forma síncrona: el backend
 registra todo y audita, y una inconsistencia se resuelve de su lado o a mano. Para avisarle algo al
@@ -194,14 +209,14 @@ contestar el preflight de red privada (<code>Access-Control-Allow-Private-Networ
 <code>Access-Control-Expose-Headers: Retry-After</code>: si no, el navegador no se lo deja leer al POS.</p>
 <p>El detalle de cada operación, sus esquemas y ejemplos está en
 <a href="connector-api.openapi.yaml"><code>connector-api.openapi.yaml</code></a>.</p>
-<h2>Mantenimiento</h2>
+<h2 id="mantenimiento">Mantenimiento</h2>
 <p>Mientras el backend no puede atender (por ejemplo, migrando su base), <code>GET /info</code> responde <code>200</code> con
 <code>status: maintenance</code> (y un <code>message</code> opcional), y los demás endpoints responden <code>503</code> con
 <code>{ &quot;code&quot;: &quot;maintenance&quot;, &quot;message&quot;: &quot;…&quot; }</code> y <code>Retry-After</code>. El POS no pierde nada: sin ack, el lote
 sigue en la terminal con su mismo <code>Idempotency-Key</code>. Deja de sincronizar, muestra el mantenimiento en
 la barra de estado y vuelve a consultar <code>/info</code> hasta que el backend vuelva a <code>ok</code>. La venta nunca se
 bloquea.</p>
-<h2>Compatibilidad y capacidades</h2>
+<h2 id="compatibilidad-y-capacidades">Compatibilidad y capacidades</h2>
 <p>Un backend es compatible con el POS si habla el <strong>mismo major</strong> y un <strong>minor igual o mayor que el
 piso 4.0.0</strong>. Un agregado nuevo del contrato no obliga a todos los backends a actualizarse.</p>
 <p>Lo que un backend hace más allá del piso lo declara como <strong>capacidad</strong> en <code>GET /info</code>
@@ -229,7 +244,7 @@ piso 4.0.0</strong>. Un agregado nuevo del contrato no obliga a todos los backen
 <p>El POS nunca deduce una capacidad de la versión, e ignora una capacidad que no conoce. Las reglas de
 evolución (campos y valores desconocidos, fotos completas, numeración con huecos) están en la sección
 &quot;Reglas de evolución&quot; del OpenAPI.</p>
-<h2>Portal: entrar al backend desde el POS</h2>
+<h2 id="portal-entrar-al-backend-desde-el-pos">Portal: entrar al backend desde el POS</h2>
 <p>Con la capacidad <code>portal</code>, el cajero abre el backend en una pestaña nueva con un comando y un botón
 del POS. El backend los declara en <code>GET /info</code>:</p>
 <pre><code class="language-json">&quot;capabilities&quot;: [&quot;demo-sessions&quot;, &quot;portal&quot;],
@@ -249,14 +264,15 @@ recomienda un solo uso y un vencimiento corto (60 segundos).</li>
 </ul>
 <p>El demo-backend lo implementa con <code>/PANEL</code>: un link de un solo uso que vence a los 60 segundos y
 muestra con qué caja se entró.</p>
-<h2>Google Sheets: un backend sin servidor</h2>
+<h2 id="google-sheets-un-backend-sin-servidor">Google Sheets: un backend sin servidor</h2>
 <p>Un comercio sin sistema propio puede usar una planilla de Google Sheets como backend, sin servidor y
 sin costo: un puente de Apps Script, pegado en la planilla e implementado como aplicación web, habla
 el mismo contrato que un backend REST (con otro transporte, porque Apps Script no expone headers) y
 guarda cada venta, cobranza y movimiento de caja en sus pestañas.</p>
-<p>Cómo instalarlo, conectar el POS desde la planilla, actualizarlo y qué guarda cada pestaña está en
-la <a href="google-sheets/">guía del puente de Google Sheets</a>, junto a sus dos archivos.</p>
-<h2>Servir el POS desde tu propio servidor</h2>
+<p>Cómo instalarlo, conectar las cajas y actualizarlo, paso a paso, está en el
+<a href="google-sheets/">setup de Google Sheets</a>, junto a <code>pos-sheets.gs</code>; qué guarda cada pestaña, el
+contrato del puente y sus limitaciones, en la <a href="google-sheets/referencia.html">referencia del puente</a>.</p>
+<h2 id="servir-el-pos-desde-tu-propio-servidor">Servir el POS desde tu propio servidor</h2>
 <p>El POS es un build estático. Una versión exacta sale de los
 <a href="https://github.com/rauldiazsolis/offline-pos/tags">tags del repo</a>: <code>git checkout vX.Y.Z</code>,
 <code>pnpm install</code> y <code>pnpm build</code>, y el resultado queda en <code>dist/</code>. Para servirlo en tu infraestructura:</p>
@@ -274,7 +290,7 @@ arreglo.</li>
 propio service worker. Cambiar de carpeta o de dominio es una <strong>instalación nueva</strong>: lo que no se
 llegó a sincronizar queda en la carpeta anterior. Antes de cambiar, sincronizá.</li>
 </ul>
-<h2>Aparecer en la home</h2>
+<h2 id="aparecer-en-la-home">Aparecer en la home</h2>
 <p>La home del sitio publicado lista los backends conocidos, cada uno con su contrato, sus capacidades
 y su link de demo al canal de su major (o el motivo de la incompatibilidad). Para sumar el tuyo,
 abrí un PR a

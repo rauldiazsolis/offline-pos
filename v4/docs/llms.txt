@@ -9,5 +9,6 @@ Para implementar un backend: leer primero la guía (qué es el POS, cómo probar
 - [Guía para integradores](guia.md): probarlo, link de demo y alta, operaciones del contrato, mantenimiento, compatibilidad, portal, Google Sheets, servir el POS en tu servidor.
 - [Guía en HTML](index.html): la misma guía para leer en el navegador.
 - [Connector API (OpenAPI 3.1)](connector-api.openapi.yaml): el contrato completo.
-- [Google Sheets: el puente de Apps Script](google-sheets/guia.md): una planilla como backend sin servidor; instalarlo, conectar el POS, actualizarlo, qué guarda cada pestaña y el contrato del puente.
+- [Google Sheets: conectar el POS a una planilla](google-sheets/guia.md): una planilla como backend sin servidor, paso a paso: instalar el puente, preparar la planilla, conectar cada caja, actualizar, volver a empezar y el secreto opcional.
+- [Google Sheets: referencia del puente](google-sheets/referencia.md): qué hace y qué no, permisos, cómo se edita la planilla, qué guarda cada evento, el contrato del puente y sus limitaciones.
 - [pos-sheets.gs](google-sheets/pos-sheets.gs): el puente de Apps Script en un solo archivo, que se pega en el Código.gs de la planilla.

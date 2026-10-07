@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="430" viewBox="0 0 760 430" role="img">
+<title>Nueva implementación: Aplicación web, Ejecutar como Yo, acceso de Cualquier persona</title>
+<rect x="0.5" y="0.5" width="759" height="429" rx="10" fill="#fff" stroke="#c4c7c5" stroke-width="1"/>
+<path d="M1 36 V10.5 A10 10 0 0 1 11 0.5 H749 A10 10 0 0 1 759 10.5 V36 Z" fill="#f1f3f4"/>
+<line x1="1" y1="36" x2="759" y2="36" stroke="#dadce0"/>
+<circle cx="18" cy="18" r="5.5" fill="#ff5f57"/>
+<circle cx="36" cy="18" r="5.5" fill="#febc2e"/>
+<circle cx="54" cy="18" r="5.5" fill="#28c840"/>
+<rect x="80" y="8" width="660" height="20" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="94" y="22" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">script.google.com/home/projects/…/edit</text>
+<rect x="1" y="37" width="758" height="392" fill="#80868b" opacity=".35"/>
+<rect x="40" y="56" width="680" height="356" rx="8" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="64" y="92" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="400" fill="#202124" text-anchor="start">Nueva implementación</text>
+<line x1="270" y1="112" x2="270" y2="352" stroke="#dadce0"/>
+<text x="64" y="136" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#202124" text-anchor="start">Seleccionar tipo</text>
+<g transform="translate(236 131)">
+<circle r="9" fill="none" stroke="#5f6368" stroke-width="3" stroke-dasharray="4 3"/>
+<circle r="4" fill="#5f6368"/>
+</g>
+<rect x="220" y="115" width="32" height="32" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="252" cy="115" r="12" fill="#e8590c"/>
+<text x="252" y="120" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<rect x="56" y="152" width="200" height="32" rx="16" fill="#e8f0fe" stroke="#e8f0fe" stroke-width="1"/>
+<text x="74" y="173" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#1967d2" text-anchor="start">Aplicación web</text>
+<rect x="52" y="148" width="208" height="40" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="260" cy="148" r="12" fill="#e8590c"/>
+<text x="260" y="153" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="294" y="136" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#202124" text-anchor="start">Configuración</text>
+<text x="294" y="164" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">Descripción</text>
+<rect x="294" y="170" width="400" height="30" rx="4" fill="#fff" stroke="#80868b" stroke-width="1"/>
+<text x="294" y="224" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600" fill="#202124" text-anchor="start">Aplicación web</text>
+<text x="294" y="248" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">Ejecutar como</text>
+<rect x="294" y="254" width="400" height="34" rx="4" fill="#fff" stroke="#80868b" stroke-width="1"/>
+<text x="304" y="276" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Yo (tu cuenta de Google)</text>
+<text x="678" y="276" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#5f6368" text-anchor="start">▾</text>
+<rect x="290" y="250" width="408" height="42" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="698" cy="250" r="12" fill="#e8590c"/>
+<text x="698" y="255" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="294" y="310" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">Quién tiene acceso</text>
+<rect x="294" y="316" width="400" height="34" rx="4" fill="#fff" stroke="#80868b" stroke-width="1"/>
+<text x="304" y="338" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#202124" text-anchor="start">Cualquier persona</text>
+<text x="678" y="338" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#5f6368" text-anchor="start">▾</text>
+<rect x="290" y="312" width="408" height="42" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="698" cy="312" r="12" fill="#e8590c"/>
+<text x="698" y="317" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+<rect x="470" y="362" width="100" height="34" rx="4" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="520.0" y="384.0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#1a73e8" text-anchor="middle">Cancelar</text>
+<rect x="584" y="362" width="112" height="34" rx="4" fill="#1a73e8" stroke="#1a73e8" stroke-width="1"/>
+<text x="640.0" y="384.0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Implementar</text>
+<rect x="580" y="358" width="120" height="42" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="700" cy="358" r="12" fill="#e8590c"/>
+<text x="700" y="363" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+</svg>

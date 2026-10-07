@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Google Sheets: el puente de Apps Script · offline-pos 0.7.0</title>
+    <title>Google Sheets: conectar el POS a una planilla · offline-pos 0.8.0</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -11,6 +11,7 @@
         --fg: #1a1a1a;
         --muted: #666;
         --code: #f3f3f3;
+        --border: #ddd;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -18,6 +19,7 @@
           --fg: #e8e8e8;
           --muted: #999;
           --code: #262626;
+          --border: #3a3a3a;
         }
       }
       body {
@@ -53,6 +55,19 @@
       a {
         color: inherit;
       }
+      img {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        margin: 8px 0 4px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      h2 {
+        margin-top: 2.5em;
+        padding-top: 0.5em;
+        border-top: 1px solid var(--border);
+      }
       .copy button {
         font: inherit;
         font-weight: 600;
@@ -68,7 +83,7 @@
   <body>
     <main>
       <header>
-        offline-pos 0.7.0 · <a href="guia.md">Markdown</a> ·
+        offline-pos 0.8.0 · <a href="guia.md">Markdown</a> ·
         <a href="../connector-api.openapi.yaml">OpenAPI</a> ·
         <a href="../llms.txt">llms.txt</a> ·
         <a href="../../../">Backends y canales</a>
@@ -99,218 +114,108 @@
             );
           });
         })();
-      </script> <h1>Google Sheets: el puente de Apps Script</h1>
-<p>Una planilla de Google Sheets puede ser el backend del POS, sin servidor y sin costo: el catálogo y
-los clientes se cargan en la planilla, y las ventas, cobranzas y movimientos de caja llegan solos a
-sus pestañas. El POS habla con la planilla a través de un <strong>puente de Apps Script</strong>, un solo archivo
-que se pega en la planilla y se implementa como aplicación web:
-<a href="pos-sheets.gs"><code>pos-sheets.gs</code></a>.</p>
-<p>Esta página acompaña al contrato <strong>4.6.0</strong> (el mismo que la <a href="../guia.md">guía para integradores</a>). Bajá
-siempre el archivo de las docs del canal donde están tus terminales.</p>
-<h2>Qué hace y qué no</h2>
-<p>El puente es un backend más del POS, con el mismo contrato que un backend REST pero con otro
-transporte (ver &quot;El contrato del puente&quot;, abajo). En el POS se elige como tipo de conexión &quot;Google
-Sheets&quot;.</p>
-<ul>
-<li><strong>Capacidades</strong>: anula cobranzas (<code>customer-payment-void</code>) y ofrece el portal (<code>portal</code>): el
-comando <code>/PLANILLA</code> y el botón &quot;Abrir planilla&quot; abren la planilla en una pestaña nueva.</li>
-<li><strong>Empresa</strong>: el nombre de la planilla es el nombre de la empresa que muestra el POS.</li>
-<li><strong>Cuenta corriente sin límite</strong>: la planilla no maneja crédito. El fiado siempre se aprueba, sin
-red, y el saldo de cada cliente sale de su libro de cuenta corriente.</li>
-<li><strong>Sin stock</strong>: el POS nunca controla stock para los productos de la planilla.</li>
-<li><strong>Sin avisos</strong>: la planilla nunca está en mantenimiento ni manda avisos al POS.</li>
-</ul>
-<h2>Instalar</h2>
+      </script> <h1>Google Sheets: conectar el POS a una planilla</h1>
+<p>Una planilla de Google Sheets puede ser el backend del POS, sin servidor y sin costo: los productos y
+los clientes se cargan en la planilla, y las ventas, las cobranzas y los movimientos de caja llegan
+solos. Hace falta una cuenta de Google y el código de esta página,
+<a href="pos-sheets.gs"><code>pos-sheets.gs</code></a> (el botón <strong>Copiar el código</strong>, arriba).</p>
+<h2 id="qué-vas-a-hacer">Qué vas a hacer</h2>
 <ol>
-<li>Creá una planilla vacía y abrí <strong>Extensiones &gt; Apps Script</strong>. El proyecto nuevo trae un archivo,
-<code>Código.gs</code>: reemplazá todo su contenido con
-<a href="pos-sheets.gs"><code>pos-sheets.gs</code></a> (en la página de esta guía, el botón
-<strong>Copiar el código</strong>) y guardá.</li>
-<li><strong>Implementar &gt; Nueva implementación &gt; Aplicación web</strong>, con &quot;Ejecutar como&quot;: <strong>Yo</strong> y &quot;Quién
-tiene acceso&quot;: <strong>Cualquier persona</strong>.</li>
-<li>Autorizá el acceso. Google pide solo acceso a <strong>esta</strong> planilla (&quot;See, edit, create, and delete
-this spreadsheet&quot;): el archivo lleva la anotación <code>@OnlyCurrentDoc</code> en su primer comentario
-justamente para eso. Si la pantalla dice &quot;<strong>all</strong> your Google Sheets spreadsheets&quot;, cancelá y
-revisá que la anotación siga ahí. El aviso de &quot;app no verificada&quot; es normal en un script propio.</li>
-<li>Abrí la URL de la aplicación web que te muestra Google
-(<code>https://script.google.com/macros/s/…/exec</code>): es la página de la planilla, donde se prepara y
-desde donde se abre el POS.</li>
+<li><a href="#1-instalar-el-puente-en-la-planilla">Instalar el puente en la planilla</a>: pegar el código y
+publicarlo como aplicación web. Una sola vez.</li>
+<li><a href="#2-preparar-la-planilla">Preparar la planilla</a>: completar un formulario. Una sola vez.</li>
+<li><a href="#3-conectar-cada-caja">Conectar cada caja</a>: abrir un link en cada terminal.</li>
+<li><a href="#actualizar-el-puente">Actualizar el puente</a>, cuando haya una versión nueva.</li>
+<li><a href="#volver-a-empezar">Volver a empezar</a>: borrar todo, por ejemplo después de probar.</li>
+<li><a href="#opcional-proteger-la-planilla-con-un-secreto">Proteger la planilla con un secreto</a>
+(opcional).</li>
 </ol>
-<p>&quot;Cualquier persona&quot; <strong>no</strong> significa que cualquiera pueda editar la planilla: el script corre con tus
-permisos y solo expone lo que necesitan el POS y la página. Es la única forma de que el POS escriba
-sin que nadie tenga que iniciar sesión en Google. La página nunca borra nada: preparar solo anda con
-la planilla sin preparar, y reiniciar exige que alguien que edita la planilla lo permita (ver
-&quot;Probar de nuevo&quot;, abajo).</p>
-<p>(Opcional) Para que solo tus terminales puedan escribir, protegé el puente con un secreto compartido:
-en Apps Script, Configuración del proyecto &gt; Propiedades de la secuencia de comandos &gt; agregá
-<code>SHARED_SECRET</code> con el valor que quieras. Cada terminal lo carga una vez en la configuración del
-POS: el link de la página nunca lo lleva.</p>
-<h2>Preparar la planilla</h2>
-<p>La página de una planilla sin preparar pide el <strong>nombre del comercio</strong>, la <strong>sucursal</strong>, la <strong>caja</strong>
-y con qué empezar:</p>
+<p>Las imágenes de las pantallas de Google son esquemáticas: Google cambia detalles de su interfaz, pero
+los nombres de los menús y de los botones son estos.</p>
+<h2 id="1-instalar-el-puente-en-la-planilla">1. Instalar el puente en la planilla</h2>
+<p><strong>1.1</strong> Creá una planilla vacía en Google Sheets y abrí <strong>Extensiones &gt; Apps Script</strong>.</p>
+<p><img src="img/instalar-1-apps-script.svg" alt="El menú Extensiones de la planilla, con Apps Script"></p>
+<p><strong>1.2</strong> En el editor, borrá todo lo que tiene <code>Código.gs</code>, pegá el código (<strong>Copiar el código</strong>,
+arriba de esta página) y guardá con el ícono del disquete o Ctrl+S.</p>
+<p><img src="img/instalar-2-pegar.svg" alt="El editor de Apps Script con el código pegado en Código.gs"></p>
+<p><strong>1.3</strong> Arriba a la derecha, <strong>Implementar &gt; Nueva implementación</strong>.</p>
+<p><img src="img/instalar-3-implementar.svg" alt="El menú Implementar, con Nueva implementación"></p>
+<p><strong>1.4</strong> En el engranaje de &quot;Seleccionar tipo&quot;, elegí <strong>Aplicación web</strong>, completá así y tocá
+<strong>Implementar</strong>:</p>
 <ul>
-<li><strong>Ferretería</strong>, <strong>Kiosco</strong> o <strong>Almacén</strong>: productos, clientes y diez días de ventas, cobranzas y
-movimientos de caja de ejemplo, hasta ayer, para probar con algo que se parece a un comercio de
-verdad. Un producto y un cliente vienen bloqueados, para ver cómo lo avisa el POS.</li>
-<li><strong>Vacía</strong>: las pestañas sin datos, para cargar tus productos y clientes.</li>
+<li>Ejecutar como: <strong>Yo</strong></li>
+<li>Quién tiene acceso: <strong>Cualquier persona</strong></li>
 </ul>
-<p>Al tocar <strong>Preparar la planilla</strong>, se crean las pestañas, la planilla toma el nombre del comercio
-(es el que muestra el POS) y la pestaña Configuración guarda el comercio, la sucursal y la caja. La
-primera pestaña es el <strong>Tablero</strong> (abajo).</p>
-<h2>Abrir el POS en cada terminal</h2>
-<p>Desde cada terminal, abrí la página de la planilla (la URL de la aplicación web; en el Tablero, el
-link <strong>Abrir el POS en una caja</strong>), poné el nombre de esa caja y tocá <strong>Abrir el POS</strong>. El POS se
-abre con esta planilla, la sucursal y la caja ya cargadas: si la terminal no tenía datos, prueba la
-conexión y entra directo a la venta. Si tenía datos de otra conexión, o la planilla tiene un secreto
-compartido, abre su configuración con todo precargado, para que decidas qué hacer con los datos o
-completes el secreto.</p>
-<p>El link lleva la URL de <strong>esa</strong> implementación, así una copia de la planilla nunca conecta al POS con
-la original, y <strong>nunca</strong> lleva el secreto: la página es pública. Sin la página, también se puede
-elegir &quot;Google Sheets&quot; en <code>/CONFIG</code> del POS y pegar la URL de la aplicación web.</p>
-<h2>El Tablero</h2>
-<p>La primera pestaña resume lo que pasa en el comercio, con fórmulas que se actualizan solas con cada
-venta que llega del POS: lo vendido hoy, los tickets de hoy, lo vendido en 7 días, el fiado
-pendiente, las ventas de cada uno de los últimos 14 días (con un gráfico), los medios de pago, los
-10 productos más vendidos y lo que debe cada cliente. Los montos ya descuentan las anulaciones.</p>
-<p>Si movés columnas de las otras pestañas, las fórmulas las siguen solas. A una planilla preparada
-antes de que existiera el Tablero, la página le ofrece <strong>Agregar el tablero</strong>, sin tocar nada más.</p>
-<h2>La pestaña Configuración</h2>
-<p>Pares clave/valor que el puente encuentra por el texto de la clave (columna A), no por la fila, y
-debajo los pasos para conectar una terminal. Se le puede dar formato o moverla.</p>
+<p><img src="img/instalar-4-aplicacion-web.svg" alt="La nueva implementación como aplicación web, ejecutada como Yo y con acceso de Cualquier persona"></p>
+<p><strong>1.5</strong> Google pide autorizar el acceso: <strong>Autorizar acceso</strong> y elegí tu cuenta. El aviso &quot;Google no
+verificó esta app&quot; es normal en un código propio: <strong>Configuración avanzada &gt; Ir a … (no seguro)</strong>.
+Al final, Google tiene que pedir acceso <strong>solo a esta planilla</strong>; si pide acceso a <strong>todas</strong> tus
+hojas de cálculo, cancelá: el código no es el de esta página.</p>
+<p><img src="img/instalar-5-autorizar.svg" alt="La autorización: acceso solo a esta hoja de cálculo"></p>
+<p><strong>1.6</strong> Copiá la <strong>URL de la aplicación web</strong> (termina en <code>/exec</code>) y abrila en el navegador: es la
+página de tu planilla. Guardala, porque la vas a abrir desde cada caja.</p>
+<p><img src="img/instalar-6-url.svg" alt="La implementación lista, con la URL de la aplicación web"></p>
+<p>&quot;Cualquier persona&quot; no deja que nadie edite tu planilla: el POS escribe a través del código, con tus
+permisos, y la página nunca borra nada sin que lo permitas.</p>
+<h2 id="2-preparar-la-planilla">2. Preparar la planilla</h2>
+<p><strong>2.1</strong> En la página de la planilla, completá el <strong>nombre del comercio</strong>, la <strong>sucursal</strong> y la
+<strong>caja</strong>, y elegí con qué empezar:</p>
 <ul>
-<li><strong>URL del POS</strong>: adónde lleva &quot;Abrir el POS&quot; (por omisión <code>https://pos.contax.ar/v4/</code>, también con
-la celda vacía o con algo que no empiece con <code>http://</code> o <code>https://</code>). Cambiala para usar otro canal
-o un POS propio.</li>
-<li><strong>Comercio</strong>, <strong>Sucursal</strong> y <strong>Caja</strong>: lo que se cargó al preparar la planilla; la página los usa
-para &quot;Abrir el POS&quot;.</li>
-<li><strong>Permitir reiniciar</strong>: con <strong>Sí</strong>, la página ofrece &quot;Reiniciar la planilla&quot; (ver abajo).</li>
+<li><strong>Ferretería</strong>, <strong>Kiosco</strong> o <strong>Almacén</strong>: con productos, clientes y diez días de ventas de
+ejemplo, para probar con algo parecido a un comercio de verdad.</li>
+<li><strong>Vacía</strong>: sin datos, para cargar tus productos y tus clientes.</li>
 </ul>
-<p>El secreto compartido nunca va en esta pestaña: viajaría con cada copia de la planilla.</p>
-<h2>Probar de nuevo</h2>
-<p>Para volver a empezar (por ejemplo, después de probar con datos de ejemplo), poné <strong>Sí</strong> en
-&quot;Permitir reiniciar&quot; y recargá la página: <strong>Reiniciar la planilla</strong> borra <strong>todas</strong> las pestañas
-(también las tuyas), deja una hoja vacía y vuelve al formulario. Las terminales que estaban
-conectadas guardan lo que vendieron: conviene volver a abrir el POS desde la página y elegir borrar
-sus datos.</p>
-<h2>El portal: abrir la planilla desde el POS</h2>
-<p>Con la terminal conectada, el comando <code>/PLANILLA</code> y el botón &quot;Abrir planilla&quot; de la barra de estado
-abren la planilla en una pestaña nueva. No hay token: abrirla ya exige una cuenta de Google con
-acceso a la planilla.</p>
-<h2>Actualizar el puente</h2>
-<ol>
-<li>Copiá <code>pos-sheets.gs</code> de las docs del canal donde están tus terminales.</li>
-<li>En la planilla: Extensiones &gt; Apps Script, reemplazá el contenido de <code>Código.gs</code> y guardá. Si tu
-proyecto tiene los archivos de una versión anterior (<code>bridge.gs</code> y <code>columnas.gs</code>), borralos: todo
-está ahora en un solo archivo.</li>
-<li>Andá a Implementar &gt; Administrar implementaciones &gt; lápiz sobre la implementación existente &gt;
-Versión: <strong>Nueva versión</strong> &gt; Implementar.</li>
-</ol>
-<p>La URL de la aplicación web no cambia y no hace falta tocar el POS. No crees una implementación
-<strong>nueva</strong>: tendría otra URL, y conectar el POS a otra URL es otra conexión.</p>
-<p>Una planilla anterior se actualiza sola: el puente agrega al final de cada pestaña las columnas
-opcionales nuevas que le falten, y las filas que ya estaban quedan como estaban. Después de
-actualizar, el primer pedido del POS puede volver a traer todos los productos y clientes: es
-esperado.</p>
-<h2>Cómo se ve y cómo se edita la planilla</h2>
-<p>Pestañas: <strong>Tablero</strong>, <strong>Productos</strong> y <strong>Clientes</strong> (los carga el comercio), <strong>Ventas</strong>, <strong>Pagos</strong>,
-<strong>CuentaCorriente</strong>, <strong>MovimientosCaja</strong> y <strong>Cobranzas</strong> (las escribe el puente), <strong>Configuración</strong>,
-y dos ocultas que usa el puente (<code>_PushLots</code> y <code>_Snapshot</code>).</p>
-<p>El puente encuentra cada columna por su <strong>encabezado</strong>, no por su posición, sin distinguir
-mayúsculas, acentos ni espacios. Podés:</p>
-<ul>
-<li>reordenar columnas y agregar las tuyas (notas, cálculos): se ignoran;</li>
-<li>borrar <code>Documento</code>, <code>Teléfono</code> o <code>Códigos de barras</code>, que son opcionales;</li>
-<li><strong>bloquear</strong> un producto o un cliente: &quot;Sí&quot; en <code>Bloqueado</code> y, si querés, el motivo en <code>Motivo del bloqueo</code>. Es informativo: el POS lo muestra, pero nunca impide vender ni cobrar;</li>
-<li>dejar vacía <code>Alta</code>: el puente la completa con la hora de la primera vez que lee la fila.</li>
-</ul>
-<p>Las demás columnas no se pueden borrar ni renombrar: el puente responde con un error que dice cuál
-falta (<code>Falta la columna &#39;Precio&#39; en la pestaña Productos</code>) y el POS lo muestra. Para renombrar una
-columna o un valor, cambiá su etiqueta en <code>pos-sheets.gs</code>: los textos de la planilla están juntos,
-en <code>COLUMN_LABELS</code> y <code>VALUE_LABELS</code>.</p>
-<p>Cada pestaña nueva nace con formato por columna (texto para ids y códigos, importes con miles y
-decimales, fechas reales, cantidades con hasta tres decimales, listas desplegables en los valores
-fijos); las filas nuevas copian el formato de la fila 2.</p>
-<p><strong>No conviertas en tabla</strong> (Formato &gt; Convertir en tabla) las pestañas que escribe el puente: la
-tabla no deja copiar el formato a las filas nuevas y la venta queda en una fila vacía. Para tus
-propias consultas, armá una pestaña aparte con <code>QUERY</code> o <code>FILTER</code> sobre ellas, como el Tablero.
-Tampoco se crean tablas desde el puente: hacerlo desde Apps Script exige un permiso sobre todas tus
-planillas o todo tu Drive.</p>
-<h2>Qué guarda cada evento</h2>
-<p>Cada fila que escribe el puente lleva el dispositivo, la sucursal y el punto de venta de la terminal.
-Un evento nunca se modifica: una anulación es otro registro que apunta al original.</p>
-<ul>
-<li><strong>Venta</strong>: una fila por línea en Ventas (con la fecha y el número del ticket) y una por medio en
-Pagos. La Descripción de una línea de producto es el nombre que el producto tiene en Productos al
-registrarse la venta (si el id ya no está, queda vacía). Un pago a cuenta corriente suma una fila
-en CuentaCorriente.</li>
-<li><strong>Anulación de una venta</strong>: otra venta, con líneas y pagos invertidos, la columna <strong>Anula a</strong> y el
-motivo; las filas del original pasan a Estado = Anulada. Si la planilla no tiene el original, no es
-un error.</li>
-<li><strong>Cliente nuevo</strong> (dado de alta en el POS): una fila en Clientes.</li>
-<li><strong>Movimiento de caja</strong> (ingreso, egreso o ajuste por arqueo): una fila en MovimientosCaja.</li>
-<li><strong>Cobranza</strong> (un cliente paga a cuenta): una fila por medio en Cobranzas (con la fecha y el
-número del recibo) y el total en negativo en CuentaCorriente.</li>
-<li><strong>Anulación de una cobranza</strong>: otra cobranza en negativo, con <strong>Anula a</strong>; la original pasa a
-Estado = Anulada.</li>
-</ul>
-<p><strong>CuentaCorriente</strong> es el libro de cada cliente: ventas a cuenta en positivo, acreditaciones y
-cobranzas en negativo. El saldo que el POS muestra de un cliente es la suma de sus filas.</p>
-<h2>El contrato del puente</h2>
-<p>Un integrador no necesita esta sección para usar el puente: es para quien quiera entenderlo o
-escribir otro cliente.</p>
-<p><code>POST &lt;URL de la aplicación web&gt;</code> con <code>Content-Type: text/plain;charset=utf-8</code> (a propósito, no
-<code>application/json</code>: evita el preflight <code>OPTIONS</code>, que Apps Script no maneja) y un body JSON:</p>
-<pre><code class="language-json">{
-  &quot;action&quot;: &quot;pushBatch&quot;,
-  &quot;payload&quot;: { &quot;deviceId&quot;: &quot;3f0c…&quot;, &quot;events&quot;: [] },
-  &quot;idempotencyKey&quot;: &quot;01J…&quot;,
-  &quot;sharedSecret&quot;: &quot;…&quot;,
-  &quot;contractVersion&quot;: &quot;4.6.0&quot;
-}
-</code></pre>
-<p>La respuesta siempre es HTTP 200 y el resultado viaja en el body:</p>
-<pre><code class="language-json">{ &quot;ok&quot;: true, &quot;data&quot;: {} }
-{ &quot;ok&quot;: false, &quot;error&quot;: &quot;mensaje&quot; }
-{ &quot;ok&quot;: false, &quot;error&quot;: &quot;mensaje&quot;, &quot;code&quot;: &quot;incompatible-contract&quot;, &quot;contractVersion&quot;: &quot;4.6.0&quot; }
-</code></pre>
-<p>Apps Script no expone los headers, así que la versión del contrato y el secreto van en el body. Con
-otra versión mayor, el puente responde <code>incompatible-contract</code> <strong>sin procesar nada</strong>: el POS no
-recibe ack y lo pendiente espera en la terminal hasta que se actualice el puente.</p>
-<p>Acciones:</p>
-<ul>
-<li><code>info</code>: sin payload. La versión del contrato, el estado (siempre <code>ok</code>), las capacidades, el portal
-y la empresa, con la misma forma que <code>GET /info</code> del <a href="../connector-api.openapi.yaml">OpenAPI</a>.
-Liviana: no toma el lock ni crea pestañas.</li>
-<li><code>pushBatch</code>: payload <code>{ deviceId, events }</code>, cada evento con su <code>id</code>, <code>createdAt</code> y <code>origin</code>.
-Aplica el lote entero de una vez y responde <code>data: {}</code>. Es idempotente por <code>idempotencyKey</code> (el
-lote, no cada evento). Un evento que no se puede aplicar queda como <em>issue</em> del lote con su id,
-sin tumbar el resto.</li>
-<li><code>pullBatch</code>: payload <code>{ deviceId, cursors: { products?, customers? }, pendingLotIds }</code>. Responde
-<code>data: { products: { items, nextCursor? }, customers: { items, nextCursor? }, lots }</code>, con el
-estado (<code>ok</code> o <code>issues</code>) de los lotes pedidos. La planilla procesa cada lote dentro del pedido, así
-que nunca informa <code>queued</code> ni <code>processing</code>.</li>
-<li><code>portalLink</code>: sin payload. Responde <code>data: { url }</code>, la URL de la planilla. Liviana, como <code>info</code>.</li>
-</ul>
-<p><code>pushBatch</code> y <code>pullBatch</code> toman el lock del script: la foto y el estado de los lotes son siempre del
-mismo instante.</p>
-<p><strong>Cursor del pull.</strong> Sheets no registra cuándo cambió cada fila. El puente guarda una huella del
-contenido de cada fila de Productos y Clientes en la pestaña oculta <code>_Snapshot</code> y la compara en cada
-pull: una fila nueva o cambiada toma la hora actual, y el cursor es la hora más nueva de cada
-pestaña. Así cubre igual una edición a mano en la planilla que una escritura del propio puente.</p>
-<h2>Limitaciones</h2>
-<ul>
-<li><strong>Bajas</strong>: borrar una fila de Productos o Clientes no viaja en el pull por cursor; el POS la ve
-recién en la próxima foto completa (al conectar, cada 2 horas o con <code>/SINCRONIZAR</code>).</li>
-<li><strong>Cuotas de Apps Script</strong>: Google limita el tiempo de ejecución y la cantidad de pedidos por día
-de cada cuenta. Alcanza para un comercio chico; para muchas terminales o mucho volumen, conviene un
-backend REST.</li>
-<li><strong>Una planilla a la vez</strong>: el lock del script hace que los pedidos de varias terminales se
-atiendan de a uno. Si la planilla está ocupada más de 30 segundos, el pedido falla y el POS lo
-reintenta.</li>
-<li><strong>Sin stock, sin límite de crédito y sin avisos</strong>, como se dijo arriba.</li>
-<li><strong>Sin reinicio desde el POS</strong>: la planilla nunca se borra desde una terminal; solo desde su página,
-y con &quot;Permitir reiniciar&quot; = Sí.</li>
-</ul>
+<p><img src="img/preparar-1-formulario.png" alt="El formulario para preparar la planilla"></p>
+<p><strong>2.2</strong> Tocá <strong>Preparar la planilla</strong>. En unos segundos la planilla tiene sus pestañas, empezando
+por el <strong>Tablero</strong> (las ventas del día, de la semana, los medios de pago, lo más vendido y el fiado),
+y la página ofrece <strong>Abrir la planilla</strong> y <strong>Abrir el POS</strong>.</p>
+<p><img src="img/preparar-2-lista.png" alt="La planilla preparada, con Abrir la planilla y Abrir el POS"></p>
+<p>Tus productos y tus clientes se cargan en las pestañas <strong>Productos</strong> y <strong>Clientes</strong>, cuando quieras:
+el POS los trae solo.</p>
+<h2 id="3-conectar-cada-caja">3. Conectar cada caja</h2>
+<p><strong>3.1</strong> En la terminal, abrí la página de la planilla (la URL del paso 1.6; también está en el
+Tablero, en <strong>Abrir el POS en una caja</strong>).</p>
+<p><strong>3.2</strong> Poné el nombre de <strong>esta</strong> caja (por ejemplo, &quot;Caja 2&quot;) y tocá <strong>Abrir el POS</strong>.</p>
+<p><img src="img/conectar-1-caja.png" alt="Abrir el POS con el nombre de la caja"></p>
+<p><strong>3.3</strong> El POS se abre conectado a la planilla, con la sucursal y la caja cargadas, listo para
+vender.</p>
+<p><img src="img/conectar-2-pos.png" alt="El POS conectado a la planilla, en la venta"></p>
+<p>Si la terminal ya tenía datos de otra conexión, o la planilla tiene un secreto, el POS abre su
+configuración con todo precargado: elegí qué hacer con los datos (o cargá el secreto) y seguí.</p>
+<p>Repetí estos pasos en cada caja, cada una con su nombre.</p>
+<h2 id="actualizar-el-puente">Actualizar el puente</h2>
+<p><strong>1.</strong> Copiá el código nuevo con <strong>Copiar el código</strong>, en esta página.</p>
+<p><strong>2.</strong> En la planilla, <strong>Extensiones &gt; Apps Script</strong>: reemplazá todo el contenido de <code>Código.gs</code> y
+guardá. Si el proyecto tiene <code>bridge.gs</code> y <code>columnas.gs</code> (de una versión anterior), borralos.</p>
+<p><strong>3.</strong> <strong>Implementar &gt; Administrar implementaciones</strong>, el lápiz, Versión: <strong>Nueva versión</strong> y
+<strong>Implementar</strong>.</p>
+<p><img src="img/actualizar-1-nueva-version.svg" alt="Administrar implementaciones: el lápiz y Nueva versión"></p>
+<p>La URL no cambia y las cajas siguen conectadas, sin tocar nada. No uses <strong>Nueva implementación</strong>:
+da otra URL, y cada caja tendría que conectarse de nuevo.</p>
+<h2 id="volver-a-empezar">Volver a empezar</h2>
+<p>Reiniciar borra <strong>todas</strong> las pestañas de la planilla (también las que agregaste vos) y vuelve al
+formulario del paso 2.</p>
+<p><strong>1.</strong> En la pestaña <strong>Configuración</strong> de la planilla, poné <strong>Sí</strong> en &quot;Permitir reiniciar&quot;.</p>
+<p><img src="img/reiniciar-1-permitir.svg" alt="La pestaña Configuración, con Permitir reiniciar en Sí"></p>
+<p><strong>2.</strong> Recargá la página de la planilla y tocá <strong>Reiniciar la planilla</strong>.</p>
+<p><img src="img/reiniciar-2-boton.png" alt="La página de la planilla, con Reiniciar la planilla"></p>
+<p><strong>3.</strong> En cada caja que estaba conectada, volvé a abrir el POS desde la página y elegí borrar sus
+datos.</p>
+<h2 id="opcional-proteger-la-planilla-con-un-secreto">(Opcional) Proteger la planilla con un secreto</h2>
+<p>Sin secreto, quien tenga la URL de la aplicación web puede mandarle ventas a la planilla. Para que
+solo tus cajas puedan:</p>
+<p><strong>1.</strong> En Apps Script, <strong>Configuración del proyecto</strong> (el engranaje) &gt; <strong>Propiedades de la secuencia
+de comandos</strong> &gt; <strong>Agregar propiedad de secuencia de comandos</strong>: <code>SHARED_SECRET</code> y el valor que
+quieras. Guardá.</p>
+<p><img src="img/secreto-1-propiedad.svg" alt="Las propiedades del script, con SHARED_SECRET"></p>
+<p><strong>2.</strong> En cada caja, abrí el POS desde la página de la planilla como en el paso 3: la configuración
+se abre con todo cargado menos el secreto. Cargalo en <strong>Secreto compartido</strong> y seguí. En una caja
+ya conectada, lo mismo desde <code>/CONFIG</code>.</p>
+<p>El link de la página nunca lleva el secreto: se carga a mano en cada caja.</p>
+<h2 id="para-saber-más">Para saber más</h2>
+<p>La <a href="referencia.html">referencia del puente</a> tiene el resto: qué hace y qué no, los
+permisos, el Tablero, la pestaña Configuración, el portal, cómo se edita la planilla, qué guarda cada
+venta, el contrato del puente y sus limitaciones.</p>
 
     </main>
   </body>

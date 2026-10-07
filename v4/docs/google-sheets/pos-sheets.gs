@@ -1,16 +1,18 @@
 /**
  * @OnlyCurrentDoc
  *
- * pos-sheets.gs, POS 0.7.0 (contrato 4.6.0): una planilla de Google Sheets como
+ * pos-sheets.gs, POS 0.8.0 (contrato 4.6.0): una planilla de Google Sheets como
  * backend del POS, en un solo archivo.
  *
- * Instalar: en una planilla vacía, Extensiones > Apps Script. Reemplazá el contenido de Código.gs
- * con este archivo y guardá. Implementar > Nueva implementación > Aplicación web (Ejecutar como: Yo;
- * Quién tiene acceso: Cualquier persona) > Implementar, autorizá el acceso a esta planilla y abrí la
- * URL de la aplicación web: ahí se prepara la planilla y se abre el POS.
+ * Instalar, en tres pasos (con imágenes en https://pos.contax.ar/v4/docs/google-sheets/):
+ * 1. En una planilla vacía, Extensiones > Apps Script: reemplazá el contenido de Código.gs con este
+ *    archivo y guardá.
+ * 2. Implementar > Nueva implementación > Aplicación web (Ejecutar como: Yo; Quién tiene acceso:
+ *    Cualquier persona) > Implementar, y autorizá el acceso a esta planilla.
+ * 3. Abrí la URL de la aplicación web: ahí se prepara la planilla y se abre el POS en cada caja.
  *
- * Actualizar: reemplazá el contenido con la versión nueva y guardá; después, Implementar >
- * Administrar implementaciones > lápiz > Versión: Nueva versión > Implementar. La URL no cambia.
+ * Actualizar: reemplazá el contenido y guardá; después, Implementar > Administrar implementaciones >
+ * lápiz > Versión: Nueva versión > Implementar. La URL no cambia.
  */
 
 /**
@@ -1339,12 +1341,13 @@ var CONFIG_LABELS = {
 
 // Lo que se escribe debajo de las claves al crear la pestaña. El primero es el título.
 var CONFIG_STEPS = [
-  'Cómo conectar una terminal',
-  '1. Desde la terminal, abrí la URL de la aplicación web (en Apps Script: Implementar > Administrar implementaciones).',
+  'Cómo conectar una caja',
+  '1. En la caja, abrí la página de la planilla (en el Tablero: Abrir el POS en una caja).',
   '2. Poné el nombre de la caja y tocá Abrir el POS.',
-  'URL del POS: adónde lleva Abrir el POS. Vacía, se usa https://pos.contax.ar/v4/.',
-  'Permitir reiniciar: con Sí, la página de la aplicación web ofrece Reiniciar la planilla, que borra todo. Solo para probar.',
-  'El secreto compartido no va en esta pestaña: se configura en Apps Script (Configuración del proyecto > Propiedades de la secuencia de comandos > SHARED_SECRET).',
+  'URL del POS: adónde lleva Abrir el POS. Vacía, https://pos.contax.ar/v4/.',
+  'Permitir reiniciar: con Sí, la página ofrece Reiniciar la planilla, que borra todo.',
+  'El secreto compartido no va en esta pestaña: se configura en Apps Script.',
+  'Instrucciones con imágenes: https://pos.contax.ar/v4/docs/google-sheets/',
 ];
 
 // Preparar la planilla: la home de la aplicación web llama a posInicializar con lo que completa el

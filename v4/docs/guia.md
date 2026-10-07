@@ -181,8 +181,9 @@ sin costo: un puente de Apps Script, pegado en la planilla e implementado como a
 el mismo contrato que un backend REST (con otro transporte, porque Apps Script no expone headers) y
 guarda cada venta, cobranza y movimiento de caja en sus pestañas.
 
-Cómo instalarlo, conectar el POS desde la planilla, actualizarlo y qué guarda cada pestaña está en
-la [guía del puente de Google Sheets](google-sheets/), junto a sus dos archivos.
+Cómo instalarlo, conectar las cajas y actualizarlo, paso a paso, está en el
+[setup de Google Sheets](google-sheets/), junto a `pos-sheets.gs`; qué guarda cada pestaña, el
+contrato del puente y sus limitaciones, en la [referencia del puente](google-sheets/referencia.html).
 
 ## Servir el POS desde tu propio servidor
 

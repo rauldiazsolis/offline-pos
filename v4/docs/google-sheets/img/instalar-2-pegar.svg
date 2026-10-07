@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="388" viewBox="0 0 760 388" role="img">
+<title>El editor de Apps Script: pegar en Código.gs y guardar</title>
+<rect x="0.5" y="0.5" width="759" height="387" rx="10" fill="#fff" stroke="#c4c7c5" stroke-width="1"/>
+<path d="M1 36 V10.5 A10 10 0 0 1 11 0.5 H749 A10 10 0 0 1 759 10.5 V36 Z" fill="#f1f3f4"/>
+<line x1="1" y1="36" x2="759" y2="36" stroke="#dadce0"/>
+<circle cx="18" cy="18" r="5.5" fill="#ff5f57"/>
+<circle cx="36" cy="18" r="5.5" fill="#febc2e"/>
+<circle cx="54" cy="18" r="5.5" fill="#28c840"/>
+<rect x="80" y="8" width="660" height="20" rx="10" fill="#fff" stroke="#dadce0" stroke-width="1"/>
+<text x="94" y="22" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="400" fill="#5f6368" text-anchor="start">script.google.com/home/projects/…/edit</text>
+<rect x="1" y="37" width="758" height="48" fill="#fff"/>
+<line x1="1" y1="85" x2="759" y2="85" stroke="#dadce0"/>
+<path d="M18 50 l12 0 l6 10 l-6 10 l-12 0 l6 -10 z" fill="#4285f4"/>
+<text x="48" y="60" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="400" fill="#5f6368" text-anchor="start">Apps Script</text>
+<text x="48" y="77" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="400" fill="#202124" text-anchor="start">Proyecto sin título</text>
+<rect x="632" y="46" width="112" height="34" rx="4" fill="#1a73e8" stroke="#1a73e8" stroke-width="1"/>
+<text x="688.0" y="68.0" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">Implementar ▾</text>
+<rect x="1" y="86" width="190" height="300" fill="#fff"/>
+<line x1="191" y1="86" x2="191" y2="386" stroke="#dadce0"/>
+<text x="18" y="112" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#202124" text-anchor="start">Archivos</text>
+<text x="170" y="112" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="18" font-weight="400" fill="#5f6368" text-anchor="end">+</text>
+<rect x="10" y="124" width="170" height="30" rx="15" fill="#e8f0fe" stroke="#e8f0fe" stroke-width="1"/>
+<text x="30" y="144" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#1967d2" text-anchor="start">Código.gs</text>
+<rect x="6" y="120" width="178" height="38" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="184" cy="120" r="12" fill="#e8590c"/>
+<text x="184" y="125" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="214" y="112" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="16" font-weight="400" fill="#5f6368" text-anchor="start">↶   ↷</text>
+<g transform="translate(276 97)">
+<rect width="20" height="20" rx="2" fill="none" stroke="#5f6368" stroke-width="2"/>
+<rect x="5" y="2" width="10" height="6" fill="#5f6368"/>
+<rect x="5" y="12" width="10" height="6" rx="1" fill="none" stroke="#5f6368" stroke-width="1.5"/>
+</g>
+<rect x="268" y="89" width="36" height="36" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="304" cy="89" r="12" fill="#e8590c"/>
+<text x="304" y="94" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="320" y="112" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#5f6368" text-anchor="start">▷ Ejecutar</text>
+<text x="410" y="112" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="400" fill="#5f6368" text-anchor="start">Depurar</text>
+<line x1="192" y1="126" x2="759" y2="126" stroke="#dadce0"/>
+<text xml:space="preserve" x="222" y="152" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">1</text>
+<text xml:space="preserve" x="236" y="152" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start">/**</text>
+<text xml:space="preserve" x="222" y="173" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">2</text>
+<text xml:space="preserve" x="236" y="173" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> * @OnlyCurrentDoc</text>
+<text xml:space="preserve" x="222" y="194" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">3</text>
+<text xml:space="preserve" x="236" y="194" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> *</text>
+<text xml:space="preserve" x="222" y="215" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">4</text>
+<text xml:space="preserve" x="236" y="215" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> * pos-sheets.gs: una planilla de Google Sheets</text>
+<text xml:space="preserve" x="222" y="236" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">5</text>
+<text xml:space="preserve" x="236" y="236" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> * como backend del POS, en un solo archivo.</text>
+<text xml:space="preserve" x="222" y="257" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">6</text>
+<text xml:space="preserve" x="236" y="257" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> *</text>
+<text xml:space="preserve" x="222" y="278" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">7</text>
+<text xml:space="preserve" x="236" y="278" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> * Instalar: en una planilla vacía, Extensiones</text>
+<text xml:space="preserve" x="222" y="299" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">8</text>
+<text xml:space="preserve" x="236" y="299" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> * &gt; Apps Script. Reemplazá el contenido de</text>
+<text xml:space="preserve" x="222" y="320" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">9</text>
+<text xml:space="preserve" x="236" y="320" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#188038" text-anchor="start"> */</text>
+<text xml:space="preserve" x="222" y="341" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">10</text>
+<text xml:space="preserve" x="236" y="341" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#202124" text-anchor="start">
+</text>
+<text xml:space="preserve" x="222" y="362" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#9aa0a6" text-anchor="end">11</text>
+<text xml:space="preserve" x="236" y="362" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="400" fill="#202124" text-anchor="start">var CONTRACT_VERSION = '4.6.0';</text>
+<rect x="228" y="132" width="428" height="244" rx="7" fill="none" stroke="#e8590c" stroke-width="3"/>
+<circle cx="656" cy="132" r="12" fill="#e8590c"/>
+<text x="656" y="137" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+</svg>
