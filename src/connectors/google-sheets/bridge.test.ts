@@ -1,94 +1,15 @@
 /// <reference types="node" />
-import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { ok } from '../../domain/result.ts';
 import { readConnectReturn } from '../../sync/demo-link.ts';
-import { FakeSpreadsheet, type FakeOptions } from '../../test/fake-spreadsheet.ts';
+import { loadAppsScript, publicFunctions, type AppsScriptOptions } from '../../test/apps-script.ts';
+import type { FakeSpreadsheet } from '../../test/fake-spreadsheet.ts';
 
 const SOURCE_FILES = ['columnas.gs', 'bridge.gs'];
 
-const outputSchema = z.object({ content: z.string() });
-const pageSchema = z.object({ html: z.string(), title: z.string() });
-const responseSchema = z.object({
-  ok: z.boolean(),
-  data: z.unknown().optional(),
-  error: z.string().optional(),
-  code: z.string().optional(),
-  contractVersion: z.string().optional(),
-});
-
-type BridgeOptions = FakeOptions & { sharedSecret?: string; webAppUrl?: string };
-
-function loadBridge(options: BridgeOptions = {}, files: string[] = SOURCE_FILES) {
-  const {
-    sharedSecret,
-    webAppUrl = 'https://script.google.com/macros/s/fake/exec',
-    ...spreadsheetOptions
-  } = options;
-  const spreadsheet = new FakeSpreadsheet(spreadsheetOptions);
-  const context: Record<string, unknown> = vm.createContext({
-    SpreadsheetApp: spreadsheet.app(),
-    ScriptApp: { getService: () => ({ getUrl: () => webAppUrl }) },
-    HtmlService: {
-      createHtmlOutput: (html: string) => {
-        const output = {
-          html,
-          title: '',
-          setTitle: (title: string) => {
-            output.title = title;
-            return output;
-          },
-          addMetaTag: () => output,
-        };
-        return output;
-      },
-    },
-    Utilities: {
-      Charset: { UTF_8: 'UTF-8' },
-      // Como el real: base64 "web safe" CON el relleno `=`.
-      base64EncodeWebSafe: (text: string) =>
-        Buffer.from(text, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
-    },
-    ContentService: {
-      MimeType: { JSON: 'JSON' },
-      createTextOutput: (content: string) => {
-        const output = { content, setMimeType: () => output };
-        return output;
-      },
-    },
-    LockService: {
-      getScriptLock: () => ({ waitLock: () => undefined, releaseLock: () => undefined }),
-    },
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (key: string) => (key === 'SHARED_SECRET' ? (sharedSecret ?? null) : null),
-      }),
-    },
-  });
-  for (const file of files) {
-    vm.runInContext(readFileSync(new URL(file, import.meta.url), 'utf8'), context);
-  }
-
-  function raw(request: Record<string, unknown>) {
-    const body = JSON.stringify(request);
-    const output: unknown = vm.runInContext(
-      `doPost({ postData: { contents: ${JSON.stringify(body)} } })`,
-      context,
-    );
-    return responseSchema.parse(JSON.parse(outputSchema.parse(output).content));
-  }
-
-  function call(action: string, payload: unknown = {}, idempotencyKey?: string) {
-    return raw({ action, payload, idempotencyKey });
-  }
-
-  function page() {
-    return pageSchema.parse(vm.runInContext('doGet()', context));
-  }
-
-  return { spreadsheet, call, raw, page, context };
+function loadBridge(options: AppsScriptOptions = {}, files: string[] = SOURCE_FILES) {
+  return loadAppsScript(options, files);
 }
 
 /** Un catálogo de prueba: el puente ya no siembra nada (#219). Los ids son los de los eventos. */
@@ -174,17 +95,6 @@ function seedCatalog(context: Record<string, unknown>): void {
     appendObjects_('Clientes', ${JSON.stringify(CATALOG.Clientes)});`,
     context,
   );
-}
-
-/**
- * Las funciones que se pueden llamar desde afuera: desde una página de HtmlService,
- * `google.script.run` llama a cualquier función del proyecto cuyo nombre no termine en `_`, con los
- * permisos del dueño y sin el secreto compartido.
- */
-function publicFunctions(context: Record<string, unknown>): string[] {
-  return Object.keys(context)
-    .filter((name) => typeof context[name] === 'function' && !name.endsWith('_'))
-    .sort();
 }
 
 /** Filas de datos no vacías de una pestaña, con las fechas como ISO para poder comparar. */
