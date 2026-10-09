@@ -29,7 +29,9 @@ function connectFragment(origin: string, wipeKey: string | null): string {
 }
 
 /**
- * Página falsa de alta (4.4.0, #128): muestra lo que recibió y pide el nombre del comercio (#193).
+ * Página falsa de alta (4.4.0, #128): muestra lo que recibió y pide el nombre del comercio (#193),
+ * precargado y sin `autofocus`: desde el POS mobile se completa con un toque, sin que se abra el
+ * teclado del celular apenas llega.
  * El formulario va a `/_demo/onboarding/complete`, que lo guarda y vuelve al POS con la conexión en
  * el fragmento `#connect=` (base64url de JSON), con el `wipe_key` o sin él (para probar el camino del
  * wizard en el POS).
@@ -47,7 +49,7 @@ function renderOnboardingPage(url: URL): string {
       : `<input type="hidden" name="${name}" value="${escapeHtml(value)}" />`;
   return onboardingHtml.replace(
     '{{content}}',
-    `${received}<form method="get" action="/_demo/onboarding/complete">${hidden('return_url', returnUrl)}${hidden('wipe_key', wipeKey)}<label>Nombre del comercio <input name="company" autofocus /></label><p class="actions"><button type="submit" name="with_key" value="1">Crear comercio y volver al POS</button><button type="submit" name="with_key" value="0">Volver sin wipe_key</button></p></form>`,
+    `${received}<form method="get" action="/_demo/onboarding/complete">${hidden('return_url', returnUrl)}${hidden('wipe_key', wipeKey)}<label>Nombre del comercio <input name="company" value="Mi comercio" /></label><p class="actions"><button type="submit" name="with_key" value="1">Crear comercio y volver al POS</button><button type="submit" name="with_key" value="0">Volver sin wipe_key</button></p></form>`,
   );
 }
 

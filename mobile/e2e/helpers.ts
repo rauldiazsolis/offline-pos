@@ -32,3 +32,20 @@ export async function typeOnKeyboard(page: Page, text: string): Promise<void> {
     await page.locator('.lkeys').getByRole('button', { name: char, exact: true }).click();
   }
 }
+
+/**
+ * Tipea cualquier texto (URLs, claves) con el teclado propio, cambiando de capa entre letras y
+ * números y símbolos según el caracter. Arranca en letras, como el teclado.
+ */
+export async function typeAnything(page: Page, text: string): Promise<void> {
+  const keys = page.locator('.lkeys');
+  let layer: 'letters' | 'symbols' = 'letters';
+  for (const char of text) {
+    const wanted = /[a-zA-ZñÑ]/.test(char) ? 'letters' : 'symbols';
+    if (wanted !== layer) {
+      await keys.getByRole('button', { name: layer === 'letters' ? '123' : 'abc' }).click();
+      layer = wanted;
+    }
+    await keys.getByRole('button', { name: char, exact: true }).click();
+  }
+}
