@@ -45,6 +45,7 @@ import { Sheet } from '../components/sheet.tsx';
 import { money } from '../format.ts';
 import { openNumberEntry, type QuickValue } from '../keyboards/entry.ts';
 import { keypadText } from '../keyboards/keypad-model.ts';
+import { receiptText } from '../receipt-text.ts';
 import { openCustomerPicker } from './sale-screen.tsx';
 
 /** Billetes para el efectivo: los que cubren lo que falta, de menor a mayor. */
@@ -311,6 +312,11 @@ export function CollectionSheet() {
   );
 }
 
+/** Compartir (Web Share) existe en Chrome para Android y Safari; en una compu, casi nunca. */
+function canShare(): boolean {
+  return 'share' in navigator;
+}
+
 /** El comprobante recién emitido o una copia, en el formato de la impresora; Imprimir si hay papel. */
 export function ReceiptSheet() {
   const current = receiptSignal.value;
@@ -337,6 +343,19 @@ export function ReceiptSheet() {
       testId="receipt-sheet"
       footer={
         <>
+          {canShare() && (
+            <button
+              type="button"
+              class="btn"
+              onClick={() => {
+                navigator.share({ text: receiptText(document) }).catch(() => {
+                  // Cerrar el menú de compartir no es un error.
+                });
+              }}
+            >
+              Compartir
+            </button>
+          )}
           {config.format !== 'none' && (
             <button
               type="button"
