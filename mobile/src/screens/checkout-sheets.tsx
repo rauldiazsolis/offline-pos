@@ -275,7 +275,8 @@ export function CollectionSheet() {
               class="item"
               data-method={method}
               onClick={() => {
-                const owed = Math.max(0, -(balance.before ?? 0));
+                // Un saldo positivo es lo que el cliente debe ("Justo" lo salda).
+                const owed = Math.max(0, balance.before ?? 0);
                 askAmount({
                   title: PAYMENT_METHOD_LABELS[method],
                   current: collectionBuffersSignal.value[method],
