@@ -20,6 +20,8 @@ type Pill = { text: string; tone: 'ok' | 'warn' | 'error' | 'muted' };
 
 /** El estado de sync en pocas palabras (el detalle, en Diagnóstico, como la barra de escritorio). */
 export function syncPill(): Pill {
+  // La vista previa con datos de ejemplo no tiene backend (`src/preview/seed.ts`).
+  if (__PREVIEW__) return { text: 'Vista previa', tone: 'muted' };
   const status = syncStatusSignal.value;
   const pending = pendingOutboxCountSignal.value;
   if (status === 'offline') {

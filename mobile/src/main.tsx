@@ -54,6 +54,10 @@ function startApp(container: HTMLElement): void {
 
 /** Una sola pestaña por almacenamiento (#175), como el POS de escritorio. */
 async function start(container: HTMLElement): Promise<void> {
+  if (__PREVIEW__) {
+    const { seedPreview } = await import('./preview/seed.ts');
+    await seedPreview();
+  }
   const displaced = consumeTabDisplaced();
   const claim = await claimTab(TAB_LOCK_NAME, browserTabLeadershipDeps());
   if (claim.kind === 'leader') {
