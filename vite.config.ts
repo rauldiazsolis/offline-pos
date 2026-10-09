@@ -26,6 +26,8 @@ export default defineConfig({
       ...defaultExclude,
       'e2e/**',
       'demo-backend/**',
+      // El POS mobile tiene su propio Vitest (`mobile/vite.config.ts`).
+      'mobile/**',
       '.claude/**',
       // Sitio publicado armado en local (#148).
       '.site-dist/**',

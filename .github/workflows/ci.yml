@@ -41,6 +41,13 @@ jobs:
 
       - run: pnpm build
 
+      # POS mobile (mobile/AGENTS.md).
+      - run: pnpm --filter pos-mobile run typecheck
+
+      - run: pnpm --filter pos-mobile run test
+
+      - run: pnpm --filter pos-mobile run build
+
       - run: pnpm exec playwright install --with-deps chromium
 
       - run: pnpm test:e2e
