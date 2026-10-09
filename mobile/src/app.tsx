@@ -1,8 +1,10 @@
 import { useEffect } from 'preact/hooks';
 import { isTrainingMode } from '../../src/storage/training-mode.ts';
+import { applyAppUpdate } from '../../src/ui/keyboard/app-update-controller.ts';
 import { enterCashScreen } from '../../src/ui/keyboard/cash-controller.ts';
 import { triggerCashSummary } from '../../src/ui/keyboard/cash-summary-controller.ts';
 import { toggleTraining } from '../../src/ui/keyboard/training-controller.ts';
+import { appUpdateSignal } from '../../src/ui/state/app-update.ts';
 import { demoConfirmSignal } from '../../src/ui/state/demo-confirm.ts';
 import { activeScreenSignal, type ActiveScreen } from '../../src/ui/state/screen.ts';
 import { connectionStateSignal } from '../../src/ui/state/sync.ts';
@@ -18,6 +20,7 @@ import { DemoConfirmScreen } from './screens/demo-confirm-screen.tsx';
 import { MoreScreen } from './screens/more-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
 import { startCatalogBrowse } from './state/catalog-browse.ts';
+import { startPendingCount } from './state/pending-count.ts';
 import { cartOpenSignal, moreOpenSignal } from './state/nav.ts';
 import {
   CashScreen,
@@ -127,8 +130,23 @@ function Overlay({ screen }: { screen: ActiveScreen }) {
   }
 }
 
+/** #54: una versión nueva descargada; se aplica a pedido, nunca con una venta en curso. */
+function UpdateBanner() {
+  const state = appUpdateSignal.value;
+  if (state === 'none') return null;
+  return (
+    <div class="banner banner--info">
+      <span>Hay una versión nueva del POS.</span>
+      <button type="button" disabled={state === 'applying'} onClick={() => void applyAppUpdate()}>
+        {state === 'applying' ? 'Actualizando…' : 'Actualizar'}
+      </button>
+    </div>
+  );
+}
+
 function Shell() {
   useEffect(() => startCatalogBrowse(), []);
+  useEffect(() => startPendingCount(), []);
   const screen = activeScreenSignal.value;
   const tab = currentTab(screen);
   const training = isTrainingMode();
@@ -141,6 +159,7 @@ function Shell() {
         </button>
       )}
       <Header />
+      <UpdateBanner />
       <DemoAndPortalBar />
       <main class="content">
         <Content screen={screen} />

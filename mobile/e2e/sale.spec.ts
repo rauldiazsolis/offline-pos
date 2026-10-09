@@ -14,7 +14,10 @@ test('una venta de punta a punta: grilla, búsqueda, cantidad, cobro y comproban
   // Buscar con el teclado de letras propio.
   await page.getByRole('button', { name: 'Buscar' }).click();
   await typeOnKeyboard(page, 'pol');
-  await page.getByTestId('text-entry').getByRole('button', { name: /Polenta 500g/ }).click();
+  await page
+    .getByTestId('text-entry')
+    .getByRole('button', { name: /Polenta 500g/ })
+    .click();
   await expect(page.getByTestId('ticket-total')).toContainText('3.000');
 
   // Cambiar la cantidad desde el ticket, con el teclado numérico.

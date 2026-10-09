@@ -6,6 +6,7 @@ import { bootstrap } from '../../src/ui/bootstrap.ts';
 import { installPosConsole } from '../../src/ui/console/pos-console.ts';
 import { isBenignResizeObserverLoopError, renderFatalError } from '../../src/ui/fatal-error.ts';
 import { browserTabLeadershipDeps } from '../../src/ui/tab-browser.ts';
+import { startServiceWorker } from '../../src/ui/service-worker.ts';
 import { claimTab } from '../../src/ui/tab-leadership.ts';
 import { startTerminalTitle } from '../../src/ui/terminal-context.ts';
 import { App } from './app.tsx';
@@ -27,11 +28,13 @@ const SECONDARY_TITLE = 'POS en otra pestaña';
 
 /**
  * El mismo arranque que el POS de escritorio (`src/main.tsx`): la consola `pos.*`, `bootstrap()`
- * (identidad, repositorios, venta en curso, onboarding de demo y sync) y el render. Lo único propio
- * es la vista.
+ * (identidad, repositorios, venta en curso, onboarding de demo y sync), el service worker y el
+ * render. Lo único propio es la vista.
  */
 function startApp(container: HTMLElement): void {
   installPosConsole();
+  // #54: abre sin red y recibe las versiones nuevas. Solo la pestaña que manda.
+  void startServiceWorker();
   bootstrap()
     .then(() => {
       render(null, container);

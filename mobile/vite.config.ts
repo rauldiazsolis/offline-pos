@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import preact from '@preact/preset-vite';
 import { defaultExclude, defineConfig } from 'vitest/config';
+import { serviceWorkerPlugin } from '../build/sw-plugin.ts';
 
 const { version } = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
@@ -12,7 +13,8 @@ const { version } = JSON.parse(
 export default defineConfig({
   // Rutas relativas, como el POS de escritorio (#148): el mismo build anda en cualquier carpeta.
   base: './',
-  plugins: [preact()],
+  // El service worker de escritorio (#54), compilado desde `src/workers/sw.ts` de este proyecto.
+  plugins: [preact(), serviceWorkerPlugin()],
   resolve: { dedupe: ['preact', '@preact/signals', 'dexie'] },
   define: { __POS_VERSION__: JSON.stringify(version) },
   server: { fs: { allow: ['..'] } },
