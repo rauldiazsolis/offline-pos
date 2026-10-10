@@ -30,7 +30,7 @@ function checkout(): void {
   void triggerCheckout();
 }
 
-/** Abajo de la venta: cuántas líneas, el total y Cobrar. Tocar el total abre el ticket. */
+/** Abajo de la venta: cuántas líneas, el total y Cerrar; tocar el total o Cerrar abre el ticket. */
 export function TicketBar() {
   const cart = cartSignal.value;
   const count = cart.lines.length;
@@ -66,8 +66,21 @@ export function TicketBar() {
         <small>{detail}</small>
         <strong class="num">{money(total)}</strong>
       </button>
-      <button type="button" class="m-btn m-btn-primary" disabled={!canCharge} onClick={checkout}>
-        {count === 0 && customer !== undefined ? 'Cobranza' : total < 0 ? 'Devolver' : 'Cobrar'}
+      {/* Cerrar la venta: abre el ticket completo para revisarlo, y ahí se cobra. Sin líneas y con
+          cliente, la cobranza sin venta. */}
+      <button
+        type="button"
+        class="m-btn m-btn-primary"
+        disabled={!canCharge}
+        onClick={() => {
+          if (count > 0) {
+            cartOpenSignal.value = true;
+          } else {
+            checkout();
+          }
+        }}
+      >
+        {count === 0 && customer !== undefined ? 'Cobranza' : 'Cerrar'}
       </button>
     </div>
   );

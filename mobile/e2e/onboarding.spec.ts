@@ -9,7 +9,8 @@ test('de la demo al comercio propio: el alta vuelve al POS mobile ya conectado',
 
   // Una venta en la demo; el alta la borra (vuelve con el wipe_key de esta terminal).
   await page.getByRole('button', { name: /Leche entera 1L/ }).click();
-  await page.getByRole('button', { name: 'Cobrar' }).click();
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await page.getByTestId('ticket-sheet').getByRole('button', { name: 'Cobrar' }).click();
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await page.getByRole('button', { name: 'Nueva venta' }).click();
 

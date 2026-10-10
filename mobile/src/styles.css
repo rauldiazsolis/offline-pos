@@ -376,6 +376,11 @@ html.pos-mobile .prod {
   transition: transform 0.08s;
 }
 
+html.pos-mobile .prod {
+  /* El toque sostenido elige la cantidad: sin el menú ni la selección del navegador. */
+  -webkit-touch-callout: none;
+}
+
 html.pos-mobile .prod:active {
   transform: scale(0.97);
 }
@@ -586,6 +591,29 @@ html.pos-mobile .sheet-body {
   padding: 0 16px 12px;
   min-height: 0;
   flex: 1 1 auto;
+}
+
+html.pos-mobile .sheet-body--fixed {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* La lista de una búsqueda ocupa lo que sobra arriba del teclado y scrollea sola. */
+html.pos-mobile .entry-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html.pos-mobile .entry-query {
+  flex: none;
+  margin: 8px 0;
+}
+
+html.pos-mobile .sheet-body--fixed .lkeys {
+  flex: none;
 }
 
 html.pos-mobile .sheet-foot {

@@ -19,7 +19,8 @@ test('instalada una vez, la app abre y vende sin red', async ({ page, context })
 
   // Se vende igual: la venta queda pendiente en el outbox.
   await page.getByRole('button', { name: /Leche entera 1L/ }).click();
-  await page.getByRole('button', { name: 'Cobrar' }).click();
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await page.getByTestId('ticket-sheet').getByRole('button', { name: 'Cobrar' }).click();
   await page.getByRole('button', { name: 'Confirmar' }).click();
   await expect(page.getByTestId('receipt-sheet')).toContainText('Ticket #1');
   await page.getByRole('button', { name: 'Nueva venta' }).click();

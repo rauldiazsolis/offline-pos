@@ -10,13 +10,27 @@ type Props = {
   full?: boolean;
   children: ComponentChildren;
   testId?: string;
+  /**
+   * El cuerpo no scrollea: lo reparte su contenido (el teclado de letras fijo abajo y la lista que
+   * scrollea arriba).
+   */
+  fixedBody?: boolean;
 };
 
 /**
  * Hoja inferior: todo lo que en escritorio es un modal. Se anima solo al montarse; los cambios de
  * contenido (cada tecla de un teclado) re-renderizan sin volver a animar.
  */
-export function Sheet({ title, onClose, closeLabel, footer, full, children, testId }: Props) {
+export function Sheet({
+  title,
+  onClose,
+  closeLabel,
+  footer,
+  full,
+  children,
+  testId,
+  fixedBody,
+}: Props) {
   return (
     <>
       <div class="backdrop" onClick={onClose} />
@@ -34,7 +48,9 @@ export function Sheet({ title, onClose, closeLabel, footer, full, children, test
             </button>
           )}
         </header>
-        <div class="sheet-body">{children}</div>
+        <div class={fixedBody === true ? 'sheet-body sheet-body--fixed' : 'sheet-body'}>
+          {children}
+        </div>
         {footer !== undefined && <footer class="sheet-foot">{footer}</footer>}
       </section>
     </>

@@ -30,7 +30,7 @@ test('cada pantalla de la venta se opera sin el teclado del sistema', async ({ p
 
   await page.getByRole('button', { name: 'Buscar' }).click();
   await expectNoSystemKeyboard(page);
-  await page.getByRole('button', { name: 'Cerrar' }).click();
+  await page.getByTestId('text-entry').getByRole('button', { name: 'Cerrar' }).click();
 
   await page.getByRole('button', { name: /Leche entera 1L/ }).click();
   await page.getByTestId('ticket-total').click();

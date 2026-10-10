@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { splitConnectorCustomers } from '../../../src/domain/customer.ts';
 import { db } from '../../../src/storage/db.ts';
+import { saveBackendCapabilities } from '../../../src/sync/backend-capabilities.ts';
 import { saveBackendCompany } from '../../../src/sync/backend-company.ts';
+import { saveBackendPortal } from '../../../src/sync/backend-portal.ts';
 import { loadSyncConfig, saveSyncConfig } from '../../../src/sync/config.ts';
 import { connectorCustomerSchema, connectorProductSchema } from '../../../src/sync/connector.ts';
 import { DEVICE_ID_KEY } from '../../../src/sync/terminal-identity.ts';
@@ -33,6 +35,9 @@ export async function seedPreview(): Promise<void> {
     verifiedAt: now,
   });
   saveBackendCompany({ name: 'Kiosco de ejemplo' });
+  // Como el demo-backend: el portal se ve (al tocarlo no abre: no hay backend).
+  saveBackendCapabilities(['demo-sessions', 'customer-payment-void', 'portal']);
+  saveBackendPortal({ command: 'PANEL', label: 'Panel del backend' });
 
   const products = z.array(fixtureProductSchema).parse(productsJson);
   const raws = z.array(connectorCustomerSchema).parse(customersJson);

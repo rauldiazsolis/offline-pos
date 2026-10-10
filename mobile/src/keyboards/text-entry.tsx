@@ -68,20 +68,24 @@ export function TextEntry({ request }: { request: TextEntryRequest }) {
       title={request.title}
       onClose={closeEntry}
       full={request.results !== undefined}
+      fixedBody
       testId="text-entry"
     >
-      <div class="query" data-testid="text-entry-display">
+      {/* La lista arriba, y el texto pegado al teclado, que queda fijo abajo: escribir no mueve nada. */}
+      {request.results !== undefined && (
+        <div class="entry-results list">{request.results(state.text)}</div>
+      )}
+      {error !== null && (
+        <p class="hint hint--error" role="alert" style={{ textAlign: 'left', margin: '6px 0 0' }}>
+          {error}
+        </p>
+      )}
+      <div class="query entry-query" data-testid="text-entry-display">
         {shown !== '' && <span>{shown}</span>}
         <span class="caret" />
         {shown === '' && <span class="ph">{request.placeholder}</span>}
       </div>
-      {error !== null && (
-        <p class="hint hint--error" role="alert" style={{ textAlign: 'left' }}>
-          {error}
-        </p>
-      )}
-      {request.results !== undefined && <div class="list">{request.results(state.text)}</div>}
-      <div class="lkeys" style={{ marginTop: '8px' }}>
+      <div class="lkeys">
         {rows.map((row, index) => (
           <div class="lrow" key={row.join('')}>
             {index === 2 && state.layer === 'letters' && (

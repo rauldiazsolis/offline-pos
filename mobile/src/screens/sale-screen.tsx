@@ -14,6 +14,7 @@ import { stockSnapshotSignal } from '../../../src/ui/state/stock.ts';
 import { Scanner } from '../camera/scanner.tsx';
 import { ScanIcon, SearchIcon, UserIcon } from '../components/icons.tsx';
 import { Sheet } from '../components/sheet.tsx';
+import { useLongPress } from '../components/use-long-press.ts';
 import { money } from '../format.ts';
 import { closeEntry, openNumberEntry, openTextEntry } from '../keyboards/entry.ts';
 import { keypadText } from '../keyboards/keypad-model.ts';
@@ -25,6 +26,7 @@ import {
   attachCustomer,
   createAndAttachCustomer,
   pendingQuantitySignal,
+  setLineQty,
 } from '../state/sale-actions.ts';
 
 const TOP = 'Más vendidos';
@@ -64,18 +66,61 @@ function stockLabel(product: Product): { text: string; low: boolean } | null {
   return { text: `${formatQuantity(stock)} u.`, low: stock <= 3 };
 }
 
+/**
+ * Toque sostenido en un producto: la cantidad de ese producto en el ticket, con el teclado numérico
+ * (0 lo quita). Sin el producto en el ticket, lo agrega con esa cantidad.
+ */
+function openProductQuantity(product: Product): void {
+  const decimal = decimalSeparator(resolveLocale());
+  const index = cartSignal.value.lines.findIndex(
+    (line) => line.kind === 'product' && line.productId === product.id,
+  );
+  const current = index === -1 ? undefined : cartSignal.value.lines[index]?.qty;
+  openNumberEntry({
+    title: product.name,
+    initial: current === undefined ? '' : keypadText(current, decimal),
+    unit: 'unidades',
+    options: { decimals: 3, signed: true },
+    hint: (value) =>
+      value === undefined
+        ? `${money(product.price)} c/u`
+        : value === 0
+          ? 'Con 0 se quita del ticket.'
+          : `${money(product.price)} c/u · ${money(product.price * value)}`,
+    quick: [
+      { label: '1', text: '1' },
+      { label: '2', text: '2' },
+      { label: '6', text: '6' },
+      { label: '12', text: '12' },
+    ],
+    validate: (value) =>
+      value === undefined || (index === -1 && value === 0) ? 'Ingresá la cantidad.' : null,
+    onDone: (value) => {
+      if (value === undefined) return;
+      if (index === -1) addProduct(product, value);
+      else setLineQty(index, value);
+    },
+  });
+}
+
 function ProductCard({ product }: { product: Product }) {
   const inCart = quantityInCart(product.id);
   const stock = stockLabel(product);
   const blocked = product.blocked !== undefined;
+  const handlers = useLongPress(
+    () => {
+      addProduct(product);
+    },
+    () => {
+      openProductQuantity(product);
+    },
+  );
   return (
     <button
       type="button"
       class={blocked ? 'prod prod--blocked' : 'prod'}
       data-product-id={product.id}
-      onClick={() => {
-        addProduct(product);
-      }}
+      {...handlers}
     >
       {inCart !== 0 && (
         <span class={inCart < 0 ? 'badge neg num' : 'badge num'}>{formatQuantity(inCart)}</span>

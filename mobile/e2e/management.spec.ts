@@ -37,7 +37,8 @@ test('venta a cuenta corriente, cobranza y anulación', async ({ page }) => {
   // Venta a cuenta corriente de Rosa.
   await pickCustomer(page, 'Ros', /Rosa Benítez/);
   await page.getByRole('button', { name: /Leche entera 1L/ }).click();
-  await page.getByRole('button', { name: 'Cobrar' }).click();
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await page.getByTestId('ticket-sheet').getByRole('button', { name: 'Cobrar' }).click();
   await page.locator('[data-method="cash"]').click();
   await page.getByRole('button', { name: 'Nada' }).click();
   await page.getByRole('button', { name: 'Listo' }).click();
