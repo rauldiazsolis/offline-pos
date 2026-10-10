@@ -1161,3 +1161,32 @@ html.pos-mobile .m-spinner {
     animation: none;
   }
 }
+
+/* El total de la barra, cada vez que cambia: un pop corto con un destello del acento. */
+html.pos-mobile .ticketbar .sum strong {
+  display: inline-block;
+  transform-origin: left center;
+}
+
+html.pos-mobile .total-pop {
+  animation: m-total-pop 0.35s ease-out;
+}
+
+@keyframes m-total-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+    color: var(--accent);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.pos-mobile .total-pop {
+    animation: none;
+  }
+}

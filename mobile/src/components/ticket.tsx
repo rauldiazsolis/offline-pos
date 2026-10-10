@@ -64,7 +64,10 @@ export function TicketBar() {
         data-testid="ticket-total"
       >
         <small>{detail}</small>
-        <strong class="num">{money(total)}</strong>
+        {/* `key`: cada total nuevo es otro elemento, así la animación vuelve a correr. */}
+        <strong key={total} class={count > 0 ? 'num total-pop' : 'num'}>
+          {money(total)}
+        </strong>
       </button>
       {/* Cerrar la venta: abre el ticket completo para revisarlo, y ahí se cobra. Sin líneas y con
           cliente, la cobranza sin venta. */}
