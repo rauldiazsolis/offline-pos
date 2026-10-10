@@ -7,16 +7,18 @@ import { connectorCustomerSchema, connectorProductSchema } from '../../../src/sy
 import { DEVICE_ID_KEY } from '../../../src/sync/terminal-identity.ts';
 import customersJson from '../../../demo-backend/src/fixtures/customers.json';
 import productsJson from '../../../demo-backend/src/fixtures/products.json';
+import { previewModeSignal } from './flag.ts';
 
 /**
  * Vista previa para el celular (`pnpm --filter pos-mobile build:preview`): la app de siempre con
  * los datos de ejemplo del demo-backend ya cargados, para probarla donde no puede llamar a un
  * backend (un Artifact de claude.ai). La conexión apunta a un backend que no existe: todo se guarda
- * local y el estado dice que no sincroniza. Nunca entra en el build normal (`__PREVIEW__`).
+ * local y el estado dice que no sincroniza. Nunca entra en la app publicada: solo en el build de `build:preview`.
  */
 const fixtureProductSchema = connectorProductSchema.extend({ initialStock: z.number() });
 
 export async function seedPreview(): Promise<void> {
+  previewModeSignal.value = true;
   if (loadSyncConfig().ok) {
     return;
   }

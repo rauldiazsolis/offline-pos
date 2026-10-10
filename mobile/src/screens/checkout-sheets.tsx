@@ -147,7 +147,7 @@ export function CheckoutSheet() {
         <>
           <button
             type="button"
-            class="btn"
+            class="m-btn"
             onClick={() => {
               checkoutBuffersSignal.value = {
                 cash: target === 0 ? '' : keypadText(target, decimalSeparator(resolveLocale())),
@@ -162,7 +162,7 @@ export function CheckoutSheet() {
           >
             Todo en efectivo
           </button>
-          <button type="button" class="btn btn-primary" onClick={() => void submitCheckout()}>
+          <button type="button" class="m-btn m-btn-primary" onClick={() => void submitCheckout()}>
             Confirmar
           </button>
         </>
@@ -257,7 +257,7 @@ export function CollectionSheet() {
       full
       testId="collection-sheet"
       footer={
-        <button type="button" class="btn btn-primary" onClick={() => void submitCollection()}>
+        <button type="button" class="m-btn m-btn-primary" onClick={() => void submitCollection()}>
           Confirmar cobranza
         </button>
       }
@@ -346,7 +346,7 @@ export function ReceiptSheet() {
           {canShare() && (
             <button
               type="button"
-              class="btn"
+              class="m-btn"
               onClick={() => {
                 navigator.share({ text: receiptText(document) }).catch(() => {
                   // Cerrar el menú de compartir no es un error.
@@ -359,7 +359,7 @@ export function ReceiptSheet() {
           {config.format !== 'none' && (
             <button
               type="button"
-              class="btn"
+              class="m-btn"
               onClick={() => {
                 printReceipt(current.source);
               }}
@@ -367,13 +367,13 @@ export function ReceiptSheet() {
               Imprimir
             </button>
           )}
-          <button type="button" class="btn btn-primary" onClick={close}>
+          <button type="button" class="m-btn m-btn-primary" onClick={close}>
             {current.returnTo === 'sale' ? 'Nueva venta' : 'Volver'}
           </button>
         </>
       }
     >
-      <div class="receipt-paper">
+      <div class="m-paper">
         <ReceiptView document={document} format={paperFormat(config.format)} />
       </div>
     </Sheet>

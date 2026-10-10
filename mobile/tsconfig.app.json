@@ -34,6 +34,5 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["src", "../src/pos-version.d.ts"],
-  "exclude": ["src/workers/sw.ts"]
+  "include": ["src", "../src/pos-version.d.ts"]
 }

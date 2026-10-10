@@ -1,4 +1,5 @@
 import { useEffect } from 'preact/hooks';
+import './styles.css';
 import { isTrainingMode } from '../../src/storage/training-mode.ts';
 import { applyAppUpdate } from '../../src/ui/keyboard/app-update-controller.ts';
 import { enterCashScreen } from '../../src/ui/keyboard/cash-controller.ts';
@@ -9,6 +10,9 @@ import { demoConfirmSignal } from '../../src/ui/state/demo-confirm.ts';
 import { activeScreenSignal, type ActiveScreen } from '../../src/ui/state/screen.ts';
 import { connectionStateSignal } from '../../src/ui/state/sync.ts';
 import { trainingScreenSignal } from '../../src/ui/state/training.ts';
+import { setUiMode } from '../../src/ui/state/ui-mode.ts';
+import { viewportWidthSignal } from '../../src/ui/state/viewport.ts';
+import { signal } from '@preact/signals';
 import { DemoAndPortalBar, Header } from './components/header.tsx';
 import { CartIcon, CashIcon, ListIcon, MoreIcon } from './components/icons.tsx';
 import { TicketBar, TicketSheet } from './components/ticket.tsx';
@@ -130,6 +134,40 @@ function Overlay({ screen }: { screen: ActiveScreen }) {
   }
 }
 
+/** Ancho desde el que se sugiere la vista de escritorio (la de su diseño, sin zoom). */
+const DESKTOP_SUGGESTION_PX = 1024;
+const desktopSuggestionDismissedSignal = signal(false);
+
+/** En una pantalla ancha, la vista de escritorio entra entera: se sugiere, nunca se cambia sola. */
+function DesktopSuggestion() {
+  if (viewportWidthSignal.value < DESKTOP_SUGGESTION_PX || desktopSuggestionDismissedSignal.value) {
+    return null;
+  }
+  return (
+    <div class="banner banner--info">
+      <span>La pantalla es ancha: ¿usar la versión de escritorio?</span>
+      <span style={{ display: 'flex', gap: '14px' }}>
+        <button
+          type="button"
+          onClick={() => {
+            desktopSuggestionDismissedSignal.value = true;
+          }}
+        >
+          No
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setUiMode('desktop');
+          }}
+        >
+          Usar escritorio
+        </button>
+      </span>
+    </div>
+  );
+}
+
 /** #54: una versión nueva descargada; se aplica a pedido, nunca con una venta en curso. */
 function UpdateBanner() {
   const state = appUpdateSignal.value;
@@ -159,6 +197,7 @@ function Shell() {
         </button>
       )}
       <Header />
+      <DesktopSuggestion />
       <UpdateBanner />
       <DemoAndPortalBar />
       <main class="content">

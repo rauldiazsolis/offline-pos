@@ -6,9 +6,12 @@ import { bootstrap } from './ui/bootstrap.ts';
 import { installPosConsole } from './ui/console/pos-console.ts';
 import { ErrorBoundary } from './ui/error-boundary.tsx';
 import { isBenignResizeObserverLoopError, renderFatalError } from './ui/fatal-error.ts';
+import { effect } from '@preact/signals';
 import { App } from './ui/app.tsx';
+import { App as MobileApp } from '../mobile/src/app.tsx';
 import { SecondaryTabScreen } from './ui/screens/secondary-tab-screen.tsx';
 import { startServiceWorker } from './ui/service-worker.ts';
+import { applyUiModeClass, uiModeSignal } from './ui/state/ui-mode.ts';
 import { startViewportTracking } from './ui/state/viewport.ts';
 import { browserTabLeadershipDeps } from './ui/tab-browser.ts';
 import { claimTab } from './ui/tab-leadership.ts';
@@ -26,6 +29,15 @@ window.addEventListener('unhandledrejection', (event) => {
   renderFatalError(event.reason as unknown);
 });
 startViewportTracking();
+// Las dos vistas del POS (escritorio y celular) son la misma terminal: ver `ui/state/ui-mode.ts`.
+effect(() => {
+  applyUiModeClass(uiModeSignal.value);
+});
+
+/** La vista elegida; cambiar es instantáneo porque las dos leen el mismo estado. */
+function ChosenApp() {
+  return uiModeSignal.value === 'mobile' ? <MobileApp /> : <App />;
+}
 
 const APP_TITLE = document.title;
 const SECONDARY_TITLE = 'POS en otra pestaña';
@@ -45,7 +57,7 @@ function startApp(container: HTMLElement): void {
       startTerminalTitle(APP_TITLE);
       render(
         <ErrorBoundary>
-          <App />
+          <ChosenApp />
         </ErrorBoundary>,
         container,
       );

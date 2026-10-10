@@ -1,3 +1,4 @@
+import './barcode-detector.ts';
 import { useEffect, useRef, useState } from 'preact/hooks';
 
 export type ScanKind = 'qr' | 'product';

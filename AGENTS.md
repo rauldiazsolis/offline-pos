@@ -37,6 +37,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Modo entrenamiento: la base aparte y las claves operativas | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); el push, la reserva y la limpieza cortados en [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); `/ENTRENAMIENTO`, las pantallas, la franja, el ticket y los bordes en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
+| Vista de celular (sin teclado del sistema): sus pantallas, teclados propios, estilos y e2e | [`mobile/AGENTS.md`](./mobile/AGENTS.md); la elección de vista, en "Dos vistas" más abajo |
 
 ## Qué es esto
 
@@ -443,6 +444,25 @@ sync y las escrituras en curso, con tope) y se recarga como segunda; si no conte
 cerrojo. **No hay forma de traer la original al frente** en Chromium (`window.focus()`,
 `window.open('', nombre)` y `alert()` no lo hacen, verificado en la spec): solo el texto y el título.
 Sin `navigator.locks` (contexto no seguro) la app arranca como antes. Detalle en `src/ui/AGENTS.md`.
+
+## Dos vistas: escritorio y celular
+
+El POS tiene dos vistas de la **misma terminal**: la de escritorio (`src/ui/`, teclado y barra de
+comandos) y la de celular (`mobile/`, que nunca abre el teclado del sistema: teclados propios,
+grillas y la cámara). Es una sola app y un solo build: `src/main.tsx` arranca igual y renderiza la
+vista elegida (`ui/state/ui-mode.ts`). Comparten el almacenamiento de la carpeta (base, conexión,
+lo pendiente, la venta en curso), así que cambiar de vista es instantáneo y no pierde nada.
+
+- **Cuál se ve**: la elegida, guardada en `localStorage` (`ui-mode`); sin elegir, el ancho decide
+  (por debajo de `MIN_SUPPORTED_WIDTH_PX`, 600 px, la de celular).
+- **Cambiar**: `/MOBILE` en escritorio; "Usar la versión de escritorio" en Más de la de celular.
+  Escritorio en una pantalla angosta muestra "Pantalla no compatible" con "Usar la versión para
+  celular"; la de celular en una pantalla de 1024 px o más sugiere la de escritorio. Nunca cambia sola.
+- **Estilos**: los de celular van todos bajo `html.pos-mobile` (la clase la pone `main.tsx` según la
+  vista) y sus clases que coincidían con las de escritorio llevan el prefijo `m-`: ninguna regla de
+  una vista toca a la otra.
+- La vista de celular reusa los controllers, signals y el arranque de escritorio sin cambiarlos; lo
+  propio es solo la vista (detalle en `mobile/AGENTS.md`).
 
 ## Modo entrenamiento (#177)
 

@@ -295,7 +295,7 @@ function FreeLineSheet({ onClose }: { onClose: () => void }) {
       footer={
         <button
           type="button"
-          class="btn btn-primary"
+          class="m-btn m-btn-primary"
           onClick={() => {
             askAmount(concept);
           }}

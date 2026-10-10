@@ -259,7 +259,7 @@ export function SummaryScreen() {
       >
         <button
           type="button"
-          class="btn"
+          class="m-btn"
           aria-label="Día anterior"
           disabled={view.date <= view.oldestDate}
           onClick={() => void showPreviousDay()}
@@ -271,7 +271,7 @@ export function SummaryScreen() {
         </h2>
         <button
           type="button"
-          class="btn"
+          class="m-btn"
           aria-label="Día siguiente"
           disabled={view.isToday}
           onClick={() => void showNextDay()}
@@ -564,7 +564,11 @@ export function CashScreen() {
           {error.message}
         </p>
       )}
-      <button type="button" class="btn btn-primary btn-block" onClick={() => void submitCash()}>
+      <button
+        type="button"
+        class="m-btn m-btn-primary m-btn-block"
+        onClick={() => void submitCash()}
+      >
         {kind === 'count'
           ? 'Registrar arqueo'
           : kind === 'in'
@@ -667,10 +671,10 @@ export function VoidScreen() {
           onClose={cancelVoidConfirmation}
           footer={
             <>
-              <button type="button" class="btn" onClick={cancelVoidConfirmation}>
+              <button type="button" class="m-btn" onClick={cancelVoidConfirmation}>
                 Volver
               </button>
-              <button type="button" class="btn btn-danger" onClick={() => void confirmVoid()}>
+              <button type="button" class="m-btn m-btn-danger" onClick={() => void confirmVoid()}>
                 Anular
               </button>
             </>
@@ -708,7 +712,7 @@ export function DiagnosticsScreen() {
   return (
     <div class="page stack">
       <PageHeader title="Diagnóstico" onBack={exitDiagnosticoScreen} />
-      <button type="button" class="btn btn-primary btn-block" onClick={() => void syncNow()}>
+      <button type="button" class="m-btn m-btn-primary m-btn-block" onClick={() => void syncNow()}>
         Sincronizar ahora
       </button>
       <div class="card">
@@ -888,7 +892,7 @@ export function PrinterScreen() {
       </div>
       {textField('Encabezado', form.header, setPrinterHeader)}
       {textField('Pie', form.footer, setPrinterFooter)}
-      <div class="receipt-paper">
+      <div class="m-paper">
         <ReceiptView document={sampleDocumentFor(form)} format={paperFormat(form.format)} />
       </div>
       {error !== null && (
@@ -899,13 +903,13 @@ export function PrinterScreen() {
       <div class="stack">
         <button
           type="button"
-          class="btn btn-block"
+          class="m-btn m-btn-block"
           disabled={form.format === 'none'}
           onClick={() => void printTestReceipt()}
         >
           Prueba de impresión
         </button>
-        <button type="button" class="btn btn-primary btn-block" onClick={savePrinterForm}>
+        <button type="button" class="m-btn m-btn-primary m-btn-block" onClick={savePrinterForm}>
           Guardar
         </button>
       </div>
@@ -932,7 +936,7 @@ export function DemoResetScreen() {
       )}
       <button
         type="button"
-        class="btn btn-danger btn-block"
+        class="m-btn m-btn-danger m-btn-block"
         disabled={busy}
         onClick={() => void confirmDemoReset()}
       >
@@ -990,7 +994,7 @@ export function TrainingScreen() {
       <div class="stack">
         <button
           type="button"
-          class={entering ? 'btn btn-primary btn-block' : 'btn btn-danger btn-block'}
+          class={entering ? 'm-btn m-btn-primary m-btn-block' : 'm-btn m-btn-danger m-btn-block'}
           disabled={busy}
           onClick={() => void confirmTraining()}
         >
@@ -998,7 +1002,7 @@ export function TrainingScreen() {
         </button>
         <button
           type="button"
-          class="btn btn-block"
+          class="m-btn m-btn-block"
           disabled={busy}
           onClick={() => {
             cancelTraining();

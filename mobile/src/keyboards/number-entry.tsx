@@ -82,7 +82,7 @@ export function NumberEntry({ request }: { request: NumberEntryRequest }) {
           {request.extra !== undefined && (
             <button
               type="button"
-              class={request.extra.danger === true ? 'btn btn-danger' : 'btn'}
+              class={request.extra.danger === true ? 'm-btn m-btn-danger' : 'm-btn'}
               onClick={() => {
                 closeEntry();
                 request.extra?.run();
@@ -91,7 +91,7 @@ export function NumberEntry({ request }: { request: NumberEntryRequest }) {
               {request.extra.label}
             </button>
           )}
-          <button type="button" class="btn btn-primary" onClick={done}>
+          <button type="button" class="m-btn m-btn-primary" onClick={done}>
             {request.okLabel ?? 'Listo'}
           </button>
         </>

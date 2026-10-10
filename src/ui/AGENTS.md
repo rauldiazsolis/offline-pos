@@ -567,6 +567,15 @@ de entrenamiento** (#177, botones) y la **barra de estado** (click =
 **encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
 del portal hace su comando, #179; el resto es pasivo, #193).
 
+## Vista de celular (`/MOBILE`)
+
+La vista de celular (`mobile/`) es la misma terminal con otra cara; el principio, en "Dos vistas" de
+la raíz. Lo de esta carpeta: `ui/state/ui-mode.ts` (la vista elegida y la clase `pos-mobile` en
+`<html>`), el comando `/MOBILE` (`commands.ts`, `command-bar-controller.ts::runCommand`) y el botón
+"Usar la versión para celular" de `screens/unsupported-screen.tsx`. Un cambio en un controller o en
+un signal de acá lo ve también la vista de celular: sus e2e (`pnpm --filter pos-mobile test:e2e`)
+corren contra el build de la raíz.
+
 ## Diseño visual
 
 Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.

@@ -42,13 +42,13 @@ export function DemoConfirmScreen() {
       )}
       {state.phase === 'starting' && (
         <p class="note" role="status">
-          <span class="spinner" /> Abriendo la demo…
+          <span class="m-spinner" /> Abriendo la demo…
         </p>
       )}
       <div class="stack">
         <button
           type="button"
-          class="btn btn-danger btn-block"
+          class="m-btn m-btn-danger m-btn-block"
           disabled={busy}
           onClick={() => void confirmDemo()}
         >
@@ -56,7 +56,7 @@ export function DemoConfirmScreen() {
         </button>
         <button
           type="button"
-          class="btn btn-block"
+          class="m-btn m-btn-block"
           disabled={busy}
           onClick={() => {
             cancelDemoConfirm();

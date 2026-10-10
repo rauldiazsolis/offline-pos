@@ -31,7 +31,9 @@ export default defineConfig({
   ],
   webServer: [
     {
+      // La app publicada es la de la raíz, con las dos vistas; en un Pixel 7 abre la de celular.
       command: `pnpm build && pnpm preview --port ${String(PORT)} --strictPort`,
+      cwd: '..',
       url: `http://localhost:${String(PORT)}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

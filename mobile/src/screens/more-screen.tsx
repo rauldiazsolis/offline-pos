@@ -7,10 +7,11 @@ import {
   commandResultsSignal,
   commandSelectionIndexSignal,
 } from '../../../src/ui/state/command-bar.ts';
+import { setUiMode } from '../../../src/ui/state/ui-mode.ts';
 import { moreOpenSignal } from '../state/nav.ts';
 
 /** Lo que ya tiene su lugar en el mobile: las pestañas y el botón Cobrar. */
-const SHOWN_ELSEWHERE = new Set(['COBRAR', 'CAJA', 'RESUMEN']);
+const SHOWN_ELSEWHERE = new Set(['COBRAR', 'CAJA', 'RESUMEN', 'MOBILE']);
 
 /** Cómo se llama cada comando en el menú; el resto, con su nombre de escritorio. */
 const TITLES: Record<string, string> = {
@@ -70,6 +71,22 @@ export function MoreScreen() {
             </button>
           );
         })}
+        <button
+          type="button"
+          class="item"
+          data-command="DESKTOP"
+          onClick={() => {
+            moreOpenSignal.value = false;
+            setUiMode('desktop');
+          }}
+        >
+          <span class="main">
+            <div class="title">Usar la versión de escritorio</div>
+            <div class="sub">
+              Con teclado y barra de comandos; la misma terminal y los mismos datos
+            </div>
+          </span>
+        </button>
       </div>
     </div>
   );

@@ -66,7 +66,7 @@ export function TicketBar() {
         <small>{detail}</small>
         <strong class="num">{money(total)}</strong>
       </button>
-      <button type="button" class="btn btn-primary" disabled={!canCharge} onClick={checkout}>
+      <button type="button" class="m-btn m-btn-primary" disabled={!canCharge} onClick={checkout}>
         {count === 0 && customer !== undefined ? 'Cobranza' : total < 0 ? 'Devolver' : 'Cobrar'}
       </button>
     </div>
@@ -160,12 +160,12 @@ export function TicketSheet() {
       testId="ticket-sheet"
       footer={
         <>
-          <button type="button" class="btn" onClick={editAdjustment}>
+          <button type="button" class="m-btn" onClick={editAdjustment}>
             % Ajuste
           </button>
           <button
             type="button"
-            class="btn btn-danger"
+            class="m-btn m-btn-danger"
             onClick={() => {
               discardSale();
               close();
@@ -173,7 +173,7 @@ export function TicketSheet() {
           >
             Descartar
           </button>
-          <button type="button" class="btn btn-primary" onClick={checkout}>
+          <button type="button" class="m-btn m-btn-primary" onClick={checkout}>
             {totals.total < 0 ? 'Devolver' : 'Cobrar'}
           </button>
         </>

@@ -212,7 +212,7 @@ function ProbeWaiting({
   return (
     <div class="stack">
       <p class="note" role="status">
-        <span class="spinner" />{' '}
+        <span class="m-spinner" />{' '}
         {stage === 'waiting-lock'
           ? 'Esperando que termine una sincronización en curso…'
           : `Pidiendo productos, stock y clientes a ${formHost()}…`}{' '}
@@ -259,7 +259,7 @@ function LocalDataStep({ model }: { model: WizardModel }) {
   if (async === 'flushing') {
     return (
       <p class="note" role="status">
-        <span class="spinner" /> Enviando{' '}
+        <span class="m-spinner" /> Enviando{' '}
         {plural(pending, 'evento pendiente', 'eventos pendientes')}…
       </p>
     );
@@ -360,7 +360,7 @@ function ReviewStep({ model }: { model: WizardModel }) {
       <p style={{ fontWeight: 700, margin: 0 }}>{applyPhrase(model)}</p>
       {wizardAsyncSignal.value === 'applying' && (
         <p class="note" role="status">
-          <span class="spinner" /> Aplicando…
+          <span class="m-spinner" /> Aplicando…
         </p>
       )}
       <ValidationError />
@@ -391,17 +391,17 @@ function PrimaryAction({ model }: { model: WizardModel }) {
   if (step === 'probe') {
     if (async === 'probing') {
       return (
-        <button type="button" class="btn" onClick={handleWizardEscape}>
+        <button type="button" class="m-btn" onClick={handleWizardEscape}>
           Cancelar la prueba
         </button>
       );
     }
     return model.probeValid ? (
-      <button type="button" class="btn btn-primary" onClick={advance}>
+      <button type="button" class="m-btn m-btn-primary" onClick={advance}>
         Siguiente
       </button>
     ) : (
-      <button type="button" class="btn btn-primary" onClick={retryProbe}>
+      <button type="button" class="m-btn m-btn-primary" onClick={retryProbe}>
         Probar
       </button>
     );
@@ -409,10 +409,10 @@ function PrimaryAction({ model }: { model: WizardModel }) {
   if (step === 'local-data' && async === 'confirming-wipe') {
     return (
       <>
-        <button type="button" class="btn" onClick={backFromWipeConfirmation}>
+        <button type="button" class="m-btn" onClick={backFromWipeConfirmation}>
           Volver
         </button>
-        <button type="button" class="btn btn-danger" onClick={advance}>
+        <button type="button" class="m-btn m-btn-danger" onClick={advance}>
           Borrar y cambiar
         </button>
       </>
@@ -422,7 +422,7 @@ function PrimaryAction({ model }: { model: WizardModel }) {
     return (
       <button
         type="button"
-        class="btn btn-primary"
+        class="m-btn m-btn-primary"
         disabled={async !== 'idle'}
         onClick={() => void applyWizard()}
       >
@@ -431,7 +431,7 @@ function PrimaryAction({ model }: { model: WizardModel }) {
     );
   }
   return (
-    <button type="button" class="btn btn-primary" disabled={async !== 'idle'} onClick={advance}>
+    <button type="button" class="m-btn m-btn-primary" disabled={async !== 'idle'} onClick={advance}>
       Siguiente
     </button>
   );
@@ -461,7 +461,7 @@ function QuickConnect() {
         </p>
         <button
           type="button"
-          class="btn btn-primary btn-block"
+          class="m-btn m-btn-primary m-btn-block"
           onClick={() => {
             setMessage(null);
             setScanning(true);
@@ -549,7 +549,7 @@ export function ConfigScreen() {
       </main>
       <footer class="sheet-foot" style={{ background: 'var(--surface)' }}>
         {canGoBack && (
-          <button type="button" class="btn" onClick={goBack}>
+          <button type="button" class="m-btn" onClick={goBack}>
             Atrás
           </button>
         )}

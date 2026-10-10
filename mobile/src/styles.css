@@ -1,6 +1,6 @@
 /* POS mobile: una pantalla de app — encabezado, contenido con scroll, barra del ticket y pestañas
    abajo; todo lo demás en hojas inferiores. Sin fuentes externas: tiene que andar sin red. */
-:root {
+html.pos-mobile {
   --bg: #eef1f4;
   --surface: #ffffff;
   --ink: #17202b;
@@ -24,7 +24,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  html.pos-mobile {
     --bg: #10151c;
     --surface: #19212b;
     --ink: #e8edf3;
@@ -43,17 +43,17 @@
   }
 }
 
-* {
+html.pos-mobile * {
   box-sizing: border-box;
 }
 
-html,
-body {
+html.pos-mobile,
+html.pos-mobile body {
   height: 100%;
   margin: 0;
 }
 
-body {
+html.pos-mobile body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
@@ -66,16 +66,16 @@ body {
   overscroll-behavior: none;
 }
 
-#app {
+html.pos-mobile #app {
   height: 100%;
 }
 
-.booting {
+html.pos-mobile .booting {
   padding: 24px 16px;
   margin: 0;
 }
 
-button {
+html.pos-mobile button {
   font: inherit;
   color: inherit;
   background: none;
@@ -84,21 +84,21 @@ button {
   cursor: pointer;
 }
 
-button:focus-visible {
+html.pos-mobile button:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
 
-button:disabled {
+html.pos-mobile button:disabled {
   cursor: default;
 }
 
-.num {
+html.pos-mobile .num {
   font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Estructura ---------- */
-.app {
+html.pos-mobile .app {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -107,7 +107,7 @@ button:disabled {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
-.training-band {
+html.pos-mobile .training-band {
   padding: 4px 16px;
   text-align: center;
   font-size: 12px;
@@ -123,7 +123,7 @@ button:disabled {
   );
 }
 
-.top {
+html.pos-mobile .top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -133,11 +133,11 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
-.brand {
+html.pos-mobile .brand {
   min-width: 0;
 }
 
-.brand h1 {
+html.pos-mobile .brand h1 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
@@ -148,13 +148,13 @@ button:disabled {
   white-space: nowrap;
 }
 
-.brand p {
+html.pos-mobile .brand p {
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--muted);
 }
 
-.pill {
+html.pos-mobile .pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -167,7 +167,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.pill::before {
+html.pos-mobile .pill::before {
   content: '';
   width: 8px;
   height: 8px;
@@ -175,20 +175,20 @@ button:disabled {
   background: var(--pill-dot, var(--muted));
 }
 
-.pill--ok {
+html.pos-mobile .pill--ok {
   --pill-dot: var(--ok);
 }
 
-.pill--warn {
+html.pos-mobile .pill--warn {
   --pill-dot: var(--warn);
 }
 
-.pill--error {
+html.pos-mobile .pill--error {
   --pill-dot: var(--danger);
   color: var(--danger);
 }
 
-.banner {
+html.pos-mobile .banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -198,35 +198,35 @@ button:disabled {
   font-weight: 600;
 }
 
-.banner--warn {
+html.pos-mobile .banner--warn {
   background: color-mix(in srgb, var(--warn) 14%, var(--surface));
   color: var(--warn);
 }
 
-.banner--error {
+html.pos-mobile .banner--error {
   background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   color: var(--danger);
 }
 
-.banner--info {
+html.pos-mobile .banner--info {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   color: var(--accent);
 }
 
-.banner button {
+html.pos-mobile .banner button {
   font-weight: 700;
   text-decoration: underline;
   min-height: 36px;
 }
 
-main.content {
+html.pos-mobile main.content {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   min-height: 0;
 }
 
-.tabs {
+html.pos-mobile .tabs {
   display: grid;
   grid-template-columns: repeat(var(--tab-count, 4), 1fr);
   background: var(--surface);
@@ -234,7 +234,7 @@ main.content {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-.tabs button {
+html.pos-mobile .tabs button {
   min-height: 56px;
   display: flex;
   flex-direction: column;
@@ -246,17 +246,17 @@ main.content {
   color: var(--muted);
 }
 
-.tabs button svg {
+html.pos-mobile .tabs button svg {
   width: 22px;
   height: 22px;
 }
 
-.tabs button[aria-current='page'] {
+html.pos-mobile .tabs button[aria-current='page'] {
   color: var(--accent);
 }
 
 /* ---------- Botones ---------- */
-.btn {
+html.pos-mobile .m-btn {
   min-height: 52px;
   padding: 0 18px;
   border-radius: 14px;
@@ -266,27 +266,27 @@ main.content {
   border: 1px solid var(--line);
 }
 
-.btn-primary {
+html.pos-mobile .m-btn-primary {
   background: var(--accent);
   color: var(--accent-ink);
   border-color: var(--accent);
 }
 
-.btn-danger {
+html.pos-mobile .m-btn-danger {
   background: transparent;
   color: var(--danger);
   border-color: var(--danger);
 }
 
-.btn:disabled {
+html.pos-mobile .m-btn:disabled {
   opacity: 0.4;
 }
 
-.btn-block {
+html.pos-mobile .m-btn-block {
   width: 100%;
 }
 
-.chip {
+html.pos-mobile .chip {
   flex: none;
   min-height: 40px;
   padding: 0 16px;
@@ -297,20 +297,20 @@ main.content {
   font-size: 14px;
 }
 
-.chip[aria-pressed='true'] {
+html.pos-mobile .chip[aria-pressed='true'] {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
 }
 
 /* ---------- Venta ---------- */
-.toolbar {
+html.pos-mobile .toolbar {
   display: flex;
   gap: 8px;
   padding: 12px 16px 4px;
 }
 
-.tool {
+html.pos-mobile .tool {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -325,24 +325,24 @@ main.content {
   font-weight: 600;
 }
 
-.tool span {
+html.pos-mobile .tool span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tool svg {
+html.pos-mobile .tool svg {
   width: 20px;
   height: 20px;
   flex: none;
 }
 
-.tool.has {
+html.pos-mobile .tool.has {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.cats {
+html.pos-mobile .cats {
   display: flex;
   gap: 8px;
   padding: 10px 16px;
@@ -350,18 +350,18 @@ main.content {
   scrollbar-width: none;
 }
 
-.cats::-webkit-scrollbar {
+html.pos-mobile .cats::-webkit-scrollbar {
   display: none;
 }
 
-.grid {
+html.pos-mobile .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 10px;
   padding: 4px 16px 20px;
 }
 
-.prod {
+html.pos-mobile .prod {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -376,18 +376,18 @@ main.content {
   transition: transform 0.08s;
 }
 
-.prod:active {
+html.pos-mobile .prod:active {
   transform: scale(0.97);
 }
 
-.prod .name {
+html.pos-mobile .prod .name {
   font-weight: 600;
   font-size: 15px;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.prod .row {
+html.pos-mobile .prod .row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -395,11 +395,11 @@ main.content {
   flex-wrap: wrap;
 }
 
-.prod--blocked .name {
+html.pos-mobile .prod--blocked .name {
   color: var(--warn);
 }
 
-.price-tag {
+html.pos-mobile .price-tag {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 21px;
@@ -410,17 +410,17 @@ main.content {
   border-radius: 6px;
 }
 
-.stock {
+html.pos-mobile .stock {
   font-size: 12px;
   color: var(--muted);
 }
 
-.stock.low {
+html.pos-mobile .stock.low {
   color: var(--warn);
   font-weight: 600;
 }
 
-.badge {
+html.pos-mobile .badge {
   position: absolute;
   top: -6px;
   right: -6px;
@@ -436,19 +436,19 @@ main.content {
   place-items: center;
 }
 
-.badge.neg {
+html.pos-mobile .badge.neg {
   background: var(--danger);
   color: #fff;
 }
 
-.empty {
+html.pos-mobile .empty {
   padding: 32px 16px;
   text-align: center;
   color: var(--muted);
   line-height: 1.5;
 }
 
-.ticketbar {
+html.pos-mobile .ticketbar {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -457,14 +457,14 @@ main.content {
   border-top: 1px solid var(--line);
 }
 
-.ticketbar .sum {
+html.pos-mobile .ticketbar .sum {
   flex: 1;
   min-width: 0;
   text-align: left;
   padding: 4px 0;
 }
 
-.ticketbar .sum small {
+html.pos-mobile .ticketbar .sum small {
   display: block;
   font-size: 12px;
   color: var(--muted);
@@ -473,14 +473,14 @@ main.content {
   white-space: nowrap;
 }
 
-.ticketbar .sum strong {
+html.pos-mobile .ticketbar .sum strong {
   font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
   line-height: 1.05;
 }
 
-.toast {
+html.pos-mobile .toast {
   position: fixed;
   left: 50%;
   bottom: calc(150px + env(safe-area-inset-bottom, 0px));
@@ -497,25 +497,25 @@ main.content {
   text-align: center;
 }
 
-.toast--warn {
+html.pos-mobile .toast--warn {
   background: var(--warn);
   color: #fff;
 }
 
-.toast--error {
+html.pos-mobile .toast--error {
   background: var(--danger);
   color: #fff;
 }
 
 /* ---------- Hojas inferiores ---------- */
-.backdrop {
+html.pos-mobile .backdrop {
   position: fixed;
   inset: 0;
   background: var(--backdrop);
   z-index: 10;
 }
 
-.sheet {
+html.pos-mobile .sheet {
   position: fixed;
   left: 0;
   right: 0;
@@ -530,14 +530,14 @@ main.content {
   color: var(--ink);
   border-radius: 20px 20px 0 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  animation: sheet-up 0.18s ease-out;
+  animation: m-sheet-up 0.18s ease-out;
 }
 
-.sheet--full {
+html.pos-mobile .sheet--full {
   height: calc(100% - 24px - env(safe-area-inset-top, 0px));
 }
 
-@keyframes sheet-up {
+@keyframes m-sheet-up {
   from {
     transform: translateY(24px);
     opacity: 0.6;
@@ -549,15 +549,15 @@ main.content {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet {
+  html.pos-mobile .sheet {
     animation: none;
   }
-  .prod {
+  html.pos-mobile .prod {
     transition: none;
   }
 }
 
-.sheet-head {
+html.pos-mobile .sheet-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -565,7 +565,7 @@ main.content {
   padding: 14px 16px 8px;
 }
 
-.sheet-head h2 {
+html.pos-mobile .sheet-head h2 {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 700;
@@ -573,7 +573,7 @@ main.content {
   min-width: 0;
 }
 
-.close {
+html.pos-mobile .close {
   min-width: 44px;
   min-height: 44px;
   border-radius: 12px;
@@ -581,14 +581,14 @@ main.content {
   color: var(--muted);
 }
 
-.sheet-body {
+html.pos-mobile .sheet-body {
   overflow-y: auto;
   padding: 0 16px 12px;
   min-height: 0;
   flex: 1 1 auto;
 }
 
-.sheet-foot {
+html.pos-mobile .sheet-foot {
   padding: 10px 16px 14px;
   display: flex;
   gap: 10px;
@@ -596,12 +596,12 @@ main.content {
   flex-wrap: wrap;
 }
 
-.sheet-foot > .btn {
+html.pos-mobile .sheet-foot > .m-btn {
   flex: 1;
 }
 
 /* ---------- Teclado numérico ---------- */
-.display {
+html.pos-mobile .display {
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
@@ -613,7 +613,7 @@ main.content {
   min-height: 72px;
 }
 
-.display .val {
+html.pos-mobile .display .val {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 44px;
@@ -621,13 +621,13 @@ main.content {
   overflow-wrap: anywhere;
 }
 
-.display .unit {
+html.pos-mobile .display .unit {
   font-size: 16px;
   color: var(--muted);
   font-weight: 600;
 }
 
-.hint {
+html.pos-mobile .hint {
   font-size: 13px;
   color: var(--muted);
   margin: -4px 0 10px;
@@ -635,29 +635,29 @@ main.content {
   min-height: 1.2em;
 }
 
-.hint--error {
+html.pos-mobile .hint--error {
   color: var(--danger);
   font-weight: 600;
 }
 
-.quick {
+html.pos-mobile .quick {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.quick .chip {
+html.pos-mobile .quick .chip {
   min-height: 38px;
 }
 
-.keys {
+html.pos-mobile .keys {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
-.key {
+html.pos-mobile .key {
   min-height: 56px;
   border-radius: 12px;
   background: var(--key);
@@ -666,18 +666,18 @@ main.content {
   font-variant-numeric: tabular-nums;
 }
 
-.key:active,
-.lkey:active {
+html.pos-mobile .key:active,
+html.pos-mobile .lkey:active {
   background: var(--key-press);
 }
 
-.key.fn {
+html.pos-mobile .key.fn {
   font-size: 17px;
   color: var(--muted);
 }
 
 /* ---------- Teclado de letras ---------- */
-.query {
+html.pos-mobile .query {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -691,33 +691,33 @@ main.content {
   overflow-wrap: anywhere;
 }
 
-.query .ph {
+html.pos-mobile .query .ph {
   color: var(--muted);
   font-weight: 500;
   margin-left: 6px;
 }
 
-.query .caret {
+html.pos-mobile .query .caret {
   flex: none;
   width: 2px;
   height: 22px;
   background: var(--accent);
-  animation: blink 1s steps(1) infinite;
+  animation: m-blink 1s steps(1) infinite;
 }
 
-@keyframes blink {
+@keyframes m-blink {
   50% {
     opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .query .caret {
+  html.pos-mobile .query .caret {
     animation: none;
   }
 }
 
-.lkeys {
+html.pos-mobile .lkeys {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -727,13 +727,13 @@ main.content {
   width: 100%;
 }
 
-.lrow {
+html.pos-mobile .lrow {
   display: flex;
   gap: 5px;
   justify-content: center;
 }
 
-.lkey {
+html.pos-mobile .lkey {
   flex: 1 1 0;
   max-width: 46px;
   min-height: 46px;
@@ -745,20 +745,20 @@ main.content {
   padding: 0;
 }
 
-.lkey.wide {
+html.pos-mobile .lkey.wide {
   max-width: none;
   flex: 1.6 1 0;
   font-size: 14px;
 }
 
-.lkey.space {
+html.pos-mobile .lkey.space {
   max-width: none;
   flex: 4 1 0;
   font-size: 14px;
   color: var(--muted);
 }
 
-.lkey.ok {
+html.pos-mobile .lkey.ok {
   max-width: none;
   flex: 2 1 0;
   font-size: 14px;
@@ -766,19 +766,19 @@ main.content {
   color: var(--accent-ink);
 }
 
-mark {
+html.pos-mobile mark {
   background: var(--tag);
   color: var(--tag-ink);
   border-radius: 3px;
 }
 
 /* ---------- Listas ---------- */
-.list {
+html.pos-mobile .list {
   display: flex;
   flex-direction: column;
 }
 
-.item {
+html.pos-mobile .item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -790,61 +790,61 @@ mark {
   width: 100%;
 }
 
-.item:last-child {
+html.pos-mobile .item:last-child {
   border-bottom: 0;
 }
 
-.item:disabled {
+html.pos-mobile .item:disabled {
   opacity: 0.45;
 }
 
-.item .main {
+html.pos-mobile .item .main {
   min-width: 0;
   flex: 1;
 }
 
-.item .title {
+html.pos-mobile .item .title {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.item .sub {
+html.pos-mobile .item .sub {
   font-size: 13px;
   color: var(--muted);
 }
 
-.item .sub.warn {
+html.pos-mobile .item .sub.warn {
   color: var(--warn);
   font-weight: 600;
 }
 
-.item .amt {
+html.pos-mobile .item .amt {
   font-weight: 700;
   white-space: nowrap;
 }
 
-.neg {
+html.pos-mobile .neg {
   color: var(--danger);
 }
 
-.pos {
+html.pos-mobile .pos {
   color: var(--ok);
 }
 
-.total-row {
+html.pos-mobile .total-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   padding: 12px 2px 4px;
 }
 
-.total-row .big {
+html.pos-mobile .total-row .big {
   font-family: var(--font-display);
   font-size: 34px;
   font-weight: 700;
 }
 
-.state-line {
+html.pos-mobile .state-line {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -854,22 +854,22 @@ mark {
   margin-top: 8px;
 }
 
-.state-line.due {
+html.pos-mobile .state-line.due {
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
 }
 
-.state-line.change {
+html.pos-mobile .state-line.change {
   background: color-mix(in srgb, var(--ok) 14%, transparent);
   color: var(--ok);
 }
 
-.state-line.error {
+html.pos-mobile .state-line.error {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   color: var(--danger);
 }
 
-.section-title {
+html.pos-mobile .section-title {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -878,23 +878,23 @@ mark {
   margin: 18px 0 6px;
 }
 
-.page {
+html.pos-mobile .page {
   padding: 8px 16px 24px;
 }
 
-.page > h2 {
+html.pos-mobile .page > h2 {
   font-family: var(--font-display);
   font-size: 26px;
   margin: 8px 0 4px;
 }
 
-.stats {
+html.pos-mobile .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.stat {
+html.pos-mobile .stat {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -902,37 +902,37 @@ mark {
   min-width: 0;
 }
 
-.stat small {
+html.pos-mobile .stat small {
   display: block;
   color: var(--muted);
   font-size: 12px;
 }
 
-.stat strong {
+html.pos-mobile .stat strong {
   font-family: var(--font-display);
   font-size: 26px;
   font-weight: 700;
   overflow-wrap: anywhere;
 }
 
-.card {
+html.pos-mobile .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 4px 14px;
 }
 
-.card + .card {
+html.pos-mobile .card + .card {
   margin-top: 10px;
 }
 
-.note {
+html.pos-mobile .note {
   font-size: 14px;
   color: var(--muted);
   line-height: 1.5;
 }
 
-.kv {
+html.pos-mobile .kv {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -941,28 +941,28 @@ mark {
   font-size: 14px;
 }
 
-.kv:last-child {
+html.pos-mobile .kv:last-child {
   border-bottom: 0;
 }
 
-.kv span:first-child {
+html.pos-mobile .kv span:first-child {
   color: var(--muted);
 }
 
-.kv span:last-child {
+html.pos-mobile .kv span:last-child {
   text-align: right;
   overflow-wrap: anywhere;
   min-width: 0;
 }
 
-.stack {
+html.pos-mobile .stack {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
 /* ---------- Comprobante ---------- */
-.receipt-paper {
+html.pos-mobile .m-paper {
   background: #fffefb;
   color: #1b1b1b;
   border-radius: 4px;
@@ -975,7 +975,7 @@ mark {
 }
 
 /* ---------- Pantalla completa (sin conexión, otra pestaña) ---------- */
-.full {
+html.pos-mobile .full {
   min-height: 100%;
   display: flex;
   flex-direction: column;
@@ -986,35 +986,35 @@ mark {
   margin: 0 auto;
 }
 
-.full h1 {
+html.pos-mobile .full h1 {
   margin: 0;
   font-family: var(--font-display);
   font-size: 30px;
   line-height: 1.1;
 }
 
-.full p {
+html.pos-mobile .full p {
   margin: 0;
 }
 
-.steps {
+html.pos-mobile .steps {
   display: flex;
   gap: 6px;
   padding: 0 16px 8px;
 }
 
-.steps span {
+html.pos-mobile .steps span {
   flex: 1;
   height: 4px;
   border-radius: 2px;
   background: var(--line);
 }
 
-.steps span.done {
+html.pos-mobile .steps span.done {
   background: var(--accent);
 }
 
-.field {
+html.pos-mobile .field {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -1028,28 +1028,28 @@ mark {
   text-align: left;
 }
 
-.field small {
+html.pos-mobile .field small {
   font-size: 12px;
   color: var(--muted);
   font-weight: 600;
 }
 
-.field span {
+html.pos-mobile .field span {
   font-size: 16px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.field .ph {
+html.pos-mobile .field .ph {
   color: var(--muted);
   font-weight: 500;
 }
 
-.field--error {
+html.pos-mobile .field--error {
   border-color: var(--danger);
 }
 
-.option {
+html.pos-mobile .option {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1062,12 +1062,12 @@ mark {
   text-align: left;
 }
 
-.option[aria-pressed='true'] {
+html.pos-mobile .option[aria-pressed='true'] {
   border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
-.option .dot {
+html.pos-mobile .option .dot {
   flex: none;
   width: 20px;
   height: 20px;
@@ -1075,20 +1075,20 @@ mark {
   border: 2px solid var(--line);
 }
 
-.option[aria-pressed='true'] .dot {
+html.pos-mobile .option[aria-pressed='true'] .dot {
   border: 6px solid var(--accent);
 }
 
-.option .title {
+html.pos-mobile .option .title {
   font-weight: 600;
 }
 
-.option .sub {
+html.pos-mobile .option .sub {
   font-size: 13px;
   color: var(--muted);
 }
 
-.scanner {
+html.pos-mobile .scanner {
   position: relative;
   border-radius: 14px;
   overflow: hidden;
@@ -1098,20 +1098,20 @@ mark {
   width: 100%;
 }
 
-.scanner video {
+html.pos-mobile .scanner video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.scanner .frame {
+html.pos-mobile .scanner .frame {
   position: absolute;
   inset: 22% 12%;
   border: 3px solid rgb(255 255 255 / 0.85);
   border-radius: 12px;
 }
 
-.spinner {
+html.pos-mobile .m-spinner {
   display: inline-block;
   width: 14px;
   height: 14px;
@@ -1119,17 +1119,17 @@ mark {
   border: 2px solid var(--line);
   border-top-color: var(--accent);
   vertical-align: -2px;
-  animation: spin 0.8s linear infinite;
+  animation: m-spin 0.8s linear infinite;
 }
 
-@keyframes spin {
+@keyframes m-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner {
+  html.pos-mobile .m-spinner {
     animation: none;
   }
 }

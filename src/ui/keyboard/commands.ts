@@ -61,6 +61,10 @@ export const CORE_COMMANDS: CommandInfo[] = [
   { name: 'CONFIG', description: 'Configurar la conexión con el sistema externo' },
   { name: 'IMPRESORA', description: 'Configurar la impresión de tickets' },
   { name: 'SINCRONIZAR', description: 'Sincronizar ahora' },
+  {
+    name: 'MOBILE',
+    description: 'Usar la versión para celular, sin teclado (misma terminal y datos)',
+  },
   { name: 'DIAGNOSTICO', description: 'Ver el estado y el historial reciente de sincronización' },
 ];
 

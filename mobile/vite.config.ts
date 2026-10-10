@@ -1,24 +1,23 @@
 import { readFileSync } from 'node:fs';
 import preact from '@preact/preset-vite';
 import { defaultExclude, defineConfig } from 'vitest/config';
-import { serviceWorkerPlugin } from '../build/sw-plugin.ts';
 
 const { version } = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
+  readFileSync(new URL('../package.json', import.meta.url), 'utf-8'),
 ) as { version: string };
 
-// El POS mobile reusa `../src` (dominio, storage, sync, conectores y controllers) sin copiarlo, y sus
-// dependencias salen del `node_modules` de la raíz: así hay una sola copia de Preact y de signals
-// (dos copias rompen la reactividad sin avisar). `dedupe` lo asegura aunque alguien las declare acá.
+// La vista de celular es parte de la app de la raíz (una sola app con las dos vistas, publicada por
+// el build de la raíz). Esta config es para los tests de `mobile/`, el servidor de desarrollo y la
+// vista previa con datos de ejemplo (`build:preview`). Las dependencias salen del `node_modules` de
+// la raíz: `dedupe` asegura una sola copia de Preact y de signals.
 export default defineConfig(({ mode }) => ({
-  // Rutas relativas, como el POS de escritorio (#148): el mismo build anda en cualquier carpeta.
   base: './',
-  // El service worker de escritorio (#54), compilado desde `src/workers/sw.ts` de este proyecto.
-  plugins: mode === 'preview' ? [preact()] : [preact(), serviceWorkerPlugin()],
+  publicDir: '../public',
+  plugins: [preact()],
   resolve: { dedupe: ['preact', '@preact/signals', 'dexie'] },
   define: {
     __POS_VERSION__: JSON.stringify(version),
-    // La vista previa con datos de ejemplo (`src/preview/seed.ts`); en el build normal no existe.
+    // La vista previa con datos de ejemplo (`src/preview/seed.ts`).
     __PREVIEW__: JSON.stringify(mode === 'preview'),
   },
   server: { fs: { allow: ['..'] } },

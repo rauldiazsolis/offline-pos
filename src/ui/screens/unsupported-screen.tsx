@@ -1,3 +1,4 @@
+import { setUiMode } from '../state/ui-mode.ts';
 import { MIN_SUPPORTED_WIDTH_PX } from '../state/viewport.ts';
 
 /**
@@ -5,7 +6,9 @@ import { MIN_SUPPORTED_WIDTH_PX } from '../state/viewport.ts';
  * — a esa altura, seguir zoomeando `.app-zoom-wrapper` (`tokens.css`)
  * dejaría el contenido ilegible en vez de solo chico. Fuera del wrapper
  * zoomeado a propósito (`ui/app.tsx`): tiene que ocupar el ancho real de la
- * ventana, angosta como sea, no el ancho lógico de diseño (1024px).
+ * ventana, angosta como sea, no el ancho lógico de diseño (1024px). Se ve solo si se eligió a mano la
+ * vista de escritorio (sin elegir, una pantalla angosta abre la de celular, `ui/state/ui-mode.ts`):
+ * ofrece volver a la de celular, con la misma terminal y los mismos datos.
  */
 export function UnsupportedScreen() {
   return (
@@ -27,8 +30,18 @@ export function UnsupportedScreen() {
       <h1 style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>Pantalla no compatible</h1>
       <p style={{ margin: 0, color: 'var(--color-text-muted)', maxWidth: '360px' }}>
         Esta aplicación necesita una ventana de al menos {MIN_SUPPORTED_WIDTH_PX}px de ancho.
-        Agrandá la ventana o usá un dispositivo con una pantalla más grande.
+        Agrandá la ventana o usá la versión para celular: es la misma terminal, con la misma
+        conexión, los mismos datos y la venta en curso.
       </p>
+      <button
+        type="button"
+        class="btn btn-primary"
+        onClick={() => {
+          setUiMode('mobile');
+        }}
+      >
+        Usar la versión para celular
+      </button>
     </div>
   );
 }

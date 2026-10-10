@@ -56,7 +56,11 @@ export function countDifference(
 }
 
 /** Un egreso mayor que el saldo esperado se advierte, nunca se bloquea. */
-export function exceedsBalance(kind: CashKind, amount: number | undefined, balance: number): boolean {
+export function exceedsBalance(
+  kind: CashKind,
+  amount: number | undefined,
+  balance: number,
+): boolean {
   return kind === 'out' && amount !== undefined && amount > balance;
 }
 

@@ -14,6 +14,7 @@ import {
   terminalIdentitySignal,
 } from '../../../src/ui/state/sync.ts';
 import { terminalHeading } from '../../../src/ui/terminal-context.ts';
+import { previewModeSignal } from '../preview/flag.ts';
 import { moreOpenSignal } from '../state/nav.ts';
 
 type Pill = { text: string; tone: 'ok' | 'warn' | 'error' | 'muted' };
@@ -21,7 +22,7 @@ type Pill = { text: string; tone: 'ok' | 'warn' | 'error' | 'muted' };
 /** El estado de sync en pocas palabras (el detalle, en Diagnóstico, como la barra de escritorio). */
 export function syncPill(): Pill {
   // La vista previa con datos de ejemplo no tiene backend (`src/preview/seed.ts`).
-  if (__PREVIEW__) return { text: 'Vista previa', tone: 'muted' };
+  if (previewModeSignal.value) return { text: 'Vista previa', tone: 'muted' };
   const status = syncStatusSignal.value;
   const pending = pendingOutboxCountSignal.value;
   if (status === 'offline') {
