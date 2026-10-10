@@ -1,7 +1,7 @@
 /**
  * @OnlyCurrentDoc
  *
- * pos-sheets.gs, POS 0.8.0 (contrato 4.6.0): una planilla de Google Sheets como
+ * pos-sheets.gs, POS 0.9.0 (contrato 4.6.0): una planilla de Google Sheets como
  * backend del POS, en un solo archivo.
  *
  * Instalar, en tres pasos (con imágenes en https://pos.contax.ar/v4/docs/google-sheets/):
