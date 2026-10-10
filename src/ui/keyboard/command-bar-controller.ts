@@ -42,6 +42,7 @@ import { getCatalogRepository } from '../state/catalog.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
 import { setCustomerRepository } from '../state/customer-repository.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { setUiMode } from '../state/ui-mode.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { activeConnectorTypeSignal, demoSessionSignal } from '../state/sync.ts';
 import { applyAppUpdate } from './app-update-controller.ts';
@@ -417,6 +418,11 @@ function runCommand(name: string, _args: string[]): void {
     case 'DIAGNOSTICO':
       enterDiagnosticoScreen();
       clearBuffer();
+      return;
+    case 'MOBILE':
+      // La misma terminal en la vista de celular (`ui/state/ui-mode.ts`).
+      clearBuffer();
+      setUiMode('mobile');
       return;
     case 'ENTRENAMIENTO':
       // #177: entra o sale; la pantalla de entrenamiento confirma.

@@ -37,6 +37,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Modo entrenamiento: la base aparte y las claves operativas | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); el push, la reserva y la limpieza cortados en [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); `/ENTRENAMIENTO`, las pantallas, la franja, el ticket y los bordes en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
+| Vista de celular (sin teclado del sistema): sus pantallas, teclados propios, estilos y e2e | [`mobile/AGENTS.md`](./mobile/AGENTS.md); la elección de vista, en "Dos vistas" más abajo |
 
 ## Qué es esto
 
@@ -444,6 +445,25 @@ cerrojo. **No hay forma de traer la original al frente** en Chromium (`window.fo
 `window.open('', nombre)` y `alert()` no lo hacen, verificado en la spec): solo el texto y el título.
 Sin `navigator.locks` (contexto no seguro) la app arranca como antes. Detalle en `src/ui/AGENTS.md`.
 
+## Dos vistas: escritorio y celular
+
+El POS tiene dos vistas de la **misma terminal**: la de escritorio (`src/ui/`, teclado y barra de
+comandos) y la de celular (`mobile/`, que nunca abre el teclado del sistema: teclados propios,
+grillas y la cámara). Es una sola app y un solo build: `src/main.tsx` arranca igual y renderiza la
+vista elegida (`ui/state/ui-mode.ts`). Comparten el almacenamiento de la carpeta (base, conexión,
+lo pendiente, la venta en curso), así que cambiar de vista es instantáneo y no pierde nada.
+
+- **Cuál se ve**: la elegida, guardada en `localStorage` (`ui-mode`); sin elegir, el ancho decide
+  (por debajo de `MIN_SUPPORTED_WIDTH_PX`, 600 px, la de celular).
+- **Cambiar**: `/MOBILE` en escritorio; "Usar la versión de escritorio" en Más de la de celular.
+  Escritorio en una pantalla angosta muestra "Pantalla no compatible" con "Usar la versión para
+  celular"; la de celular en una pantalla de 1024 px o más sugiere la de escritorio. Nunca cambia sola.
+- **Estilos**: los de celular van todos bajo `html.pos-mobile` (la clase la pone `main.tsx` según la
+  vista) y sus clases que coincidían con las de escritorio llevan el prefijo `m-`: ninguna regla de
+  una vista toca a la otra.
+- La vista de celular reusa los controllers, signals y el arranque de escritorio sin cambiarlos; lo
+  propio es solo la vista (detalle en `mobile/AGENTS.md`).
+
 ## Modo entrenamiento (#177)
 
 Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`. Para practicar con el
@@ -647,11 +667,13 @@ en el historial de git).
 | Epic #180, etapa C | El puente publicado: guía pública `docs/integradores/google-sheets.md` y `/v4/docs/google-sheets/` con los `.gs`, sin referencias internas | PR #216 |
 | #219 + #212 | La planilla lista en un paso: `pos-sheets.gs` (un archivo), la home que la prepara con datos de prueba de un rubro y el Tablero, "Abrir el POS" con la sucursal y la caja que el POS aplica solo, solo cinco funciones públicas, la Descripción de las líneas de producto y "Con Google Sheets" en la home del sitio | PR #220 |
 | #221 | La guía de Sheets en dos páginas: el setup al grano, con índice e imágenes (capturas reales de lo nuestro, SVG esquemáticos de Google), y la referencia para integradores | PR #222 |
+| Vista de celular | La misma terminal en el celular sin teclado del sistema (`mobile/`): teclados propios, grilla, escáner, cobro, caja, resumen y el resto; una sola app con la de escritorio (`/MOBILE`), que comparte datos y venta en curso | PR #223 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
 worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
-`0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; `0.8.0`, su guía en dos páginas, con imágenes (#221); se publica con
+`0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; `0.8.0`, su guía en dos páginas, con imágenes (#221); `0.9.0`, la
+vista de celular; se publica con
 `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo

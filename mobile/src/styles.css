@@ -1,0 +1,1192 @@
+/* POS mobile: una pantalla de app — encabezado, contenido con scroll, barra del ticket y pestañas
+   abajo; todo lo demás en hojas inferiores. Sin fuentes externas: tiene que andar sin red. */
+html.pos-mobile {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #17202b;
+  --muted: #5d6877;
+  --line: #d5dbe3;
+  --accent: #1f5fd1;
+  --accent-ink: #ffffff;
+  --tag: #ffcf33;
+  --tag-ink: #2a2100;
+  --ok: #17803d;
+  --warn: #b45309;
+  --danger: #c0262d;
+  --key: #f6f8fa;
+  --key-press: #dfe5ec;
+  --backdrop: rgb(8 12 18 / 0.45);
+  --training: #b45309;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Roboto Condensed', 'Arial Narrow', 'Helvetica Neue', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.pos-mobile {
+    --bg: #10151c;
+    --surface: #19212b;
+    --ink: #e8edf3;
+    --muted: #9aa6b5;
+    --line: #2c3743;
+    --accent: #5b92f0;
+    --accent-ink: #08111f;
+    --tag: #f2c230;
+    --tag-ink: #231b00;
+    --ok: #4cc47a;
+    --warn: #f0a33c;
+    --danger: #f06b70;
+    --key: #222c38;
+    --key-press: #2f3b49;
+    color-scheme: dark;
+  }
+}
+
+html.pos-mobile * {
+  box-sizing: border-box;
+}
+
+html.pos-mobile,
+html.pos-mobile body {
+  height: 100%;
+  margin: 0;
+}
+
+html.pos-mobile body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html.pos-mobile #app {
+  height: 100%;
+}
+
+html.pos-mobile .booting {
+  padding: 24px 16px;
+  margin: 0;
+}
+
+html.pos-mobile button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+html.pos-mobile button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+html.pos-mobile button:disabled {
+  cursor: default;
+}
+
+html.pos-mobile .num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Estructura ---------- */
+html.pos-mobile .app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+  margin: 0 auto;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+html.pos-mobile .training-band {
+  padding: 4px 16px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--training),
+    var(--training) 10px,
+    color-mix(in srgb, var(--training) 80%, #000) 10px,
+    color-mix(in srgb, var(--training) 80%, #000) 20px
+  );
+}
+
+html.pos-mobile .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+html.pos-mobile .brand {
+  min-width: 0;
+}
+
+html.pos-mobile .brand h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.pos-mobile .brand p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+html.pos-mobile .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--key);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+html.pos-mobile .pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pill-dot, var(--muted));
+}
+
+html.pos-mobile .pill--ok {
+  --pill-dot: var(--ok);
+}
+
+html.pos-mobile .pill--warn {
+  --pill-dot: var(--warn);
+}
+
+html.pos-mobile .pill--error {
+  --pill-dot: var(--danger);
+  color: var(--danger);
+}
+
+html.pos-mobile .banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+html.pos-mobile .banner--warn {
+  background: color-mix(in srgb, var(--warn) 14%, var(--surface));
+  color: var(--warn);
+}
+
+html.pos-mobile .banner--error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+
+html.pos-mobile .banner--info {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+
+html.pos-mobile .banner button {
+  font-weight: 700;
+  text-decoration: underline;
+  min-height: 36px;
+}
+
+html.pos-mobile main.content {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+
+html.pos-mobile .tabs {
+  display: grid;
+  grid-template-columns: repeat(var(--tab-count, 4), 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html.pos-mobile .tabs button {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+html.pos-mobile .tabs button svg {
+  width: 22px;
+  height: 22px;
+}
+
+html.pos-mobile .tabs button[aria-current='page'] {
+  color: var(--accent);
+}
+
+/* ---------- Botones ---------- */
+html.pos-mobile .m-btn {
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 16px;
+  background: var(--key);
+  border: 1px solid var(--line);
+}
+
+html.pos-mobile .m-btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+html.pos-mobile .m-btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+html.pos-mobile .m-btn:disabled {
+  opacity: 0.4;
+}
+
+html.pos-mobile .m-btn-block {
+  width: 100%;
+}
+
+html.pos-mobile .chip {
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+html.pos-mobile .chip[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+/* ---------- Venta ---------- */
+html.pos-mobile .toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 4px;
+}
+
+html.pos-mobile .tool {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-weight: 600;
+}
+
+html.pos-mobile .tool span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.pos-mobile .tool svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+html.pos-mobile .tool.has {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+html.pos-mobile .cats {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+html.pos-mobile .cats::-webkit-scrollbar {
+  display: none;
+}
+
+html.pos-mobile .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  padding: 4px 16px 20px;
+}
+
+html.pos-mobile .prod {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 108px;
+  padding: 12px;
+  text-align: left;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  transition: transform 0.08s;
+}
+
+html.pos-mobile .prod {
+  /* El toque sostenido elige la cantidad: sin el menú ni la selección del navegador. */
+  -webkit-touch-callout: none;
+}
+
+html.pos-mobile .prod:active {
+  transform: scale(0.97);
+}
+
+html.pos-mobile .prod .name {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .prod .row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+html.pos-mobile .prod--blocked .name {
+  color: var(--warn);
+}
+
+html.pos-mobile .price-tag {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1;
+  padding: 4px 8px 3px;
+  background: var(--tag);
+  color: var(--tag-ink);
+  border-radius: 6px;
+}
+
+html.pos-mobile .stock {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+html.pos-mobile .stock.low {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+html.pos-mobile .badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 13px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+}
+
+html.pos-mobile .badge.neg {
+  background: var(--danger);
+  color: #fff;
+}
+
+html.pos-mobile .empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+html.pos-mobile .ticketbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+html.pos-mobile .ticketbar .sum {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 4px 0;
+}
+
+html.pos-mobile .ticketbar .sum small {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html.pos-mobile .ticketbar .sum strong {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+html.pos-mobile .toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 30;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 14px;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  text-align: center;
+}
+
+html.pos-mobile .toast--warn {
+  background: var(--warn);
+  color: #fff;
+}
+
+html.pos-mobile .toast--error {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ---------- Hojas inferiores ---------- */
+html.pos-mobile .backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--backdrop);
+  z-index: 10;
+}
+
+html.pos-mobile .sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 11;
+  max-width: 600px;
+  margin: 0 auto;
+  max-height: calc(100% - 24px - env(safe-area-inset-top, 0px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 20px 20px 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: m-sheet-up 0.18s ease-out;
+}
+
+html.pos-mobile .sheet--full {
+  height: calc(100% - 24px - env(safe-area-inset-top, 0px));
+}
+
+@keyframes m-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.pos-mobile .sheet {
+    animation: none;
+  }
+  html.pos-mobile .prod {
+    transition: none;
+  }
+}
+
+html.pos-mobile .sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 8px;
+}
+
+html.pos-mobile .sheet-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  min-width: 0;
+}
+
+html.pos-mobile .close {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+html.pos-mobile .sheet-body {
+  overflow-y: auto;
+  padding: 0 16px 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+html.pos-mobile .sheet-body--fixed {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* La lista de una búsqueda ocupa lo que sobra arriba del teclado y scrollea sola. */
+html.pos-mobile .entry-results {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html.pos-mobile .entry-query {
+  flex: none;
+  margin: 8px 0;
+}
+
+html.pos-mobile .sheet-body--fixed .lkeys {
+  flex: none;
+}
+
+html.pos-mobile .sheet-foot {
+  padding: 10px 16px 14px;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+html.pos-mobile .sheet-foot > .m-btn {
+  flex: 1;
+}
+
+/* ---------- Teclado numérico ---------- */
+html.pos-mobile .display {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: var(--key);
+  min-height: 72px;
+}
+
+html.pos-mobile .display .val {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .display .unit {
+  font-size: 16px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+html.pos-mobile .hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin: -4px 0 10px;
+  text-align: right;
+  min-height: 1.2em;
+}
+
+html.pos-mobile .hint--error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+html.pos-mobile .quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+html.pos-mobile .quick .chip {
+  min-height: 38px;
+}
+
+html.pos-mobile .keys {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+html.pos-mobile .key {
+  min-height: 56px;
+  border-radius: 12px;
+  background: var(--key);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+html.pos-mobile .key:active,
+html.pos-mobile .lkey:active {
+  background: var(--key-press);
+}
+
+html.pos-mobile .key.fn {
+  font-size: 17px;
+  color: var(--muted);
+}
+
+/* ---------- Teclado de letras ---------- */
+html.pos-mobile .query {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--key);
+  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .query .ph {
+  color: var(--muted);
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+html.pos-mobile .query .caret {
+  flex: none;
+  width: 2px;
+  height: 22px;
+  background: var(--accent);
+  animation: m-blink 1s steps(1) infinite;
+}
+
+@keyframes m-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.pos-mobile .query .caret {
+    animation: none;
+  }
+}
+
+html.pos-mobile .lkeys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px 10px;
+  background: var(--key-press);
+  border-radius: 14px;
+  width: 100%;
+}
+
+html.pos-mobile .lrow {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+html.pos-mobile .lkey {
+  flex: 1 1 0;
+  max-width: 46px;
+  min-height: 46px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 19px;
+  font-weight: 600;
+  box-shadow: 0 1px 0 var(--line);
+  padding: 0;
+}
+
+html.pos-mobile .lkey.wide {
+  max-width: none;
+  flex: 1.6 1 0;
+  font-size: 14px;
+}
+
+html.pos-mobile .lkey.space {
+  max-width: none;
+  flex: 4 1 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+html.pos-mobile .lkey.ok {
+  max-width: none;
+  flex: 2 1 0;
+  font-size: 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+html.pos-mobile mark {
+  background: var(--tag);
+  color: var(--tag-ink);
+  border-radius: 3px;
+}
+
+/* ---------- Listas ---------- */
+html.pos-mobile .list {
+  display: flex;
+  flex-direction: column;
+}
+
+html.pos-mobile .item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 2px;
+  min-height: 56px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  width: 100%;
+}
+
+html.pos-mobile .item:last-child {
+  border-bottom: 0;
+}
+
+html.pos-mobile .item:disabled {
+  opacity: 0.45;
+}
+
+html.pos-mobile .item .main {
+  min-width: 0;
+  flex: 1;
+}
+
+html.pos-mobile .item .title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .item .sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+html.pos-mobile .item .sub.warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+html.pos-mobile .item .amt {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+html.pos-mobile .neg {
+  color: var(--danger);
+}
+
+html.pos-mobile .pos {
+  color: var(--ok);
+}
+
+html.pos-mobile .total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 12px 2px 4px;
+}
+
+html.pos-mobile .total-row .big {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+}
+
+html.pos-mobile .state-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+html.pos-mobile .state-line.due {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+}
+
+html.pos-mobile .state-line.change {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
+}
+
+html.pos-mobile .state-line.error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+
+html.pos-mobile .section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 6px;
+}
+
+html.pos-mobile .page {
+  padding: 8px 16px 24px;
+}
+
+html.pos-mobile .page > h2 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  margin: 8px 0 4px;
+}
+
+html.pos-mobile .stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+html.pos-mobile .stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  min-width: 0;
+}
+
+html.pos-mobile .stat small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+html.pos-mobile .stat strong {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 4px 14px;
+}
+
+html.pos-mobile .card + .card {
+  margin-top: 10px;
+}
+
+html.pos-mobile .note {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+html.pos-mobile .kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+
+html.pos-mobile .kv:last-child {
+  border-bottom: 0;
+}
+
+html.pos-mobile .kv span:first-child {
+  color: var(--muted);
+}
+
+html.pos-mobile .kv span:last-child {
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+html.pos-mobile .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---------- Comprobante ---------- */
+html.pos-mobile .m-paper {
+  background: #fffefb;
+  color: #1b1b1b;
+  border-radius: 4px;
+  margin: 4px auto 8px;
+  max-width: 340px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.18);
+  /* A6 mide 89 mm: en un celular angosto, el papel se desplaza en vez de cortarse. */
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* ---------- Pantalla completa (sin conexión, otra pestaña) ---------- */
+html.pos-mobile .full {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+html.pos-mobile .full h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.1;
+}
+
+html.pos-mobile .full p {
+  margin: 0;
+}
+
+html.pos-mobile .steps {
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+
+html.pos-mobile .steps span {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+html.pos-mobile .steps span.done {
+  background: var(--accent);
+}
+
+html.pos-mobile .field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--key);
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+html.pos-mobile .field small {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+html.pos-mobile .field span {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+html.pos-mobile .field .ph {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+html.pos-mobile .field--error {
+  border-color: var(--danger);
+}
+
+html.pos-mobile .option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+html.pos-mobile .option[aria-pressed='true'] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+html.pos-mobile .option .dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+}
+
+html.pos-mobile .option[aria-pressed='true'] .dot {
+  border: 6px solid var(--accent);
+}
+
+html.pos-mobile .option .title {
+  font-weight: 600;
+}
+
+html.pos-mobile .option .sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+html.pos-mobile .scanner {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 3 / 4;
+  max-height: 55vh;
+  width: 100%;
+}
+
+html.pos-mobile .scanner video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+html.pos-mobile .scanner .frame {
+  position: absolute;
+  inset: 22% 12%;
+  border: 3px solid rgb(255 255 255 / 0.85);
+  border-radius: 12px;
+}
+
+html.pos-mobile .m-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  vertical-align: -2px;
+  animation: m-spin 0.8s linear infinite;
+}
+
+@keyframes m-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.pos-mobile .m-spinner {
+    animation: none;
+  }
+}
+
+/* El total de la barra, cada vez que cambia: un pop corto con un destello del acento. */
+html.pos-mobile .ticketbar .sum strong {
+  display: inline-block;
+  transform-origin: left center;
+}
+
+html.pos-mobile .total-pop {
+  animation: m-total-pop 0.35s ease-out;
+}
+
+@keyframes m-total-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+    color: var(--accent);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.pos-mobile .total-pop {
+    animation: none;
+  }
+}

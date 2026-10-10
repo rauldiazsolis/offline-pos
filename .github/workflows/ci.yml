@@ -41,9 +41,18 @@ jobs:
 
       - run: pnpm build
 
+      # POS mobile (mobile/AGENTS.md).
+      - run: pnpm --filter pos-mobile run typecheck
+
+      - run: pnpm --filter pos-mobile run test
+
+      - run: pnpm --filter pos-mobile run build
+
       - run: pnpm exec playwright install --with-deps chromium
 
       - run: pnpm test:e2e
+
+      - run: pnpm --filter pos-mobile run test:e2e
 
       # Si falla el e2e, o si un test pasó recién al reintentar (queda su trace.zip), sube la
       # traza, las capturas y el error-context.md de cada test (#169).

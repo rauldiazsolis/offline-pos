@@ -15,6 +15,9 @@ export default defineConfig({
   plugins: [preact(), serviceWorkerPlugin()],
   // Versión visible en /DIAGNOSTICO (#148). Vitest usa el mismo `define`.
   define: { __POS_VERSION__: JSON.stringify(version) },
+  // Un solo bundle con las dos vistas (escritorio y celular, `ui/state/ui-mode.ts`): sin `import()`
+  // dinámicos a propósito (#54, "la regla de los `import()` dinámicos" en `src/ui/AGENTS.md`).
+  build: { chunkSizeWarningLimit: 800 },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
@@ -26,6 +29,8 @@ export default defineConfig({
       ...defaultExclude,
       'e2e/**',
       'demo-backend/**',
+      // El POS mobile tiene su propio Vitest (`mobile/vite.config.ts`).
+      'mobile/**',
       '.claude/**',
       // Sitio publicado armado en local (#148).
       '.site-dist/**',
