@@ -6,6 +6,7 @@ import {
 } from '../../storage/cash-repository.ts';
 import { describeError } from '../errors.ts';
 import { parseAmount, parseNonNegativeAmount } from '../parse-amount.ts';
+import { noteOperation } from '../state/operations.ts';
 import {
   cashBalanceSignal,
   cashErrorSignal,
@@ -163,6 +164,7 @@ export async function submitCash(): Promise<void> {
       cashErrorSignal.value = { field: 'counted', message: describeError(result) };
       return;
     }
+    noteOperation('cash');
     const { count } = result.value;
     lastCashCountAtSignal.value = count.createdAt;
     finish(
@@ -183,6 +185,7 @@ export async function submitCash(): Promise<void> {
     };
     return;
   }
+  noteOperation('cash');
   finish(MOVEMENT_NOTICE[kind]);
 }
 

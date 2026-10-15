@@ -23,6 +23,7 @@ import {
 import { commandBarWarningSignal } from '../state/command-bar.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
 import { attachedCustomerSignal, resetAttachedCustomer } from '../state/customer.ts';
+import { noteOperation } from '../state/operations.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { refreshStockSnapshot } from '../state/stock.ts';
 import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
@@ -256,5 +257,6 @@ export async function submitCheckout(): Promise<void> {
   commandBarWarningSignal.value = null;
   resetAttachedCustomer();
   resetCheckout();
+  noteOperation('sale');
   showOrPrintReceipt({ kind: 'sale', sale: result.value, copy: false });
 }

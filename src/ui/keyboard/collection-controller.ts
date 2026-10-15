@@ -10,6 +10,7 @@ import { collectAndPersist } from '../../storage/customer-payment-repository.ts'
 import { describeError } from '../errors.ts';
 import { parseNonNegativeAmount } from '../parse-amount.ts';
 import { showOrPrintReceipt } from '../print/after-close.ts';
+import { noteOperation } from '../state/operations.ts';
 import {
   collectionBuffersSignal,
   collectionErrorSignal,
@@ -108,6 +109,7 @@ export async function submitCollection(): Promise<void> {
     return;
   }
   await refreshCustomerBalances();
+  noteOperation('collection');
   const record = result.value;
   resetAttachedCustomer();
   resetCollection();

@@ -25,6 +25,9 @@ import { describeTrainingDiscard, describeTrainingPending } from './training-mod
 /** "Saliste del entrenamiento." después de la recarga: de esta pestaña, sobrevive a su reload. */
 export const TRAINING_EXITED_KEY = storageKey('training-exited');
 
+/** "Entrar con la guía" (#226): `bootstrap` abre la guía después de la recarga. */
+export const GUIDE_START_KEY = storageKey('guide-start');
+
 export type TrainingDeps = {
   hasSaleInProgress: () => boolean;
   summarize: () => Promise<LocalDataSummary>;
@@ -35,6 +38,8 @@ export type TrainingDeps = {
   /** Copia lo maestro a la base de entrenamiento y los cursores a sus claves. */
   prepareTrainingData: () => Promise<void>;
   writeMark: (startedAt: string) => void;
+  /** Que la guía se abra después de la recarga (#226). */
+  noteGuideStart: () => void;
   clearTraining: () => void;
   noteExited: () => void;
   pauseSync: () => void;
@@ -60,6 +65,13 @@ const browserDeps: TrainingDeps = {
   },
   writeMark: (startedAt) => {
     localStorage.setItem(TRAINING_MARK_KEY, JSON.stringify({ startedAt }));
+  },
+  noteGuideStart: () => {
+    try {
+      sessionStorage.setItem(GUIDE_START_KEY, '1');
+    } catch {
+      // Sin `sessionStorage` se entra sin la guía: se abre con /GUIA.
+    }
   },
   clearTraining: () => {
     clearTrainingKeys();
@@ -91,6 +103,17 @@ export function consumeTrainingExited(): boolean {
     const exited = sessionStorage.getItem(TRAINING_EXITED_KEY) !== null;
     sessionStorage.removeItem(TRAINING_EXITED_KEY);
     return exited;
+  } catch {
+    return false;
+  }
+}
+
+/** Lee y borra el pedido de abrir la guía al entrar (lo consume `bootstrap`). */
+export function consumeGuideStart(): boolean {
+  try {
+    const start = sessionStorage.getItem(GUIDE_START_KEY) !== null;
+    sessionStorage.removeItem(GUIDE_START_KEY);
+    return start;
   } catch {
     return false;
   }
@@ -142,8 +165,23 @@ export function cancelTraining(deps: TrainingDeps = browserDeps): void {
   deps.resumeSync();
 }
 
-/** Enter: entra (envía lo real, copia, marca) o sale (borra las claves); en los dos, recarga. */
-export async function confirmTraining(deps: TrainingDeps = browserDeps): Promise<void> {
+/**
+ * Enter al entrar (#226): como `confirmTraining`, y después de la recarga se abre la guía paso a
+ * paso. Al salir es lo mismo que `confirmTraining`.
+ */
+export function confirmTrainingWithGuide(deps: TrainingDeps = browserDeps): Promise<void> {
+  return confirm(deps, true);
+}
+
+/**
+ * Entra (envía lo real, copia, marca) o sale (borra las claves); en los dos, recarga. Al entrar es
+ * "Entrar sin guía" (Alt+Enter); Enter es `confirmTrainingWithGuide`.
+ */
+export function confirmTraining(deps: TrainingDeps = browserDeps): Promise<void> {
+  return confirm(deps, false);
+}
+
+async function confirm(deps: TrainingDeps, withGuide: boolean): Promise<void> {
   const current = trainingScreenSignal.value;
   if (current?.phase !== 'ready') {
     return;
@@ -157,6 +195,9 @@ export async function confirmTraining(deps: TrainingDeps = browserDeps): Promise
     }
     await deps.prepareTrainingData();
     deps.writeMark(deps.now());
+    if (withGuide) {
+      deps.noteGuideStart();
+    }
   } else {
     trainingScreenSignal.value = { ...current, phase: 'leaving' };
     deps.clearTraining();

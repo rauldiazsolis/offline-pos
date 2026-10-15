@@ -36,6 +36,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Impresión: `/IMPRESORA`, `ReceiptDocument`, el puerto `ReceiptPrinter`, "Al cobrar", reimprimir | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); la config en `storage/printer-config.ts` |
 | Una sola pestaña: cerrojo, traspaso ("Usar esta pestaña"), la pantalla de la segunda, el arranque | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md); el nombre por carpeta y el contador de escrituras en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Modo entrenamiento: la base aparte y las claves operativas | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); el push, la reserva y la limpieza cortados en [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); `/ENTRENAMIENTO`, las pantallas, la franja, el ticket y los bordes en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Guía de entrenamiento (#226): la invitación con la caja vacía, `/GUIA`, el panel, las lecciones y "Hacelo" | [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Playwright: `fixtures.ts`, `helpers.ts`, `keyboard-only.spec.ts` | [`e2e/AGENTS.md`](./e2e/AGENTS.md) |
 | Vista de celular (sin teclado del sistema): sus pantallas, teclados propios, estilos y e2e | [`mobile/AGENTS.md`](./mobile/AGENTS.md); la elección de vista, en "Dos vistas" más abajo |
 
@@ -482,6 +483,13 @@ el contrato.
   título de la pestaña y en todo comprobante, y aviso al salir con lo que se descarta.
 - **Cortado en entrenamiento**: `/CONFIG`, `/ALTA`, `/DEMO_NUEVA`, `/DEMO_RESET` y los links de
   demo, que tocarían la conexión real o borrarían datos reales. No se entra con una venta en curso.
+- **La guía paso a paso** (#226, solo escritorio; spec
+  `docs/superpowers/specs/2026-10-15-guia-de-entrenamiento-design.md`): con la caja sin movimientos,
+  el carrito vacío invita a entrar; Enter en la pantalla de entrada entra con la guía (Alt+Enter, sin
+  ella) y `/GUIA` la abre o la cierra adentro. Cuatro lecciones (primera venta, cantidades y códigos,
+  línea libre y descuento, dos medios): cada paso muestra qué escribir, marca en vivo lo que coincide
+  y se cumple por el estado de la app, nunca por las teclas; "Hacelo" (F2) lo hace despacio por el
+  mismo camino que el teclado. Al terminar se sigue en entrenamiento.
 
 ## UX keyboard-first
 
@@ -534,6 +542,7 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | `/DEMO_NUEVA` | Solo con la terminal en demo: empieza una demo nueva con el backend y la plantilla de la actual (ver "Onboarding de demo") |
 | `/DEMO_RESET` | Solo con el conector `rest-demo`: reinicia la demo (ver `src/connectors/AGENTS.md`) |
 | `/ENTRENAMIENTO` | Entra o sale del modo entrenamiento: nada se envía al backend y al salir se descarta (ver "Modo entrenamiento") |
+| `/GUIA` | Solo en entrenamiento: abre o cierra la guía paso a paso (#226, ver "Modo entrenamiento") |
 | `/ACTUALIZAR` | Solo con una versión nueva descargada: la aplica y recarga, nunca con una venta en curso (ver `src/ui/AGENTS.md`) |
 | `/<el del backend>` | Solo si el backend declara la capacidad `portal` (4.6.0, #179): abre el backend en una pestaña nueva con un link de `POST /portal-links`; el nombre (`/PANEL` en el demo-backend) y el botón del encabezado los manda el backend (ver `src/ui/AGENTS.md`) |
 
@@ -671,12 +680,14 @@ en el historial de git).
 | #221 | La guía de Sheets en dos páginas: el setup al grano, con índice e imágenes (capturas reales de lo nuestro, SVG esquemáticos de Google), y la referencia para integradores | PR #222 |
 | Vista de celular | La misma terminal en el celular sin teclado del sistema (`mobile/`): teclados propios, grilla, escáner, cobro, caja, resumen y el resto; una sola app con la de escritorio (`/MOBILE`), que comparte datos y venta en curso | PR #223 |
 | #224 | La caja en tres comandos con un formulario cada uno: `/INGRESO` y `/EGRESO` (el monto primero, Enter confirma en el concepto) y `/ARQUEO`; sin `/CAJA` ni selector en escritorio | PR #225 |
+| #226 | Guía de entrenamiento en escritorio: invitación con la caja vacía, entrar con la guía, `/GUIA`, cuatro lecciones que marcan lo tipeado en vivo y "Hacelo" (F2) | PR #227 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
 worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
 `0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; `0.8.0`, su guía en dos páginas, con imágenes (#221); `0.9.0`, la
-vista de celular; `0.10.0`, la caja en `/INGRESO`, `/EGRESO` y `/ARQUEO` (#224); se publica con
+vista de celular; `0.10.0`, la caja en `/INGRESO`, `/EGRESO` y `/ARQUEO` (#224); `0.11.0`, la guía de
+entrenamiento (#226); se publica con
 `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo

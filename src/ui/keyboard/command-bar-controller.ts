@@ -53,12 +53,13 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
+import { toggleGuide } from './guide-controller.ts';
 import { toggleTraining } from './training-controller.ts';
 import { openPortal } from './portal-controller.ts';
 import { enterPrinterScreen } from './printer-controller.ts';
 import { CONNECTOR_ACTIONS } from './connector-actions.ts';
 import { commandAvailability, currentPortalOffer, disabledCommandMessage } from './commands.ts';
-import { parseCommandBar, roundedQuantityPrefix } from './parse-command-bar.ts';
+import { parseCommandBar, parseQuantityText, roundedQuantityPrefix } from './parse-command-bar.ts';
 import { connectorCommands } from '../../sync/connector-registry.ts';
 import { syncNow } from '../../sync/engine.ts';
 
@@ -376,7 +377,7 @@ function triggerVoid(): void {
  * carrito que ni siquiera se guardó — perderlo es barato de rehacer, no
  * justifica un paso extra.
  */
-function triggerDiscardCart(): void {
+export function triggerDiscardCart(): void {
   cartSignal.value = discardCart();
   cartSelectionIndexSignal.value = null;
   resetAttachedCustomer();
@@ -437,6 +438,11 @@ function runCommand(name: string, _args: string[]): void {
       clearBuffer();
       void toggleTraining();
       return;
+    case 'GUIA':
+      // #226: solo en entrenamiento (fuera, el menú la deshabilita con su motivo).
+      clearBuffer();
+      void toggleGuide();
+      return;
     case 'ACTUALIZAR':
       // Solo existe con una versión nueva descargada (#54).
       if (appUpdateSignal.value === 'none') {
@@ -485,6 +491,33 @@ function runCommand(name: string, _args: string[]): void {
       clearBuffer();
     }
   }
+}
+
+/**
+ * Enter en la barra de comandos: la tecla y "Hacelo" de la guía de entrenamiento (#226) pasan por acá.
+ * Con la barra vacía (#99) abre Cobro si hay algo que cobrar, igual que Ctrl+Enter — va antes que la
+ * línea seleccionada, que necesita un número para cambiar su cantidad. Con una línea del carrito
+ * seleccionada (↑/↓ previo), una cantidad reemplaza la de la línea en vez de buscarse como código de
+ * barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`); una fila de la lista de códigos
+ * elegida a mano gana sobre "cantidad de la línea".
+ */
+export function pressCommandBarEnter(): void {
+  const buffer = commandBarBufferSignal.value;
+  if (buffer === '') {
+    void submitEmptyCommandBar();
+    return;
+  }
+  const pickingCode =
+    parsedSignal.value.kind === 'code-search' && searchSelectionIndexSignal.value !== null;
+  if (cartSelectionIndexSignal.value !== null && !pickingCode) {
+    const parsedQty = parseQuantityText(buffer);
+    if (parsedQty.ok) {
+      void setSelectedCartLineQuantity(parsedQty.qty, { rounded: parsedQty.rounded });
+      commandBarBufferSignal.value = '';
+      return;
+    }
+  }
+  submitCommandBar();
 }
 
 /** Se llama al presionar Enter con la barra de comandos activa (no en modo navegación del carrito). */

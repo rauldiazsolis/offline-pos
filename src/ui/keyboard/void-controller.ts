@@ -9,6 +9,7 @@ import {
 import { describeError } from '../errors.ts';
 import { formatBalance } from '../format-balance.ts';
 import { receiptName, saleName } from '../format-ticket.ts';
+import { noteOperation } from '../state/operations.ts';
 import { commandBarNoticeSignal, overlayDismissedSignal } from '../state/command-bar.ts';
 import { customerBalancesSignal, refreshCustomerBalances } from '../state/customer-balance.ts';
 import { getCustomerRepository } from '../state/customer-repository.ts';
@@ -231,5 +232,6 @@ export async function confirmVoid(): Promise<void> {
   }
   await refreshStockSnapshot();
   await refreshCustomerBalances();
+  noteOperation('void');
   finish(notice);
 }

@@ -18,6 +18,7 @@ import { attachedCustomerSignal } from '../state/customer.ts';
 import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { formatBalance } from '../format-balance.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
+import { EmptyCart } from './EmptyCart.tsx';
 import './cart-view.css';
 
 const cardStyle = {
@@ -170,7 +171,7 @@ function CartTable({
   const rowRef = useScrollSelectedIntoView(cartSelectionIndexSignal);
 
   if (lines.length === 0) {
-    return <p style={{ color: 'var(--color-text-muted)' }}>El carrito está vacío.</p>;
+    return <EmptyCart />;
   }
 
   // <table> real, no un grid por fila — así el navegador calcula un único

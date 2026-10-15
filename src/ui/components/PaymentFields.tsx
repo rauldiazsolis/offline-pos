@@ -60,6 +60,7 @@ export function PaymentFields<M extends PaymentMethod>(props: {
               }}
               type="text"
               inputMode="decimal"
+              data-payment-method={method}
               value={raw}
               onInput={(event: TargetedEvent<HTMLInputElement>) => {
                 props.onInput(method, event.currentTarget.value);

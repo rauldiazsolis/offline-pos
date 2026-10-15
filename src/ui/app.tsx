@@ -1,5 +1,6 @@
 import './tokens.css';
 import { isTrainingMode } from '../storage/training-mode.ts';
+import { GuidePanel } from './components/GuidePanel.tsx';
 import { TrainingBanner } from './components/TrainingBanner.tsx';
 import { CashScreen } from './screens/cash-screen.tsx';
 import { CashSummaryScreen } from './screens/cash-summary-screen.tsx';
@@ -16,6 +17,7 @@ import { TrainingScreen } from './screens/training-screen.tsx';
 import { UnsupportedScreen } from './screens/unsupported-screen.tsx';
 import { VoidScreen } from './screens/void-screen.tsx';
 import { demoConfirmSignal } from './state/demo-confirm.ts';
+import { guideSignal } from './state/guide.ts';
 import { activeScreenSignal } from './state/screen.ts';
 import { trainingScreenSignal } from './state/training.ts';
 import { connectionStateSignal } from './state/sync.ts';
@@ -74,11 +76,21 @@ export function App() {
   if (viewportWidthSignal.value < MIN_SUPPORTED_WIDTH_PX) {
     return <UnsupportedScreen />;
   }
-  // #177: la franja va arriba de todas las pantallas; la activa toma el alto que queda.
+  // #177: la franja va arriba de todas las pantallas; la activa toma el alto que queda. Debajo de
+  // la franja, la guía (#226), que solo existe en entrenamiento.
   const training = isTrainingMode();
+  const guide = training && guideSignal.value !== null;
+  const classes = ['app-zoom-wrapper'];
+  if (training) {
+    classes.push('app-zoom-wrapper--training');
+  }
+  if (guide) {
+    classes.push('app-zoom-wrapper--guide');
+  }
   return (
-    <div class={training ? 'app-zoom-wrapper app-zoom-wrapper--training' : 'app-zoom-wrapper'}>
+    <div class={classes.join(' ')}>
       {training && <TrainingBanner />}
+      {guide && <GuidePanel />}
       <ActiveScreen />
     </div>
   );
