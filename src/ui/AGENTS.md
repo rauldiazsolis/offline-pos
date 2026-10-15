@@ -15,7 +15,9 @@ está el grueso del tema:
 `Ctrl+Enter` = `/COBRAR` desde cualquier estado. **Enter con la barra vacía (#99)**: con líneas abre
 Cobro igual que Ctrl+Enter (aunque haya una línea seleccionada), sin líneas y con cliente abre la
 **cobranza sin venta** (#101, igual que `/COBRAR` y Ctrl+Enter en ese estado), sin nada no hace nada
-(`command-bar-controller.ts::submitEmptyCommandBar`). Con la barra vacía, `↑/↓` navegan el carrito; con
+(`command-bar-controller.ts::submitEmptyCommandBar`). Toda la lógica del Enter de la barra vive en
+`command-bar-controller.ts::pressCommandBarEnter`, que comparten la tecla y "Hacelo" de la guía de
+entrenamiento (#226). Con la barra vacía, `↑/↓` navegan el carrito; con
 texto, navegan resultados (producto, cliente o el menú de comandos filtrado). Errores de parseo van
 en un slot de altura fija reservado (nunca corren el layout) y seleccionan todo el input (`.select()`)
 para reemplazar sin retipear. El foco al montar y el `.select()` en error se resuelven con los hooks
@@ -433,8 +435,10 @@ base y las claves, en `src/storage/AGENTS.md`; el sync, en `src/sync/AGENTS.md`.
   pausa el sync y abre la pantalla (`ui/screens/training-screen.tsx`, estado en
   `ui/state/training.ts`, patrón de "Abrir una demo"): qué es el modo y lo real sin enviar
   (`training-model.ts::describeTrainingPending`, "Sin enviar: 1 venta y 1 movimiento más…").
-  Enter = "Entrar al entrenamiento" (`.btn-primary`): último envío de lo real (si falla, entra igual),
-  copia, marca, `prepareTabRelease` y recarga. Esc = "Cancelar" (reanuda el sync).
+  Enter = "Entrar con la guía" (`.btn-primary`, `confirmTrainingWithGuide`, #226) y Alt+Enter =
+  "Entrar sin guía" (`confirmTraining`): último envío de lo real (si falla, entra igual), copia,
+  marca, `prepareTabRelease` y recarga; con la guía, además `guide-start` en `sessionStorage`. Esc =
+  "Cancelar" (reanuda el sync).
 - **Salir**: se puede con una venta de práctica a medias. La pantalla lista lo que se descarta
   (`describeTrainingDiscard`: ventas, cobranzas, movimientos de caja y arqueos, la venta en curso y
   los clientes creados, o "No hiciste nada en el entrenamiento.") y lo que vuelve. Enter = "Descartar
@@ -457,6 +461,42 @@ base y las claves, en `src/storage/AGENTS.md`; el sync, en `src/sync/AGENTS.md`.
   y volvé a abrir el link." (`sync/demo-link.ts::hasOnboardingParams`). Sin id de dispositivo, primero
   se sale del entrenamiento y se recarga. `/ACTUALIZAR`, `/SINCRONIZAR` (solo el pull), el portal,
   `/RESUMEN` y `/ANULAR` andan igual, sobre la base de práctica.
+
+## Guía de entrenamiento (#226)
+
+Spec: `docs/superpowers/specs/2026-10-15-guia-de-entrenamiento-design.md`. Solo en escritorio y solo
+en entrenamiento: todo lo que hace es práctica.
+
+- **La invitación** (`components/EmptyCart.tsx`, el carrito vacío): fuera del entrenamiento y con la
+  caja sin movimientos (`state/operations.ts::noMovementsSignal`), "¿Es la primera vez que usás el
+  POS?" con "Empezar la guía (/ENTRENAMIENTO)"; en entrenamiento con la guía cerrada, "Estás
+  practicando" con "Abrir la guía (/GUIA)". Los movimientos: `bootstrap` cuenta los de la base
+  (`hadLocalMovementsSignal`) y cada controller que registra algo llama a `noteOperation` (venta,
+  cobranza, caja, anulación); `resetSessionAfterWipe` los vuelve a cero.
+- **Abrirla**: "Entrar con la guía" (la consume `bootstrap` con `consumeGuideStart` después de la
+  recarga) o `/GUIA` (`commands.ts::guideCommand`; fuera del entrenamiento, deshabilitado con "solo en
+  entrenamiento; entrá con /ENTRENAMIENTO"), que con la guía abierta la cierra. La vista de celular no
+  lo lista, y pasar a ella cierra la guía.
+- **El modelo** (`keyboard/guide-model.ts`, puro): un paso tiene qué decir (`say`, con el texto a
+  escribir aparte), dónde se escribe (`target`: la barra o un medio de Cobro), cuándo está cumplido
+  (`done`, sobre `GuideSnapshot`, el estado de la app: nunca las teclas), una pista opcional y las
+  acciones de "Hacelo" (`demo`). `chooseActors` elige con qué productos practicar; `advanceStep` pasa
+  de largo los pasos ya cumplidos. Las lecciones, en `keyboard/guide-lessons.ts`.
+- **El controller** (`keyboard/guide-controller.ts`, dependencias inyectadas): `openGuide`,
+  `closeGuide`, `toggleGuide`, `nextLesson` y `guidePrimaryAction` (F2). Un `effect` sigue el estado
+  (`state/guide.ts`): arranca la lección que espera recién en la venta (descartando la venta de
+  práctica a medias con `triggerDiscardCart`), avanza los pasos y marca la lección terminada.
+  **"Hacelo"** (`doIt`) va por el mismo camino que el teclado: `updateCommandBarBuffer` letra por
+  letra, `pressCommandBarEnter`, `submitCheckout`, `closeReceipt`, y en Cobro enfoca el campo
+  (`data-payment-method`) y escribe en su buffer. Cualquier tecla salvo F2, o un click, lo frena
+  (listeners en captura sobre `window`, solo con la guía abierta).
+- **El panel** (`components/GuidePanel.tsx`, debajo de la franja, en `App`; `.guide-panel` y
+  `.app-zoom-wrapper--guide` en `tokens.css`): alto fijo (`--guide-panel-h`), la instrucción en hasta
+  dos renglones, el texto a escribir con lo que coincide en verde y el primer carácter distinto en
+  rojo, y la pista. Botones "Hacelo (F2)", "Saltar lección" y "Cerrar guía", `tabIndex={-1}` con
+  `keepFocusOnMouseDown`: nunca le sacan el foco a la pantalla.
+- **e2e** (`e2e/training-guide.spec.ts`): las cuatro lecciones con F2 de punta a punta. Un cambio en la
+  barra, en Cobro o en un comando que use una lección tiene que pasar ese spec.
 
 ## "Abrir una demo" (#176)
 
@@ -569,7 +609,8 @@ seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), 
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
 (`select`s, campos y botones), **la caja** (campos,
 sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la pantalla y la franja
-de entrenamiento** (#177, botones) y la **barra de estado** (click =
+de entrenamiento** (#177, botones), **la guía de entrenamiento** (#226: el panel, con F2 para su
+botón principal, y la invitación del carrito vacío) y la **barra de estado** (click =
 `/DIAGNOSTICO`; el aviso de arqueo abre `/ARQUEO`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
 **encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
 del portal hace su comando, #179; el resto es pasivo, #193).
