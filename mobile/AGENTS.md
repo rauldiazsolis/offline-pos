@@ -54,7 +54,8 @@ Decisiones:
   línea libre, ajuste, cliente). Mismos signals: el carrito persiste igual y Cobro lo lee igual.
 - **"Más" corre cada comando por el despachador de escritorio** (`/NOMBRE` + Enter en
   `command-bar-controller.ts`), así los del conector y el del portal del backend andan sin código
-  propio. Las pestañas cubren COBRAR, CAJA y RESUMEN.
+  propio. Las pestañas cubren COBRAR, RESUMEN e INGRESO, EGRESO y ARQUEO (la pestaña Caja, con
+  su selector: los tres comandos de escritorio, #224, no van en Más).
 - **Los avisos** del slot de la barra de escritorio (`commandBar{Error,Warning,Notice}Signal`) se
   muestran como aviso flotante (`components/toast.tsx`), que los limpia a los 4 s.
 - **La conexión nunca se tipea si se puede evitar**: un QR (`camera/scanned-link.ts` toma el

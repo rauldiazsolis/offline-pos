@@ -298,7 +298,7 @@ al volver `ok`. Un error de red no cambia el estado; con `unknown` los ciclos co
 (`domain/cash-movement.ts`: ingreso/egreso de caja; el arqueo viaja solo como ajuste
 `count-adjustment` con lo esperado y lo contado, y solo si la diferencia no es 0) y
 `customer-payment` (`domain/customer-payment.ts`: cobranza sin venta, sin cuenta corriente como medio
-y sin vuelto). `cash-movement` lo genera `/CAJA` desde la Etapa 5 (#100); `customer-payment`, la
+y sin vuelto). `cash-movement` lo generan `/INGRESO`, `/EGRESO` y `/ARQUEO` (`/CAJA` desde la Etapa 5, #100, hasta #224); `customer-payment`, la
 cobranza sin venta desde la Etapa 6 (#101).
 Ninguno se anula (se corrigen con otro registro, RNF-07). `cash-session` se eliminó, y desde la Etapa
 5 tampoco existe el turno local. Cantidades con signo y hasta 3 decimales, `Sale.total`/`Payment.amount` pueden
