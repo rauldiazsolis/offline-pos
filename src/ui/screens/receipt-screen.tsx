@@ -6,14 +6,8 @@ import { printReceipt } from '../print/after-close.ts';
 import { ReceiptPreview } from '../print/ReceiptPreview.tsx';
 import { receiptDocumentFor } from '../print/resolve-receipt.ts';
 import { printerConfigSignal } from '../state/printer.ts';
-import { receiptSignal } from '../state/receipt.ts';
+import { closeReceipt, receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
-
-function closeReceipt(): void {
-  const returnTo = receiptSignal.value?.returnTo ?? 'sale';
-  receiptSignal.value = null;
-  activeScreenSignal.value = returnTo;
-}
 
 /**
  * Solo si la pantalla sigue siendo esta: al cerrar, `closeReceipt` ya eligió a dónde volver (la

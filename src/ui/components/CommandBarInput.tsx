@@ -4,10 +4,8 @@ import {
   activateCommandBarRow,
   dismissCommandBarOverlay,
   moveSelection,
+  pressCommandBarEnter,
   removeSelectedCartLine,
-  setSelectedCartLineQuantity,
-  submitCommandBar,
-  submitEmptyCommandBar,
   triggerCheckout,
   updateCommandBarBuffer,
 } from '../keyboard/command-bar-controller.ts';
@@ -17,8 +15,7 @@ import { useScrollIndicator } from '../hooks/use-scroll-indicator.ts';
 import { useScrollSelectedIntoView } from '../hooks/use-scroll-selected-into-view.ts';
 import { useSelectOnErrorSignal } from '../hooks/use-select-on-error.ts';
 import { formatDate, formatMoney, formatQuantity } from '../format.ts';
-import { parseQuantityText } from '../keyboard/parse-command-bar.ts';
-import { cartSelectionIndexSignal, cartSignal } from '../state/cart.ts';
+import { cartSignal } from '../state/cart.ts';
 import { stockSnapshotSignal } from '../state/stock.ts';
 import { ScrollIndicatorBar } from './ScrollIndicatorBar.tsx';
 import {
@@ -159,32 +156,7 @@ export function CommandBarInput() {
 
     if (event.key === 'Enter') {
       event.preventDefault();
-      const buffer = commandBarBufferSignal.value;
-
-      // Barra vacía (#99): Enter abre Cobro si hay algo que cobrar, igual
-      // que Ctrl+Enter — va antes que la línea seleccionada, que necesita un
-      // número para cambiar su cantidad.
-      if (buffer === '') {
-        void submitEmptyCommandBar();
-        return;
-      }
-
-      // Con una línea del carrito seleccionada (↑/↓ previo), una cantidad +
-      // Enter reemplaza la de la línea en vez de buscarse como código de
-      // barras — con signo y hasta 3 decimales desde #99 (`-2`, `1,5`).
-      // Una fila de la lista de códigos elegida a mano gana sobre "cantidad de la línea".
-      const pickingCode =
-        parsedSignal.value.kind === 'code-search' && searchSelectionIndexSignal.value !== null;
-      if (cartSelectionIndexSignal.value !== null && !pickingCode) {
-        const parsedQty = parseQuantityText(buffer);
-        if (parsedQty.ok) {
-          void setSelectedCartLineQuantity(parsedQty.qty, { rounded: parsedQty.rounded });
-          commandBarBufferSignal.value = '';
-          return;
-        }
-      }
-
-      submitCommandBar();
+      pressCommandBarEnter();
     }
   };
 
