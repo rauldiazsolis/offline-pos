@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { setTrainingModeForTests } from '../../storage/training-mode.ts';
+import { guideSignal } from '../state/guide.ts';
 import { setActiveConnectorType, setDemoSession } from '../state/sync.ts';
 import { RESERVED_COMMAND_NAMES, availableCommands, commandAvailability } from './commands.ts';
 
@@ -25,6 +26,30 @@ describe('/ENTRENAMIENTO (#177)', () => {
 
   it('es un nombre reservado: el portal no puede llamarse así', () => {
     expect(RESERVED_COMMAND_NAMES.has('ENTRENAMIENTO')).toBe(true);
+  });
+});
+
+describe('/GUIA (#226)', () => {
+  it('solo en entrenamiento: afuera, deshabilitado con el motivo', () => {
+    expect(commandAvailability('GUIA')).toEqual({
+      enabled: false,
+      reason: 'solo en entrenamiento; entrá con /ENTRENAMIENTO',
+    });
+    setTrainingModeForTests({ startedAt });
+    expect(commandAvailability('GUIA')).toEqual({ enabled: true });
+  });
+
+  it('con la guía abierta, la descripción dice que la cierra', () => {
+    const description = () =>
+      availableCommands().find((command) => command.name === 'GUIA')?.description;
+    expect(description()).toBe('Guía paso a paso para aprender a usar el POS');
+    guideSignal.value = { phase: 'finished' };
+    expect(description()).toBe('Cerrar la guía paso a paso');
+    guideSignal.value = null;
+  });
+
+  it('es un nombre reservado', () => {
+    expect(RESERVED_COMMAND_NAMES.has('GUIA')).toBe(true);
   });
 });
 

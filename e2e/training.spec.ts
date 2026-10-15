@@ -69,7 +69,8 @@ test('entrenamiento: vende con lo real, nada se empuja y al salir vuelve lo real
   await runCommand(page, '/ENTRENAMIENTO');
   await expect(page.getByRole('heading', { name: 'Entrar al entrenamiento' })).toBeVisible();
   await expect(page.getByText(/^Sin enviar: 1 venta y 1 movimiento más\./)).toBeVisible();
-  await page.keyboard.press('Enter');
+  // Sin la guía (#226): este spec es el del modo; la guía tiene el suyo.
+  await page.keyboard.press('Alt+Enter');
   await expect(page.getByText(BANNER_TEXT)).toBeVisible();
   await expect(page).toHaveTitle(/^ENTRENAMIENTO · /);
   // El último envío de lo real, antes de entrar, sí podía intentar un push; desde acá, ninguno.

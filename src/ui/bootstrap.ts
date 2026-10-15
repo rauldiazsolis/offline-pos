@@ -15,7 +15,8 @@ import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { hasOnboardingParams, stripOnboardingParams } from '../sync/demo-link.ts';
 import { openRequiredWizard, openWizardWithCandidate } from './keyboard/config-controller.ts';
 import { openDemoConfirm } from './keyboard/demo-confirm-controller.ts';
-import { consumeTrainingExited } from './keyboard/training-controller.ts';
+import { openGuide } from './keyboard/guide-controller.ts';
+import { consumeGuideStart, consumeTrainingExited } from './keyboard/training-controller.ts';
 import { runOnboardingFromUrl } from './onboarding.ts';
 import { resetSessionAfterWipe } from './session-reset.ts';
 import { cartSignal } from './state/cart.ts';
@@ -29,6 +30,7 @@ import { refreshCustomerBalances } from './state/customer-balance.ts';
 import { summarizeLocalData, hasUserData } from '../storage/local-data.ts';
 import { getCashBalance } from '../storage/cash-repository.ts';
 import { lastCashCountAtSignal, startCashClock } from './state/cash.ts';
+import { hadLocalMovementsSignal } from './state/operations.ts';
 import {
   setActiveConnectorType,
   setConnectionState,
@@ -160,6 +162,16 @@ export async function bootstrap(): Promise<void> {
   // #177: la salida del entrenamiento recargó; se avisa una sola vez.
   if (consumeTrainingExited()) {
     commandBarNoticeSignal.value = 'Saliste del entrenamiento.';
+  }
+
+  // #226: la invitación a la guía, mientras la caja no tenga movimientos. Después del onboarding,
+  // que pudo haber borrado lo local.
+  const local = await summarizeLocalData();
+  hadLocalMovementsSignal.value =
+    local.sales + local.cashMovements + local.cashCounts + local.customerPayments > 0;
+  // "Entrar con la guía" recargó: la guía arranca en la primera lección.
+  if (consumeGuideStart()) {
+    void openGuide();
   }
 
   startSyncEngine();

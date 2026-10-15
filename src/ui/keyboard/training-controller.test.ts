@@ -6,6 +6,7 @@ import { trainingScreenSignal } from '../state/training.ts';
 import {
   cancelTraining,
   confirmTraining,
+  confirmTrainingWithGuide,
   toggleTraining,
   type TrainingDeps,
 } from './training-controller.ts';
@@ -41,6 +42,9 @@ function fakeDeps(overrides: Partial<TrainingDeps> = {}): TrainingDeps & { calls
     },
     writeMark: (startedAt) => {
       calls.push(`mark ${startedAt}`);
+    },
+    noteGuideStart: () => {
+      calls.push('guide');
     },
     clearTraining: () => {
       calls.push('clear');
@@ -106,6 +110,23 @@ describe('entrar al entrenamiento (#177)', () => {
     await confirmTraining(deps);
 
     expect(deps.calls).toEqual(['pause', 'flush', 'copy', `mark ${now}`, 'release', 'reload']);
+  });
+
+  it('con la guía (#226): además deja el pedido de abrirla después de la recarga', async () => {
+    const deps = fakeDeps();
+    await toggleTraining(deps);
+
+    await confirmTrainingWithGuide(deps);
+
+    expect(deps.calls).toEqual([
+      'pause',
+      'flush',
+      'copy',
+      `mark ${now}`,
+      'guide',
+      'release',
+      'reload',
+    ]);
   });
 
   it('un envío que falla no impide entrar', async () => {

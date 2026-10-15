@@ -288,6 +288,102 @@ textarea {
 }
 
 /*
+ * Guía de entrenamiento (#226): un panel de alto fijo debajo de la franja, en todas las pantallas
+ * que toca una lección. Nunca crece: el título y la pista en un renglón, la instrucción en hasta dos
+ * (en una pantalla angosta no entra en uno), y lo que sobra se recorta con "…". La pantalla activa
+ * descuenta también su alto.
+ */
+:root {
+  --guide-panel-h: calc(var(--font-size-base) * 6.25);
+}
+
+.app-zoom-wrapper--training.app-zoom-wrapper--guide {
+  --app-height: calc(100svh / var(--app-zoom) - var(--training-banner-h) - var(--guide-panel-h));
+}
+
+.guide-panel {
+  height: var(--guide-panel-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  background: var(--color-selected-bg-subtle);
+  color: var(--color-text);
+  border-bottom: 2px solid var(--color-accent);
+}
+
+.guide-panel__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guide-panel__line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guide-panel__title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.guide-panel__title strong {
+  color: var(--color-text);
+}
+
+.guide-panel__say {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--font-size-base);
+}
+
+.guide-panel__hint {
+  min-height: 1.3em;
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+}
+
+/* Lo que hay que escribir: lo que ya coincide en verde, el primer carácter distinto en rojo. */
+.guide-panel__text {
+  margin: 0 0.3em;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  font-family: var(--font-mono);
+  font-weight: bold;
+  white-space: pre;
+}
+
+.guide-panel__text-ok {
+  color: var(--color-success);
+}
+
+.guide-panel__text-wrong {
+  color: #ffffff;
+  background: var(--color-danger);
+}
+
+.guide-panel__actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.guide-panel__actions .btn {
+  white-space: nowrap;
+}
+
+/*
  * El ticket en pantalla (comprobante y vista previa de `/IMPRESORA`, #174) es el papel a tamaño
  * real: cancela el `zoom` de la app, así sus medidas en mm y pt son las del papel y el texto nunca
  * baja de ~12 px (9 pt en 58 mm), por encima del piso de #111. En el iframe de impresión no hay

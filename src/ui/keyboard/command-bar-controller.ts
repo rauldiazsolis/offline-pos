@@ -53,6 +53,7 @@ import { triggerCashSummary } from './cash-summary-controller.ts';
 import { enterConfigScreen } from './config-controller.ts';
 import { enterDiagnosticoScreen } from './diagnostico-controller.ts';
 import { startNewDemo, startOnboarding } from './onboarding-controller.ts';
+import { toggleGuide } from './guide-controller.ts';
 import { toggleTraining } from './training-controller.ts';
 import { openPortal } from './portal-controller.ts';
 import { enterPrinterScreen } from './printer-controller.ts';
@@ -436,6 +437,11 @@ function runCommand(name: string, _args: string[]): void {
       // #177: entra o sale; la pantalla de entrenamiento confirma.
       clearBuffer();
       void toggleTraining();
+      return;
+    case 'GUIA':
+      // #226: solo en entrenamiento (fuera, el menú la deshabilita con su motivo).
+      clearBuffer();
+      void toggleGuide();
       return;
     case 'ACTUALIZAR':
       // Solo existe con una versión nueva descargada (#54).

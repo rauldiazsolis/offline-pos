@@ -23,7 +23,8 @@ describe('pantalla de entrenamiento (#177)', () => {
     expect(screen.getByRole('heading', { name: 'Entrar al entrenamiento' })).not.toBeNull();
     expect(screen.getByText(/Nada se envía al backend/)).not.toBeNull();
     expect(screen.getByText('Sin enviar: 1 venta y 1 movimiento más.')).not.toBeNull();
-    expect(button('Entrar al entrenamiento (Enter)').disabled).toBe(false);
+    expect(button('Entrar con la guía (Enter)').className).toContain('btn-primary');
+    expect(button('Entrar sin guía (Alt+Enter)').disabled).toBe(false);
     expect(button('Cancelar (Esc)').disabled).toBe(false);
   });
 
@@ -38,7 +39,8 @@ describe('pantalla de entrenamiento (#177)', () => {
     render(<TrainingScreen />);
 
     expect(screen.getByText('Preparando…')).not.toBeNull();
-    expect(button('Entrar al entrenamiento (Enter)').disabled).toBe(true);
+    expect(button('Entrar con la guía (Enter)').disabled).toBe(true);
+    expect(button('Entrar sin guía (Alt+Enter)').disabled).toBe(true);
     expect(button('Cancelar (Esc)').disabled).toBe(true);
   });
 
@@ -56,5 +58,6 @@ describe('pantalla de entrenamiento (#177)', () => {
     expect(screen.getByText(/Vuelven el stock, los saldos y el resumen reales/)).not.toBeNull();
     expect(button('Descartar y salir (Enter)').className).toContain('btn-danger');
     expect(button('Seguir entrenando (Esc)').disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Entrar sin guía (Alt+Enter)' })).toBeNull();
   });
 });

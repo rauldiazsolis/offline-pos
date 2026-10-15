@@ -1,7 +1,11 @@
 import type { TargetedKeyboardEvent } from 'preact';
 import { useFocusOnMount } from '../hooks/use-focus-on-mount.ts';
 import { keepFocusOnMouseDown } from '../hooks/use-mouse-keeps-focus.ts';
-import { cancelTraining, confirmTraining } from '../keyboard/training-controller.ts';
+import {
+  cancelTraining,
+  confirmTraining,
+  confirmTrainingWithGuide,
+} from '../keyboard/training-controller.ts';
 import type { TrainingDiscard } from '../keyboard/training-model.ts';
 import { trainingScreenSignal } from '../state/training.ts';
 
@@ -32,7 +36,8 @@ function DiscardList(props: { discard: TrainingDiscard }) {
 
 /**
  * Entrar o salir del entrenamiento (#177). Mismo patrón que "Abrir una demo": un solo paso, Enter
- * confirma y Esc cancela, cada atajo con su botón. Mientras prepara o sale no se puede hacer nada.
+ * confirma y Esc cancela, cada atajo con su botón. Al entrar, Enter entra con la guía paso a paso
+ * (#226) y Alt+Enter sin ella. Mientras prepara o sale no se puede hacer nada.
  */
 export function TrainingScreen() {
   const containerRef = useFocusOnMount<HTMLDivElement>();
@@ -50,7 +55,7 @@ export function TrainingScreen() {
     }
     if (event.key === 'Enter') {
       event.preventDefault();
-      void confirmTraining();
+      void (entering && !event.altKey ? confirmTrainingWithGuide() : confirmTraining());
       return;
     }
     if (event.key === 'Escape') {
@@ -87,6 +92,10 @@ export function TrainingScreen() {
           <p style={{ ...paragraph, fontWeight: 'bold' }}>
             Nada se envía al backend. Al salir se borra todo lo que hiciste.
           </p>
+          <p style={paragraph}>
+            La guía paso a paso te muestra qué escribir en cada momento, y con "Hacelo" lo hace ella
+            despacio para que veas cómo. Al terminar seguís en el entrenamiento.
+          </p>
           {state.phase === 'checking' ? (
             <p style={paragraph}>Revisando los datos de esta terminal…</p>
           ) : (
@@ -118,13 +127,18 @@ export function TrainingScreen() {
         >
           {entering ? 'Cancelar (Esc)' : 'Seguir entrenando (Esc)'}
         </button>
+        {entering && (
+          <button type="button" class="btn" onClick={() => void confirmTraining()} disabled={busy}>
+            Entrar sin guía (Alt+Enter)
+          </button>
+        )}
         <button
           type="button"
           class={entering ? 'btn btn-primary' : 'btn btn-danger'}
-          onClick={() => void confirmTraining()}
+          onClick={() => void (entering ? confirmTrainingWithGuide() : confirmTraining())}
           disabled={busy}
         >
-          {entering ? 'Entrar al entrenamiento (Enter)' : 'Descartar y salir (Enter)'}
+          {entering ? 'Entrar con la guía (Enter)' : 'Descartar y salir (Enter)'}
         </button>
       </div>
     </div>

@@ -12,9 +12,18 @@ import { moreOpenSignal } from '../state/nav.ts';
 
 /**
  * Lo que ya tiene su lugar en el mobile: las pestañas y el botón Cobrar. Ingreso, egreso y arqueo
- * son la pestaña Caja, con su selector (#224).
+ * son la pestaña Caja, con su selector (#224). La guía de entrenamiento (`GUIA`, #226) es solo de
+ * escritorio.
  */
-const SHOWN_ELSEWHERE = new Set(['COBRAR', 'INGRESO', 'EGRESO', 'ARQUEO', 'RESUMEN', 'MOBILE']);
+const SHOWN_ELSEWHERE = new Set([
+  'COBRAR',
+  'INGRESO',
+  'EGRESO',
+  'ARQUEO',
+  'RESUMEN',
+  'MOBILE',
+  'GUIA',
+]);
 
 /** Cómo se llama cada comando en el menú; el resto, con su nombre de escritorio. */
 const TITLES: Record<string, string> = {

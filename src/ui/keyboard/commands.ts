@@ -4,6 +4,7 @@ import type { BackendPortal } from '../../sync/connector.ts';
 import { CONNECTOR_TYPES, connectorCommands } from '../../sync/connector-registry.ts';
 import { appUpdateSignal } from '../state/app-update.ts';
 import { cartSignal } from '../state/cart.ts';
+import { guideSignal } from '../state/guide.ts';
 import { attachedCustomerSignal } from '../state/customer.ts';
 import {
   activeConnectorTypeSignal,
@@ -90,6 +91,21 @@ function trainingCommand(): CommandInfo {
   };
 }
 
+export const GUIDE_OUTSIDE_TRAINING_REASON = 'solo en entrenamiento; entrá con /ENTRENAMIENTO';
+
+/** `/GUIA` (#226): la guía paso a paso, solo en entrenamiento (todo lo que hace es práctica). */
+function guideCommand(): CommandInfo {
+  return {
+    name: 'GUIA',
+    description:
+      guideSignal.value !== null
+        ? 'Cerrar la guía paso a paso'
+        : 'Guía paso a paso para aprender a usar el POS',
+    availability: () =>
+      isTrainingMode() ? ENABLED : { enabled: false, reason: GUIDE_OUTSIDE_TRAINING_REASON },
+  };
+}
+
 function guardForTraining(command: CommandInfo): CommandInfo {
   if (!isTrainingMode() || !TRAINING_BLOCKED_COMMANDS.has(command.name)) {
     return command;
@@ -107,6 +123,7 @@ function guardForTraining(command: CommandInfo): CommandInfo {
 export const RESERVED_COMMAND_NAMES: ReadonlySet<string> = new Set([
   ...CORE_COMMANDS.map((command) => command.name),
   'ENTRENAMIENTO',
+  'GUIA',
   'ACTUALIZAR',
   'ALTA',
   'DEMO_NUEVA',
@@ -130,7 +147,7 @@ export function currentPortalOffer(): BackendPortal | null {
 }
 
 /**
- * Los del núcleo, `/ENTRENAMIENTO` (#177), `/ACTUALIZAR` (#54) si hay una versión nueva
+ * Los del núcleo, `/ENTRENAMIENTO` (#177), `/GUIA` (#226), `/ACTUALIZAR` (#54) si hay una versión nueva
  * descargada, `/ALTA` (#128) y `/DEMO_NUEVA` (#176) si la terminal está en demo, el del portal (#179)
  * si el backend lo ofrece y los que declara el conector activo (Etapa 2c, #77). En entrenamiento, los
  * de `TRAINING_BLOCKED_COMMANDS` quedan deshabilitados con su motivo. Lee signals, así que dentro de
@@ -155,6 +172,7 @@ export function availableCommands(): CommandInfo[] {
   return [
     ...CORE_COMMANDS,
     trainingCommand(),
+    guideCommand(),
     ...updateCommands,
     ...demoCommands,
     ...portalCommands,
