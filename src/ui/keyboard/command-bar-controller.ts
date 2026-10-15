@@ -388,8 +388,16 @@ function runCommand(name: string, _args: string[]): void {
     case 'COBRAR':
       void triggerCheckout();
       return;
-    case 'CAJA':
-      enterCashScreen();
+    case 'INGRESO':
+      enterCashScreen('in');
+      clearBuffer();
+      return;
+    case 'EGRESO':
+      enterCashScreen('out');
+      clearBuffer();
+      return;
+    case 'ARQUEO':
+      enterCashScreen('count');
       clearBuffer();
       return;
     case 'RESUMEN':

@@ -837,11 +837,11 @@ describe('CommandBarInput', () => {
       const input = screen.getByLabelText('Barra de comandos');
 
       fireEvent.input(input, { target: { value: '/' } });
-      fireEvent.keyDown(input, { key: 'ArrowDown' }); // CAJA, índice 1
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // INGRESO, índice 1
       expect(commandSelectionIndexSignal.value).toBe(1);
 
-      fireEvent.input(input, { target: { value: '/C' } }); // CAJA sigue en la lista (COBRAR, CAJA, CONFIG)
-      expect(commandSelectionIndexSignal.value).toBe(1);
+      fireEvent.input(input, { target: { value: '/I' } }); // INGRESO sigue en la lista (INGRESO, IMPRESORA)
+      expect(commandSelectionIndexSignal.value).toBe(0);
     });
 
     it('el menú de comandos pierde la selección si el comando ya no está en la lista nueva', () => {
@@ -849,9 +849,9 @@ describe('CommandBarInput', () => {
       const input = screen.getByLabelText('Barra de comandos');
 
       fireEvent.input(input, { target: { value: '/' } });
-      fireEvent.keyDown(input, { key: 'ArrowDown' }); // CAJA, índice 1
+      fireEvent.keyDown(input, { key: 'ArrowDown' }); // INGRESO, índice 1
 
-      fireEvent.input(input, { target: { value: '/AN' } }); // solo ANULAR, CAJA ya no está
+      fireEvent.input(input, { target: { value: '/AN' } }); // solo ANULAR, INGRESO ya no está
       expect(commandSelectionIndexSignal.value).toBeNull();
     });
 

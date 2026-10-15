@@ -40,7 +40,7 @@ describe('SaleScreen — mouse (Etapa 2 de #94)', () => {
   it('click fuera del overlay lo cierra sin tocar el buffer', () => {
     render(<SaleScreen />);
     fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '/' } });
-    expect(screen.queryByText('/CAJA')).not.toBeNull();
+    expect(screen.queryByText('/ARQUEO')).not.toBeNull();
 
     const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
     screen.getByText('Consumidor Final').dispatchEvent(event);
@@ -66,7 +66,7 @@ describe('SaleScreen — mouse (Etapa 2 de #94)', () => {
     fireEvent.input(screen.getByLabelText('Barra de comandos'), { target: { value: '/' } });
 
     const event = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
-    screen.getByText('/CAJA').dispatchEvent(event);
+    screen.getByText('/ARQUEO').dispatchEvent(event);
 
     expect(overlayDismissedSignal.value).toBe(false);
   });

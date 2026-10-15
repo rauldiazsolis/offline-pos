@@ -104,9 +104,13 @@ describe('comandos habilitados (Etapa 2 de #94)', () => {
   it('↓ saltea los deshabilitados', () => {
     updateCommandBarBuffer('/');
     moveSelection(1);
-    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe('CAJA');
+    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe(
+      'INGRESO',
+    );
     moveSelection(-1);
-    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe('CAJA');
+    expect(commandResultsSignal.value[effectiveCommandIndexSignal.value ?? -1]?.name).toBe(
+      'INGRESO',
+    );
   });
 
   it('con un artículo, /COBRAR vuelve a preseleccionarse', () => {
@@ -229,7 +233,9 @@ describe('/DEMO_RESET (Ciclo 8; comando del conector rest-demo desde la Etapa 2c
 describe('availableCommands (Etapa 2c)', () => {
   const CORE = [
     'COBRAR',
-    'CAJA',
+    'INGRESO',
+    'EGRESO',
+    'ARQUEO',
     'RESUMEN',
     'ANULAR',
     'DESCARTAR',

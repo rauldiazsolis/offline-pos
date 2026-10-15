@@ -3,7 +3,8 @@ import { localDateKey, shiftDateKey } from '../../domain/ticket-number.ts';
 import { formatMoney, formatTime } from '../format.ts';
 
 /**
- * Reglas del modal de `/CAJA` (spec de #100, §4), puras — sin DOM ni async, mismo criterio que
+ * Reglas de los formularios de caja (`/INGRESO`, `/EGRESO` y `/ARQUEO`, #224; antes un solo
+ * `/CAJA` con selector, spec de #100, §4), puras — sin DOM ni async, mismo criterio que
  * `config-wizard-model.ts`. `cash-controller.ts` orquesta lo async y `cash-screen.tsx` dibuja.
  */
 export type CashKind = 'count' | 'in' | 'out';
@@ -18,14 +19,33 @@ export const CASH_KIND_LABELS: Record<CashKind, string> = {
 
 export type CashField = 'counted' | 'concept' | 'description' | 'amount';
 
+/** El título de cada formulario: dice qué se está registrando antes del primer dato. */
+export const CASH_KIND_TITLES: Record<CashKind, string> = {
+  count: 'Arqueo de caja',
+  in: 'Ingreso de caja',
+  out: 'Egreso de caja',
+};
+
+/**
+ * El monto primero (#224): Monto → Enter → Concepto → Enter confirma. La Descripción, opcional,
+ * queda al final, fuera del camino de Enter (se llega con ↓ o Tab desde Concepto).
+ */
 const FIELDS: Record<CashKind, readonly CashField[]> = {
   count: ['counted'],
-  in: ['concept', 'description', 'amount'],
-  out: ['concept', 'description', 'amount'],
+  in: ['amount', 'concept', 'description'],
+  out: ['amount', 'concept', 'description'],
 };
 
 export function fieldsFor(kind: CashKind): readonly CashField[] {
   return FIELDS[kind];
+}
+
+/**
+ * Enter en un campo confirma el formulario, en vez de pasar al siguiente: el contado del arqueo,
+ * el Concepto y la Descripción. Solo el Monto de un movimiento pasa al Concepto.
+ */
+export function enterSubmits(field: CashField): boolean {
+  return field !== 'amount';
 }
 
 /** El campo siguiente o anterior, sin ciclar (mismo patrón que Cobro). */
@@ -56,7 +76,11 @@ export function countDifference(
 }
 
 /** Un egreso mayor que el saldo esperado se advierte, nunca se bloquea. */
-export function exceedsBalance(kind: CashKind, amount: number | undefined, balance: number): boolean {
+export function exceedsBalance(
+  kind: CashKind,
+  amount: number | undefined,
+  balance: number,
+): boolean {
   return kind === 'out' && amount !== undefined && amount > balance;
 }
 

@@ -51,7 +51,9 @@ export const CORE_COMMANDS: CommandInfo[] = [
     description: 'Cobrar la venta, o una cobranza al cliente sin artículos (o Ctrl+Enter)',
     availability: checkoutAvailability,
   },
-  { name: 'CAJA', description: 'Arqueo, ingreso o egreso de caja' },
+  { name: 'INGRESO', description: 'Registrar un ingreso de efectivo a la caja' },
+  { name: 'EGRESO', description: 'Registrar un egreso de efectivo de la caja' },
+  { name: 'ARQUEO', description: 'Contar el efectivo de la caja y compararlo con lo esperado' },
   {
     name: 'RESUMEN',
     description: 'Consultar tickets, productos, medios de pago y caja de un día',

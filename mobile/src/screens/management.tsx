@@ -426,7 +426,7 @@ function amountField(params: {
   );
 }
 
-/** `/CAJA`: arqueo (no ciego: muestra lo esperado), ingreso o egreso, con el teclado propio. */
+/** La pestaña Caja: arqueo (no ciego: muestra lo esperado), ingreso o egreso, con el teclado propio. */
 export function CashScreen() {
   useLayoutEffect(() => {
     void loadCashScreen();

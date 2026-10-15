@@ -28,7 +28,8 @@ import {
 } from './cash-form-model.ts';
 
 /**
- * Capa de glue entre el modal de `/CAJA` (Etapa 5 de #94, #100) y `storage/cash-repository.ts` —
+ * Capa de glue entre los formularios de caja (`/INGRESO`, `/EGRESO` y `/ARQUEO`, #224; la pestaña
+ * Caja del celular) y `storage/cash-repository.ts` —
  * mismo rol que `checkout-controller.ts`. Las reglas están en `cash-form-model.ts`.
  */
 
@@ -45,7 +46,8 @@ function resetCashForm(): void {
 }
 
 /**
- * `/CAJA` desde la barra de comandos (o el aviso de la barra de estado). Solo cambia de pantalla:
+ * `/INGRESO`, `/EGRESO` o `/ARQUEO` desde la barra de comandos (o el aviso de la barra de estado, o
+ * la pestaña Caja del celular). Solo cambia de pantalla:
  * cargar el saldo es responsabilidad del `useLayoutEffect` del modal (`loadCashScreen`), mismo
  * criterio que el resto de las pantallas.
  */
@@ -62,7 +64,10 @@ export async function loadCashScreen(): Promise<void> {
   cashBalanceSignal.value = await getCashBalance();
 }
 
-/** Cambiar de tipo no pierde lo tipeado (de Ingreso a Egreso, por ejemplo). */
+/**
+ * Cambiar de tipo no pierde lo tipeado (de Ingreso a Egreso, por ejemplo). Solo lo usa el selector
+ * del celular: en escritorio el tipo lo fija el comando (#224).
+ */
 export function setCashKind(kind: CashKind): void {
   cashKindSignal.value = kind;
   cashErrorSignal.value = null;
@@ -130,13 +135,13 @@ export function chooseConceptSuggestion(index: number): void {
 function finish(notice: string): void {
   resetCashForm();
   commandBarNoticeSignal.value = notice;
-  // Si `/CAJA` se abrió con un click (el aviso de la barra de estado), ese click cerró el overlay
+  // Si el formulario se abrió con un click (el aviso de la barra de estado), ese click cerró el overlay
   // de la barra de comandos (#28): sin esto el aviso quedaba oculto — lo encontró el e2e.
   overlayDismissedSignal.value = false;
   activeScreenSignal.value = 'sale';
 }
 
-/** Ctrl+Enter (o Enter en el arqueo): registra y vuelve a la venta con un aviso. */
+/** Enter en el último paso (o Ctrl+Enter): registra y vuelve a la venta con un aviso. */
 export async function submitCash(): Promise<void> {
   const kind = cashKindSignal.value;
   const fields = cashFieldsSignal.value;
