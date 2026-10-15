@@ -670,7 +670,7 @@ en el historial de git).
 | #219 + #212 | La planilla lista en un paso: `pos-sheets.gs` (un archivo), la home que la prepara con datos de prueba de un rubro y el Tablero, "Abrir el POS" con la sucursal y la caja que el POS aplica solo, solo cinco funciones públicas, la Descripción de las líneas de producto y "Con Google Sheets" en la home del sitio | PR #220 |
 | #221 | La guía de Sheets en dos páginas: el setup al grano, con índice e imágenes (capturas reales de lo nuestro, SVG esquemáticos de Google), y la referencia para integradores | PR #222 |
 | Vista de celular | La misma terminal en el celular sin teclado del sistema (`mobile/`): teclados propios, grilla, escáner, cobro, caja, resumen y el resto; una sola app con la de escritorio (`/MOBILE`), que comparte datos y venta en curso | PR #223 |
-| #224 | La caja en tres comandos con un formulario cada uno: `/INGRESO` y `/EGRESO` (el monto primero, Enter confirma en el concepto) y `/ARQUEO`; sin `/CAJA` ni selector en escritorio | — |
+| #224 | La caja en tres comandos con un formulario cada uno: `/INGRESO` y `/EGRESO` (el monto primero, Enter confirma en el concepto) y `/ARQUEO`; sin `/CAJA` ni selector en escritorio | PR #225 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
