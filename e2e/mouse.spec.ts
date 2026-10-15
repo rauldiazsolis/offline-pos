@@ -85,11 +85,11 @@ test.describe('pantalla de venta', () => {
   }) => {
     const commandBar = page.getByLabel('Barra de comandos');
     await commandBar.fill('/');
-    await expect(page.getByText('/CAJA')).toBeVisible();
+    await expect(page.getByText('/ARQUEO')).toBeVisible();
 
     await page.getByText('Consumidor Final').click();
 
-    await expect(page.getByText('/CAJA')).toHaveCount(0);
+    await expect(page.getByText('/ARQUEO')).toHaveCount(0);
     await expect(commandBar).toHaveValue('/');
     await expect(commandBar).toBeFocused();
   });

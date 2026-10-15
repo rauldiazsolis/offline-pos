@@ -92,9 +92,9 @@ test('cobranza sin venta: recibo, saldo, arqueo, /RESUMEN y outbox', async ({ pa
   expect(balances.find((row) => row.customerId === ana?.id)?.balance).toBe(-800);
 
   // El arqueo espera el efectivo de las dos cobranzas (500 + 100).
-  await commandBar.fill('/CAJA');
+  await commandBar.fill('/ARQUEO');
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Arqueo de caja' })).toBeVisible();
   await expect(page.getByText('$600,00')).toBeVisible();
   await page.keyboard.press('Escape');
 

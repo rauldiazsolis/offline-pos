@@ -79,13 +79,13 @@ test('venta → cobrar → Comprobante → Esc → la barra de comandos recupera
   await expect(commandBar).toBeFocused();
 });
 
-test('venta → /CAJA → Esc → la barra de comandos recupera el foco', async ({ page }) => {
+test('venta → /EGRESO → Esc → la barra de comandos recupera el foco', async ({ page }) => {
   await page.goto('/');
   const commandBar = page.getByLabel('Barra de comandos');
 
-  await commandBar.fill('/CAJA');
+  await commandBar.fill('/EGRESO');
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Egreso de caja' })).toBeVisible();
 
   await page.keyboard.press('Escape');
 
