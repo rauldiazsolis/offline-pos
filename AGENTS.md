@@ -27,7 +27,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Conectores: REST, Google Sheets (puente, fingerprint, `ensureColumns_`, funciones públicas), registro, comandos por conector y `/DEMO_RESET` | [`src/connectors/AGENTS.md`](./src/connectors/AGENTS.md) |
 | Venta: cantidades y redondeo, tickets en 0 o negativos, anulación de ventas y de cobranzas | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); Cobro y advertencias en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
-| Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/CAJA`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
+| Caja: saldo de efectivo, conceptos, numeración de tickets | [`src/domain/AGENTS.md`](./src/domain/AGENTS.md); modelo local en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); `/INGRESO`, `/EGRESO`, `/ARQUEO`, aviso y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Cobranza y saldo del cliente | Persistencia en [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); pantalla, comprobante, saldo en la venta y `/RESUMEN` en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Dexie: borrado de lo local, tablas con unión discriminada, fixtures | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md) |
 | Almacenamiento por carpeta: base de Dexie, claves de `localStorage` y cachés del service worker según la ruta (#148, #54) | [`src/storage/AGENTS.md`](./src/storage/AGENTS.md); la publicación, en "Publicación" más abajo |
@@ -133,7 +133,7 @@ src/
   sync/            # motor de sincronización, config de la terminal, registro de conectores (connector-registry.ts)
   connectors/      # un subdirectorio por conector (rest/, rest-demo/, google-sheets/): su config, sus campos para /CONFIG y su factory
   ui/
-    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, /CAJA, /RESUMEN, /CONFIG (config-wizard/), /IMPRESORA, /DIAGNOSTICO, /DEMO_RESET
+    screens/       # una por pantalla: venta, cobro, cobranza, comprobante, /ANULAR, caja (ingreso, egreso y arqueo), /RESUMEN, /CONFIG (config-wizard/), /IMPRESORA, /DIAGNOSTICO, /DEMO_RESET
     print/         # el comprobante (modelo, componente) y su impresión (puerto ReceiptPrinter, iframe)
     components/    # barra de comandos, carrito, barra de estado, campos de pago, indicador de scroll
     keyboard/      # un controller por pantalla (teclado y mouse) y modelos puros de formularios
@@ -472,7 +472,7 @@ el contrato.
 
 - **Una base aparte, con recarga**: `/ENTRENAMIENTO` copia lo maestro (catálogo, stock, clientes,
   cuentas, saldos, conceptos) a la base `<almacenamiento>#entrenamiento`, prende una marca y recarga;
-  todo lo demás (venta, cobro, `/CAJA`, `/RESUMEN`, `/ANULAR`, numeración, reaplicación del pull) anda
+  todo lo demás (venta, cobro, la caja, `/RESUMEN`, `/ANULAR`, numeración, reaplicación del pull) anda
   igual sobre esa base. Salir borra la marca y recarga: la base real nunca se tocó, así que vuelven el
   stock, los saldos, el resumen, la venta en curso y lo pendiente real tal cual estaban.
 - **Nada sale al backend**: el push se corta en un solo lugar y la reserva de crédito se evalúa
@@ -520,7 +520,9 @@ advertencias en vez de bloqueos, en `src/ui/AGENTS.md`.
 | Comando | Qué hace |
 |---|---|
 | `/COBRAR` | Cobro (con líneas) o cobranza sin venta (sin líneas y con cliente). También Ctrl+Enter, o Enter con la barra vacía |
-| `/CAJA` | Arqueo, ingreso o egreso de caja (ver "Caja sin turnos") |
+| `/INGRESO` | Ingreso de efectivo a la caja: Monto, Enter, Concepto, Enter (ver "Caja sin turnos") |
+| `/EGRESO` | Egreso de efectivo de la caja, con el mismo formulario que el ingreso |
+| `/ARQUEO` | Arqueo: el efectivo contado contra lo esperado |
 | `/RESUMEN` | Un día calendario: movimientos, productos y medios de pago |
 | `/ANULAR` | Anula un ticket o una cobranza de las últimas 24 h con otro documento |
 | `/DESCARTAR` | Vacía la venta en curso (líneas, cliente y ajuste global) con `domain/cart.ts::discardCart`, sin confirmación |
@@ -544,7 +546,7 @@ ni cierre (`triggerCheckout` y `closeSaleAndPersist` ya no piden turno; los turn
 errores se eliminaron: un turno abierto al actualizar se pierde, no hay terminales en producción).
 
 El saldo de efectivo, los conceptos sugeridos y la numeración están en `src/domain/AGENTS.md`; el
-modelo local en `src/storage/AGENTS.md`; `/CAJA`, el aviso "Sin arqueo en 24 h" y `/RESUMEN` en
+modelo local en `src/storage/AGENTS.md`; `/INGRESO`, `/EGRESO`, `/ARQUEO`, el aviso "Sin arqueo en 24 h" y `/RESUMEN` en
 `src/ui/AGENTS.md`.
 
 **Cobranza sin venta y saldo del cliente (Etapa 6 de #94, #101)** — un cliente paga a cuenta sin
@@ -668,12 +670,13 @@ en el historial de git).
 | #219 + #212 | La planilla lista en un paso: `pos-sheets.gs` (un archivo), la home que la prepara con datos de prueba de un rubro y el Tablero, "Abrir el POS" con la sucursal y la caja que el POS aplica solo, solo cinco funciones públicas, la Descripción de las líneas de producto y "Con Google Sheets" en la home del sitio | PR #220 |
 | #221 | La guía de Sheets en dos páginas: el setup al grano, con índice e imágenes (capturas reales de lo nuestro, SVG esquemáticos de Google), y la referencia para integradores | PR #222 |
 | Vista de celular | La misma terminal en el celular sin teclado del sistema (`mobile/`): teclados propios, grilla, escáner, cobro, caja, resumen y el resto; una sola app con la de escritorio (`/MOBILE`), que comparte datos y venta en curso | PR #223 |
+| #224 | La caja en tres comandos con un formulario cada uno: `/INGRESO` y `/EGRESO` (el monto primero, Enter confirma en el concepto) y `/ARQUEO`; sin `/CAJA` ni selector en escritorio | PR #225 |
 
 **Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
 2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
 worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
 `0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; `0.8.0`, su guía en dos páginas, con imágenes (#221); `0.9.0`, la
-vista de celular; se publica con
+vista de celular; `0.10.0`, la caja en `/INGRESO`, `/EGRESO` y `/ARQUEO` (#224); se publica con
 `docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
 punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
 producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
@@ -694,7 +697,6 @@ etiqueta antes de tomar un issue.
 - Venta y barra de comandos: #119 (revisión de cantidades, precios y búsquedas), #23 (scanner por
   velocidad de tecleo), #24 (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
 - Anulación: #137 (comprobante de la anulación).
-- Caja: #57 (usabilidad del modal de `/CAJA`).
 - Clientes y cuenta corriente: #102 (comandos de consulta), #187 (la reserva de crédito con 503 o en
   mantenimiento cae a la evaluación offline); `backlog`: #37 (documento y teléfono), #104.
 - Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
@@ -708,7 +710,7 @@ etiqueta antes de tomar un issue.
   lo pendiente) y #199 (repensar la home: arrancar desde las cajas configuradas).
 - Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
 - Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
-  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir `/CAJA`), #205 (flake de
+  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir la caja), #205 (flake de
   `e2e/mouse.spec.ts`) y #135 (fines de línea: `.gitattributes` con `eol=lf`).
 - Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
   su repo.

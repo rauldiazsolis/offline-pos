@@ -5,6 +5,7 @@ import {
   countNotice,
   describeDifference,
   describeLastCount,
+  enterSubmits,
   exceedsBalance,
   fieldsFor,
   moveCashField,
@@ -23,18 +24,26 @@ afterEach(() => {
 });
 
 describe('cash-form-model', () => {
-  it('campos por tipo', () => {
+  it('campos por tipo: el monto primero en un movimiento (#224)', () => {
     expect(fieldsFor('count')).toEqual(['counted']);
-    expect(fieldsFor('in')).toEqual(['concept', 'description', 'amount']);
-    expect(fieldsFor('out')).toEqual(['concept', 'description', 'amount']);
+    expect(fieldsFor('in')).toEqual(['amount', 'concept', 'description']);
+    expect(fieldsFor('out')).toEqual(['amount', 'concept', 'description']);
   });
 
   it('moveCashField avanza y retrocede sin ciclar', () => {
+    expect(moveCashField('in', 'amount', 1)).toBe('concept');
     expect(moveCashField('in', 'concept', 1)).toBe('description');
     expect(moveCashField('in', 'description', -1)).toBe('concept');
-    expect(moveCashField('in', 'amount', 1)).toBeUndefined();
-    expect(moveCashField('in', 'concept', -1)).toBeUndefined();
+    expect(moveCashField('in', 'description', 1)).toBeUndefined();
+    expect(moveCashField('in', 'amount', -1)).toBeUndefined();
     expect(moveCashField('count', 'counted', 1)).toBeUndefined();
+  });
+
+  it('Enter confirma en todos los campos salvo el Monto (#224)', () => {
+    expect(enterSubmits('amount')).toBe(false);
+    expect(enterSubmits('concept')).toBe(true);
+    expect(enterSubmits('description')).toBe(true);
+    expect(enterSubmits('counted')).toBe(true);
   });
 
   it('countDifference', () => {

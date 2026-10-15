@@ -10,16 +10,15 @@ import {
   loadCashScreen,
   moveConceptSuggestion,
   openConceptSuggestions,
-  setCashKind,
   submitCash,
   updateCashField,
 } from '../keyboard/cash-controller.ts';
 import {
-  CASH_KIND_LABELS,
-  CASH_KINDS,
+  CASH_KIND_TITLES,
   countDifference,
   describeDifference,
   describeLastCount,
+  enterSubmits,
   exceedsBalance,
   fieldsFor,
   formatCashAmount,
@@ -89,15 +88,12 @@ const amountInputStyle = {
   textAlign: 'right' as const,
 };
 
-const kindButtonStyle = (selected: boolean) => ({
-  flex: 1,
-  padding: 'var(--space-2)',
-  borderRadius: 'var(--radius-md)',
-  border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-  background: selected ? 'var(--color-accent)' : 'transparent',
-  color: selected ? 'var(--color-chrome-bg)' : 'var(--color-text)',
-  cursor: 'pointer',
-});
+/** Un color por tipo (#224): el borde superior y el título, para no confundir un ingreso con un egreso. */
+const KIND_COLORS: Record<CashKind, string> = {
+  count: 'var(--color-accent)',
+  in: 'var(--color-success)',
+  out: 'var(--color-warning)',
+};
 
 const FIELD_LABELS: Record<CashField, string> = {
   counted: 'Contado',
@@ -106,18 +102,23 @@ const FIELD_LABELS: Record<CashField, string> = {
   amount: 'Monto',
 };
 
-const KIND_HOTKEYS: Record<CashKind, string> = { count: 'Alt+1', in: 'Alt+2', out: 'Alt+3' };
+const HINTS: Record<CashKind, string> = {
+  count: 'Enter confirma, Esc cancela.',
+  in: 'Enter pasa al concepto y confirma. ↓ o Tab, la descripción. Esc cancela.',
+  out: 'Enter pasa al concepto y confirma. ↓ o Tab, la descripción. Esc cancela.',
+};
 
 /**
- * `/CAJA` (Etapa 5 de #94, #100; criterios de #57): tarjeta centrada con un selector Arqueo /
- * Ingreso / Egreso (radio: Alt+1/2/3, click, o ↑/↓ con el foco en el selector) y todos los campos
- * del tipo visibles. El arqueo no es ciego: muestra el esperado y la diferencia en vivo. Enter y ↓
- * pasan al campo siguiente, ↑ al anterior; Ctrl+Enter confirma (Enter también en el arqueo) y Esc
- * cancela — salvo con las sugerencias de Concepto abiertas, que primero se cierran.
+ * Un formulario por función (#224): `/ARQUEO`, `/INGRESO` y `/EGRESO` abren esta tarjeta centrada
+ * en su tipo, sin selector — el comando ya es la decisión —, con su título y su color. El arqueo
+ * no es ciego: muestra el esperado y la diferencia en vivo. En un movimiento va el Monto primero:
+ * Enter pasa al Concepto y Enter en el Concepto (o en la Descripción, opcional, a la que se llega
+ * con ↓ o Tab) confirma; con una sugerencia elegida con ↓, el primer Enter la toma y el segundo
+ * confirma. ↑ vuelve al campo anterior, Ctrl+Enter confirma desde cualquier campo y Esc cancela —
+ * salvo con las sugerencias de Concepto abiertas, que primero se cierran.
  */
 export function CashScreen() {
   const fieldRefs = useRef(new Map<CashField, HTMLInputElement>());
-  const kindRefs = useRef(new Map<CashKind, HTMLButtonElement>());
   const suggestionRowRef = useScrollSelectedIntoView(conceptSuggestionIndexSignal);
   const kind = cashKindSignal.value;
 
@@ -134,7 +135,7 @@ export function CashScreen() {
     input?.select();
   };
 
-  // Al abrir y al cambiar de tipo, el foco va al primer campo del tipo.
+  // Al abrir, el foco va al primer campo del tipo.
   useLayoutEffect(() => {
     focusField(fieldsFor(kind)[0]);
   }, [kind]);
@@ -147,21 +148,9 @@ export function CashScreen() {
     }
   });
 
-  const chooseKind = (next: CashKind) => {
-    setCashKind(next);
-  };
-
   const handleContainerKeyDown = (event: TargetedKeyboardEvent<HTMLDivElement>) => {
     // Un botón enfocado con Tab se activa con Enter de forma nativa: no repetir el atajo.
     if (event.target instanceof HTMLButtonElement && event.key === 'Enter' && !event.ctrlKey) {
-      return;
-    }
-    if (event.altKey && (event.key === '1' || event.key === '2' || event.key === '3')) {
-      event.preventDefault();
-      const next = CASH_KINDS[Number(event.key) - 1];
-      if (next !== undefined) {
-        chooseKind(next);
-      }
       return;
     }
     if (event.key === 'Enter' && event.ctrlKey) {
@@ -179,19 +168,6 @@ export function CashScreen() {
     }
   };
 
-  const handleKindKeyDown = (event: TargetedKeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
-      return;
-    }
-    event.preventDefault();
-    const index = CASH_KINDS.indexOf(kind) + (event.key === 'ArrowDown' ? 1 : -1);
-    const next = CASH_KINDS[index];
-    if (next !== undefined) {
-      setCashKind(next);
-      kindRefs.current.get(next)?.focus();
-    }
-  };
-
   const handleFieldKeyDown =
     (field: CashField) => (event: TargetedKeyboardEvent<HTMLInputElement>) => {
       if (event.altKey || event.ctrlKey || event.key === 'Escape') {
@@ -206,17 +182,25 @@ export function CashScreen() {
         moveConceptSuggestion(event.key === 'ArrowDown' ? 1 : -1);
         return;
       }
-      if (event.key === 'Enter' && field === 'counted') {
-        event.preventDefault();
-        void submitCash();
-        return;
-      }
-      if (event.key === 'Enter' || event.key === 'ArrowDown') {
+      if (event.key === 'Enter') {
         event.preventDefault();
         const selected = conceptSuggestionIndexSignal.value;
-        if (suggestionsOpen && event.key === 'Enter' && selected !== null) {
+        if (suggestionsOpen && selected !== null) {
+          // El primer Enter toma la sugerencia y deja verla; el segundo confirma.
           chooseConceptSuggestion(selected);
-        } else if (field === 'concept') {
+          return;
+        }
+        if (enterSubmits(field)) {
+          closeConceptSuggestions();
+          void submitCash();
+        } else {
+          focusField(moveCashField(kind, field, 1));
+        }
+        return;
+      }
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (field === 'concept') {
           closeConceptSuggestions();
         }
         focusField(moveCashField(kind, field, 1));
@@ -305,7 +289,7 @@ export function CashScreen() {
               ref={suggestionRowRef(index)}
               onClick={() => {
                 chooseConceptSuggestion(index);
-                focusField('description');
+                focusField('concept');
               }}
               class="selectable-row"
               data-selected={index === conceptSuggestionIndexSignal.value ? '' : undefined}
@@ -325,38 +309,13 @@ export function CashScreen() {
 
   return (
     <div style={overlayStyle} onMouseDown={keepFocusOnMouseDown}>
-      <div style={dialogStyle} onKeyDown={handleContainerKeyDown}>
-        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)' }}>Caja</h1>
-
-        <div
-          role="radiogroup"
-          aria-label="Tipo de movimiento"
-          style={{ display: 'flex', gap: 'var(--space-2)' }}
-        >
-          {CASH_KINDS.map((option) => (
-            <button
-              key={option}
-              ref={(element) => {
-                if (element === null) {
-                  kindRefs.current.delete(option);
-                } else {
-                  kindRefs.current.set(option, element);
-                }
-              }}
-              type="button"
-              role="radio"
-              aria-checked={option === kind}
-              tabIndex={option === kind ? 0 : -1}
-              onClick={() => {
-                chooseKind(option);
-              }}
-              onKeyDown={handleKindKeyDown}
-              style={kindButtonStyle(option === kind)}
-            >
-              {CASH_KIND_LABELS[option]} ({KIND_HOTKEYS[option]})
-            </button>
-          ))}
-        </div>
+      <div
+        style={{ ...dialogStyle, borderTop: `4px solid ${KIND_COLORS[kind]}` }}
+        onKeyDown={handleContainerKeyDown}
+      >
+        <h1 style={{ margin: 0, fontSize: 'var(--font-size-xl)', color: KIND_COLORS[kind] }}>
+          {CASH_KIND_TITLES[kind]}
+        </h1>
 
         {kind === 'count' ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
@@ -404,16 +363,13 @@ export function CashScreen() {
             gap: 'var(--space-3)',
           }}
         >
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            Alt+1/2/3 cambia el tipo. Enter o ↓ pasa al campo siguiente, ↑ al anterior. Ctrl+Enter
-            confirma, Esc cancela.
-          </p>
+          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{HINTS[kind]}</p>
           <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
             <button type="button" class="btn" onClick={cancelCash}>
               Cancelar (Esc)
             </button>
             <button type="button" class="btn btn-primary" onClick={() => void submitCash()}>
-              Confirmar (Ctrl+Enter)
+              Confirmar (Enter)
             </button>
           </div>
         </div>

@@ -40,7 +40,7 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
  * `sync/engine.ts`. Los 4 textos son los de §7 del doc de diseño.
  *
  * A la derecha, independiente del estado de sync y de la conectividad, el aviso "Sin arqueo en
- * 24 h" (Etapa 5 de #94, #100): un botón que abre `/CAJA` en Arqueo sin abrir `/DIAGNOSTICO` y
+ * 24 h" (Etapa 5 de #94, #100): un botón que abre `/ARQUEO` sin abrir `/DIAGNOSTICO` y
  * sin sacarle el foco a la barra de comandos. Antes, "Avisos (N)" (4.4.0, #128): los avisos
  * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
  * Primero de todos, "Versión nueva (/ACTUALIZAR)" (#54) cuando el service worker ya descargó una:
@@ -229,7 +229,7 @@ export function StatusBar() {
                 event.stopPropagation();
                 enterCashScreen('count');
               }}
-              title="Hacer un arqueo (/CAJA)"
+              title="Hacer un arqueo (/ARQUEO)"
               style={{
                 background: 'transparent',
                 color: 'var(--color-chrome-warning)',

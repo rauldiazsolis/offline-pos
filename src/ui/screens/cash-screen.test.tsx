@@ -7,7 +7,7 @@ import {
 } from '../../storage/cash-repository.ts';
 import { saveSyncConfig } from '../../sync/config.ts';
 import { enterCashScreen } from '../keyboard/cash-controller.ts';
-import { cashBalanceSignal, cashErrorSignal, cashKindSignal } from '../state/cash.ts';
+import { cashBalanceSignal, cashErrorSignal } from '../state/cash.ts';
 import { activeScreenSignal } from '../state/screen.ts';
 import { CashScreen } from './cash-screen.tsx';
 
@@ -55,43 +55,68 @@ describe('CashScreen', () => {
     expect(screen.getByText('Sobran $100,00')).not.toBeNull();
   });
 
-  it('el selector es un radio: Alt+2 cambia a Ingreso y enfoca Concepto; ↓ en el selector avanza', async () => {
-    await renderCash('count');
-
-    fireEvent.keyDown(getInput('Contado'), { key: '2', altKey: true });
-    expect(cashKindSignal.value).toBe('in');
-    expect(document.activeElement).toBe(getInput('Concepto'));
-
-    const ingreso = screen.getByRole('radio', { name: /Ingreso/ });
-    expect(ingreso.getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radiogroup')).not.toBeNull();
-
-    fireEvent.keyDown(ingreso, { key: 'ArrowDown' });
-    expect(cashKindSignal.value).toBe('out');
+  it('un formulario por función: título del tipo y sin selector (#224)', async () => {
+    await renderCash('out');
+    expect(screen.getByRole('heading', { name: 'Egreso de caja' })).not.toBeNull();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+    expect(document.activeElement).toBe(getInput('Monto'));
   });
 
-  it('Ingreso: Enter y ↓ avanzan, ↑ retrocede', async () => {
+  it('Ingreso: el monto primero, Enter pasa al Concepto, ↓ a la Descripción, ↑ retrocede', async () => {
     await renderCash('in');
 
-    fireEvent.keyDown(getInput('Concepto'), { key: 'Enter' });
-    expect(document.activeElement).toBe(getInput('Descripción'));
-    fireEvent.keyDown(getInput('Descripción'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(getInput('Monto'));
-    fireEvent.keyDown(getInput('Monto'), { key: 'ArrowUp' });
+    fireEvent.keyDown(getInput('Monto'), { key: 'Enter' });
+    expect(document.activeElement).toBe(getInput('Concepto'));
+    fireEvent.keyDown(getInput('Concepto'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(getInput('Descripción'));
+    fireEvent.keyDown(getInput('Descripción'), { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(getInput('Concepto'));
+    expect(recordCashMovement).not.toHaveBeenCalled();
   });
 
-  it('con sugerencias abiertas, ↓ las recorre, Enter elige y Esc cierra sin salir', async () => {
+  it('Enter en el Concepto confirma: Monto, Enter, Concepto, Enter (#224)', async () => {
+    vi.mocked(recordCashMovement).mockResolvedValue({
+      ok: true,
+      value: {
+        id: 'm1',
+        direction: 'out',
+        amount: 5000,
+        concept: 'Proveedor',
+        source: 'manual',
+        createdAt: '2026-10-15T12:00:00.000Z',
+      },
+    });
+    await renderCash('out');
+
+    fireEvent.input(getInput('Monto'), { target: { value: '5000' } });
+    fireEvent.keyDown(getInput('Monto'), { key: 'Enter' });
+    fireEvent.input(getInput('Concepto'), { target: { value: 'Proveedor' } });
+    fireEvent.keyDown(getInput('Concepto'), { key: 'Enter' });
+
+    await vi.waitFor(() => {
+      expect(activeScreenSignal.value).toBe('sale');
+    });
+    expect(recordCashMovement).toHaveBeenCalledWith({
+      direction: 'out',
+      amount: 5000,
+      concept: 'Proveedor',
+    });
+  });
+
+  it('con sugerencias abiertas, ↓ las recorre, el primer Enter elige y Esc cierra sin salir', async () => {
     vi.mocked(listConceptSuggestions).mockResolvedValue(['Cambio inicial', 'Pago']);
     await renderCash('in');
-    fireEvent.focus(getInput('Concepto'));
+    fireEvent.keyDown(getInput('Monto'), { key: 'Enter' });
+    expect(document.activeElement).toBe(getInput('Concepto'));
     await screen.findByText('Cambio inicial');
 
     fireEvent.keyDown(getInput('Concepto'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(getInput('Concepto'));
     fireEvent.keyDown(getInput('Concepto'), { key: 'Enter' });
     expect(getInput('Concepto').value).toBe('Cambio inicial');
-    expect(document.activeElement).toBe(getInput('Descripción'));
+    expect(screen.queryByText('Pago')).toBeNull();
+    expect(recordCashMovement).not.toHaveBeenCalled();
 
     fireEvent.focus(getInput('Concepto'));
     await screen.findByText('Pago');
@@ -109,7 +134,7 @@ describe('CashScreen', () => {
     expect(screen.getByText('El egreso supera el saldo esperado ($500,00)')).not.toBeNull();
   });
 
-  it('Ctrl+Enter confirma y un error selecciona su campo', async () => {
+  it('Ctrl+Enter confirma desde el Monto y un error selecciona su campo', async () => {
     vi.mocked(recordCashMovement).mockResolvedValue({
       ok: false,
       error: 'cash/concept-required',
@@ -128,7 +153,7 @@ describe('CashScreen', () => {
   it('botones con su atajo', async () => {
     await renderCash('count');
     const cancel = screen.getByRole('button', { name: 'Cancelar (Esc)' });
-    const confirm = screen.getByRole('button', { name: 'Confirmar (Ctrl+Enter)' });
+    const confirm = screen.getByRole('button', { name: 'Confirmar (Enter)' });
     expect(confirm.className).toContain('btn-primary');
 
     fireEvent.click(cancel);

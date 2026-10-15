@@ -10,8 +10,11 @@ import {
 import { setUiMode } from '../../../src/ui/state/ui-mode.ts';
 import { moreOpenSignal } from '../state/nav.ts';
 
-/** Lo que ya tiene su lugar en el mobile: las pestañas y el botón Cobrar. */
-const SHOWN_ELSEWHERE = new Set(['COBRAR', 'CAJA', 'RESUMEN', 'MOBILE']);
+/**
+ * Lo que ya tiene su lugar en el mobile: las pestañas y el botón Cobrar. Ingreso, egreso y arqueo
+ * son la pestaña Caja, con su selector (#224).
+ */
+const SHOWN_ELSEWHERE = new Set(['COBRAR', 'INGRESO', 'EGRESO', 'ARQUEO', 'RESUMEN', 'MOBILE']);
 
 /** Cómo se llama cada comando en el menú; el resto, con su nombre de escritorio. */
 const TITLES: Record<string, string> = {

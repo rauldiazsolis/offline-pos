@@ -129,7 +129,7 @@ un click no hace nada salvo en el botón. Sin conexión activa ni demo, no se mu
 tres bocetos (título solo arriba y sync al pie; todo al pie en una línea; la empresa como título):
 el usuario prefirió el último, por más atractivo. El **título de la pestaña** es `<caja> -
 <sucursal>`, sin la empresa (`terminal-context.ts::startTerminalTitle`, que arranca
-`main.tsx::startApp`): vale también para las pantallas sin encabezado (`/CAJA`, `/COBRAR`,
+`main.tsx::startApp`): vale también para las pantallas sin encabezado (la caja, `/COBRAR`,
 `/RESUMEN`…); sin conexión activa queda el de siempre y la segunda pestaña (#175) conserva el suyo.
 
 Barra de estado (al pie, debajo de la barra de comandos desde #193, `ui/components/StatusBar.tsx`) — hasta la Etapa 2 de #94 era a
@@ -194,26 +194,33 @@ Spec: `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`; lo de `syn
   <label>: <motivo>." (`describeError`); con la terminal en demo, un 401/403 marca la demo revocada
   (como un ciclo de sync) y el motivo es "la demo terminó". Todo mensaje reabre el overlay de la
   barra (`overlayDismissedSignal`): el `mousedown` del botón lo cierra como un click afuera (#28), y
-  si no, el error quedaba oculto (como `/CAJA` desde la barra de estado). Un pedido a la vez. El
+  si no, el error quedaba oculto (como el arqueo desde la barra de estado). Un pedido a la vez. El
   comando limpia la barra antes de llamarla.
 - **El botón** (`TerminalHeader`): `.btn` con `<label> (/<command>)`, a la derecha, `tabIndex={-1}`
   y `keepFocusOnMouseDown`; con la demo activa va antes del de `/ALTA`, que sigue siendo el primario.
   Nunca parte su etiqueta.
 
-## `/CAJA` y `/RESUMEN` (Etapa 5, #100 y #120)
+## Caja (`/INGRESO`, `/EGRESO`, `/ARQUEO`) y `/RESUMEN` (Etapa 5, #100, #120 y #224)
 
-- **`/CAJA` como modal** (`ui/screens/cash-screen.tsx`, `ui/keyboard/cash-controller.ts`, reglas en
-  `ui/keyboard/cash-form-model.ts`, pura): selector Arqueo / Ingreso / Egreso con comportamiento de
-  radio (Alt+1/2/3, click, ↑/↓ en el selector). El arqueo **no es ciego**: esperado, último arqueo
-  ("hoy 09:12" / "ayer 18:40" / "23/09 18:40") y "Sobran/Faltan $X" en vivo. Ingreso/Egreso: Concepto
-  (con sugerencias), Descripción opcional y Monto; Enter y ↓ avanzan, ↑ retrocede, Ctrl+Enter
-  confirma, Esc cierra las sugerencias o cancela. Un egreso mayor que el saldo se advierte en ámbar,
+- **Un formulario por función** (#224; antes `/CAJA`, un modal con selector Arqueo / Ingreso /
+  Egreso que pedía demasiadas teclas): `/INGRESO`, `/EGRESO` y `/ARQUEO` abren el modal
+  (`ui/screens/cash-screen.tsx`, `ui/keyboard/cash-controller.ts`, reglas en
+  `ui/keyboard/cash-form-model.ts`, pura) en su tipo, sin selector: el comando ya es la decisión
+  (`enterCashScreen(kind)`). Cada uno con su título ("Ingreso de caja", "Egreso de caja", "Arqueo de
+  caja") y su color en el título y el borde superior (acento, éxito, ámbar). El arqueo **no es
+  ciego**: esperado, último arqueo ("hoy 09:12" / "ayer 18:40" / "23/09 18:40") y "Sobran/Faltan $X"
+  en vivo; Enter confirma. Ingreso/Egreso: **el Monto primero** — Enter pasa al Concepto (con
+  sugerencias) y Enter en el Concepto confirma (`enterSubmits`); con una sugerencia elegida con ↓, el
+  primer Enter la toma y el segundo confirma. La Descripción, opcional, va al final, fuera del camino
+  de Enter (↓ o Tab desde el Concepto; Enter ahí también confirma). ↑ retrocede, Ctrl+Enter confirma
+  desde cualquier campo, Esc cierra las sugerencias o cancela. Se escriben con dos letras (`/IN`,
+  `/EG`, `/AR`). La vista de celular conserva su selector en la pestaña Caja (`setCashKind`). Un egreso mayor que el saldo se advierte en ámbar,
   sin bloquear. Al confirmar vuelve a la venta con un aviso informativo en el slot de la barra
   (`commandBarNoticeSignal`: mismo ciclo de vida que la advertencia, sin su estilo; reabre el overlay
   aunque un click lo haya cerrado — bug real que encontró el e2e al arquear desde la barra de estado).
 - **Aviso "Sin arqueo en 24 h"** en la barra de estado (`cashCountOverdueSignal`, con un reloj por
-  minuto que arranca `bootstrap`): un botón ámbar, independiente del estado de sync, que abre `/CAJA`
-  en Arqueo sin abrir `/DIAGNOSTICO` ni sacarle el foco a la barra de comandos.
+  minuto que arranca `bootstrap`): un botón ámbar, independiente del estado de sync, que abre `/ARQUEO`
+  sin abrir `/DIAGNOSTICO` ni sacarle el foco a la barra de comandos.
 - **`/RESUMEN` por fecha** (`storage/cash-summary-repository.ts::getDaySummary`,
   `domain/day-summary.ts`): arranca en hoy y navega de a un día con Alt+←/Alt+→ (o los botones),
   entre el día más viejo con datos locales y hoy, conservando pestaña y filtros. Pestaña
@@ -292,7 +299,7 @@ Spec: `docs/superpowers/specs/2026-10-04-portal-en-el-pos-design.md`; lo de `syn
   buscador no recibe texto (Enter anula, Esc vuelve con la misma selección y filtro, Tab llega a los
   botones).
 - **Al anular**: vuelve a la venta con un aviso en el slot de la barra (`commandBarNoticeSignal`,
-  como `/CAJA`): "Anulado el Recibo #1 con el Recibo #2". Recarga el stock y los saldos. El
+  como la caja): "Anulado el Recibo #1 con el Recibo #2". Recarga el stock y los saldos. El
   comprobante de la anulación queda en #137.
 
 ## Impresión (#174)
@@ -327,7 +334,7 @@ Spec: `docs/superpowers/specs/2026-10-02-impresion-de-tickets-design.md`.
 - **Al cobrar** (`ui/print/after-close.ts::showOrPrintReceipt`): Cobro y la cobranza registran primero
   y después, según la config: Imprimir vuelve a la venta (barra vacía y enfocada) y manda a imprimir
   sin esperar; Mostrar va al comprobante; Nada vuelve directo a la venta. Los dos que vuelven a la
-  venta lo dicen en el slot de avisos de la barra (`commandBarNoticeSignal`, como `/CAJA`): "Ticket
+  venta lo dicen en el slot de avisos de la barra (`commandBarNoticeSignal`, como la caja): "Ticket
   #4 registrado." o "… registrado y enviado a imprimir." ("enviado": el POS no sabe si el diálogo se
   canceló); en una cobranza, "Recibo #3 de Ana …" (`documentName`).
 - **El comprobante** (`ui/screens/receipt-screen.tsx`, `receiptSignal = { source, returnTo }`): dibuja
@@ -560,10 +567,10 @@ en un campo lo enfoca, "Cancelar (Esc)" y "Confirmar cobro (Ctrl+Enter)". **Cobr
 mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y botones), **`/ANULAR`** (filas clickeables =
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
-(`select`s, campos y botones), **`/CAJA`** (selector, campos,
+(`select`s, campos y botones), **la caja** (campos,
 sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la pantalla y la franja
 de entrenamiento** (#177, botones) y la **barra de estado** (click =
-`/DIAGNOSTICO`; el aviso de arqueo abre `/CAJA`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
+`/DIAGNOSTICO`; el aviso de arqueo abre `/ARQUEO`; "Avisos (N)" abre `/DIAGNOSTICO`) y el
 **encabezado** (el botón del alta hace `/ALTA`, #128, o `/DEMO_NUEVA` con la demo revocada, #176; el
 del portal hace su comando, #179; el resto es pasivo, #193).
 
@@ -592,7 +599,7 @@ Reglas vigentes; cómo se llegó a cada una está en `docs/historia.md`.
   `.wizard-step-button[aria-current]`), círculo lleno en las opciones
   (`.wizard-option[aria-pressed]`); el borde de una tarjeta elegida queda neutro y del mismo grosor. El **hover** es decorativo: nunca contorno azul ni la marca.
   Excepciones: sobre el chrome oscuro y en controles compactos (overlays de la barra, selector de
-  `/CAJA`, pestañas de `/RESUMEN`) la selección es relleno sólido; la barra de comandos marca su foco
+  sugerencias de la caja, pestañas de `/RESUMEN`) la selección es relleno sólido; la barra de comandos marca su foco
   con el borde inferior. Se eligió comparando capturas de tres alternativas (spec
   `docs/superpowers/specs/2026-09-29-foco-seleccion-y-texto-design.md`).
 - **Montos** en `--font-mono` con `font-variant-numeric: tabular-nums`, alineados a la derecha, en

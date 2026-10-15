@@ -127,8 +127,12 @@ test.describe('a 600 × 700', () => {
     await expectLegible(page, '/RESUMEN Medios de pago');
     await page.keyboard.press('Escape');
 
-    await runCommand(page, '/CAJA');
-    await expectLegible(page, '/CAJA');
+    await runCommand(page, '/ARQUEO');
+    await expectLegible(page, '/ARQUEO');
+    await page.keyboard.press('Escape');
+
+    await runCommand(page, '/EGRESO');
+    await expectLegible(page, '/EGRESO');
     await page.keyboard.press('Escape');
 
     await runCommand(page, '/ANULAR');

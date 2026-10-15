@@ -33,17 +33,24 @@ test.beforeEach(async ({ page, context }) => {
   await context.setOffline(true);
 });
 
-async function openCash(page: Page): Promise<void> {
+const CASH_COMMANDS = {
+  count: ['/ARQUEO', 'Arqueo de caja'],
+  in: ['/INGRESO', 'Ingreso de caja'],
+  out: ['/EGRESO', 'Egreso de caja'],
+} as const;
+
+async function openCash(page: Page, kind: keyof typeof CASH_COMMANDS): Promise<void> {
+  const [command, title] = CASH_COMMANDS[kind];
   const commandBar = page.getByLabel('Barra de comandos');
-  await commandBar.fill('/CAJA');
+  await commandBar.fill(command);
   await commandBar.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: title })).toBeVisible();
 }
 
 test('arqueo inicial: sin arqueo previo, registra el contado y encola el ajuste', async ({
   page,
 }) => {
-  await openCash(page);
+  await openCash(page, 'count');
   await expect(
     page.getByText('Sin arqueo previo · esperado desde el inicio de la terminal'),
   ).toBeVisible();
@@ -63,32 +70,51 @@ test('arqueo inicial: sin arqueo previo, registra el contado y encola el ajuste'
   ]);
 });
 
-test('ingreso con concepto sugerido y egreso mayor que el saldo', async ({ page }) => {
-  await openCash(page);
-  await page.keyboard.press('Alt+2');
+test('ingreso con concepto sugerido y egreso mayor que el saldo (#224)', async ({ page }) => {
+  // Monto primero: Enter pasa al Concepto y Enter en el Concepto confirma.
+  await openCash(page, 'in');
+  await expect(page.getByLabel('Monto')).toBeFocused();
+  await page.keyboard.type('500');
+  await page.keyboard.press('Enter');
   await expect(page.getByLabel('Concepto')).toBeFocused();
-  await page.getByLabel('Concepto').fill('Cambio inicial');
-  await page.getByLabel('Monto').fill('500');
-  await page.keyboard.press('Control+Enter');
+  await page.keyboard.type('Cambio inicial');
+  await page.keyboard.press('Enter');
   await expect(page.getByText('Ingreso registrado')).toBeVisible();
 
-  // La segunda vez, el concepto ya aparece como sugerencia al enfocar el campo.
-  await openCash(page);
-  await page.keyboard.press('Alt+2');
+  // La segunda vez, el concepto ya aparece como sugerencia: el primer Enter lo toma y el
+  // segundo confirma.
+  await openCash(page, 'in');
+  await page.keyboard.type('100');
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('list', { name: 'Sugerencias' })).toBeVisible();
   await expect(page.getByText('Cambio inicial')).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('Concepto')).toHaveValue('Cambio inicial');
-  await expect(page.getByLabel('Descripción')).toBeFocused();
+  await expect(page.getByLabel('Concepto')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Ingreso registrado')).toBeVisible();
 
   // Egreso: advierte que supera el saldo, pero igual registra.
-  await page.keyboard.press('Alt+3');
-  await page.getByLabel('Concepto').fill('Proveedor');
-  await page.getByLabel('Monto').fill('9000');
-  await expect(page.getByText('El egreso supera el saldo esperado ($500,00)')).toBeVisible();
-  await page.keyboard.press('Control+Enter');
+  await openCash(page, 'out');
+  await page.keyboard.type('9000');
+  await expect(page.getByText('El egreso supera el saldo esperado ($600,00)')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Proveedor');
+  await page.keyboard.press('Enter');
   await expect(page.getByText('Egreso registrado')).toBeVisible();
+
+  const movements = await getAllFromStore<{ direction: string; amount: number; concept: string }>(
+    page,
+    'cashMovements',
+  );
+  expect(movements.map(({ direction, amount, concept }) => [direction, amount, concept])).toEqual(
+    expect.arrayContaining([
+      ['in', 500, 'Cambio inicial'],
+      ['in', 100, 'Cambio inicial'],
+      ['out', 9000, 'Proveedor'],
+    ]),
+  );
 });
 
 test('venta sin turno, anulación numerada y /RESUMEN del día', async ({ page }) => {
@@ -138,7 +164,7 @@ test('el aviso "Sin arqueo en 24 h" abre el arqueo y desaparece al arquear', asy
   await expect(notice).toBeVisible();
 
   await notice.click();
-  await expect(page.getByRole('heading', { name: 'Caja' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Arqueo de caja' })).toBeVisible();
   await expect(page.getByLabel('Contado')).toBeFocused();
 
   await page.getByLabel('Contado').fill('0');
