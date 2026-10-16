@@ -236,9 +236,8 @@ No redirige al dominio propio. El almacenamiento del navegador es **por origen**
 operó en `offline-pos.pages.dev` no ve sus datos en `pos.contax.ar` (lo que no se sincronizó queda en
 la dirección vieja), así que una redirección no traería nada y le cortaría el acceso a lo guardado.
 Las dos direcciones son instalaciones separadas que no se mezclan; la oficial es
-`pos.contax.ar/v4/` y una terminal real se instala solo ahí. Además, el mini-erp baja de
-`offline-pos.pages.dev` su copia del POS publicado y el contrato (desde #54, de `/v4/` y
-`/v4/docs/`: ya no hay carpetas por versión).
+`pos.contax.ar/v4/` y una terminal real se instala solo ahí. El mini-erp también baja de ahí
+(`pos.contax.ar/v4/` y `/v4/docs/`) su copia del POS publicado y el contrato.
 
 ## 9. Imprimir sin el diálogo del navegador (#174)
 
