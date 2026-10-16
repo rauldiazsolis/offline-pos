@@ -137,7 +137,7 @@ Con `https://pos.contax.ar` (antes del dominio propio era `https://<proyecto>.pa
 5. Con el demo-backend levantado en tu máquina (`pnpm backend`, del último tag), el link **Abrir
    demo** abre `/v4/` en DEMO. Chrome pide permiso de **acceso a la red local** (la página es `https`
    y el backend `http://localhost`): aceptalo.
-6. `/DIAGNOSTICO` muestra `POS 0.3.0 · almacenamiento offline-pos@/v4/ · sin conexión: lista`.
+6. `/DIAGNOSTICO` muestra `POS <la versión del tag> · almacenamiento offline-pos@/v4/ · sin conexión: lista`.
 7. Chrome ofrece **instalar** la app (el ícono de la barra de direcciones). Instalada, abre en su
    propia ventana.
 8. Sin red (DevTools → Network → Offline, o desconectando la compu) y con F5, el POS abre igual.
@@ -236,9 +236,8 @@ No redirige al dominio propio. El almacenamiento del navegador es **por origen**
 operó en `offline-pos.pages.dev` no ve sus datos en `pos.contax.ar` (lo que no se sincronizó queda en
 la dirección vieja), así que una redirección no traería nada y le cortaría el acceso a lo guardado.
 Las dos direcciones son instalaciones separadas que no se mezclan; la oficial es
-`pos.contax.ar/v4/` y una terminal real se instala solo ahí. Además, el mini-erp baja de
-`offline-pos.pages.dev` su copia del POS publicado y el contrato (desde #54, de `/v4/` y
-`/v4/docs/`: ya no hay carpetas por versión).
+`pos.contax.ar/v4/` y una terminal real se instala solo ahí. El mini-erp también baja de ahí
+(`pos.contax.ar/v4/` y `/v4/docs/`) su copia del POS publicado y el contrato.
 
 ## 9. Imprimir sin el diálogo del navegador (#174)
 

@@ -9,10 +9,9 @@ explícitamente que la barra de comandos recupera el foco al volver — no una r
 rastro.
 
 `e2e/helpers.ts` (Fase 6) reúne acciones de setup que varios specs repiten y que tienen que pasar
-por la UI real, no por IndexedDB directo (`completeWizardRest`, `fillPayment`; `openCashSession` se
-eliminó en la Etapa 5: ya no hace falta un turno para cobrar) — distinto de `indexed-db.ts`, que es
-lectura/escritura cruda para datos que en producción vendrían de un pull (`CustomerAccount`) y que
-no tiene sentido ejercitar por UI en cada test.
+por la UI real, no por IndexedDB directo (`completeWizardRest`, `fillPayment`, …) — distinto de
+`indexed-db.ts`, que es lectura/escritura cruda para datos que en producción vendrían de un pull
+(`CustomerAccount`) y que no tiene sentido ejercitar por UI en cada test.
 
 `e2e/fixtures.ts` (Etapa 2b) exporta un `test` de Playwright que siembra una conexión `active`
 (`ACTIVE_CONFIG`, con `verifiedAt`, sucursal y punto de venta, apuntando a un backend inalcanzable),

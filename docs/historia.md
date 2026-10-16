@@ -4,7 +4,7 @@ Texto de `CLAUDE.md` tal como estaba el 2026-09-28, antes de condensarlo a regla
 acá porque cuenta **cómo** se llegó a cada decisión: bugs reales encontrados, decisiones reabiertas a
 propósito, desvíos de los planes y alternativas descartadas. Es un archivo: puede contener datos que
 ya no son ciertos (por ejemplo, turnos de caja, `/CUENTA` o el menú de "/" sin preselección). Para
-trabajar, manda `CLAUDE.md`; lo de más adelante sigue en git, en los PR y en `docs/superpowers/`.
+trabajar, mandan los `AGENTS.md`; lo de más adelante sigue en git, en los PR y en `docs/superpowers/`.
 Los planes que se citan (`docs/superpowers/plans/…`) se borraron al cerrar cada etapa: están en el
 historial de git (`git log --all -- <ruta>`).
 
@@ -15,6 +15,7 @@ Contenido:
 3. Diseño visual (ciclo por ciclo)
 4. Patrones establecidos (con el contexto de cada uno)
 5. Connector API: los gaps de la v1 del contrato
+6. Stack: lo que se descartó
 
 ---
 
@@ -1235,3 +1236,15 @@ forma de avisarle al backend —; `account-hold-confirm` — §5 decía que "via
 contrato nunca había definido ese endpoint) viajan hoy como eventos del lote de `/sync/push`
 (`OutboxBatchItem`, unión discriminada por `type` en `sync/connector.ts`) — ya no son endpoints HTTP
 propios.
+
+## Stack: lo que se descartó
+
+Notas que vivían en "Stack" de `AGENTS.md` hasta el 2026-10-16.
+
+- **TanStack Query (Fase 2)**: el diseño original la elegía, con un persister, para el pull del
+  catálogo. No se sumó: el motor de sync ya necesita reintentos y backoff para el push del outbox, y
+  esa misma lógica se reusa para el pull (`sync/engine.ts`). Traer una librería aparte para algo que
+  el propio motor ya resuelve no se justificaba, dado que se prefiere minimizar dependencias.
+- **`vite-plugin-pwa` (#54)**: el stack decía `vite-plugin-pwa` (Workbox). Se descartó:
+  `workbox-build` arrastra Babel, Rollup, ajv, terser y unas 35 dependencias más para usar solo el
+  precache y el fallback de navegación, que el service worker propio resuelve en unas 60 líneas.
