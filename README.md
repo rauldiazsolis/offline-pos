@@ -102,5 +102,5 @@ pnpm dev          # el POS y el demo-backend juntos
 
 ## Licencia
 
-[GNU AGPL-3.0](./LICENSE). Podés usar, estudiar y modificar el código; si ofrecés una versión
+© 2026 Peky Diaz Solis. [GNU AGPL-3.0](./LICENSE). Podés usar, estudiar y modificar el código; si ofrecés una versión
 modificada como servicio, tenés que publicar su código con la misma licencia.

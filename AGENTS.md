@@ -95,6 +95,9 @@ allá en el mismo trabajo, y viceversa.
   cierra. En el cuerpo del PR va **"Closes #N"** — GitHub no reconoce "Cierra #N" — y después del
   merge se verifica que se haya cerrado. "Pendiente", al final de este archivo, se actualiza en el
   mismo PR.
+- **README al día**: todo PR revisa el `README.md` de la raíz y lo actualiza en el mismo PR si cambia
+  algo de lo que cuenta (qué hace el producto, el estado, los comandos, las versiones, los requisitos
+  o la documentación). Es parte de lo que se revisa antes de abrir el PR, como "Pendiente".
 - **Dependencias**: con varias opciones equivalentes, la librería va detrás de un puerto (ver
   "Patrones establecidos") y se prefiere la que tenga menos dependencias propias
   (`npm view <paquete> dependencies`), aunque sea menos popular.
