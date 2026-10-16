@@ -1,11 +1,12 @@
 # AGENTS.md
 
-Guía de convenciones para trabajar en este repo. El diseño completo vive en
-[`pos-web-diseno-arquitectura.md`](./pos-web-diseno-arquitectura.md) — este archivo es un resumen
-operativo para no tener que releerlo entero en cada sesión; ante cualquier duda o contradicción,
-el documento de diseño manda. Acá van las reglas vigentes; cómo se llegó a cada una (bugs
-encontrados, decisiones reabiertas) está en [`docs/historia.md`](./docs/historia.md), que no hace
-falta leer para trabajar.
+Reglas vigentes para trabajar en este repo. Ante una duda o una contradicción mandan, en este orden,
+el código, estos `AGENTS.md` y la spec de cada etapa (`docs/superpowers/specs/`). El diseño original,
+[`pos-web-diseno-arquitectura.md`](./pos-web-diseno-arquitectura.md), explica la visión y los
+requisitos (RF, RNF) que se citan, pero quedó atrás en varias decisiones (el stack, los turnos, el
+contrato): no manda. Cómo se llegó a cada regla (bugs encontrados, decisiones reabiertas,
+alternativas descartadas) está en [`docs/historia.md`](./docs/historia.md), que no hace falta leer
+para trabajar.
 
 ## Cómo están organizadas estas instrucciones
 
@@ -55,24 +56,28 @@ ESC/POS directo, con corte y cajón, queda para #188.
 ## Cómo trabajamos
 
 Convenciones de proceso acordadas con el usuario (antes vivían en la memoria local de Claude, #117).
+**Son las mismas en los dos repos** (offline-pos y rauldiazsolis/mini-erp): un cambio acá se copia
+allá en el mismo trabajo, y viceversa.
 
 - **Idioma**: todo en español — respuestas, resúmenes, informes, preguntas, specs, planes, commits y
   comentarios —, aunque el pedido o las instrucciones de un skill vengan en inglés.
 - **Plan antes de codear**: un trabajo de varios pasos (una etapa, un ciclo) arranca con un plan que el
   usuario revisa y aprueba; solo se saltea si él lo dice para ese trabajo puntual. El plan se ejecuta
-  **inline** (`superpowers:executing-plans`, tarea por tarea con checkpoints), no con un subagente por
-  tarea: el ritmo pausado le da tiempo de revisar cada paso. **El plan se borra en el PR que cierra la
-  etapa** (queda en el historial de git); la spec queda en `docs/superpowers/specs/`, porque explica
-  las decisiones.
+  **inline** (`superpowers:executing-plans`), no con un subagente por tarea: el ritmo pausado le da
+  tiempo de revisar cada paso. **El plan se borra en el PR que cierra la etapa** (queda en el
+  historial de git); la spec queda en `docs/superpowers/specs/`, porque explica las decisiones.
 - **Informe final con prueba manual**: al terminar, un informe más instrucciones paso a paso de qué
-  hacer en la UI y qué se debería ver — la prueba en el navegador la hace el usuario.
+  hacer en la UI y qué se debería ver.
 - **Revisión sin cambios**: en una revisión (entre etapas, o una tanda de observaciones) no se toca
   código salvo pedido explícito en el momento; las observaciones se anotan como issues. Contestar una
   pregunta de alcance ("¿esto lo resolvemos ahora?") **no** es la luz verde para implementar: esa es
   aparte y explícita ("dale, implementá").
-- **Ramas y PR**: cada etapa en su propia rama, con commits chicos verificados localmente
-  (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`, y `pnpm test:e2e` cuando aplica). El PR
-  se abre recién al terminar la etapa, después de la revisión y de sus cambios pedidos (el CI remoto
+- **Verificación local** antes de cada commit: `pnpm lint && pnpm typecheck && pnpm test && pnpm
+  build`; si se toca `mobile/`, también `pnpm --filter pos-mobile run typecheck`, `run test` y `run
+  build`; si se toca `demo-backend/`, `pnpm typecheck:backend && pnpm test:backend`; y `pnpm
+  test:e2e` (y el de `pos-mobile`) cuando aplica. Es lo mismo que corre el CI.
+- **Ramas y PR**: cada etapa en su propia rama, con commits chicos verificados localmente. El PR se
+  abre recién al terminar la etapa, después de la revisión y de sus cambios pedidos (el CI remoto
   corre en el PR, que cancela la corrida vieja si llega otro push, y con el tag de una versión, no en
   `main`: #207), y se mergea con **merge commit**, nunca squash: el historial commit por commit sirve
   para revisar y hacer bisect.
@@ -86,18 +91,48 @@ Convenciones de proceso acordadas con el usuario (antes vivían en la memoria lo
   (contexto, causa o hueco, archivos, preguntas abiertas). Etiqueta `backlog`: se prioriza después de
   lo ya diseñado.
 - **Claude mantiene los issues** (el usuario no los edita a mano): al mergear una etapa, cierra su
-  issue con un comentario que apunta al PR y tilda el epic ("— PR #N"). En el cuerpo del PR va
-  **"Closes #N"** — GitHub no reconoce "Cierra #N" — y después del merge se verifica que se haya cerrado.
+  issue con un comentario que apunta al PR y tilda el epic ("— PR #N"); un epic con todo tildado se
+  cierra. En el cuerpo del PR va **"Closes #N"** — GitHub no reconoce "Cierra #N" — y después del
+  merge se verifica que se haya cerrado. "Pendiente", al final de este archivo, se actualiza en el
+  mismo PR.
 - **Dependencias**: con varias opciones equivalentes, la librería va detrás de un puerto (ver
   "Patrones establecidos") y se prefiere la que tenga menos dependencias propias
   (`npm view <paquete> dependencies`), aunque sea menos popular.
+
+### Desde el escritorio o desde el celular
+
+El usuario trabaja de dos maneras, y el proceso cambia un poco. Lo de arriba vale siempre; esto es
+lo que cambia.
+
+| | Escritorio | Celular |
+|---|---|---|
+| Dónde corre el agente | Claude Code (o Antigravity IDE, en el mini-erp) en la compu del usuario, con Windows y PowerShell | Claude Code en la nube, desde la app de Claude: un contenedor Linux que se descarta al terminar la sesión |
+| Rama | Una por etapa, con el nombre que elige el agente (`claude/<tema>`) | La que fija la sesión (`ccr-…` o `claude/…-<sufijo>`); no se renombra |
+| Ritmo del plan | Tarea por tarea, frenando en cada checkpoint para que el usuario revise | Por bloques más grandes (varias tareas seguidas), con un informe corto entre bloques, legible en el teléfono |
+| Commit y push | Commit por tarea; push cuando conviene | Commit **y push** al cerrar cada tarea: el contenedor puede reciclarse y lo no subido se pierde |
+| Prueba manual | El usuario prueba en su navegador con `pnpm dev` (y `pnpm backend` o el mini-erp local) | El agente corre el e2e y le manda **capturas** de Playwright de lo que cambió (Chromium ya está en el contenedor; no se corre `playwright install`). La prueba del usuario queda para cuando esté en el escritorio o, si es urgente, después de publicar |
+| Informe final | Completo, con la prueba manual paso a paso | Igual de completo, pero con lo que el usuario tiene que hacer o decidir arriba de todo; la prueba manual, marcada como pendiente para el escritorio |
+
+En los dos casos: el plan se aprueba antes de codear, el PR se abre recién al terminar la etapa y el
+CI no se espera ni se lee.
 
 ## POS y mini-erp: desarrollo separado
 
 El mini-erp (Express + SQLite multitenant) es un backend externo que implementa el Connector API: vive
 en su propio repo, [`rauldiazsolis/mini-erp`](https://github.com/rauldiazsolis/mini-erp), con sus
-propias reglas, desde el 2026-09-29 (epic #161). Un cambio de contrato en el POS se anuncia (qué rompe
-en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
+propias reglas, desde el 2026-09-29 (epic #161). Juntos forman **mini contax** (el producto: mini +
+POS). Cómo se coordinan:
+
+- **El contrato es de este repo** (`docs/connector-api.openapi.yaml`) y se publica en el canal
+  (`https://pos.contax.ar/v4/docs/`). El mini-erp guarda una copia bajada **del canal publicado**
+  (`pnpm contract:update`, con la procedencia en su `contract.json`), nunca de `main`.
+- **El mini-erp abre el POS publicado** (`https://pos.contax.ar/v4/`) desde su landing y, en
+  desarrollo, sirve una copia local del canal (`/pos/v4/`, sin service worker).
+- **Un cambio de contrato** en el POS se anuncia con un issue en el mini-erp (qué agrega o qué rompe);
+  nunca se adapta el mini-erp desde acá. Si el mini-erp necesita algo del contrato, abre un issue acá.
+- **Las convenciones de proceso** ("Cómo trabajamos") son las mismas en los dos repos.
+- **Hoy**: contrato 4.6.0 en los dos (piso 4.0.0); el mini-erp declara `customer-payment-void`,
+  `demo-sessions` y `portal` (`/MINI`).
 
 ## Stack
 
@@ -114,16 +149,8 @@ en los backends) con un issue allá; nunca se adapta el mini-erp desde acá.
 | Impresión / hardware | `window.print()` en un iframe (#174); Web Serial / WebUSB / Web Bluetooth para ESC/POS — **pendiente** (#188) |
 
 Navegador de referencia: Chromium (Chrome/Edge). La app anda en Firefox/Safari; el hardware, cuando
-exista, va a depender de Web Serial/WebUSB (solo Chromium).
-
-**Nota (Fase 2)**: el doc de diseño original elegía TanStack Query + persister para el pull de
-catálogo. Se decidió no sumarla: el motor de sync ya necesita reintentos/backoff para el push del
-outbox, y esa misma lógica se reusa para el pull (`sync/engine.ts`) — traer una librería aparte para
-algo que el propio motor ya resuelve no se justificaba, dado que se prefiere minimizar dependencias.
-
-**Nota (#54)**: el stack decía `vite-plugin-pwa` (Workbox). Se descartó: `workbox-build` arrastra
-Babel, Rollup, ajv, terser y unas 35 dependencias más para usar solo precache y fallback de
-navegación, que el service worker propio resuelve en unas 60 líneas.
+exista, va a depender de Web Serial/WebUSB (solo Chromium). El diseño original elegía TanStack Query
+y `vite-plugin-pwa`: por qué se descartaron, en `docs/historia.md` ("Stack: lo que se descartó").
 
 ## Estructura de proyecto
 
@@ -147,6 +174,7 @@ demo-backend/      # backend de referencia (Node + SQLite): la referencia ejecut
 build/             # plugin de Vite que compila sw.js con la lista de archivos del build (#54)
 scripts/           # los íconos de la PWA desde favicon.svg (se corre a mano, #54)
 site/              # publicación (#148, #54): canal por major del contrato, home de backends, docs; no es parte de la app
+mobile/            # la vista de celular (workspace `pos-mobile`): pantallas, teclados propios, cámara (ver mobile/AGENTS.md)
 e2e/               # Playwright
 docs/              # connector-api.openapi.yaml, integradores/ (guía y llms.txt), publicacion.md, specs y planes (superpowers/), historia.md
 ```
@@ -217,8 +245,8 @@ Entidades: `Product`, `StockItem`, `Sale`/`SaleLine` (con su número de ticket),
 `Customer` puede no tener una asociada), `CustomerBalance` (el saldo, aparte del crédito desde #101:
 cualquier cliente puede tener saldo, tenga o no cuenta corriente, así un saldo a favor nunca se
 confunde con crédito), `CustomerPayment` (cobranza sin venta, con su número de recibo), `AccountHold`,
-`AccountMovement`. Detalle completo de campos en §4 del documento de diseño (que todavía no conoce
-los agregados de #94).
+`AccountMovement`. Los campos vigentes están en los tipos de `domain/` y en el contrato (el §4 del
+diseño original no conoce los agregados de #94 en adelante).
 
 Dos categorías de dato, porque cambian la estrategia de sync:
 
@@ -407,8 +435,8 @@ carpetas por versión); guía del mantenedor (tag, Cloudflare, qué hacer si fal
 - **Dominio** (#150): `https://pos.contax.ar`, dominio propio del proyecto de Pages con un CNAME en
   el DNS de DreamHost; `pos.contax.com.ar` redirige ahí con el Redirect de DreamHost (como todo
   `*.contax.com.ar` → `*.contax.ar`). `offline-pos.pages.dev` sigue sirviendo, sin redirigir: es otro
-  origen con sus propias terminales, y el mini-erp todavía baja de ahí su copia del POS y el contrato.
-  Una terminal real se instala solo en `pos.contax.ar/v4/`. Pasos en `docs/publicacion.md`.
+  origen con sus propias terminales. El mini-erp baja la copia del POS y el contrato de
+  `pos.contax.ar/v4/`. Una terminal real se instala solo en `pos.contax.ar/v4/`. Pasos en `docs/publicacion.md`.
 - **La home** (`/`, `site/home-page.ts`; `/versions` redirige ahí) lista los backends de
   `site/backends.json`, que es un dato del **sitio** (la app nunca lo lee) y cambia por PR: cada uno
   con su contrato, sus capacidades y "Abrir demo" en el canal de su major (o por qué es incompatible),
@@ -497,8 +525,9 @@ Principio central: **un único input siempre enfocado** (la barra de comandos) �
 problema de foco competido en vez de gestionarlo. Nunca agregar un segundo elemento que pueda robar
 foco durante la operación normal.
 
-Prioridad de interpretación de la barra de comandos (orden fijo, ver §7 del diseño para el detalle
-completo de cada regla y los casos de ambigüedad cantidad-vs-código-de-barras):
+Prioridad de interpretación de la barra de comandos (orden fijo; el detalle de cada regla, en
+`src/ui/AGENTS.md`, y la discusión original de la ambigüedad cantidad-vs-código-de-barras, en el §7
+del diseño):
 
 1. `/` → modo comando, filtrado por prefijo (detalle en `src/ui/AGENTS.md`).
 2. `@` → búsqueda/alta de cliente.
@@ -682,46 +711,45 @@ en el historial de git).
 | #224 | La caja en tres comandos con un formulario cada uno: `/INGRESO` y `/EGRESO` (el monto primero, Enter confirma en el concepto) y `/ARQUEO`; sin `/CAJA` ni selector en escritorio | PR #225 |
 | #226 | Guía de entrenamiento en escritorio: invitación con la caja vacía, entrar con la guía, `/GUIA`, cuatro lecciones que marcan lo tipeado en vivo y "Hacelo" (F2) | PR #227 |
 
-**Siguiente**: el MVP del POS está publicado en https://pos.contax.ar (`0.1.0` el
-2026-09-29, `0.2.0` con la pasada visual el 2026-10-01; desde `0.3.0`, en el canal `/v4/` con service
-worker; `0.4.0` con el contrato 4.6.0 y `0.5.0` con el modo entrenamiento, los dos el 2026-10-04;
-`0.6.0` con Google Sheets el 2026-10-06; `0.7.0`, la planilla lista en un paso; `0.8.0`, su guía en dos páginas, con imágenes (#221); `0.9.0`, la
-vista de celular; `0.10.0`, la caja en `/INGRESO`, `/EGRESO` y `/ARQUEO` (#224); `0.11.0`, la guía de
-entrenamiento (#226); se publica con
-`docs/publicacion.md`) y el circuito con el mini-erp anda de punta a
-punta (`https://mini.contax.ar` contra `pos.contax.ar`). Ahora, el **MVP de mini contax** (el
-producto: mini + POS), definido el 2026-10-01 en rauldiazsolis/mini-erp#17, con su spec en el repo
-del mini-erp. La parte del POS es el epic #182, completo y publicado en la `0.5.0`: antes del hito 1 (un comercio conocido que
-paga), la impresión (#174), una sola pestaña (#175) y el service worker con el canal (#54); antes del
-hito 2, el link de demo con confirmación (#176), el contrato del portal (#178), su comando y botón
-(#179) y el modo entrenamiento (#177). Google Sheets tuvo su epic, #180, completo en tres etapas
-(spec `docs/superpowers/specs/2026-10-05-sheets-4-6-portal-onboarding-design.md`): A, el puente en
-4.6.0 con el portal (PR #211); B, "Conectar el POS" desde la planilla (#133, PR #213); C, el puente y
-su guía publicados en `/v4/docs/google-sheets/`, todo en la `0.6.0`. La `0.7.0` trae la planilla
-lista en un paso (#219, spec `docs/superpowers/specs/2026-10-07-sheets-planilla-lista-design.md`) y
-#212.
-Después del MVP: #102 (comandos de consulta). En paralelo, sin bloquear nada: #135.
+### Publicado
 
-**Issues abiertas**, por feature. `backlog` = se prioriza después de lo ya diseñado; revisar la
-etiqueta antes de tomar un issue.
+El POS está en https://pos.contax.ar/v4/ (canal del contrato 4.x), en la versión de `package.json`
+(hoy `0.11.0`), y anda de punta a punta con el mini-erp publicado (https://mini.contax.ar). Versiones:
+`0.1.0` el MVP (2026-09-29); `0.2.0` la pasada visual; `0.3.0` el canal `/v4/` con service worker;
+`0.4.0` el contrato 4.6.0; `0.5.0` el modo entrenamiento; `0.6.0` Google Sheets; `0.7.0` la planilla
+lista en un paso; `0.8.0` la guía de Sheets en dos páginas; `0.9.0` la vista de celular; `0.10.0` la
+caja en `/INGRESO`, `/EGRESO` y `/ARQUEO`; `0.11.0` la guía de entrenamiento. Se publica con
+`docs/publicacion.md`.
 
-- Venta y barra de comandos: #119 (revisión de cantidades, precios y búsquedas), #23 (scanner por
-  velocidad de tecleo), #24 (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
-- Anulación: #137 (comprobante de la anulación).
-- Clientes y cuenta corriente: #102 (comandos de consulta), #187 (la reserva de crédito con 503 o en
-  mantenimiento cae a la evaluación offline); `backlog`: #37 (documento y teléfono), #104.
-- Sync: #155 (flake de "Avisos (1)" en `demo-onboarding.spec.ts`); `backlog`: #113, #103, #13 (los
-  dos últimos, sobre `notices` de 4.4.0).
-- Config y accesibilidad: #41 (resize en DevTools).
-- MVP de mini contax: Impresión, #188 (ESC/POS directo, corte y cajón, cuando haya una impresora
-  con qué probar).
-- Pantallas y publicación: #49 (tracking de modales); `backlog`: #151 (`GET /info` sin
-  autenticación), #52 (Historial), #143 (pasar de demo a producción sin repetir el onboarding), #181
-  (iniciar la caja con datos del backend), #197 (pasar una terminal de `/v4/` a `/v5/` sin perder
-  lo pendiente) y #199 (repensar la home: arrancar desde las cajas configuradas).
-- Conectores (`backlog`): #70 a #73 (CSV, Tiendanube, Mercado Libre, AFIP).
-- Transversal: #142 (flake de `DatabaseClosedError` en `pnpm test`), #169 (flake de
-  `e2e/text-size.spec.ts` en CI: la barra desaparece al abrir la caja), #205 (flake de
-  `e2e/mouse.spec.ts`) y #135 (fines de línea: `.gitattributes` con `eol=lf`).
-- Otros (`backlog`): #60 (vuelto vs. billetes), #62 (typescript-eslint). Los del mini-erp están en
-  su repo.
+### Siguiente
+
+El **MVP de mini contax** (mini + POS, definido el 2026-10-01 en rauldiazsolis/mini-erp#17). La
+parte del POS (epic #182) y la de Google Sheets (epic #180) están completas y publicadas; lo que
+sigue del MVP es del mini-erp (M11, rauldiazsolis/mini-erp#27). Del lado del POS, los candidatos
+son el bug de #228, #187 (la reserva de crédito con 503) y #102 (comandos de consulta); el orden lo
+decide el usuario.
+
+### Pendiente
+
+Los issues sin `backlog`, por feature (los `backlog` se priorizan después de lo ya diseñado; revisar la
+etiqueta antes de tomar uno). La lista completa, siempre al día, está en
+[los issues abiertos](https://github.com/rauldiazsolis/offline-pos/issues) y
+[los de `backlog`](https://github.com/rauldiazsolis/offline-pos/issues?q=is%3Aopen+label%3Abacklog).
+
+- **Venta y barra de comandos**: #228 (bug: escanear justo después de agregar cambia la cantidad),
+  #119 (revisión de cantidades, precios y búsquedas), #23 (scanner por velocidad de tecleo), #24
+  (instrucciones en la barra), #45 (idea: `?<texto>` asistido por IA).
+- **Clientes y cuenta corriente**: #102 (comandos de consulta), #187 (la reserva de crédito con 503 o
+  en mantenimiento cae a la evaluación offline).
+- **Google Sheets**: #214 (el tope de 20 s de la prueba es justo), #215 (mensaje claro cuando Google no
+  entrega la respuesta del puente).
+- **Impresión**: #188 (ESC/POS directo, corte y cajón, cuando haya una impresora con qué probar).
+- **Pantallas y accesibilidad**: #49 (tracking de modales), #41 (resize en DevTools).
+- **Flakes**: #142 (`DatabaseClosedError` en `pnpm test`), #155 ("Avisos (1)" en
+  `demo-onboarding.spec.ts`), #169 (`e2e/text-size.spec.ts` en CI; era al abrir `/CAJA`, que ya no
+  existe: revisar si sigue), #205 (`e2e/mouse.spec.ts`).
+- **Transversal**: #135 (el `.gitattributes` con `eol=lf` ya está; falta verificar `pnpm
+  format:check` en Windows).
+- **`backlog`**: venta y cobro #60; anulación #137, #139, #140; clientes #37, #104; sync #13, #103,
+  #113, #172, #181, #189; publicación #143, #151, #197, #199; historial #52; conectores #70 a #73
+  (CSV, Tiendanube, Mercado Libre, AFIP); herramientas #62. Los del mini-erp están en su repo.

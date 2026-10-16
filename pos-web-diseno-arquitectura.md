@@ -1,5 +1,11 @@
 # POS Web offline-first — Diseño y plan de desarrollo
 
+> **Documento histórico.** Es el diseño original (2026-09), con la visión y los requisitos (RF, RNF)
+> que todavía se citan. Varias decisiones cambiaron después: el stack (sin TanStack Query ni
+> `vite-plugin-pwa`), los turnos de caja (se eliminaron), el contrato (hoy 4.6.0, por lotes) y el
+> modelo de dominio. Lo vigente está en [`AGENTS.md`](./AGENTS.md) y en las specs de
+> `docs/superpowers/specs/`.
+
 ## 1. Visión y alcance
 
 Un punto de venta web para retail (kiosco, tienda), instalable como PWA, que:
