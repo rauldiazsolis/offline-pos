@@ -137,7 +137,7 @@ Con `https://pos.contax.ar` (antes del dominio propio era `https://<proyecto>.pa
 5. Con el demo-backend levantado en tu máquina (`pnpm backend`, del último tag), el link **Abrir
    demo** abre `/v4/` en DEMO. Chrome pide permiso de **acceso a la red local** (la página es `https`
    y el backend `http://localhost`): aceptalo.
-6. `/DIAGNOSTICO` muestra `POS 0.3.0 · almacenamiento offline-pos@/v4/ · sin conexión: lista`.
+6. `/DIAGNOSTICO` muestra `POS <la versión del tag> · almacenamiento offline-pos@/v4/ · sin conexión: lista`.
 7. Chrome ofrece **instalar** la app (el ícono de la barra de direcciones). Instalada, abre en su
    propia ventana.
 8. Sin red (DevTools → Network → Offline, o desconectando la compu) y con F5, el POS abre igual.

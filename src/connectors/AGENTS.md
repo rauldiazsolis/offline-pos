@@ -72,7 +72,7 @@ Un cambio del puente que se ve desde afuera va también a la guía: al setup si 
 sus imágenes: las capturas de la página de la planilla y del POS salen de
 `scripts/sheets-guide-images.ts`, que se corre a mano; las pantallas de Google son SVG esquemáticos
 en `docs/integradores/img/google-sheets/`), y si no, a la referencia. Cada conector es dueño de su schema de config
-y de la lista ordenada de campos que `/CONFIG` muestra (`configFields`); `sync/connector-registry.ts`
+y de la lista ordenada de campos que `/CONFIG` muestra (`restConfigFields`, `googleSheetsConfigFields`, …, que el registro expone como `fields`); `sync/connector-registry.ts`
 arma la unión discriminada por `type` y expone `createConnector(config)`, el único punto que elige
 implementación (`sync/engine.ts::runPushCycle`/`runPullCycleNow` y
 `sync/account-hold.ts::requestAccountHoldNow` ya no instancian ninguno directo). "Plugin" acá

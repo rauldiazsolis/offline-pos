@@ -9,11 +9,10 @@ modificar**: dominio, storage, sync, conectores, el arranque (`ui/bootstrap.ts`)
 sobre signals). Lo propio del mobile es solo la vista. Las reglas de la raíz (`../AGENTS.md`) valen
 acá igual, empezando por "Cómo trabajamos".
 
-Desarrollo en una rama larga que no se mergea hasta que el mobile esté prácticamente completo
-(decisión del usuario, 2026-10-09). Fuera de `mobile/` se tocó lo mínimo: configuración (workspace,
-el `exclude` de Vitest de la raíz, el CI), la página de alta del demo-backend (sin `autofocus`) y,
-desde que las dos vistas son una sola app (2026-10-10), la elección de vista (`src/main.tsx`,
-`ui/state/ui-mode.ts`, `/MOBILE`, la pantalla no compatible e `index.html`).
+Se mergeó en el PR #223 y se publicó en la `0.9.0`. Fuera de `mobile/` toca lo mínimo:
+configuración (workspace, el `exclude` de Vitest de la raíz, el CI), la página de alta del
+demo-backend (sin `autofocus`) y la elección de vista (`src/main.tsx`, `ui/state/ui-mode.ts`,
+`/MOBILE`, la pantalla no compatible e `index.html`).
 
 ## Sin teclado del sistema (la regla central)
 

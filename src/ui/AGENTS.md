@@ -529,7 +529,7 @@ recortado con "…" y completo en el `title`), y se vuelve a cualquier paso ya a
    identidad perdida (`identityResetSignal`).
 2. **Tipo de conexión**: las opciones de `CONNECTOR_TYPES` con su `description`; ↑/↓ + Enter o click.
    Sin nada elegido, la primera flecha elige la opción enfocada, la que se ve (#112).
-3. **Datos del conector**: los `configFields` del tipo más sus instrucciones (`setupHelp`).
+3. **Datos del conector**: los campos del tipo (`fields` de `CONNECTOR_TYPES`) más sus instrucciones (`setupHelp`).
 4. **Probar** (`sync/connection.ts::probeConnection`): arranca solo al entrar; pull completo **en
    memoria**, todo o nada, con tope de tiempo — no toca IndexedDB, cursores ni config. Mientras
    espera: spinner (quieto con `prefers-reduced-motion`), qué espera (`onProgress`: `waiting-lock` o
