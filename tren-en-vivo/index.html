@@ -12,14 +12,14 @@
 /* Una pantalla: mapa arriba, tablero de velocidad abajo, como el cuadro de una cabina */
 :root{
   --bg:#f3f5f6; --panel:#ffffff; --fg:#16202a; --muted:#5c6b78; --line:#d8dee3;
-  --accent:#0a7d5a; --warn:#b85c00; --bad:#b3261e; --track:#0a7d5a;
+  --accent:#0a7d5a; --warn:#b85c00; --bad:#b3261e; --track:#0a7d5a; --gps:#1a73e8;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#0d1318; --panel:#151d24; --fg:#e8eef2; --muted:#8c9aa6; --line:#26323c;
-  --accent:#3ddc97; --warn:#ffb454; --bad:#ff6b5e; --track:#3ddc97; color-scheme:dark;
+  --accent:#3ddc97; --warn:#ffb454; --bad:#ff6b5e; --track:#3ddc97; --gps:#6aa8ff; color-scheme:dark;
 }}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -28,12 +28,11 @@ body{background:var(--bg);color:var(--fg);font:15px/1.4 var(--body);display:flex
 header{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   padding-block:10px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
 .trains{display:flex;gap:6px;flex:1 1 100%;min-width:0}
-.btn{flex:1}
 .train{flex:1;border:1.5px solid var(--line);background:var(--panel);color:var(--fg);border-radius:10px;
   padding:8px 10px;font:600 15px var(--body);text-align:left;cursor:pointer;min-width:0}
 .train small{display:block;font:500 12px var(--mono);color:var(--muted)}
 .train[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.btn{border:1.5px solid var(--line);background:var(--panel);color:var(--fg);border-radius:10px;padding:9px 12px;
+.btn{flex:1;border:1.5px solid var(--line);background:var(--panel);color:var(--fg);border-radius:10px;padding:9px 12px;
   font:600 14px var(--body);cursor:pointer}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#04140d}
 button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
@@ -44,12 +43,15 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
   display:grid;grid-template-columns:auto 1fr;gap:4px 16px;align-items:center}
 .speed{font:700 84px/0.9 var(--display);font-variant-numeric:tabular-nums;letter-spacing:-1px}
 .speed span{font:500 20px var(--display);color:var(--muted);letter-spacing:.5px;margin-left:4px}
-.where{min-width:0}
+.speed.est{color:var(--muted)}
+.where{min-width:0;display:flex;flex-direction:column;gap:1px}
 .where .place{font-weight:600;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.where .coords{font:500 12px var(--mono);color:var(--muted)}
-.status{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--body);text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.where .next,.where .coords{font:500 12px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.where .next{color:var(--fg)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.status{display:inline-flex;align-items:center;gap:6px;font:600 11.5px var(--body);text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
-.status.ok .dot{background:var(--accent)} .status.weak .dot{background:var(--warn)} .status.err .dot{background:var(--bad)}
+.ok .dot{background:var(--accent)} .weak .dot{background:var(--warn)} .err .dot{background:var(--bad)}
 .stats{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
 .stat{border-left:2px solid var(--line);padding-left:8px;min-width:0}
 .stat b{display:block;font:700 22px var(--display);font-variant-numeric:tabular-nums}
@@ -75,8 +77,12 @@ canvas{grid-column:1/-1;width:100%;height:56px;display:block}
 <section class="dash" aria-live="polite">
   <div class="speed" id="speed">--<span>km/h</span></div>
   <div class="where">
-    <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin GPS</span></div>
+    <div class="chips">
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin GPS</span></div>
+      <div class="status" id="railStatus"><span class="dot"></span><span id="railText">Vías: —</span></div>
+    </div>
     <div class="place" id="place">Tocá «Empezar» y permití la ubicación</div>
+    <div class="next" id="next"></div>
     <div class="coords" id="coords">—</div>
   </div>
   <div class="stats">
@@ -98,26 +104,193 @@ const store = {
   get(k,d){try{const v=localStorage.getItem('tren:'+k);return v?JSON.parse(v):d}catch{return d}},
   set(k,v){try{localStorage.setItem('tren:'+k,JSON.stringify(v))}catch{}}
 };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 // --- Mapa: calles de OpenStreetMap + capa de vías de OpenRailwayMap
 const map = L.map('map',{zoomControl:true}).setView([39.5,-8.0],7);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 const rail = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',{maxZoom:19,opacity:.75,attribution:'© OpenRailwayMap'}).addTo(map);
 L.control.layers(null,{'Vías (OpenRailwayMap)':rail}).addTo(map);
-const trackLine = L.polyline([], {color:getComputedStyle(document.documentElement).getPropertyValue('--track').trim()||'#0a7d5a',weight:5,opacity:.85}).addTo(map);
-const marker = L.circleMarker([0,0],{radius:9,color:'#fff',weight:3,fillColor:'#1a73e8',fillOpacity:1});
-const accCircle = L.circle([0,0],{radius:0,color:'#1a73e8',weight:1,fillOpacity:.08});
+const trackLine = L.polyline([], {color:css('--track')||'#0a7d5a',weight:5,opacity:.85}).addTo(map);
+const rawDot = L.circleMarker([0,0],{radius:4,color:'#888',weight:1,fillColor:'#888',fillOpacity:.8});
+const accCircle = L.circle([0,0],{radius:0,color:css('--gps')||'#1a73e8',weight:1,fillOpacity:.06});
+const marker = L.circleMarker([0,0],{radius:9,color:'#fff',weight:3,fillColor:css('--gps')||'#1a73e8',fillOpacity:1});
+
+// --- Geometría: proyección local en metros (precisa de sobra en 50 km)
+const RE=6371000, DEG=Math.PI/180;
+let ref = null;
+const toXY = (la,lo) => [(lo-ref.lo)*DEG*RE*ref.cos, (la-ref.la)*DEG*RE];
+const toLL = (x,y) => [ref.la + y/(RE*DEG), ref.lo + x/(RE*DEG*ref.cos)];
+function hav(a,b){const dLa=(b.la-a.la)*DEG,dLo=(b.lo-a.lo)*DEG;
+  const s=Math.sin(dLa/2)**2+Math.cos(a.la*DEG)*Math.cos(b.la*DEG)*Math.sin(dLo/2)**2;return 2*RE*Math.asin(Math.sqrt(s))}
+
+// --- Vías cercanas (OpenStreetMap vía Overpass): solo líneas principales, sin playas ni desvíos
+const OVERPASS = ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const FETCH_RADIUS = 20000, REFETCH_AFTER = 10000;
+const rails = new Map();     // id -> {id,name,ll,xy,cum,len,bb}
+const stations = new Map();  // id -> {name,la,lo}
+let railArea = store.get('railArea', null), railFetching = false, railFailAt = 0, railError = '';
+
+function setRef(la,lo){
+  ref = {la, lo, cos:Math.cos(la*DEG)};
+  for(const w of rails.values()) prepWay(w);
+}
+function prepWay(w){
+  w.xy = w.ll.map(([la,lo])=>toXY(la,lo));
+  w.cum=[0]; let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12;
+  w.xy.forEach(([x,y],i)=>{ if(i) w.cum.push(w.cum[i-1]+Math.hypot(x-w.xy[i-1][0],y-w.xy[i-1][1]));
+    minx=Math.min(minx,x);miny=Math.min(miny,y);maxx=Math.max(maxx,x);maxy=Math.max(maxy,y)});
+  w.len=w.cum[w.cum.length-1]; w.bb=[minx,miny,maxx,maxy];
+}
+function addRailData(ways, nodes){
+  for(const w of ways){ if(!w.ll || w.ll.length<2) continue; const o={id:w.id,name:w.name||'',ll:w.ll}; if(ref) prepWay(o); rails.set(w.id,o) }
+  for(const n of nodes) stations.set(n.id,n);
+}
+function saveRails(){
+  // la caché guarda lo más cercano: si el navegador no deja tanto, se recorta
+  const ways=[...rails.values()].map(w=>({id:w.id,name:w.name,ll:w.ll})), nodes=[...stations.values()];
+  for(const n of [ways.length, 1500, 600]){
+    try{ localStorage.setItem('tren:rails', JSON.stringify({ways:ways.slice(-n),nodes})); return }catch{}
+  }
+}
+(function loadRails(){ const c=store.get('rails',null); if(c) addRailData(c.ways||[], c.nodes||[]) })();
+
+async function fetchRails(la,lo){
+  if(railFetching || Date.now()-railFailAt < 30000) return;
+  railFetching = true; renderRailStatus();
+  const q = `[out:json][timeout:25];way["railway"~"^(rail|narrow_gauge)$"]["service"!~"."](around:${FETCH_RADIUS},${la},${lo});out tags geom;`+
+            `node["railway"~"^(station|halt)$"](around:${FETCH_RADIUS+10000},${la},${lo});out tags;`;
+  for(const url of OVERPASS){
+    try{
+      const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 35000);
+      const r = await fetch(url,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctl.signal});
+      clearTimeout(to);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      const ways=[], nodes=[];
+      for(const e of j.elements||[]){
+        if(e.type==='way' && e.geometry) ways.push({id:e.id, name:(e.tags&&(e.tags.name||e.tags.ref))||'', ll:e.geometry.map(g=>[g.lat,g.lon])});
+        else if(e.type==='node' && e.tags && e.tags.name) nodes.push({id:e.id, name:e.tags.name, la:e.lat, lo:e.lon});
+      }
+      // se descartan los tramos lejanos para que la memoria no crezca sin fin
+      for(const w of rails.values()){ const m=w.ll[Math.floor(w.ll.length/2)]; if(hav({la:m[0],lo:m[1]},{la,lo})>60000) rails.delete(w.id) }
+      for(const s of stations.values()){ if(hav(s,{la,lo})>80000) stations.delete(s.id) }
+      addRailData(ways,nodes);
+      railArea = {la,lo,t:Date.now()}; store.set('railArea',railArea); saveRails();
+      railFetching=false; railError=''; renderRailStatus(); return;
+    }catch(e){ railError = e.name==='AbortError' ? 'tiempo agotado' : 'sin conexión'; }
+  }
+  railFetching=false; railFailAt=Date.now(); renderRailStatus();
+}
+function maybeFetchRails(la,lo){
+  if(!railArea || hav(railArea,{la,lo}) > REFETCH_AFTER || !rails.size) fetchRails(la,lo);
+}
+
+// Punto de la vía más cercano a (x,y), con preferencia por seguir en el mismo tramo
+function snap(x,y,maxD,preferId){
+  let best=null;
+  for(const w of rails.values()){
+    const b=w.bb; if(x<b[0]-maxD||x>b[2]+maxD||y<b[1]-maxD||y>b[3]+maxD) continue;
+    for(let i=1;i<w.xy.length;i++){
+      const [ax,ay]=w.xy[i-1],[bx,by]=w.xy[i]; const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;
+      let t = L2 ? ((x-ax)*dx+(y-ay)*dy)/L2 : 0; t=t<0?0:t>1?1:t;
+      const px=ax+t*dx, py=ay+t*dy, d=Math.hypot(x-px,y-py);
+      if(d>maxD) continue;
+      const score = d + (preferId!=null && w.id!==preferId ? 20 : 0);
+      if(!best || score<best.score) best={w, s:w.cum[i-1]+t*Math.sqrt(L2), d, score, x:px, y:py};
+    }
+  }
+  return best;
+}
+function atS(w,s){
+  s=Math.max(0,Math.min(w.len,s));
+  let lo=0,hi=w.cum.length-1; while(hi-lo>1){const m=(lo+hi)>>1; if(w.cum[m]<=s) lo=m; else hi=m}
+  const seg=(w.cum[hi]-w.cum[lo])||1, t=(s-w.cum[lo])/seg, [ax,ay]=w.xy[lo],[bx,by]=w.xy[hi];
+  return {x:ax+t*(bx-ax), y:ay+t*(by-ay), tx:(bx-ax)/seg, ty:(by-ay)/seg};
+}
+// Tramo que sigue al llegar al final de w (extremo a menos de 25 m), en la dirección de avance
+function nextWay(w, atEnd){
+  const p = atEnd ? w.xy[w.xy.length-1] : w.xy[0];
+  let best=null;
+  for(const o of rails.values()){ if(o===w) continue;
+    const a=o.xy[0], b=o.xy[o.xy.length-1];
+    const da=Math.hypot(a[0]-p[0],a[1]-p[1]), db=Math.hypot(b[0]-p[0],b[1]-p[1]);
+    if(da<25 && (!best||da<best.d)) best={w:o,s:0,dir:1,d:da};
+    if(db<25 && (!best||db<best.d)) best={w:o,s:o.len,dir:-1,d:db};
+  }
+  return best;
+}
+
+// --- Filtro sobre la vía: posición a lo largo del tramo (s), velocidad (v) y sentido (dir)
+// Entre lecturas (y sin GPS) el tren sigue avanzando por la vía a la última velocidad, hasta 2 min.
+let F = null;
+const DEAD_RECKON_MS = 120000;
+function advance(t){
+  if(!F) return;
+  let dt=(t-F.t)/1000; if(dt<=0) return;
+  if(t-F.fixT > DEAD_RECKON_MS){ F.t=t; return }
+  let move = F.v*dt;
+  addMotion(move, dt*1000);
+  for(let k=0;k<4 && move>0;k++){
+    const target = F.s + F.dir*move;
+    if(target>=0 && target<=F.w.len){ F.s=target; move=0; break }
+    const atEnd = target>F.w.len, used = atEnd ? F.w.len-F.s : F.s;
+    const n = nextWay(F.w, atEnd);
+    if(!n){ F.s = atEnd?F.w.len:0; break }
+    move -= used; F.w=n.w; F.s=n.s; F.dir=n.dir;
+  }
+  F.t=t;
+}
+function filterUpdate(la,lo,t,acc,dopp){
+  if(!ref) setRef(la,lo);
+  if(!rails.size) return null;
+  if(hav(ref,{la,lo})>50000) setRef(la,lo);
+  const [mx,my] = toXY(la,lo);
+  const recent = F && t-F.fixT < DEAD_RECKON_MS;
+  if(recent) advance(t);
+  // con lectura muy mala y un estado reciente, solo se corrige un poco sobre la vía actual
+  if(recent && acc>250){
+    const c = snap(mx,my,Math.min(acc,1500),F.w.id);
+    if(c && c.w===F.w){ F.s += 0.03*(c.s-F.s) }
+    if(dopp!=null && acc<400) F.v = 0.7*F.v + 0.3*dopp;
+    F.fixT=t; F.acc=acc; return true;
+  }
+  const c = snap(mx,my, Math.min(400, Math.max(60, acc*1.5)), recent?F.w.id:null);
+  if(!c){ F=null; return null }
+  if(!recent || c.w!==F.w){
+    // tramo nuevo: el sentido sale del rumbo que se traía o, si no, del rumbo del GPS
+    const tg = atS(c.w,c.s); let dir=1;
+    if(recent && F.hx!=null) dir = (tg.tx*F.hx+tg.ty*F.hy)>=0 ? 1 : -1;
+    const v = dopp!=null ? dopp : (recent?F.v:0);
+    F = {w:c.w, s:c.s, v, dir, t, fixT:t, lastMeasT:t, acc, hx:recent?F.hx:null, hy:recent?F.hy:null};
+    return true;
+  }
+  const dt = Math.max(0.5,(t-(F.lastMeasT||t))/1000);
+  const innov = c.s - F.s;
+  const alpha = Math.max(0.06, Math.min(0.8, 18/Math.max(acc,1)));
+  F.s = Math.max(0, Math.min(F.w.len, F.s + alpha*innov));
+  let vs = F.dir*F.v + (alpha*alpha/(2-alpha))*innov/dt;     // velocidad con signo, filtro alfa-beta
+  if(dopp!=null){ const mag = 0.35*Math.abs(vs) + 0.65*dopp; vs = (Math.sign(vs)||F.dir)*mag }
+  if(Math.abs(vs)>1.5) F.dir = vs>0?1:-1;
+  F.v = Math.min(70, Math.abs(vs)); if(F.v<0.5) F.v=0;
+  const tg = atS(F.w,F.s); F.hx=tg.tx*F.dir; F.hy=tg.ty*F.dir;
+  F.fixT=t; F.lastMeasT=t; F.acc=acc;
+  return true;
+}
+function filteredPos(){ const p=atS(F.w,F.s); const [la,lo]=toLL(p.x,p.y); return {la,lo,hx:p.tx*F.dir,hy:p.ty*F.dir} }
 
 // --- Estado del viaje (por tren)
 let train = store.get('train','IC720');
 let trip, watchId = null, follow = true, lastGeocode = null, wakeLock = null;
+let centered = false, smooth = null, lastFix = null, mode = 'none';   // mode: 'rail' | 'raw' | 'none'
+const speedLog = [];
 
 function emptyTrip(){return {pts:[],dist:0,vmax:0,movingMs:0,start:null}}
 function loadTrip(){
   trip = store.get('trip:'+train, emptyTrip());
   trackLine.setLatLngs(trip.pts.map(p=>[p.la,p.lo]));
-  if(trip.pts.length){const p=trip.pts[trip.pts.length-1];placeMarker(p.la,p.lo,p.acc||0);map.fitBounds(trackLine.getBounds(),{maxZoom:14,padding:[20,20]})}
-  render(null);
+  if(trip.pts.length){const p=trip.pts[trip.pts.length-1];placeMarker(p.la,p.lo);map.fitBounds(trackLine.getBounds(),{maxZoom:14,padding:[20,20]})}
+  render();
 }
 function saveTrip(){
   if(trip.pts.length>5000) trip.pts = trip.pts.filter((_,i)=>i%2===0||i>trip.pts.length-500);
@@ -131,65 +304,121 @@ function selectTrain(id){
 }
 document.querySelectorAll('.train').forEach(b=>b.addEventListener('click',()=>selectTrain(b.dataset.id)));
 
-// --- Distancia (haversine, metros)
-function hav(a,b){const R=6371000,r=Math.PI/180;const dLa=(b.la-a.la)*r,dLo=(b.lo-a.lo)*r;
-  const s=Math.sin(dLa/2)**2+Math.cos(a.la*r)*Math.cos(b.la*r)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(s))}
-
-function placeMarker(la,lo,acc){
-  marker.setLatLng([la,lo]); accCircle.setLatLng([la,lo]).setRadius(acc);
-  if(!map.hasLayer(marker)){marker.addTo(map);accCircle.addTo(map)}
+function addMotion(m, ms){ trip.dist += m; if(F && F.v>1) trip.movingMs += ms; }
+function placeMarker(la,lo){ marker.setLatLng([la,lo]); if(!map.hasLayer(marker)) marker.addTo(map) }
+function pushTrack(la,lo,t){
+  const last=trip.pts[trip.pts.length-1];
+  if(!last || hav(last,{la,lo})>15){ trip.pts.push({la,lo,t}); trackLine.addLatLng([la,lo]) }
 }
 
-let smooth = null;
 function onPos(pos){
-  const c = pos.coords, t = pos.timestamp || Date.now();
-  const p = {la:c.latitude, lo:c.longitude, t, acc:Math.round(c.accuracy||0)};
-  const prev = trip.pts[trip.pts.length-1];
-  let v = (c.speed!=null && !isNaN(c.speed) && c.speed>=0) ? c.speed*3.6 : null;  // km/h del GPS
-  if(prev){
-    const d = hav(prev,p), dt = (t-prev.t)/1000;
-    if(v==null && dt>0.5) v = d/dt*3.6;            // si el GPS no da velocidad, se calcula
-    const plausible = d < Math.max(50, dt*100) && p.acc < 200;  // descarta saltos (>360 km/h) y fixes muy malos
-    if(plausible && (d > Math.max(3, p.acc*0.3))){
-      trip.dist += d;
-      if((v||0) > 3) trip.movingMs += t-prev.t;
-      p.v = v; trip.pts.push(p); trackLine.addLatLng([p.la,p.lo]);
-    } else if(!plausible){ v = smooth; }
-  } else { p.v = v||0; trip.pts.push(p); trackLine.addLatLng([p.la,p.lo]); trip.start = trip.start||t; }
-  if(v!=null){ smooth = smooth==null ? v : smooth*0.4 + v*0.6; if(smooth<1) smooth=0;
-    if(smooth>trip.vmax && p.acc<60) trip.vmax = smooth; }
+  const c = pos.coords, t = pos.timestamp || Date.now(), acc = Math.round(c.accuracy||9999);
+  const dopp = (c.speed!=null && !isNaN(c.speed) && c.speed>=0 && acc<150) ? c.speed : null;
+  lastFix = {la:c.latitude, lo:c.longitude, t, acc, c};
+  rawDot.setLatLng([c.latitude,c.longitude]); accCircle.setLatLng([c.latitude,c.longitude]).setRadius(acc);
+  if(!map.hasLayer(rawDot)){rawDot.addTo(map);accCircle.addTo(map)}
   if(!trip.start) trip.start = t;
-  placeMarker(p.la,p.lo,p.acc);
-  if(follow) map.setView([p.la,p.lo], Math.max(map.getZoom(),13), {animate:true});
-  speedLog.push({t, v:smooth||0}); while(speedLog.length && t-speedLog[0].t>600000) speedLog.shift();
-  saveTrip(); render(pos); geocode(p);
-}
-const speedLog = [];
+  maybeFetchRails(c.latitude,c.longitude);
+  if(!centered){ centered=true; map.setView([c.latitude,c.longitude], Math.max(map.getZoom(),14)) }
 
-function render(pos){
-  const v = smooth;
-  $('speed').firstChild.nodeValue = v==null ? '--' : nf0.format(v);
+  if(filterUpdate(c.latitude,c.longitude,t,acc,dopp)){
+    mode='rail'; smooth = F.v*3.6;
+    const p=filteredPos(); pushTrack(p.la,p.lo,t);
+    if(acc<120 && smooth>trip.vmax) trip.vmax=smooth;
+  } else {
+    mode='raw'; rawUpdate(c,t,acc,dopp);
+  }
+  saveTrip(); render(); geocode(currentPos());
+}
+// Sin vías cargadas cerca: el GPS solo, descartando saltos imposibles
+let rawPrev=null;
+function rawUpdate(c,t,acc,dopp){
+  const p={la:c.latitude, lo:c.longitude, t};
+  let v = dopp!=null ? dopp*3.6 : null;
+  if(rawPrev){
+    const d=hav(rawPrev,p), dt=(t-rawPrev.t)/1000;
+    if(v==null && dt>0.5) v=d/dt*3.6;
+    const plausible = d < Math.max(50, dt*100) && acc < 200;
+    if(!plausible){ v=smooth; }
+    else if(d > Math.max(3, acc*0.3)){ trip.dist+=d; if((v||0)>3) trip.movingMs+=t-rawPrev.t; rawPrev=p; pushTrack(p.la,p.lo,t) }
+  } else { rawPrev=p; pushTrack(p.la,p.lo,t) }
+  if(v!=null){ smooth = smooth==null ? v : smooth*0.4+v*0.6; if(smooth<1) smooth=0; if(smooth>trip.vmax && acc<60) trip.vmax=smooth }
+  placeMarker(p.la,p.lo);
+}
+function currentPos(){
+  if(F && mode==='rail') return filteredPos();
+  if(lastFix) return {la:lastFix.la, lo:lastFix.lo};
+  return null;
+}
+
+// Cada segundo: el tren avanza sobre la vía aunque no llegue GPS
+function tick(){
+  const now=Date.now();
+  if(F && mode==='rail'){
+    if(now-F.fixT <= DEAD_RECKON_MS){ advance(now); smooth=F.v*3.6 }
+    const p=filteredPos(); placeMarker(p.la,p.lo); pushTrack(p.la,p.lo,now);
+    if(follow) map.panTo([p.la,p.lo],{animate:true,duration:.8});
+  } else if(follow && lastFix){ map.panTo([lastFix.la,lastFix.lo],{animate:true,duration:.8}) }
+  if(smooth!=null){ speedLog.push({t:now, v:smooth}); while(speedLog.length && now-speedLog[0].t>600000) speedLog.shift() }
+  render();
+}
+setInterval(tick,1000);
+
+function renderRailStatus(){
+  const el=$('railStatus');
+  if(railFetching){ el.className='status weak'; $('railText').textContent='Bajando vías…'; return }
+  if(!rails.size){ el.className='status err'; $('railText').textContent = railError ? `Vías: ${railError}` : 'Vías: —'; return }
+  if(mode==='rail'){ el.className='status ok'; $('railText').textContent = 'Sobre la vía' + (F&&F.w.name?` · ${F.w.name}`:''); return }
+  el.className='status weak'; $('railText').textContent = `Vías: ${rails.size} tramos`;
+}
+
+function render(){
+  const est = F && mode==='rail' && Date.now()-F.fixT > 8000;
+  $('speed').classList.toggle('est', !!est);
+  $('speed').firstChild.nodeValue = smooth==null ? '--' : nf0.format(smooth);
   $('vmax').textContent = trip.vmax ? nf0.format(trip.vmax) : '--';
   $('vavg').textContent = trip.movingMs>10000 ? nf0.format(trip.dist/(trip.movingMs/1000)*3.6) : '--';
   $('dist').textContent = nf1.format(trip.dist/1000);
   const secs = trip.start ? Math.floor((Date.now()-trip.start)/1000) : 0;
   const h=Math.floor(secs/3600), m=Math.floor(secs%3600/60), s=secs%60;
   $('time').textContent = h ? `${h}:${String(m).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
-  if(pos){
-    const c = pos.coords, acc = Math.round(c.accuracy);
-    const st = $('status'); st.className = 'status ' + (acc<=30?'ok':acc<=100?'weak':'err');
-    $('statusText').textContent = `GPS ±${acc} m`;
-    let extra = '';
-    if(c.heading!=null && !isNaN(c.heading) && (smooth||0)>3){const dirs=['N','NE','E','SE','S','SO','O','NO'];extra+=' · rumbo '+dirs[Math.round(c.heading/45)%8]}
+  if(lastFix){
+    const acc=lastFix.acc, age=Math.round((Date.now()-lastFix.t)/1000);
+    $('status').className = 'status ' + (age>15?'err':acc<=30?'ok':acc<=150?'weak':'err');
+    $('statusText').textContent = age>15 ? `Sin GPS hace ${age} s` + (est&&Date.now()-F.fixT<=DEAD_RECKON_MS?' · estimando':'') : `GPS ±${acc} m`;
+    const c=lastFix.c; let extra='';
     if(c.altitude!=null) extra+=` · ${Math.round(c.altitude)} m alt.`;
-    $('coords').textContent = `${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)}${extra}`;
+    const p=currentPos(); if(p) $('coords').textContent = `${p.la.toFixed(5)}, ${p.lo.toFixed(5)}${extra}`;
+    renderNext(p);
   }
+  renderRailStatus();
   drawChart();
 }
-setInterval(()=>render(null),1000);
+
+// Próxima estación: la más cercana hacia adelante (rumbo ±60°); si no hay rumbo, la más cercana
+function renderNext(p){
+  if(!p || !stations.size){ $('next').textContent=''; return }
+  let hx=p.hx, hy=p.hy;
+  if(hx==null && trip.pts.length>3){ const a=trip.pts[trip.pts.length-4], b=trip.pts[trip.pts.length-1];
+    hx=(b.lo-a.lo)*Math.cos(b.la*DEG); hy=b.la-a.la; const n=Math.hypot(hx,hy); if(n>1e-6){hx/=n;hy/=n} else hx=hy=null }
+  let near=null, ahead=null;
+  for(const s of stations.values()){
+    const d=hav(p,s); if(!near||d<near.d) near={s,d};
+    if(hx!=null && (smooth||0)>5){ const vx=(s.lo-p.lo)*Math.cos(p.la*DEG), vy=s.la-p.la, n=Math.hypot(vx,vy)||1;
+      if((vx*hx+vy*hy)/n > 0.5 && d>300 && (!ahead||d<ahead.d)) ahead={s,d} }
+  }
+  const km = d => d<1000 ? `${nf0.format(d)} m` : `${nf1.format(d/1000)} km`;
+  if(near && near.d<400 && (smooth||0)<15) $('next').textContent = `En estación: ${near.s.name}`;
+  else if(ahead){
+    const eta = smooth>10 ? ` · ~${Math.max(1,Math.round(ahead.d*1.15/(smooth/3.6)/60))} min` : '';
+    $('next').textContent = `Próxima: ${ahead.s.name} · ${km(ahead.d)}${eta}`;
+  }
+  else if(near) $('next').textContent = `Cerca de: ${near.s.name} · ${km(near.d)}`;
+}
 
 // --- Lugar más cercano (Nominatim, como mucho cada 45 s y tras moverse 1 km)
 async function geocode(p){
+  if(!p) return;
   if(lastGeocode && (Date.now()-lastGeocode.t<45000 || hav(lastGeocode,p)<1000)) return;
   lastGeocode = {la:p.la, lo:p.lo, t:Date.now()};
   try{
@@ -206,14 +435,13 @@ function drawChart(){
   const cv=$('chart'), dpr=window.devicePixelRatio||1, w=cv.clientWidth, h=cv.clientHeight;
   if(cv.width!==w*dpr){cv.width=w*dpr;cv.height=h*dpr}
   const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
-  const cs=getComputedStyle(document.documentElement);
   const vmaxTrain = +document.querySelector('.train[aria-pressed="true"]')?.dataset.vmax || 200;
   const top = Math.max(vmaxTrain, ...speedLog.map(s=>s.v)) * 1.05, now=Date.now();
-  ctx.strokeStyle=cs.getPropertyValue('--line'); ctx.lineWidth=1; ctx.fillStyle=cs.getPropertyValue('--muted'); ctx.font='10px '+cs.getPropertyValue('--mono');
+  ctx.strokeStyle=css('--line'); ctx.lineWidth=1; ctx.fillStyle=css('--muted'); ctx.font='10px '+css('--mono');
   [0.5,1].forEach(f=>{const y=h-(vmaxTrain*f/top)*(h-4);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();ctx.fillText(nf0.format(vmaxTrain*f),2,y-2)});
   if(speedLog.length<2) return;
   const X=t=>w-(now-t)/600000*w, Y=v=>h-(v/top)*(h-4);
-  const acc=cs.getPropertyValue('--accent').trim();
+  const acc=css('--accent');
   ctx.beginPath(); speedLog.forEach((s,i)=>i?ctx.lineTo(X(s.t),Y(s.v)):ctx.moveTo(X(s.t),Y(s.v)));
   ctx.strokeStyle=acc; ctx.lineWidth=2; ctx.stroke();
   ctx.lineTo(X(speedLog[speedLog.length-1].t),h); ctx.lineTo(X(speedLog[0].t),h); ctx.closePath();
@@ -222,7 +450,7 @@ function drawChart(){
 
 // --- Arranque, pantalla encendida y controles
 function onErr(e){
-  const st=$('status'); st.className='status err';
+  $('status').className='status err';
   $('statusText').textContent='Sin GPS';
   $('msg').textContent = e.code===1 ? 'Ubicación denegada: habilitala para este sitio en los ajustes del navegador y tocá «Empezar».'
     : e.code===3 ? 'El GPS tarda en responder (túnel o vagón cerrado). Sigue intentando…' : 'No se pudo leer la ubicación: '+e.message;
@@ -233,17 +461,17 @@ $('start').addEventListener('click',()=>{
   if(!('geolocation' in navigator)){$('msg').textContent='Este navegador no tiene GPS.';return}
   $('msg').textContent='';
   if(watchId!=null) navigator.geolocation.clearWatch(watchId);
-  watchId = navigator.geolocation.watchPosition(p=>{$('msg').textContent='';onPos(p)}, onErr, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+  watchId = navigator.geolocation.watchPosition(p=>{if(p.coords.accuracy<5000) $('msg').textContent='';onPos(p)}, onErr, {enableHighAccuracy:true, maximumAge:0, timeout:20000});
   $('start').textContent='GPS activo'; if(!trip.pts.length) $('place').textContent='Buscando dónde estás…'; $('statusText').textContent='Buscando señal…';
   keepAwake();
 });
 $('follow').addEventListener('click',()=>{follow=!follow;$('follow').setAttribute('aria-pressed',String(follow));$('follow').textContent=follow?'Seguir':'Libre';
-  if(follow&&trip.pts.length){const p=trip.pts[trip.pts.length-1];map.setView([p.la,p.lo],Math.max(map.getZoom(),13))}});
+  const p=currentPos(); if(follow&&p) map.setView([p.la,p.lo],Math.max(map.getZoom(),13))});
 map.on('dragstart',()=>{if(follow){follow=false;$('follow').setAttribute('aria-pressed','false');$('follow').textContent='Libre'}});
 let resetArmed=false;
 $('reset').addEventListener('click',()=>{
   if(!resetArmed){resetArmed=true;$('reset').textContent='¿Seguro? Tocá otra vez';setTimeout(()=>{resetArmed=false;$('reset').textContent='Borrar viaje'},3000);return}
-  resetArmed=false;$('reset').textContent='Borrar viaje';trip=emptyTrip();smooth=null;speedLog.length=0;trackLine.setLatLngs([]);saveTrip();render(null);
+  resetArmed=false;$('reset').textContent='Borrar viaje';trip=emptyTrip();smooth=null;F=null;rawPrev=null;speedLog.length=0;trackLine.setLatLngs([]);saveTrip();render();
 });
 selectTrain(train);
 </script>
