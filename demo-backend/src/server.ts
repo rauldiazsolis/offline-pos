@@ -3,11 +3,13 @@ import { createApp } from './app.ts';
 import { openDb } from './db.ts';
 import { registerRoutes } from './router.ts';
 import { accountHoldRoutes } from './routes/account-holds.ts';
+import { claimRoutes } from './routes/claim.ts';
 import { demoResetRoute } from './routes/demo-reset.ts';
 import { demoSessionRoutes } from './routes/demo-sessions.ts';
 import { infoRoutes } from './routes/info.ts';
 import { panelRoutes } from './routes/panel.ts';
 import { portalRoutes } from './routes/portal.ts';
+import { snapshotRoutes } from './routes/snapshot.ts';
 import { syncRoutes } from './routes/sync.ts';
 import { seedIfEmpty } from './seed.ts';
 
@@ -25,6 +27,8 @@ registerRoutes(accountHoldRoutes);
 registerRoutes(demoResetRoute);
 registerRoutes(demoSessionRoutes);
 registerRoutes(portalRoutes);
+registerRoutes(claimRoutes);
+registerRoutes(snapshotRoutes);
 registerRoutes(panelRoutes);
 
 createApp(db).listen(PORT, () => {

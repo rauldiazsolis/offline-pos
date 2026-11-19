@@ -41,6 +41,7 @@ export const portalRoutes: RouteDef[] = [
     pattern: /^\/portal-links$/,
     requiresAuth: true,
     checksContract: true,
+    checksDevice: true,
     closedInMaintenance: true,
     handler: (req, res, ctx) => {
       const { token, expiresAt } = issuePortalLink(ctx.db, ctx.token ?? '', new Date());

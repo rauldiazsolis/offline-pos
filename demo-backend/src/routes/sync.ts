@@ -40,6 +40,7 @@ export const syncRoutes: RouteDef[] = [
     method: 'POST',
     pattern: /^\/sync\/push$/,
     checksContract: true,
+    checksDevice: true,
     closedInMaintenance: true,
     requiresAuth: true,
     handler: async (req, res, ctx) => {
@@ -71,6 +72,7 @@ export const syncRoutes: RouteDef[] = [
     method: 'POST',
     pattern: /^\/sync\/pull$/,
     checksContract: true,
+    checksDevice: true,
     closedInMaintenance: true,
     requiresAuth: true,
     handler: async (req, res, ctx) => {

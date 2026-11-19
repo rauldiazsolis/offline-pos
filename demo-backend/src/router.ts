@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { DatabaseSync } from 'node:sqlite';
 import { isRevokedKey } from './demo-keys.ts';
+import { isRevokedDevice } from './device-claim.ts';
 import { sendJson } from './http-helpers.ts';
 import { backendContractVersion, contractMajor, getDemoSettings } from './settings.ts';
 
@@ -34,6 +35,20 @@ export type RouteDef = {
    * cierra: es cómo el POS se entera.
    */
   closedInMaintenance?: boolean;
+  /**
+   * Valida la exclusividad por dispositivo (4.7.0, #230, capacidad `device-claim`): si la key es de
+   * una caja vinculada a otro dispositivo y llega un `X-Device-Id` distinto, responde
+   * `409 { code: 'device-revoked', message }` sin procesar nada ni dar ack. Sin el header (un POS
+   * 4.6) o con una key que no es de ninguna caja, se procesa. Solo en las rutas autenticadas del
+   * Connector API, nunca en `/info` (que nunca responde 409).
+   */
+  checksDevice?: boolean;
+  /**
+   * Si la ruta existe hoy (4.7.0, #230): con `false`, el router sigue de largo y termina en el 404
+   * genérico, como un backend que no la implementa. Lo usan los ajustes del panel que apagan
+   * `device-claim` y `cash-snapshot`. Sin la función, la ruta existe siempre.
+   */
+  isEnabled?: (db: DatabaseSync) => boolean;
   handler: RouteHandler;
 };
 
@@ -68,7 +83,9 @@ function bearerToken(req: IncomingMessage): string | undefined {
  * origen — `*` alcanza. `Idempotency-Key` se suma a los headers permitidos
  * porque todo `POST` de eventos de negocio lo manda (ver
  * `connectors/rest/rest-fetch-connector.ts::buildHeaders`), y
- * `X-POS-Contract-Version` porque el POS la manda en todo request (4.0.0).
+ * `X-POS-Contract-Version` porque el POS la manda en todo request (4.0.0), y `X-Device-Id` porque
+ * el POS 4.7 lo manda a un backend que declara `device-claim` (#230): sin él, el preflight rechaza
+ * el request entero.
  * `Retry-After` se expone (4.6.0, #178): no es un header de respuesta que el
  * navegador deje leer desde otro origen sin eso.
  */
@@ -76,7 +93,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
-    'Content-Type, Authorization, Idempotency-Key, X-POS-Contract-Version',
+    'Content-Type, Authorization, Idempotency-Key, X-POS-Contract-Version, X-Device-Id',
   'Access-Control-Expose-Headers': 'Retry-After',
 };
 
@@ -116,6 +133,9 @@ export async function handleRequest(
     if (match === null) {
       continue;
     }
+    if (route.isEnabled !== undefined && !route.isEnabled(db)) {
+      continue;
+    }
     if (route.requiresAuth && bearerToken(req) === undefined) {
       sendJson(res, 401, { error: 'Falta el header Authorization: Bearer <token>' });
       return;
@@ -133,6 +153,20 @@ export async function handleRequest(
         contractMajor(declared) !== contractMajor(backendVersion)
       ) {
         sendJson(res, 409, { code: 'incompatible-contract', contractVersion: backendVersion });
+        return;
+      }
+    }
+    // 4.7.0 (#230): después de la auth y del contrato (un POS de otro major no entiende el cuerpo
+    // nuevo) y antes del mantenimiento: un equipo revocado no tiene nada que esperar.
+    if (route.checksDevice === true && getDemoSettings(db).deviceClaim) {
+      const deviceId = req.headers['x-device-id'];
+      if (
+        isRevokedDevice(db, bearerToken(req), typeof deviceId === 'string' ? deviceId : undefined)
+      ) {
+        sendJson(res, 409, {
+          code: 'device-revoked',
+          message: 'Esta caja fue vinculada en otro dispositivo.',
+        });
         return;
       }
     }

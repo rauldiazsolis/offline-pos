@@ -28,6 +28,8 @@ describe('openDb', () => {
         'portal_links',
         'products',
         'push_lots',
+        'claim_tokens',
+        'registers',
         'sales',
         'stock',
         'stock_movements',

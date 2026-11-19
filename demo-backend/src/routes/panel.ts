@@ -183,6 +183,9 @@ export const panelRoutes: RouteDef[] = [
           : {}),
         ...(body?.notice !== undefined ? { notice: body.notice } : {}),
         ...(body?.demoSessions !== undefined ? { demoSessions: body.demoSessions } : {}),
+        // 4.7.0 (#230): apagar `device-claim` o `cash-snapshot` simula un backend anterior.
+        ...(body?.deviceClaim !== undefined ? { deviceClaim: body.deviceClaim } : {}),
+        ...(body?.cashSnapshot !== undefined ? { cashSnapshot: body.cashSnapshot } : {}),
       });
       sendJson(res, 200, { delayLots: isDelayEnabled(ctx.db), ...getDemoSettings(ctx.db) });
     },

@@ -4,8 +4,8 @@ import { sendJson } from '../http-helpers.ts';
 import type { RouteDef } from '../router.ts';
 import { DEFAULT_TEMPLATE, DEMO_COMPANY_NAMES, isTemplateName } from '../seed.ts';
 import {
+  backendCapabilities,
   backendContractVersion,
-  CAPABILITIES,
   getCompanyName,
   getDemoSettings,
   getDemoTemplate,
@@ -37,6 +37,7 @@ export function companyFor(
  * responde 409 — es justamente cómo el POS se entera de que no son
  * compatibles. Mantenimiento y "contrato 3.0.0" se prenden desde el panel. 4.4.0 (#128): también
  * informa sus capacidades. 4.5.0 (#193): también la empresa. 4.6.0 (#178): también el portal.
+ * 4.7.0 (#230): nunca valida el dispositivo (ni siquiera `409 device-revoked`).
  */
 export const infoRoutes: RouteDef[] = [
   {
@@ -54,7 +55,7 @@ export const infoRoutes: RouteDef[] = [
           ? { message: maintenance.message }
           : {}),
         backend: { name: 'offline-pos-demo-backend', version },
-        capabilities: CAPABILITIES,
+        capabilities: backendCapabilities(ctx.db),
         portal: PORTAL,
         ...(company !== undefined ? { company } : {}),
       });

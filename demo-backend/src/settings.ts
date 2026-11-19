@@ -4,11 +4,18 @@ import type { DatabaseSync } from 'node:sqlite';
  * Versión del Connector API que habla este minibackend (4.4.0 desde #128: `POST /demo-sessions`,
  * capacidades y `notices`; 4.3.0, #125: anulación de una cobranza con `voidsPaymentId`; 4.2.0, #101:
  * recibo de cobranza y saldo de cualquier cliente; 4.1.0, #120; 4.0.0, #99). 4.5.0 desde #193:
- * `company` en `GET /info`. 4.6.0 desde #178: capacidad `portal` y el 503 de mantenimiento.
+ * `company` en `GET /info`. 4.6.0 desde #178: capacidad `portal` y el 503 de mantenimiento. 4.7.0
+ * desde #230: capacidades `device-claim` (`POST /claim` y el `409 device-revoked`) y `cash-snapshot`
+ * (`GET /snapshot`).
  */
-export const CONTRACT_VERSION = '4.6.0';
-/** Lo opcional del contrato que implementa (4.4.0, #128; `portal` desde 4.6.0, #178): lo informa `GET /info`. */
+export const CONTRACT_VERSION = '4.7.0';
+/**
+ * Lo opcional del contrato que implementa siempre (4.4.0, #128; `portal` desde 4.6.0, #178). Las de
+ * 4.7.0 (#230) se pueden apagar desde el panel: ver `backendCapabilities`.
+ */
 export const CAPABILITIES = ['demo-sessions', 'customer-payment-void', 'portal'];
+export const CAPABILITY_DEVICE_CLAIM = 'device-claim';
+export const CAPABILITY_CASH_SNAPSHOT = 'cash-snapshot';
 /** El comando y el botón que el POS inyecta con la capacidad `portal` (4.6.0, #178). */
 export const PORTAL = { command: 'PANEL', label: 'Panel del backend' };
 /** Lo que informa con "Simular contrato 3.0.0" prendido en el panel. */
@@ -33,6 +40,13 @@ export type DemoSettings = {
   simulateContract3: boolean;
   notice: NoticeSetting;
   demoSessions: DemoSessionsMode;
+  /**
+   * `device-claim` prendido (4.7.0, #230, por omisión sí): apagado, `/info` no lo declara,
+   * `POST /claim` da 404 y no se valida la exclusividad. Para probar el POS contra un backend viejo.
+   */
+  deviceClaim: boolean;
+  /** `cash-snapshot` prendido (4.7.0, #230, por omisión sí): apagado, `GET /snapshot` da 404. */
+  cashSnapshot: boolean;
 };
 
 function readSetting(db: DatabaseSync, key: string): string | undefined {
@@ -63,6 +77,8 @@ export function getDemoSettings(db: DatabaseSync): DemoSettings {
         ? { enabled: false, severity: 'warning', message: '' }
         : (JSON.parse(notice) as NoticeSetting),
     demoSessions: DEMO_SESSIONS_MODES.find((mode) => mode === demoSessions) ?? 'normal',
+    deviceClaim: readSetting(db, 'deviceClaim') !== 'false',
+    cashSnapshot: readSetting(db, 'cashSnapshot') !== 'false',
   };
 }
 
@@ -79,6 +95,22 @@ export function setDemoSettings(db: DatabaseSync, partial: Partial<DemoSettings>
   if (partial.demoSessions !== undefined) {
     writeSetting(db, 'demoSessions', partial.demoSessions);
   }
+  if (partial.deviceClaim !== undefined) {
+    writeSetting(db, 'deviceClaim', String(partial.deviceClaim));
+  }
+  if (partial.cashSnapshot !== undefined) {
+    writeSetting(db, 'cashSnapshot', String(partial.cashSnapshot));
+  }
+}
+
+/** Las capacidades que declara `GET /info`: las fijas más las de 4.7.0 que estén prendidas (#230). */
+export function backendCapabilities(db: DatabaseSync): string[] {
+  const { deviceClaim, cashSnapshot } = getDemoSettings(db);
+  return [
+    ...CAPABILITIES,
+    ...(deviceClaim ? [CAPABILITY_DEVICE_CLAIM] : []),
+    ...(cashSnapshot ? [CAPABILITY_CASH_SNAPSHOT] : []),
+  ];
 }
 
 /**

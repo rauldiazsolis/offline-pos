@@ -65,14 +65,34 @@ async function push(version: string | undefined, id = 'lot-1'): Promise<Response
 }
 
 describe('GET /info (#99)', () => {
-  it('informa el contrato 4.6.0, el estado ok, sus capacidades y el portal (#128, #193, #178)', async () => {
+  it('informa el contrato 4.7.0, el estado ok, sus capacidades y el portal (#128, #193, #178, #230)', async () => {
     // Sin empresa: la key no es de una demo y no se cargó ningún comercio en el alta.
     expect(await info()).toEqual({
-      contractVersion: '4.6.0',
+      contractVersion: '4.7.0',
       status: 'ok',
-      backend: { name: 'offline-pos-demo-backend', version: '4.6.0' },
-      capabilities: ['demo-sessions', 'customer-payment-void', 'portal'],
+      backend: { name: 'offline-pos-demo-backend', version: '4.7.0' },
+      capabilities: [
+        'demo-sessions',
+        'customer-payment-void',
+        'portal',
+        'device-claim',
+        'cash-snapshot',
+      ],
       portal: { command: 'PANEL', label: 'Panel del backend' },
+    });
+  });
+
+  it('con "device-claim" apagado no la declara (4.7.0, #230)', async () => {
+    setDemoSettings(db, { deviceClaim: false });
+    expect(await info()).toMatchObject({
+      capabilities: ['demo-sessions', 'customer-payment-void', 'portal', 'cash-snapshot'],
+    });
+  });
+
+  it('con "cash-snapshot" apagado no la declara (4.7.0, #230)', async () => {
+    setDemoSettings(db, { cashSnapshot: false });
+    expect(await info()).toMatchObject({
+      capabilities: ['demo-sessions', 'customer-payment-void', 'portal', 'device-claim'],
     });
   });
 
@@ -113,7 +133,7 @@ describe('versión del contrato en cada request (#99)', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       code: 'incompatible-contract',
-      contractVersion: '4.6.0',
+      contractVersion: '4.7.0',
     });
   });
 
@@ -146,5 +166,11 @@ describe('versión del contrato en cada request (#99)', () => {
     expect(response.headers.get('access-control-allow-headers')).toContain(
       'X-POS-Contract-Version',
     );
+  });
+
+  it('el preflight permite X-Device-Id (4.7.0, #230)', async () => {
+    const response = await fetch(`${baseUrl}/sync/push`, { method: 'OPTIONS' });
+
+    expect(response.headers.get('access-control-allow-headers')).toContain('X-Device-Id');
   });
 });

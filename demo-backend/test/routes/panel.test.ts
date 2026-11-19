@@ -382,7 +382,35 @@ describe('panel — estado del backend (#99)', () => {
       simulateContract3: true,
       notice: { enabled: true, severity: 'critical', message: 'Cuota' },
       demoSessions: 'capacity',
+      deviceClaim: true,
+      cashSnapshot: true,
     });
+  });
+
+  it('apaga device-claim y cash-snapshot por separado (4.7.0, #230)', async () => {
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ deviceClaim: false }),
+    });
+    expect(await getJson('/_demo/api/settings')).toMatchObject({
+      deviceClaim: false,
+      cashSnapshot: true,
+    });
+
+    await fetch(`${baseUrl}/_demo/api/settings`, {
+      method: 'PUT',
+      body: JSON.stringify({ cashSnapshot: false, deviceClaim: true }),
+    });
+    expect(await getJson('/_demo/api/settings')).toMatchObject({
+      deviceClaim: true,
+      cashSnapshot: false,
+    });
+  });
+
+  it('el panel tiene la sección para vincular una caja (4.7.0, #230)', async () => {
+    const html = await (await fetch(`${baseUrl}/_demo`)).text();
+    expect(html).toContain('Vincular una caja');
+    expect(html).toContain('/_demo/claim-tokens');
   });
 
   it('la lista de ventas muestra a qué venta anula una anulación', async () => {
