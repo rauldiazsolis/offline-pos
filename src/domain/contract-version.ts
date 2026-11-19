@@ -5,9 +5,10 @@
  * 4.4.0 desde #128 (`POST /demo-sessions`, capacidades en `GET /info`, `notices` en el pull, reglas
  * de evolución), 4.5.0 desde #193 (`company` opcional en `GET /info`), 4.6.0 desde #178 (capacidad
  * `portal` con `POST /portal-links`, `ErrorBody`, el 503 de mantenimiento y el 429/503 de
- * `/demo-sessions`).
+ * `/demo-sessions`), 4.7.0 desde #230 (capacidades `device-claim`, con `POST /claim`, `X-Device-Id`
+ * y el `409 device-revoked`, y `cash-snapshot`, con `GET /snapshot`).
  */
-export const POS_CONTRACT_VERSION = '4.6.0';
+export const POS_CONTRACT_VERSION = '4.7.0';
 
 /**
  * Piso de compatibilidad (4.4.0, #128): desde acá un agregado nuevo entra como capacidad

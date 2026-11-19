@@ -7,6 +7,10 @@ export const CAPABILITY_DEMO_SESSIONS = 'demo-sessions';
 export const CAPABILITY_CUSTOMER_PAYMENT_VOID = 'customer-payment-void';
 /** 4.6.0 (#179): va con el objeto `portal` de `GET /info` (`backend-portal.ts`). */
 export const CAPABILITY_PORTAL = 'portal';
+/** 4.7.0 (#230): `POST /claim`, `X-Device-Id` y el `409 device-revoked` (`claim-schema.ts`). */
+export const CAPABILITY_DEVICE_CLAIM = 'device-claim';
+/** 4.7.0 (#230): `GET /snapshot`, la foto de la caja (`snapshot-schema.ts`). */
+export const CAPABILITY_CASH_SNAPSHOT = 'cash-snapshot';
 
 /**
  * Las del último `getInfo` exitoso, en `localStorage`: una terminal que arranca sin red las sabe

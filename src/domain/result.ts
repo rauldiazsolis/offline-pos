@@ -113,6 +113,12 @@ export type ErrorMeta = {
   // 4.6.0 (#173): el backend frena pedidos (429) o llegó a su tope de demos (503 demo-capacity)
   'demo/rate-limited': { retryAfterSeconds?: number };
   'demo/capacity': undefined;
+  // 4.7.0 (#230): `POST /claim` (capacidad device-claim)
+  'claim/not-offered': undefined;
+  'claim/not-found': undefined;
+  'claim/expired': { reason: 'expired' | 'used' };
+  // 4.7.0 (#230): 409 device-revoked, la caja se vinculó en otro dispositivo
+  'sync/device-revoked': { message?: string };
 
   // storage/printer-config.ts (impresión, #174)
   'printer/save-failed': { message: string };

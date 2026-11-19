@@ -294,6 +294,18 @@ export const incompatibleContractBodySchema = z.object({
   contractVersion: z.string(),
 });
 
+/** Header con el id de dispositivo (4.7.0, #230): solo a un backend con `device-claim` y en `/claim`. */
+export const DEVICE_ID_HEADER = 'X-Device-Id';
+
+/**
+ * Cuerpo del otro `409` (4.7.0, #230): la caja de la key está vinculada a otro dispositivo. No
+ * procesó nada ni dio ack, como el de contrato; se distinguen por `code`.
+ */
+export const deviceRevokedBodySchema = z.object({
+  code: z.literal('device-revoked'),
+  message: z.string().optional(),
+});
+
 export type Connector = {
   /**
    * Versión del contrato y estado del backend (`GET /info`, 4.0.0 — #99).

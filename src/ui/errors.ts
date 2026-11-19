@@ -158,6 +158,16 @@ export function describeError(failure: Failure): string {
       return 'este backend no ofrece demos';
     case 'portal/not-offered':
       return 'este backend no ofrece el portal';
+    case 'claim/not-offered':
+      return 'este backend no ofrece vincular la caja con un código';
+    case 'claim/not-found':
+      return 'el código para vincular la caja no existe; pedí uno nuevo en el backend';
+    case 'claim/expired':
+      return failure.meta.reason === 'used'
+        ? 'el código para vincular la caja ya se usó en otro dispositivo; pedí uno nuevo en el backend'
+        : 'el código para vincular la caja venció; pedí uno nuevo en el backend';
+    case 'sync/device-revoked':
+      return failure.meta.message ?? 'Esta caja fue vinculada en otro dispositivo.';
     case 'demo/rate-limited': {
       const seconds = failure.meta.retryAfterSeconds;
       const minutes = seconds === undefined ? undefined : Math.max(1, Math.ceil(seconds / 60));
