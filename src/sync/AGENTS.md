@@ -195,7 +195,8 @@ rama `feat/device-claim-and-snapshot`:
   permite rechazaría todo. El `#connect=` acepta `claimToken` en vez de `apiKey`.
 - **Capacidad `cash-snapshot`**: `GET /snapshot` (`sync/snapshot-schema.ts`, tolerante por
   elemento, a tipos del dominio) con `lastTicket`, `lastReceipt`, `recentSales` y
-  `recentCustomerPayments` de 24 h, `cashAnchor?` y `cashMovements` desde el ancla. Sin turnos.
+  `recentCustomerPayments` desde el ancla o 24 h (lo más viejo; sin ancla, todo), `cashAnchor?` y
+  `cashMovements` desde el ancla. Sin turnos.
 - Hasta ahora solo el contrato y los tipos (bloque 1); el demo-backend y el uso en el POS llegan en
   los bloques 2 y 3.
 

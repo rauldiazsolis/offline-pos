@@ -20,8 +20,8 @@ info:
         `device-claim`, en todos los requests.
       - Capacidad `cash-snapshot`: `GET /snapshot` devuelve el estado de la
         caja de la key (últimos números de ticket y de recibo, ventas y
-        cobranzas de las últimas 24 h, el ancla del efectivo y los
-        movimientos de caja desde ella) para que una terminal nueva siga
+        cobranzas desde el ancla del efectivo o las últimas 24 h, el ancla y
+        los movimientos de caja desde ella) para que una terminal nueva siga
         donde quedó la anterior. Ver "Foto de la caja" más abajo.
       - La vuelta del onboarding acepta `claimToken` en lugar de `apiKey`.
       - Las respuestas `409` pasan a ser `Conflict`: `incompatible-contract`
@@ -246,9 +246,10 @@ info:
     la caja donde quedó: sigue la numeración de tickets y recibos, puede
     reimprimir y anular lo de las últimas 24 h y arranca con el saldo de
     efectivo correcto. Sin turnos: el efectivo se ancla en el último arqueo
-    que el backend conoce (`cashAnchor`) y suma los movimientos de caja
-    desde él. Sin `cashAnchor`, los movimientos son todos los de la caja y
-    la base es 0. Un `404` (o la capacidad ausente) significa "no hay foto":
+    que el backend conoce (`cashAnchor`) y suma los movimientos de caja, las
+    ventas y las cobranzas desde él, así que la foto los trae desde el ancla
+    aunque sea de hace más de 24 h. Sin `cashAnchor`, la base es 0 y la foto
+    trae todo lo de la caja. Un `404` (o la capacidad ausente) significa "no hay foto":
     el POS sigue con la caja vacía, sin mostrar error.
 
     **Portal (4.6.0)**: con la capacidad `portal`, el POS suma el comando
@@ -546,10 +547,16 @@ paths:
         sigue con la caja vacía, como sin la capacidad.
 
         **Consistencia**: la foto es de un instante e incluye todo lo que el
-        backend ya aplicó de esa caja. Ventanas: `recentSales` y
-        `recentCustomerPayments`, lo creado (`createdAt`) en las últimas 24 h;
-        `cashMovements`, lo creado desde `cashAnchor.countedAt` (o todo, sin
-        ancla). El backend nunca trunca la foto.
+        backend ya aplicó de esa caja. Ventanas, por el `createdAt` de cada
+        documento:
+          - `recentSales` y `recentCustomerPayments`: desde
+            `cashAnchor.countedAt` o desde hace 24 h, lo que sea **más
+            viejo** (el saldo de efectivo suma las ventas y cobranzas desde el
+            último arqueo, y `/ANULAR` necesita las últimas 24 h). Sin ancla,
+            todo lo de la caja (la base del efectivo es 0).
+          - `cashMovements`: desde `cashAnchor.countedAt` (el ajuste incluido),
+            o todo sin ancla.
+        El backend nunca trunca la foto.
       parameters:
         - $ref: '#/components/parameters/ContractVersion'
         - $ref: '#/components/parameters/DeviceId'
@@ -1511,11 +1518,13 @@ components:
         recentSales:
           type: array
           items: { $ref: '#/components/schemas/SnapshotSale' }
-          description: Ventas y anulaciones creadas en las últimas 24 h, más nuevas primero o en cualquier orden.
+          description: |
+            Ventas y anulaciones desde `cashAnchor.countedAt` o las últimas
+            24 h, lo que sea más viejo; sin ancla, todas. En cualquier orden.
         recentCustomerPayments:
           type: array
           items: { $ref: '#/components/schemas/SnapshotCustomerPayment' }
-          description: Cobranzas (y sus anulaciones) creadas en las últimas 24 h.
+          description: Cobranzas (y sus anulaciones), con la misma ventana que `recentSales`.
         cashAnchor:
           $ref: '#/components/schemas/CashAnchor'
         cashMovements:

@@ -222,8 +222,9 @@ conectar una caja nueva:
 
 - `lastTicket` y `lastReceipt`: los últimos números de ticket y de recibo, para que la numeración
   siga.
-- `recentSales` y `recentCustomerPayments`: lo creado en las últimas 24 h (con anulaciones), para el
-  resumen del día, reimprimir y anular.
+- `recentSales` y `recentCustomerPayments`: lo creado desde el ancla del efectivo o en las últimas
+  24 h, lo que sea más viejo (sin ancla, todo lo de la caja), con anulaciones: el resumen del día,
+  reimprimir, anular y el saldo de efectivo.
 - `cashAnchor`: el último arqueo que el backend conoce (lo contado), y `cashMovements`, los
   movimientos de caja desde entonces. Sin ancla, todos los de la caja con base 0. No hay turnos.
 - Lo que viene en la foto ya está en el backend: el POS nunca lo vuelve a mandar.

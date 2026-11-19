@@ -8,7 +8,11 @@ import { isRecord, readPayload, readString, type Row } from './rows.ts';
  * venta). Nunca se trunca.
  */
 
-/** La ventana de `recentSales` y `recentCustomerPayments`: la de `/ANULAR`. */
+/**
+ * La ventana mínima de `recentSales` y `recentCustomerPayments`: la de `/ANULAR`. Se amplía hasta el
+ * ancla si es más vieja (el saldo de efectivo suma las ventas y cobranzas desde el último arqueo), y
+ * sin ancla son todas (la base es 0, como en el POS).
+ */
 export const RECENT_WINDOW_MS = 24 * 3_600_000;
 
 type DocumentNumber = { date: string; number: number };
@@ -90,12 +94,6 @@ function countedOf(item: Item): number | undefined {
 export function buildCashSnapshot(db: DatabaseSync, register: Register, now: Date): CashSnapshot {
   const origin = { branch: register.branch, pointOfSale: register.pointOfSale };
   const withOrigin = (item: Item): Record<string, unknown> => ({ ...item.payload, origin });
-  const since = now.getTime() - RECENT_WINDOW_MS;
-  const recent = (items: Item[]): Record<string, unknown>[] =>
-    items
-      .filter((item) => item.createdAtMs >= since)
-      .sort(newestFirst)
-      .map(withOrigin);
 
   const sales = itemsOf(db, 'sales', register);
   const payments = itemsOf(db, 'customer_payments', register);
@@ -114,6 +112,15 @@ export function buildCashSnapshot(db: DatabaseSync, register: Register, now: Dat
       anchor = { item, counted };
     }
   }
+  const since =
+    anchor === undefined
+      ? Number.NEGATIVE_INFINITY
+      : Math.min(now.getTime() - RECENT_WINDOW_MS, anchor.item.createdAtMs);
+  const recent = (items: Item[]): Record<string, unknown>[] =>
+    items
+      .filter((item) => item.createdAtMs >= since)
+      .sort(newestFirst)
+      .map(withOrigin);
   const lastTicket = lastNumber(sales, 'ticket');
   const lastReceipt = lastNumber(payments, 'receipt');
   return {

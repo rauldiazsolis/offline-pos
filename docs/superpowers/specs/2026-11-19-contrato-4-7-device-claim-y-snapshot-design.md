@@ -27,7 +27,9 @@ Cambiar una caja de equipo sin pasar la API key a mano y sin perder la caja:
    claim.
 4. **Sin turnos** (se eliminaron en #120): la foto trae `lastTicket` y `lastReceipt`
    (`{ date, number }`, porque los contadores son por día y la cobranza tiene el suyo),
-   `recentSales` y `recentCustomerPayments` de las últimas 24 h (la ventana de `/ANULAR`),
+   `recentSales` y `recentCustomerPayments` desde el ancla o las últimas 24 h, lo que sea más viejo
+   (24 h es la ventana de `/ANULAR`; el ancla, la del saldo de efectivo; sin ancla, todo: ajuste
+   aprobado después del bloque 2),
    `cashAnchor?: { countedAt, amount }` y `cashMovements` desde el ancla. Se descartaron
    `shift_opened_at` y `opening_balance`. El ancla existe porque el saldo de efectivo se calcula desde
    el último arqueo, y los arqueos son locales: el backend solo ve su ajuste (`count-adjustment`, con

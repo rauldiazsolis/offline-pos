@@ -175,7 +175,38 @@ describe('GET /snapshot (4.7.0, #230)', () => {
     expect(movements[0]).toMatchObject({ source: 'count-adjustment', origin: CAJA_1 });
   });
 
-  it('sin arqueo, sin ancla y con todos los movimientos; sin documentos, sin números', async () => {
+  it('con el ancla de hace más de 24 h, las ventas y cobranzas van desde el ancla', async () => {
+    const { apiKey } = ensureRegister(db, CAJA_1, new Date());
+    await push(apiKey, [
+      sale('s-antes', CAJA_1, hoursAgo(40), { date: '2026-11-17', number: 1 }),
+      cash('arqueo', CAJA_1, hoursAgo(30), 800),
+      sale('s-desde-ancla', CAJA_1, hoursAgo(26), { date: '2026-11-18', number: 2 }),
+      payment('cp-desde-ancla', CAJA_1, hoursAgo(27), { date: '2026-11-18', number: 1 }),
+      sale('s-hoy', CAJA_1, hoursAgo(1), { date: '2026-11-19', number: 1 }),
+    ]);
+
+    const body = await readJson(await snapshot(apiKey));
+
+    expect(ids(arrayField(body, 'recentSales'))).toEqual(['s-hoy', 's-desde-ancla']);
+    expect(ids(arrayField(body, 'recentCustomerPayments'))).toEqual(['cp-desde-ancla']);
+  });
+
+  it('sin arqueo, sin ancla y con todo: movimientos, ventas y cobranzas (la base es 0)', async () => {
+    const { apiKey } = ensureRegister(db, CAJA_1, new Date());
+    await push(apiKey, [
+      cash('cm-1', CAJA_1, hoursAgo(50)),
+      cash('cm-2', CAJA_1, hoursAgo(1)),
+      sale('s-vieja', CAJA_1, hoursAgo(72), { date: '2026-11-16', number: 5 }),
+    ]);
+
+    const body = await readJson(await snapshot(apiKey));
+
+    expect(ids(arrayField(body, 'cashMovements'))).toEqual(['cm-1', 'cm-2']);
+    expect(ids(arrayField(body, 'recentSales'))).toEqual(['s-vieja']);
+    expect(body).not.toHaveProperty('cashAnchor');
+  });
+
+  it('sin documentos, sin números', async () => {
     const { apiKey } = ensureRegister(db, CAJA_1, new Date());
     await push(apiKey, [cash('cm-1', CAJA_1, hoursAgo(50)), cash('cm-2', CAJA_1, hoursAgo(1))]);
 
