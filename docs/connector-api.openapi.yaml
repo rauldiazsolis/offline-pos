@@ -446,7 +446,7 @@ paths:
     post:
       operationId: claimDevice
       summary: Canjea un claimToken por la conexión de una caja (capacidad device-claim)
-      x-pos-status: documented-not-implemented
+      x-pos-status: implemented-v4
       description: |
         Opcional (4.7.0): solo lo implementa un backend con la capacidad
         `device-claim`. **Sin autenticación** (el token es la credencial),
@@ -528,7 +528,7 @@ paths:
     get:
       operationId: getCashSnapshot
       summary: El estado de la caja de la key, para retomarla (capacidad cash-snapshot)
-      x-pos-status: documented-not-implemented
+      x-pos-status: implemented-v4
       description: |
         Opcional (4.7.0): solo lo implementa un backend con la capacidad
         `cash-snapshot`. Autenticado con la API key; devuelve el estado de

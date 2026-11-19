@@ -184,8 +184,7 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 ## Contrato: qué trajo cada versión
 
 **Contrato 4.7.0 (#230)** — aditivo (spec
-`docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`), en curso en la
-rama `feat/device-claim-and-snapshot`:
+`docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`):
 - **Capacidad `device-claim`**: `POST /claim` canjea un `claimToken` de un solo uso por la conexión
   de una caja (`sync/claim-schema.ts`) y la vincula a ese `X-Device-Id`. Un claim desde otro equipo
   revoca al anterior: sus requests responden `409 { code: 'device-revoked', message? }`

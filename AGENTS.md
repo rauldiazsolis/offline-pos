@@ -134,8 +134,9 @@ POS). Cómo se coordinan:
 - **Un cambio de contrato** en el POS se anuncia con un issue en el mini-erp (qué agrega o qué rompe);
   nunca se adapta el mini-erp desde acá. Si el mini-erp necesita algo del contrato, abre un issue acá.
 - **Las convenciones de proceso** ("Cómo trabajamos") son las mismas en los dos repos.
-- **Hoy**: contrato 4.6.0 en los dos (piso 4.0.0); el mini-erp declara `customer-payment-void`,
-  `demo-sessions` y `portal` (`/MINI`).
+- **Hoy**: contrato 4.7.0 en el POS y el demo-backend, 4.6.0 en el mini-erp (piso 4.0.0, compatibles);
+  el mini-erp declara `customer-payment-void`, `demo-sessions` y `portal` (`/MINI`). La 4.7.0
+  (`device-claim` y `cash-snapshot`) está anunciada en rauldiazsolis/mini-erp#95.
 
 ## Stack
 
@@ -284,8 +285,8 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
 documentado en `docs/connector-api.openapi.yaml`, **versión 4.7.0** desde #230 (capacidades
 `device-claim`, con `POST /claim`, `X-Device-Id` y el `409 device-revoked`, y `cash-snapshot`, con
-`GET /snapshot`; spec `docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`,
-en curso); la 4.6.0 es de #178 (capacidad
+`GET /snapshot`; spec `docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`);
+la 4.6.0 es de #178 (capacidad
 `portal` con `POST /portal-links`, `ErrorBody`, el 503 de mantenimiento y el 429/503 de las demos,
 spec `docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`); la 4.5.0 es de #193 (`company`
 opcional en `GET /info`, spec `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`);
