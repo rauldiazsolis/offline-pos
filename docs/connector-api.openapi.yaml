@@ -1,12 +1,33 @@
 openapi: 3.1.0
 info:
   title: offline-pos Connector API
-  version: '4.6.0'
+  version: '4.7.0'
   description: |
     Contrato que cualquier sistema externo (ERP, e-commerce, facturación,
     inventario) implementa para conectarse al POS. La guía para integradores
     (`guia.md`, publicada junto a este archivo) explica cómo probarlo y por
     dónde empezar.
+
+    **4.7.0 respecto de 4.6.0** (aditivo):
+      - Capacidad `device-claim`: una caja se vincula a un dispositivo
+        canjeando un `claimToken` de un solo uso con `POST /claim`, que
+        devuelve la API key. Un claim nuevo de la misma caja desde otro
+        dispositivo revoca al anterior: desde entonces sus requests
+        autenticados responden `409` con `code: device-revoked`. Ver
+        "Vinculación por dispositivo" más abajo.
+      - Header `X-Device-Id` (el mismo `deviceId` que viaja en push y pull):
+        el POS lo manda en `POST /claim` y, solo a un backend que declara
+        `device-claim`, en todos los requests.
+      - Capacidad `cash-snapshot`: `GET /snapshot` devuelve el estado de la
+        caja de la key (últimos números de ticket y de recibo, ventas y
+        cobranzas de las últimas 24 h, el ancla del efectivo y los
+        movimientos de caja desde ella) para que una terminal nueva siga
+        donde quedó la anterior. Ver "Foto de la caja" más abajo.
+      - La vuelta del onboarding acepta `claimToken` en lugar de `apiKey`.
+      - Las respuestas `409` pasan a ser `Conflict`: `incompatible-contract`
+        o `device-revoked`, por `code`.
+      - El piso sigue en 4.0.0: un backend 4.6 sigue siendo compatible, y un
+        backend sin estas capacidades no cambia en nada.
 
     **4.6.0 respecto de 4.5.0** (aditivo):
       - Capacidad `portal`: el POS abre el backend en una pestaña nueva con
@@ -133,18 +154,21 @@ info:
     ack, el lote sigue congelado en el outbox del POS con su mismo
     `idempotency_id` y sale cuando el backend se actualice.
 
-    **Compatibilidad del lado del POS (desde 4.4.0)**: el POS habla 4.6.0 y
+    **Compatibilidad del lado del POS (desde 4.4.0)**: el POS habla 4.7.0 y
     considera compatible a un backend del **mismo major con minor igual o
     mayor que el piso 4.0.0** (hasta 4.3.0 exigía su mismo minor). Lo que un
     backend puede o no hacer más allá del piso lo declara como **capacidad**
     en `GET /info.capabilities`; el POS nunca la deduce de la versión y un
-    nombre de capacidad que no conoce lo ignora. Capacidades (4.4.0 y 4.6.0):
+    nombre de capacidad que no conoce lo ignora. Capacidades (4.4.0, 4.6.0 y
+    4.7.0):
 
     | Capacidad | Qué habilita | Sin ella |
     |---|---|---|
     | `demo-sessions` | El backend implementa `POST /demo-sessions` | El POS no la consulta antes: un link de demo prueba directo y el 404 es la respuesta |
     | `customer-payment-void` | El POS anula cobranzas (`voidsPaymentId`, 4.3.0) | La cobranza se ve en `/ANULAR` pero no se anula |
     | `portal` | El POS muestra el comando y el botón que declara `portal` y abre el backend con `POST /portal-links` | No aparece nada |
+    | `device-claim` | El backend implementa `POST /claim` y la exclusividad por `X-Device-Id` (`409 device-revoked`); el POS le manda `X-Device-Id` en todo request | El POS no manda `X-Device-Id` (salvo en `POST /claim`) y nunca espera un `409 device-revoked` |
+    | `cash-snapshot` | El backend implementa `GET /snapshot`; el POS lo pide al conectar una caja | El POS arranca la caja vacía, como siempre |
 
     **Reglas de evolución (4.4.0)**:
       - **Campos desconocidos**: los dos lados los ignoran, en cualquier nivel.
@@ -178,6 +202,8 @@ info:
 
         <return_url>#connect=<base64url de JSON>
         JSON: { baseUrl, apiKey, branch, pointOfSale, wipeKey? }
+        JSON (4.7.0, con `device-claim`):
+              { baseUrl, claimToken, branch?, pointOfSale?, wipeKey? }
 
     `baseUrl` tiene que ser `https:` (o `http:` a `localhost`, `127.0.0.1` o
     `[::1]`). `wipeKey` es el `wipe_key` que recibió en la ida, sin
@@ -185,6 +211,45 @@ info:
     demo y aplica la conexión; sin él, precarga `/CONFIG` para que el
     operador decida. Una demo revocada (ver `POST /demo-sessions`) puede ir
     igual al alta: la vuelta trae una conexión nueva.
+
+    Con `claimToken` (4.7.0) la vuelta no lleva la key: el POS la pide con
+    `POST /claim` antes de guardar nada, y toma la sucursal y el punto de
+    venta de la respuesta si el fragmento no los trae. Un fragmento con
+    `apiKey` funciona exactamente igual que en 4.6.0.
+
+    **Vinculación por dispositivo (4.7.0, capacidad `device-claim`)**: el
+    backend emite un `claimToken` para una caja (por ejemplo, desde su
+    admin, como un link `#connect=` o un QR). El POS lo canjea con
+    `POST /claim` mandando su `X-Device-Id`; la caja queda vinculada a ese
+    dispositivo.
+
+      - El `claimToken` es de **un solo uso**, con vencimiento corto. Repetir
+        el canje desde el **mismo** `X-Device-Id` mientras el token no venció
+        devuelve la misma respuesta (por si se perdió la primera); desde
+        otro, `410`.
+      - Canjear un token nuevo de la misma caja desde otro dispositivo la
+        vincula a ese y **revoca al anterior**: todo request autenticado de
+        la API que traiga otro `X-Device-Id` responde
+        `409 { code: device-revoked, message }` sin procesar nada ni dar ack.
+        El POS revocado deja de sincronizar, le muestra al operador que la
+        caja se vinculó en otro dispositivo y le deja bajar lo pendiente.
+      - Un request **sin** `X-Device-Id` (un POS anterior a 4.7.0) no se
+        valida: el backend lo procesa como en 4.6.0.
+      - `GET /info` nunca responde `409`, tampoco `device-revoked`.
+      - El backend tiene que permitir `X-Device-Id` por CORS
+        (`Access-Control-Allow-Headers`). Por eso el POS lo manda solo a un
+        backend que declara `device-claim`: un header nuevo dispara el
+        preflight y un backend que no lo permite rechazaría el request.
+
+    **Foto de la caja (4.7.0, capacidad `cash-snapshot`)**: con
+    `GET /snapshot` una terminal nueva (o que se volvió a vincular) retoma
+    la caja donde quedó: sigue la numeración de tickets y recibos, puede
+    reimprimir y anular lo de las últimas 24 h y arranca con el saldo de
+    efectivo correcto. Sin turnos: el efectivo se ancla en el último arqueo
+    que el backend conoce (`cashAnchor`) y suma los movimientos de caja
+    desde él. Sin `cashAnchor`, los movimientos son todos los de la caja y
+    la base es 0. Un `404` (o la capacidad ausente) significa "no hay foto":
+    el POS sigue con la caja vacía, sin mostrar error.
 
     **Portal (4.6.0)**: con la capacidad `portal`, el POS suma el comando
     `/<portal.command>` y un botón `<portal.label> (/<portal.command>)`.
@@ -357,6 +422,7 @@ paths:
         guarda.
       parameters:
         - $ref: '#/components/parameters/ContractVersion'
+        - $ref: '#/components/parameters/DeviceId'
       responses:
         '201':
           description: La URL a abrir.
@@ -371,7 +437,135 @@ paths:
         '404':
           description: El backend no implementa el portal.
         '409':
-          $ref: '#/components/responses/IncompatibleContract'
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Maintenance'
+
+  /claim:
+    post:
+      operationId: claimDevice
+      summary: Canjea un claimToken por la conexión de una caja (capacidad device-claim)
+      x-pos-status: documented-not-implemented
+      description: |
+        Opcional (4.7.0): solo lo implementa un backend con la capacidad
+        `device-claim`. **Sin autenticación** (el token es la credencial),
+        con el header `X-Device-Id` obligatorio. Ver "Vinculación por
+        dispositivo" en la descripción general.
+
+        El POS lo llama al abrirse con un `#connect=` que trae `claimToken`,
+        antes de guardar nada: recién con la respuesta arma la conexión, la
+        prueba y la aplica. Sin red o con un error, no guarda nada.
+
+        Vincula la caja del token al `X-Device-Id`: desde entonces el
+        dispositivo anterior de esa caja (si había) recibe
+        `409 device-revoked`. Repetirlo desde el mismo dispositivo con el
+        mismo token, mientras no venció, devuelve la misma respuesta.
+
+        Un `404` **sin** `ErrorBody` (o con un `code` que el POS no conoce)
+        es un backend que no implementa el claim.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+        - name: X-Device-Id
+          in: header
+          required: true
+          schema: { type: string }
+          description: El `deviceId` de la terminal (el mismo de push y pull).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: Caja vinculada a este dispositivo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+        '400':
+          description: Falta `X-Device-Id` o el cuerpo no tiene `claimToken`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ErrorBody'
+                  - type: object
+                    properties:
+                      code: { type: string, enum: [invalid-request] }
+        '404':
+          description: |
+            `code: claim-not-found`: el token no existe. Sin cuerpo: el backend
+            no implementa el claim.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ErrorBody'
+                  - type: object
+                    properties:
+                      code: { type: string, enum: [claim-not-found] }
+        '410':
+          description: |
+            `code: claim-expired` (venció) o `claim-used` (ya lo canjeó otro
+            dispositivo). El POS pide un token nuevo; no reintenta solo.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ErrorBody'
+                  - type: object
+                    properties:
+                      code: { type: string, enum: [claim-expired, claim-used] }
+        '409':
+          $ref: '#/components/responses/IncompatibleContractOnly'
+        '503':
+          $ref: '#/components/responses/Maintenance'
+
+  /snapshot:
+    get:
+      operationId: getCashSnapshot
+      summary: El estado de la caja de la key, para retomarla (capacidad cash-snapshot)
+      x-pos-status: documented-not-implemented
+      description: |
+        Opcional (4.7.0): solo lo implementa un backend con la capacidad
+        `cash-snapshot`. Autenticado con la API key; devuelve el estado de
+        **la caja de esa key** (sucursal y punto de venta). Ver "Foto de la
+        caja" en la descripción general.
+
+        El POS lo pide al aplicar una conexión nueva (en particular después
+        de un `POST /claim`), si el backend declara la capacidad. Hidrata
+        con él lo local: sigue la numeración desde `lastTicket` y
+        `lastReceipt`, guarda `recentSales` y `recentCustomerPayments` para
+        el resumen, la reimpresión y la anulación, y toma el saldo de
+        efectivo de `cashAnchor` más `cashMovements`. Lo hidratado nunca
+        vuelve a viajar en un push: ya está en el backend.
+
+        Un `404` (o cualquier otro fallo) no corta el onboarding: el POS
+        sigue con la caja vacía, como sin la capacidad.
+
+        **Consistencia**: la foto es de un instante e incluye todo lo que el
+        backend ya aplicó de esa caja. Ventanas: `recentSales` y
+        `recentCustomerPayments`, lo creado (`createdAt`) en las últimas 24 h;
+        `cashMovements`, lo creado desde `cashAnchor.countedAt` (o todo, sin
+        ancla). El backend nunca trunca la foto.
+      parameters:
+        - $ref: '#/components/parameters/ContractVersion'
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: La foto de la caja.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashSnapshot'
+        '401':
+          description: API key inválida o revocada.
+        '404':
+          description: El backend no implementa la foto de la caja.
+        '409':
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/Maintenance'
 
@@ -404,6 +598,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
         - $ref: '#/components/parameters/ContractVersion'
+        - $ref: '#/components/parameters/DeviceId'
       requestBody:
         required: true
         content:
@@ -414,7 +609,7 @@ paths:
         '200':
           description: Lote recibido (o ya recibido antes, si el idempotency_id se repite).
         '409':
-          $ref: '#/components/responses/IncompatibleContract'
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/Maintenance'
 
@@ -471,6 +666,7 @@ paths:
         solo le muestra los avisos al humano.
       parameters:
         - $ref: '#/components/parameters/ContractVersion'
+        - $ref: '#/components/parameters/DeviceId'
       requestBody:
         required: true
         content:
@@ -485,7 +681,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PullBatchResponse'
         '409':
-          $ref: '#/components/responses/IncompatibleContract'
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/Maintenance'
 
@@ -503,6 +699,7 @@ paths:
         negativo sin `reference`.
       parameters:
         - $ref: '#/components/parameters/ContractVersion'
+        - $ref: '#/components/parameters/DeviceId'
       requestBody:
         required: true
         content:
@@ -517,7 +714,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountHoldResponse'
         '409':
-          $ref: '#/components/responses/IncompatibleContract'
+          $ref: '#/components/responses/Conflict'
         '503':
           $ref: '#/components/responses/Maintenance'
 
@@ -542,13 +739,26 @@ components:
       required: false
       schema:
         type: string
-        example: '4.6.0'
+        example: '4.7.0'
       description: |
-        Versión del contrato que habla el POS (4.6.0). El POS la manda en
+        Versión del contrato que habla el POS (4.7.0). El POS la manda en
         todos los requests. Un backend que no soporta ese major responde 409
         `IncompatibleContract` sin procesar nada (salvo `/info`, que nunca
         responde 409). Sin el header (un POS anterior a 4.0.0) queda a
         criterio del backend; se recomienda tratarlo igual.
+
+    DeviceId:
+      name: X-Device-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: |
+        4.7.0: el `deviceId` de la terminal (el mismo que viaja en push y
+        pull). El POS lo manda solo a un backend que declara `device-claim`.
+        Con él, el backend responde `409 device-revoked` si la caja de la
+        key está vinculada a otro dispositivo. Sin él (un POS anterior a
+        4.7.0), no valida nada.
 
   headers:
     RetryAfter:
@@ -578,32 +788,43 @@ components:
               - type: object
                 properties:
                   code: { type: string, enum: [maintenance] }
-    IncompatibleContract:
+    Conflict:
       description: |
-        El backend no habla la versión mayor del contrato que declaró el POS.
-        No procesó nada ni dio ack: no es un rechazo de contenido (el backend
-        nunca rechaza una venta), es un "no entiendo el idioma". Sin ack, el
-        lote queda congelado en el outbox del POS con su mismo
-        `idempotency_id` y se reenvía cuando el backend se actualice. Se
-        descartó aceptar y guardar en cuarentena con ack: el POS lo daría por
-        entregado y lo borraría a los 7 días.
+        Dos casos, por `code`; en los dos el backend no procesó nada ni dio
+        ack (un lote sigue congelado en el outbox del POS con su mismo
+        `idempotency_id`):
+
+          - `incompatible-contract`: el backend no habla la versión mayor
+            del contrato que declaró el POS. No es un rechazo de contenido
+            (el backend nunca rechaza una venta), es un "no entiendo el
+            idioma": el lote se reenvía cuando el backend se actualice. Se
+            descartó aceptar y guardar en cuarentena con ack: el POS lo daría
+            por entregado y lo borraría a los 7 días.
+          - `device-revoked` (4.7.0, solo con `device-claim` y con
+            `X-Device-Id`): la caja de la key está vinculada a otro
+            dispositivo. El POS deja de sincronizar y le ofrece al operador
+            bajar lo pendiente y desvincular la terminal.
       content:
         application/json:
           schema:
-            type: object
-            required: [code, contractVersion]
-            properties:
-              code: { type: string, enum: [incompatible-contract] }
-              contractVersion:
-                type: string
-                description: La versión del contrato que habla el backend.
+            oneOf:
+              - $ref: '#/components/schemas/IncompatibleContractBody'
+              - $ref: '#/components/schemas/DeviceRevokedBody'
+    IncompatibleContractOnly:
+      description: |
+        El backend no habla la versión mayor del contrato que declaró el POS
+        (ver `Conflict`). `POST /claim` nunca responde `device-revoked`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IncompatibleContractBody'
 
   schemas:
     BackendInfo:
       type: object
       required: [contractVersion, status]
       properties:
-        contractVersion: { type: string, example: '4.6.0' }
+        contractVersion: { type: string, example: '4.7.0' }
         status:
           type: string
           enum: [ok, maintenance]
@@ -613,7 +834,8 @@ components:
           items: { type: string, example: customer-payment-void }
           description: |
             4.4.0: lo que el backend implementa más allá del piso 4.0.0
-            (`demo-sessions`, `customer-payment-void`; `portal` desde 4.6.0).
+            (`demo-sessions`, `customer-payment-void`; `portal` desde 4.6.0;
+            `device-claim` y `cash-snapshot` desde 4.7.0).
             Ausente = ninguna. El POS ignora un nombre que no conoce.
         message:
           {
@@ -1171,11 +1393,138 @@ components:
       type: object
       required: [code]
       description: |
-        4.6.0: cuerpo de los errores `429` y `503`. El POS decide por `code`
-        e ignora un código que no conoce.
+        4.6.0: cuerpo de los errores `429` y `503`; 4.7.0 suma los de
+        `POST /claim` y `409 device-revoked`. El POS decide por `code` e
+        ignora un código que no conoce.
       properties:
         code: { type: string, example: maintenance }
         message: { type: string, description: Para mostrar en el POS. }
+
+    IncompatibleContractBody:
+      type: object
+      required: [code, contractVersion]
+      properties:
+        code: { type: string, enum: [incompatible-contract] }
+        contractVersion:
+          type: string
+          description: La versión del contrato que habla el backend.
+
+    DeviceRevokedBody:
+      description: '4.7.0: la caja de la key está vinculada a otro dispositivo.'
+      allOf:
+        - $ref: '#/components/schemas/ErrorBody'
+        - type: object
+          properties:
+            code: { type: string, enum: [device-revoked] }
+
+    ClaimRequest:
+      type: object
+      required: [claimToken]
+      properties:
+        claimToken:
+          type: string
+          description: El token que emitió el backend, sin modificar.
+
+    ClaimResponse:
+      type: object
+      required: [apiKey, branch, pointOfSale]
+      description: |
+        4.7.0: la conexión de la caja. El POS la usa como si hubiera llegado
+        un `#connect=` con `apiKey`: la sucursal y el punto de venta del
+        fragmento, si los trae, ganan sobre los de acá.
+      properties:
+        apiKey:
+          type: string
+          description: La API key de la caja, para el `Authorization` de todo request.
+        branch: { type: string, description: 'Sucursal de la caja.' }
+        pointOfSale: { type: string, description: 'Punto de venta de la caja.' }
+        company:
+          type: object
+          required: [name]
+          description: Opcional, como en `GET /info`.
+          properties:
+            name: { type: string }
+        register:
+          type: object
+          required: [name]
+          description: El nombre de la caja en el backend, para mostrarlo. Opcional.
+          properties:
+            name: { type: string, example: Caja 1 }
+
+    DocumentNumber:
+      type: object
+      required: [date, number]
+      description: Fecha local de la terminal y número en ese día, como `Sale.ticket`.
+      properties:
+        date: { type: string, format: date, example: '2026-11-19' }
+        number: { type: integer, minimum: 1, example: 12 }
+
+    CashAnchor:
+      type: object
+      required: [countedAt, amount]
+      description: |
+        El último arqueo que el backend conoce de la caja: el efectivo
+        contado en ese instante. El backend lo deduce, por ejemplo, del
+        último movimiento `count-adjustment` (`count.counted`).
+      properties:
+        countedAt: { type: string, format: date-time }
+        amount: { type: number, description: 'Efectivo contado, 2 decimales.' }
+
+    SnapshotSale:
+      description: Una venta (o anulación) de la caja, con su `origin`.
+      allOf:
+        - $ref: '#/components/schemas/Sale'
+        - type: object
+          properties:
+            origin: { $ref: '#/components/schemas/EventOrigin' }
+
+    SnapshotCustomerPayment:
+      allOf:
+        - $ref: '#/components/schemas/CustomerPayment'
+        - type: object
+          properties:
+            origin: { $ref: '#/components/schemas/EventOrigin' }
+
+    SnapshotCashMovement:
+      allOf:
+        - $ref: '#/components/schemas/CashMovement'
+        - type: object
+          properties:
+            origin: { $ref: '#/components/schemas/EventOrigin' }
+
+    CashSnapshot:
+      type: object
+      required: [recentSales, recentCustomerPayments, cashMovements]
+      description: |
+        4.7.0: el estado de la caja de la key (ver "Foto de la caja" en la
+        descripción general). Sin turnos. Un elemento mal formado se
+        descarta sin tirar la foto.
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+          description: El instante de la foto. Informativo.
+        lastTicket:
+          $ref: '#/components/schemas/DocumentNumber'
+        lastReceipt:
+          $ref: '#/components/schemas/DocumentNumber'
+        recentSales:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotSale' }
+          description: Ventas y anulaciones creadas en las últimas 24 h, más nuevas primero o en cualquier orden.
+        recentCustomerPayments:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotCustomerPayment' }
+          description: Cobranzas (y sus anulaciones) creadas en las últimas 24 h.
+        cashAnchor:
+          $ref: '#/components/schemas/CashAnchor'
+        cashMovements:
+          type: array
+          items: { $ref: '#/components/schemas/SnapshotCashMovement' }
+          description: |
+            Ingresos, egresos y ajustes de arqueo creados desde
+            `cashAnchor.countedAt` (el ajuste del propio arqueo incluido), o
+            todos los de la caja sin ancla.
 
     UnknownTemplate:
       type: object

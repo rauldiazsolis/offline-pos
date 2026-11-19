@@ -22,7 +22,7 @@ además un `CLAUDE.md` de una línea (`@AGENTS.md`) para que Claude Code los car
 |---|---|
 | Outbox: identidad de eventos y del dispositivo, push y pull por lotes, reaplicación, limpieza a 7 días, cadencias, foto completa, log de sync y `/DIAGNOSTICO` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) (también rige su código en `domain/` y `storage/`) |
 | Cuenta corriente: la reserva de crédito síncrona | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
-| Contrato: qué trajo cada versión (v3, 4.0.0 a 4.6.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
+| Contrato: qué trajo cada versión (v3, 4.0.0 a 4.7.0), estado del backend, capacidades y avisos del backend, puerto `Connector`, config en `localStorage` | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md) |
 | Portal (#179): la capacidad, `POST /portal-links` y sus errores | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el comando, el botón y la pestaña en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Onboarding de demo: link de demo, `POST /demo-sessions`, `wipe_key`, vuelta con `#connect`, excepción de borrado, demo revocada | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); marca DEMO, `/ALTA`, `/DEMO_NUEVA`, "Abrir una demo" y el wizard precargado en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
 | Ciclo de vida de la conexión: aplicar, sin sync con `/CONFIG` abierto | [`src/sync/AGENTS.md`](./src/sync/AGENTS.md); el wizard en [`src/ui/AGENTS.md`](./src/ui/AGENTS.md) |
@@ -282,7 +282,10 @@ sobrevivir a un refresh/crash de esta terminal, nunca viajar a ningún lado.
 ## Connector API
 
 El POS no tiene lógica de ningún backend particular, solo del contrato (REST/JSON versionado,
-documentado en `docs/connector-api.openapi.yaml`, **versión 4.6.0** desde #178 (capacidad
+documentado en `docs/connector-api.openapi.yaml`, **versión 4.7.0** desde #230 (capacidades
+`device-claim`, con `POST /claim`, `X-Device-Id` y el `409 device-revoked`, y `cash-snapshot`, con
+`GET /snapshot`; spec `docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`,
+en curso); la 4.6.0 es de #178 (capacidad
 `portal` con `POST /portal-links`, `ErrorBody`, el 503 de mantenimiento y el 429/503 de las demos,
 spec `docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`); la 4.5.0 es de #193 (`company`
 opcional en `GET /info`, spec `docs/superpowers/specs/2026-10-03-empresa-sucursal-y-caja-design.md`);

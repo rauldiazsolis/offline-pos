@@ -7,7 +7,7 @@ cuando vuelve la conexión. Se opera 100% con teclado (y también con mouse).
 El POS es **estático y genérico**: son archivos HTML, JS y CSS sin servidor propio, y no conoce
 ningún backend en particular. Se conecta a cualquier sistema (ERP, e-commerce, facturación,
 inventario) que implemente el **Connector API**, un contrato REST/JSON versionado. Esta guía
-acompaña a la versión del contrato **4.6.0**; el detalle de cada operación está en
+acompaña a la versión del contrato **4.7.0**; el detalle de cada operación está en
 [`connector-api.openapi.yaml`](../connector-api.openapi.yaml).
 
 ## Probarlo en 5 minutos
@@ -103,13 +103,17 @@ Las operaciones:
 | `POST /account-holds` | La única operación síncrona: reserva de crédito para una venta a cuenta corriente.                                                                                                                                                                                        |
 | `POST /demo-sessions` | Opcional: arranca una demo (ver la sección anterior).                                                                                                                                                                                                                     |
 | `POST /portal-links`  | Opcional: la URL para abrir el backend desde el POS (capacidad `portal`, ver más abajo).                                                                                                                                                                                  |
+| `POST /claim`         | Opcional: canjea un código de un solo uso por la conexión de una caja y la vincula a ese dispositivo (capacidad `device-claim`, ver más abajo).                                                                                                                           |
+| `GET /snapshot`       | Opcional: la foto de la caja, para que una terminal nueva siga donde quedó la anterior (capacidad `cash-snapshot`, ver más abajo).                                                                                                                                        |
 
 Todo request del POS lleva:
 
-- `Authorization: Bearer <apiKey>` (salvo `POST /demo-sessions`). Cómo se emite esa API key lo
-  define cada backend.
+- `Authorization: Bearer <apiKey>` (salvo `POST /demo-sessions` y `POST /claim`). Cómo se emite
+  esa API key lo define cada backend.
 - `X-POS-Contract-Version: <versión>`. Si el major no es uno que el backend soporta, responde `409`
   sin procesar nada; nada se pierde, el lote queda en la terminal hasta que el backend se actualice.
+- `X-Device-Id: <deviceId>`, solo si el backend declara `device-claim` (y siempre en `POST /claim`).
+  Un backend que no la declara nunca lo recibe, así que no tiene que permitirlo por CORS.
 
 El POS corre en otro origen que el backend: el backend tiene que contestar **CORS** (incluidos
 `Authorization`, `Idempotency-Key` y `X-POS-Contract-Version` en los headers permitidos). Si el
@@ -139,11 +143,13 @@ piso 4.0.0**. Un agregado nuevo del contrato no obliga a todos los backends a ac
 Lo que un backend hace más allá del piso lo declara como **capacidad** en `GET /info`
 (`capabilities`):
 
-| Capacidad               | Qué habilita                                                |
-| ----------------------- | ----------------------------------------------------------- |
-| `demo-sessions`         | El backend implementa `POST /demo-sessions`.                |
-| `customer-payment-void` | El POS puede anular cobranzas.                              |
-| `portal`                | El POS muestra un comando y un botón para abrir el backend. |
+| Capacidad               | Qué habilita                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `demo-sessions`         | El backend implementa `POST /demo-sessions`.                                                     |
+| `customer-payment-void` | El POS puede anular cobranzas.                                                                   |
+| `portal`                | El POS muestra un comando y un botón para abrir el backend.                                      |
+| `device-claim`          | Una caja se vincula a un dispositivo con un código de un solo uso, y el anterior queda revocado. |
+| `cash-snapshot`         | Una terminal nueva retoma la caja: numeración, ventas recientes y efectivo.                      |
 
 El POS nunca deduce una capacidad de la versión, e ignora una capacidad que no conoce. Las reglas de
 evolución (campos y valores desconocidos, fotos completas, numeración con huecos) están en la sección
@@ -173,6 +179,55 @@ un usuario con su cuenta.
 
 El demo-backend lo implementa con `/PANEL`: un link de un solo uso que vence a los 60 segundos y
 muestra con qué caja se entró.
+
+## Vincular una caja a un dispositivo y retomarla
+
+Dos capacidades opcionales (4.7.0) para cambiar de equipo sin perder la caja.
+
+**`device-claim`**: en vez de mostrarle la API key al comercio, el backend emite un **código de un
+solo uso** (`claimToken`) para una caja, por ejemplo como un link al POS con la conexión en el
+fragmento:
+
+    <url del POS>#connect=<base64url de { baseUrl, claimToken, branch?, pointOfSale? }>
+
+El POS lo canjea con `POST /claim` (sin `Authorization`, con `X-Device-Id` y
+`{ "claimToken": "…" }`) y recibe `200 { apiKey, branch, pointOfSale, company?, register? }`. Recién
+entonces prueba y guarda la conexión. Errores, con `{ code, message? }`: `400 invalid-request`,
+`404 claim-not-found` y `410 claim-expired` o `claim-used`.
+
+- El código es de un solo uso y vence pronto. Repetir el canje desde el mismo `X-Device-Id` devuelve
+  lo mismo (por si se perdió la respuesta); desde otro, `410 claim-used`.
+- Canjear un código nuevo de la misma caja desde otro equipo la vincula a ese y **revoca al
+  anterior**: sus requests autenticados con su `X-Device-Id` reciben
+  `409 { "code": "device-revoked", "message": "…" }` sin procesar nada. El POS revocado deja de
+  sincronizar, avisa que la caja se vinculó en otro dispositivo y deja bajar lo pendiente.
+- Un request **sin** `X-Device-Id` (un POS anterior a 4.7.0) no se valida. `GET /info` nunca
+  responde `409`.
+- Hay que sumar `X-Device-Id` a los headers permitidos por CORS.
+- El `#connect=` con `apiKey` sigue funcionando igual.
+
+**`cash-snapshot`**: `GET /snapshot` devuelve el estado de la caja de la key, y el POS lo pide al
+conectar una caja nueva:
+
+```json
+{
+  "lastTicket": { "date": "2026-11-19", "number": 12 },
+  "lastReceipt": { "date": "2026-11-19", "number": 3 },
+  "recentSales": [],
+  "recentCustomerPayments": [],
+  "cashAnchor": { "countedAt": "2026-11-19T08:00:00Z", "amount": 15000 },
+  "cashMovements": []
+}
+```
+
+- `lastTicket` y `lastReceipt`: los últimos números de ticket y de recibo, para que la numeración
+  siga.
+- `recentSales` y `recentCustomerPayments`: lo creado en las últimas 24 h (con anulaciones), para el
+  resumen del día, reimprimir y anular.
+- `cashAnchor`: el último arqueo que el backend conoce (lo contado), y `cashMovements`, los
+  movimientos de caja desde entonces. Sin ancla, todos los de la caja con base 0. No hay turnos.
+- Lo que viene en la foto ya está en el backend: el POS nunca lo vuelve a mandar.
+- Un `404` (o la capacidad ausente) significa "sin foto": el POS arranca la caja vacía, sin error.
 
 ## Google Sheets: un backend sin servidor
 

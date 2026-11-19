@@ -183,6 +183,22 @@ especial, es un evento más del lote, igual que documenta §6 para el vencimient
 
 ## Contrato: qué trajo cada versión
 
+**Contrato 4.7.0 (#230)** — aditivo (spec
+`docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`), en curso en la
+rama `feat/device-claim-and-snapshot`:
+- **Capacidad `device-claim`**: `POST /claim` canjea un `claimToken` de un solo uso por la conexión
+  de una caja (`sync/claim-schema.ts`) y la vincula a ese `X-Device-Id`. Un claim desde otro equipo
+  revoca al anterior: sus requests responden `409 { code: 'device-revoked', message? }`
+  (`deviceRevokedBodySchema`, junto al de contrato en `sync/connector.ts`; se distinguen por
+  `code`), traducido a `sync/device-revoked`. `X-Device-Id` (`DEVICE_ID_HEADER`) va solo en
+  `/claim` y a backends con la capacidad: un header nuevo dispara el preflight y un backend que no lo
+  permite rechazaría todo. El `#connect=` acepta `claimToken` en vez de `apiKey`.
+- **Capacidad `cash-snapshot`**: `GET /snapshot` (`sync/snapshot-schema.ts`, tolerante por
+  elemento, a tipos del dominio) con `lastTicket`, `lastReceipt`, `recentSales` y
+  `recentCustomerPayments` de 24 h, `cashAnchor?` y `cashMovements` desde el ancla. Sin turnos.
+- Hasta ahora solo el contrato y los tipos (bloque 1); el demo-backend y el uso en el POS llegan en
+  los bloques 2 y 3.
+
 **Contrato 4.6.0 (#178)** — aditivo (spec
 `docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`):
 - **Capacidad `portal`**: `GET /info` la declara con `portal: { command, label }` y
