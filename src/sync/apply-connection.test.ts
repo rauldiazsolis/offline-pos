@@ -13,6 +13,7 @@ import {
   backendPortalSignal,
   connectionStateSignal,
   demoRevokedSignal,
+  deviceRevokedSignal,
   syncStatusSignal,
   terminalIdentitySignal,
 } from '../ui/state/sync.ts';
@@ -178,6 +179,16 @@ describe('applyConnection', () => {
 
     expect(demoRevokedSignal.value).toBeNull();
     expect(localStorage.getItem('offline-pos:demo-revoked')).toBeNull();
+  });
+
+  it('deja atrás una caja vinculada en otro dispositivo (4.7.0, #230)', async () => {
+    deviceRevokedSignal.value = { at: now };
+    localStorage.setItem('offline-pos:device-revoked', JSON.stringify({ at: now }));
+
+    await applyConnection({ candidate, snapshot, local: 'wipe', originChanged: true, now });
+
+    expect(deviceRevokedSignal.value).toBeUndefined();
+    expect(localStorage.getItem('offline-pos:device-revoked')).toBeNull();
   });
 
   it('fija el tipo del conector activo (de ahí salen los comandos de la barra)', async () => {

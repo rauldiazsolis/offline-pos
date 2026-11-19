@@ -23,7 +23,7 @@ import {
   syncLogSignal,
   syncStatusSignal,
 } from '../ui/state/sync.ts';
-import { demoRevokedSignal } from '../ui/state/sync.ts';
+import { demoRevokedSignal, deviceRevokedSignal } from '../ui/state/sync.ts';
 import { getLastCleanup } from './cleanup-schedule.ts';
 import { saveSyncConfig } from './config.ts';
 import type { BatchLotStatus } from './connector.ts';
@@ -1796,6 +1796,91 @@ describe('demo revocada (#176)', () => {
     await runPushCycle();
 
     expect(demoRevokedSignal.value).not.toBeNull();
+  });
+});
+
+describe('caja vinculada en otro dispositivo (4.7.0, #230)', () => {
+  beforeEach(() => {
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com', verifiedAt: now });
+  });
+
+  afterEach(() => {
+    deviceRevokedSignal.value = undefined;
+  });
+
+  function revokedConnector() {
+    const pushBatch = vi.fn(() =>
+      Promise.resolve(err('sync/device-revoked', { message: 'Otro equipo.' })),
+    );
+    return { pushBatch, connector: fakeConnector({ pushBatch }) };
+  }
+
+  it('un 409 device-revoked en el push marca la caja; el lote queda congelado, sin ack', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const { connector } = revokedConnector();
+
+    const summary = await pushPendingLot(connector, now);
+
+    expect(summary).toEqual({ attempted: 1, failed: true });
+    expect(deviceRevokedSignal.value?.message).toBe('Otro equipo.');
+    expect(deviceRevokedSignal.value?.at).toMatch(/^\d{4}-/);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+    expect(getCurrentPushLot()?.eventIds).toEqual(['sale-1']);
+    expect(getAwaitingLots()).toEqual([]);
+  });
+
+  it('un 409 device-revoked en el pull también la marca', async () => {
+    const connector = fakeConnector({
+      pullBatch: () => Promise.resolve(err('sync/device-revoked', {})),
+    });
+
+    await runPullCycle(connector, now);
+
+    expect(deviceRevokedSignal.value).not.toBeUndefined();
+    expect(deviceRevokedSignal.value).not.toHaveProperty('message');
+  });
+
+  it('con la marca no corre push, pull ni /info', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    deviceRevokedSignal.value = { at: now };
+    setBackendCheckDue(true);
+    const calls = stubRestFetch();
+
+    await runPushThenPull();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('/SINCRONIZAR no la borra ni manda nada', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    deviceRevokedSignal.value = { at: now };
+    const calls = stubRestFetch();
+
+    await syncNow();
+
+    expect(deviceRevokedSignal.value).toEqual({ at: now });
+    expect(calls).toEqual([]);
+    expect((await db.outbox.get('sale-1'))?.status).toBe('pending');
+  });
+
+  it('con el conector REST real: el 409 frena el ciclo y el siguiente ya no sale', async () => {
+    await db.outbox.add(pendingSaleEvent());
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        calls.push(`${init?.method ?? 'GET'} ${new URL(url).pathname}`);
+        return Promise.resolve(
+          new Response(JSON.stringify({ code: 'device-revoked' }), { status: 409 }),
+        );
+      }),
+    );
+
+    await runPushCycle();
+    await runPushThenPull();
+
+    expect(calls).toEqual(['POST /sync/push']);
+    expect(deviceRevokedSignal.value).not.toBeUndefined();
   });
 });
 

@@ -19,6 +19,7 @@ import { customerBalancesSignal } from '../state/customer-balance.ts';
 import { printerConfigSignal, setReceiptPrinter } from '../state/printer.ts';
 import { receiptSignal } from '../state/receipt.ts';
 import { activeScreenSignal } from '../state/screen.ts';
+import { deviceRevokedSignal } from '../state/sync.ts';
 import {
   accountBalancePreview,
   amountTendered,
@@ -337,6 +338,59 @@ describe('cuenta corriente', () => {
       expect(receiptSale()?.payments).toEqual([{ method: 'account', amount: 200 }]);
     } finally {
       setTrainingModeForTests(null);
+    }
+  });
+
+  it('con la caja vinculada en otro dispositivo, no pide el hold: evalúa offline (4.7.0, #230)', async () => {
+    attachedCustomerSignal.value = customer;
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+    setOnline(true);
+    deviceRevokedSignal.value = { at: '2026-11-19T10:00:00.000Z' };
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    fakeCustomerRepository({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    try {
+      checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+      await submitCheckout();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(receiptSale()?.payments).toEqual([{ method: 'account', amount: 200 }]);
+    } finally {
+      deviceRevokedSignal.value = undefined;
+    }
+  });
+
+  it('un 409 device-revoked al pedir el hold cae a la evaluación offline (4.7.0, #230)', async () => {
+    attachedCustomerSignal.value = customer;
+    saveSyncConfig({ type: 'rest', baseUrl: 'https://api.example.com' });
+    setOnline(true);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ code: 'device-revoked' }), { status: 409 })),
+      ),
+    );
+    fakeCustomerRepository({
+      customerId: 'c1',
+      creditLimit: 1000,
+      margin: 0,
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    try {
+      checkoutBuffersSignal.value = { ...emptyBuffers(), account: '200' };
+      await submitCheckout();
+
+      expect(receiptSale()?.payments).toEqual([{ method: 'account', amount: 200 }]);
+      expect(deviceRevokedSignal.value).not.toBeUndefined();
+    } finally {
+      deviceRevokedSignal.value = undefined;
     }
   });
 

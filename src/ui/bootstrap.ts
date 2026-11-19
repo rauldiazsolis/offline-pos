@@ -10,6 +10,7 @@ import { restoreBackendCompany } from '../sync/backend-company.ts';
 import { restoreBackendPortal } from '../sync/backend-portal.ts';
 import { restoreBackendNotices } from '../sync/backend-notices.ts';
 import { restoreDemoRevoked } from '../sync/demo-revoked.ts';
+import { restoreDeviceRevoked } from '../sync/device-revoked.ts';
 import { startSyncEngine } from '../sync/engine.ts';
 import { resolveDeviceIdentity } from '../sync/terminal-identity.ts';
 import { hasOnboardingParams, stripOnboardingParams } from '../sync/demo-link.ts';
@@ -138,6 +139,8 @@ export async function bootstrap(): Promise<void> {
   restoreBackendNotices();
   // #176: una demo revocada se sigue mostrando aunque se arranque sin red.
   restoreDemoRevoked();
+  // 4.7.0 (#230): la caja vinculada en otro dispositivo, también sin red.
+  restoreDeviceRevoked();
 
   if (onboarding.kind === 'review') {
     await openWizardWithCandidate(onboarding.candidate, onboarding.notice);

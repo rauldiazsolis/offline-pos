@@ -61,7 +61,7 @@ Spec: `docs/superpowers/specs/2026-10-04-modo-entrenamiento-design.md`; el princ
   `operationalKey('<nombre>')`, que en entrenamiento es `storageKey('training:<nombre>')`: los
   cursores, `sync:last-full`, el estado de lotes, `cleanup:last-run` y los contadores de ticket y
   recibo (así la numeración real no se consume). Lo demás (config, device-id, capacidades, empresa,
-  avisos, portal, demo revocada, impresora) se comparte. `storage-keys.test.ts` acepta las dos formas.
+  avisos, portal, demo revocada, caja revocada de 4.7.0, impresora) se comparte. `storage-keys.test.ts` acepta las dos formas.
 - **Entrar y salir** (`training-copy.ts`): `prepareTrainingDatabase` borra una base de entrenamiento
   vieja y copia, en una transacción, `TRAINING_COPIED_TABLES` (catálogo, stock, clientes, cuentas,
   saldos y conceptos; nunca ventas, cobranzas, movimientos, caja, outbox ni venta en curso);
@@ -110,6 +110,19 @@ compartido con `/DEMO_RESET`.
   `AccountMovement` es positivo y el saldo sube. Índice `voidsPaymentId` en Dexie v9 ("¿ya tiene
   anulación?" sin recorrer la tabla); `loadVoidedPaymentIds` y `loadPaymentVoidOriginals` los usan
   `/ANULAR` y `/RESUMEN`.
+
+## La foto de la caja (4.7.0, #230)
+
+- `hydrate-snapshot.ts::hydrateSnapshot` guarda en **una** transacción las ventas, cobranzas y
+  movimientos de caja de `GET /snapshot`, y con `cashAnchor` un arqueo local (`counted` =
+  `expected` = `amount`, sin `adjustmentId`). **Nada entra al outbox** ni toca stock, saldos o
+  movimientos de cuenta: ya están en el backend, el pull los trae aplicados y la reaplicación sale
+  solo del outbox. Los instantes se pasan a ISO UTC (`toISOString`): los índices `createdAt` y el
+  saldo de efectivo comparan como texto. Solo si ventas, cobranzas, movimientos y arqueos están
+  vacíos; si no, `skipped` sin tocar nada. Un id repetido en la foto no pisa nada.
+- Lo hidratado se limpia a los 7 días como lo sincronizado (un evento ausente cuenta como enviado),
+  aparece en `/ANULAR` y `/RESUMEN` y se anula como lo propio (la anulación sí tiene su evento).
+  Sin `cashAnchor` la foto trae todo y, como sin arqueo, no se limpia hasta el primer arqueo.
 
 ## Fixtures
 

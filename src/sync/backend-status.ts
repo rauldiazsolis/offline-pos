@@ -13,6 +13,7 @@ import { saveBackendPortal } from './backend-portal.ts';
 import { loadSyncConfig } from './config.ts';
 import type { BackendInfo, Connector } from './connector.ts';
 import { isDemoRevokedFailure, markDemoRevoked } from './demo-revoked.ts';
+import { markDeviceRevoked } from './device-revoked.ts';
 import { logSyncAttempt } from './sync-log.ts';
 
 /**
@@ -73,9 +74,14 @@ export async function refreshBackendStatus(
  * Después de un fallo de sync: un `409 incompatible-contract` fija el estado
  * ya; cualquier otro fallo que no sea de red agenda un `getInfo` antes del
  * próximo ciclo (puede ser que el backend haya entrado en mantenimiento). Con
- * la terminal en demo, un 401/403 además marca la demo revocada (#176).
+ * la terminal en demo, un 401/403 además marca la demo revocada (#176). Un `409 device-revoked`
+ * (4.7.0, #230) marca la caja vinculada en otro dispositivo: no dice nada del estado del backend.
  */
 export function noteSyncFailure(failure: Failure): void {
+  if (failure.error === 'sync/device-revoked') {
+    markDeviceRevoked(new Date().toISOString(), failure.meta.message);
+    return;
+  }
   if (isDemoRevokedFailure(failure, loadSyncConfig())) {
     markDemoRevoked(new Date().toISOString());
   }

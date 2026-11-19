@@ -8,12 +8,14 @@ import {
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
+  deviceRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
   pushLotIssuesSignal,
   syncLogSignal,
   type BackendStatus,
+  type DeviceRevoked,
   type SyncLogEntry,
 } from '../ui/state/sync.ts';
 import { appUpdateSignal, serviceWorkerStateSignal } from '../ui/state/app-update.ts';
@@ -61,6 +63,11 @@ export type SyncDiagnostics = {
   storageNamespace: string;
   /** Desde cuándo la demo está revocada (#176); `null` = no lo está. */
   demoRevokedAt: string | null;
+  /**
+   * La caja vinculada en otro dispositivo (4.7.0, #230): desde cuándo y el mensaje del backend.
+   * Ausente = no lo está (opcional para no tocar a quien arma la foto a mano).
+   */
+  deviceRevoked?: DeviceRevoked;
   /** Desde cuándo está prendido el modo entrenamiento (#177); `null` = apagado. */
   trainingSince: string | null;
   /** Si el POS abre sin red: el estado del service worker (#54). */
@@ -88,6 +95,7 @@ function currentOfflineStatus(): OfflineStatus {
 }
 
 export function collectDiagnostics(): SyncDiagnostics {
+  const deviceRevoked = deviceRevokedSignal.value;
   return {
     config: loadSyncConfig(),
     lockHeld: isSyncLockHeld(),
@@ -108,6 +116,7 @@ export function collectDiagnostics(): SyncDiagnostics {
     posVersion: __POS_VERSION__,
     storageNamespace: STORAGE_NAMESPACE,
     demoRevokedAt: demoRevokedSignal.value,
+    ...(deviceRevoked !== undefined ? { deviceRevoked } : {}),
     trainingSince: trainingMark()?.startedAt ?? null,
     offline: currentOfflineStatus(),
   };

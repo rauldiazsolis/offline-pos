@@ -14,6 +14,10 @@ import {
   type DemoEntry,
 } from '../sync/demo-link.ts';
 import { requestDemoSession, type DemoSession } from '../sync/demo-session.ts';
+import { retakeCashFromSnapshot } from '../sync/cash-snapshot.ts';
+import type { ClaimResponse } from '../sync/claim-schema.ts';
+import { requestClaim } from '../sync/device-claim.ts';
+import { getDeviceId } from '../sync/terminal-identity.ts';
 import { consumeWipeKey } from '../sync/wipe-key.ts';
 import { describeError } from './errors.ts';
 
@@ -25,6 +29,9 @@ import { describeError } from './errors.ts';
  * pide confirmación (`confirm`, #176) y la demo se pide recién después (`startDemo`); (b) la vuelta
  * del alta con un `wipe_key` emitido por esta terminal, o sin datos del usuario. La vuelta de una
  * planilla de Google Sheets ("Conectar el POS", #133) nunca borra: siempre precarga el wizard.
+ * La vuelta con un código de vinculación (`claimToken`, 4.7.0, #230) canjea el código con
+ * `POST /claim` antes de guardar nada y después sigue el mismo camino que la del alta; con
+ * `cash-snapshot`, además retoma la caja (`retakeCashFromSnapshot`).
  */
 
 export type OnboardingOutcome =
@@ -43,6 +50,10 @@ export type OnboardingDeps = {
   probeConnection: (config: SyncConfig) => Promise<Result<ProbeSnapshot>>;
   applyConnection: (params: ApplyConnectionParams) => Promise<Result<void>>;
   consumeWipeKey: (key: string | undefined, now: Date) => boolean;
+  /** 4.7.0 (#230): `POST /claim` con el id de este dispositivo. */
+  requestClaim: (baseUrl: string, claimToken: string) => Promise<Result<ClaimResponse>>;
+  /** 4.7.0 (#230): la foto de la caja después de aplicar un claim; nunca falla. */
+  retakeCash: (config: SyncConfig, capabilities: readonly string[] | undefined) => Promise<unknown>;
   now: () => Date;
 };
 
@@ -54,6 +65,9 @@ export const defaultOnboardingDeps: OnboardingDeps = {
   probeConnection: (config) => probeConnection(config),
   applyConnection,
   consumeWipeKey,
+  requestClaim: (baseUrl, claimToken) =>
+    withTimeout(requestClaim(baseUrl, claimToken, getDeviceId()), PROBE_TIMEOUT_MS),
+  retakeCash: retakeCashFromSnapshot,
   now: () => new Date(),
 };
 
@@ -174,27 +188,92 @@ async function handleReturn(
   if (back.value.type === 'google-sheets') {
     return handleSheetsReturn(back.value, context, deps);
   }
+  if (back.value.type === 'rest-claim') {
+    return handleClaimReturn(back.value, context, deps);
+  }
   const { wipeKey, type, ...connection } = back.value;
   const candidate: SyncConfig = { type, ...connection, ...keptLocale(context.config) };
+  return applyReturnedConnection(candidate, wipeKey, context, deps, ALTA_TEXTS);
+}
+
+/** Los textos de una vuelta REST: la del alta o la de un código de vinculación. */
+type ReturnTexts = { review: string; probeFailed: string };
+
+const ALTA_TEXTS: ReturnTexts = {
+  review:
+    'Volviste del alta. Esta terminal tiene datos locales: revisá la conexión y elegí qué hacer con ellos.',
+  probeFailed: 'No se pudo probar la conexión del alta',
+};
+
+const CLAIM_TEXTS: ReturnTexts = {
+  review:
+    'La caja quedó vinculada a este equipo. Esta terminal tiene datos locales: revisá la conexión y elegí qué hacer con ellos.',
+  probeFailed: 'La caja quedó vinculada a este equipo, pero no se pudo probar la conexión',
+};
+
+/**
+ * La vuelta REST, con la conexión ya armada (del fragmento o del claim): con el `wipe_key` o sin
+ * datos del usuario, prueba y aplica borrando; si no, o si la prueba falla, el wizard precargado.
+ * `retakeCash` (solo la del claim): después de aplicar, la foto de la caja.
+ */
+async function applyReturnedConnection(
+  candidate: SyncConfig,
+  wipeKey: string | undefined,
+  context: OnboardingContext,
+  deps: OnboardingDeps,
+  texts: ReturnTexts,
+  options: { retakeCash?: boolean } = {},
+): Promise<OnboardingOutcome> {
   // El `wipe_key` se consume siempre que venga (es de un solo uso), aunque no haga falta.
   const authorized = deps.consumeWipeKey(wipeKey, deps.now()) || !context.hasUserData;
   if (!authorized) {
-    return {
-      kind: 'review',
-      candidate,
-      notice:
-        'Volviste del alta. Esta terminal tiene datos locales: revisá la conexión y elegí qué hacer con ellos.',
-    };
+    return { kind: 'review', candidate, notice: texts.review };
   }
   const applied = await probeAndWipe(candidate, deps, deps.now().toISOString());
   if (!applied.ok) {
     return {
       kind: 'review',
       candidate,
-      notice: sentence(`No se pudo probar la conexión del alta: ${describeError(applied)}`),
+      notice: sentence(`${texts.probeFailed}: ${describeError(applied)}`),
     };
   }
+  if (options.retakeCash === true) {
+    await deps.retakeCash(candidate, applied.value.capabilities);
+  }
   return { kind: 'applied' };
+}
+
+/**
+ * La vuelta con un código de vinculación (4.7.0, #230): `POST /claim` antes de guardar nada. Si
+ * falla (código inexistente, vencido o usado, backend sin claim, sin red), no se toca nada. Con la
+ * key recibida, el mismo camino que la vuelta del alta; la sucursal y la caja del fragmento ganan
+ * sobre las de la respuesta. Si termina en el wizard, la key ya se canjeó: va precargada en la
+ * conexión (un segundo canje del mismo código desde este equipo devolvería lo mismo, pero no hace
+ * falta). Con `cash-snapshot`, después de aplicar se retoma la caja.
+ */
+async function handleClaimReturn(
+  back: Extract<ConnectReturn, { type: 'rest-claim' }>,
+  context: OnboardingContext,
+  deps: OnboardingDeps,
+): Promise<OnboardingOutcome> {
+  const claim = await deps.requestClaim(back.baseUrl, back.claimToken);
+  if (!claim.ok) {
+    return {
+      kind: 'failed',
+      notice: sentence(`No se pudo vincular la caja: ${describeError(claim)}`),
+    };
+  }
+  const candidate: SyncConfig = {
+    type: 'rest',
+    baseUrl: back.baseUrl,
+    apiKey: claim.value.apiKey,
+    branch: back.branch ?? claim.value.branch,
+    pointOfSale: back.pointOfSale ?? claim.value.pointOfSale,
+    ...keptLocale(context.config),
+  };
+  return applyReturnedConnection(candidate, back.wipeKey, context, deps, CLAIM_TEXTS, {
+    retakeCash: true,
+  });
 }
 
 /**
@@ -231,20 +310,22 @@ async function handleSheetsReturn(
   return { kind: 'applied' };
 }
 
+/** Prueba y aplica borrando; devuelve la foto de la prueba (sus capacidades, para la caja). */
 async function probeAndWipe(
   candidate: SyncConfig,
   deps: OnboardingDeps,
   now: string,
-): Promise<Result<void>> {
+): Promise<Result<ProbeSnapshot>> {
   const probe = await deps.probeConnection(candidate);
   if (!probe.ok) {
     return probe;
   }
-  return deps.applyConnection({
+  const applied = await deps.applyConnection({
     candidate,
     snapshot: probe.value,
     local: 'wipe',
     originChanged: true,
     now,
   });
+  return applied.ok ? probe : applied;
 }

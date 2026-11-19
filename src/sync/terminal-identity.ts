@@ -7,11 +7,12 @@ import { loadSyncConfig, saveSyncConfig, type SyncConfig } from './config.ts';
 import { clearSyncCursors } from './cursor.ts';
 import { clearPushLotState } from './push-lot.ts';
 import { storageKey } from '../storage/storage-namespace.ts';
+import { getDeviceId, peekDeviceId, setResolvedDeviceId } from './device-id.ts';
+
+// El id en memoria vive en `device-id.ts` (sin dependencias, 4.7.0, #230); acá, su ciclo de vida.
+export { getDeviceId, peekDeviceId };
 
 export const DEVICE_ID_KEY = storageKey('device-id');
-
-/** Id resuelto al arrancar (`resolveDeviceIdentity`); nunca se crea después. */
-let cachedDeviceId: string | undefined;
 
 export type IdentityResolution =
   | { status: 'existing' }
@@ -54,7 +55,7 @@ async function hasAnyLocalData(): Promise<boolean> {
 export async function resolveDeviceIdentity(): Promise<IdentityResolution> {
   const stored = readStoredDeviceId();
   if (stored !== undefined) {
-    cachedDeviceId = stored;
+    setResolvedDeviceId(stored);
     return { status: 'existing' };
   }
   // #177: sin id con la marca de entrenamiento, primero se sale del entrenamiento: el borrado de
@@ -77,32 +78,13 @@ export async function resolveDeviceIdentity(): Promise<IdentityResolution> {
 
   const created = crypto.randomUUID();
   storeDeviceId(created);
-  cachedDeviceId = created;
+  setResolvedDeviceId(created);
   return { status: 'created', wipedLocalData };
-}
-
-/**
- * Id de dispositivo: viaja una vez por request de push y de pull (contrato
- * v3). Nunca crea uno: si alguien borra la clave a mitad de sesión, la
- * terminal sigue con el id en memoria hasta recargar, y recién ahí
- * `resolveDeviceIdentity` aplica el ciclo de vida. Llamarlo antes de resolver
- * es un bug (invariante), no un error de negocio.
- */
-export function getDeviceId(): string {
-  if (cachedDeviceId === undefined) {
-    throw new Error('getDeviceId() antes de resolveDeviceIdentity()');
-  }
-  return cachedDeviceId;
-}
-
-/** Para `pos.deviceId()`, que existe antes del arranque: `null` si todavía no se resolvió. */
-export function peekDeviceId(): string | null {
-  return cachedDeviceId ?? null;
 }
 
 /** Solo tests (`src/test/setup.ts`): fija o limpia el id en memoria. */
 export function setDeviceIdForTests(id: string | undefined): void {
-  cachedDeviceId = id;
+  setResolvedDeviceId(id);
 }
 
 /** Sucursal y punto de venta actuales de `/CONFIG`, para estampar en un evento al encolarlo. */

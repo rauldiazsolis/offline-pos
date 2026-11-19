@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { backendCapabilitiesSignal, deviceRevokedSignal } from '../ui/state/sync.ts';
 import { requestPortalLink } from './portal-link.ts';
 
 const config = { type: 'rest' as const, baseUrl: 'https://b.x', apiKey: 'k1' };
@@ -15,6 +16,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  backendCapabilitiesSignal.value = undefined;
+  deviceRevokedSignal.value = undefined;
 });
 
 describe('requestPortalLink (4.6.0, #179)', () => {
@@ -158,5 +161,32 @@ describe('requestPortalLink con el puente de Google Sheets (4.6.0)', () => {
     fetchMock.mockResolvedValue(json(200, { ok: true, data: { url: 'http://otro.x/planilla' } }));
 
     expect(await requestPortalLink(sheets)).toMatchObject({ error: 'sync/invalid-payload' });
+  });
+});
+
+describe('requestPortalLink (4.7.0, #230)', () => {
+  it('con device-claim manda X-Device-Id; sin la capacidad, no', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json(201, { url: 'https://b.x/p/abc' })));
+
+    backendCapabilitiesSignal.value = ['device-claim', 'portal'];
+    await requestPortalLink(config);
+    backendCapabilitiesSignal.value = ['portal'];
+    await requestPortalLink(config);
+    backendCapabilitiesSignal.value = undefined;
+    await requestPortalLink(config);
+
+    const deviceIds = fetchMock.mock.calls.map(([, init]) =>
+      new Headers(init?.headers).get('X-Device-Id'),
+    );
+    expect(deviceIds).toEqual(['test-device-id', null, null]);
+  });
+
+  it('un 409 device-revoked marca la caja revocada', async () => {
+    fetchMock.mockResolvedValue(json(409, { code: 'device-revoked', message: 'Otro equipo.' }));
+
+    const result = await requestPortalLink(config);
+
+    expect(result).toMatchObject({ ok: false, error: 'sync/device-revoked' });
+    expect(deviceRevokedSignal.value).toMatchObject({ message: 'Otro equipo.' });
   });
 });

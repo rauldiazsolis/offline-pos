@@ -152,6 +152,22 @@ export function setDemoRevoked(at: string | null): void {
 }
 
 /**
+ * Caja vinculada en otro dispositivo (4.7.0, #230): cuándo un `409 device-revoked` mostró que otro
+ * equipo canjeó un código de vinculación de esta caja, y el `message` del backend si vino
+ * (`undefined` = no está revocada). La persiste `sync/device-revoked.ts`. Con la marca no corre
+ * ningún push, pull ni `getInfo`, tampoco con `/SINCRONIZAR` (reintentar no cambia nada: la caja es
+ * de otro equipo). La venta sigue; la UI muestra la pantalla bloqueante con "Exportar" y
+ * "Desvincular".
+ */
+export type DeviceRevoked = { at: string; message?: string };
+
+export const deviceRevokedSignal = signal<DeviceRevoked | undefined>(undefined);
+
+export function setDeviceRevoked(revoked: DeviceRevoked | undefined): void {
+  deviceRevokedSignal.value = revoked;
+}
+
+/**
  * Motivo del último fallo de sync (un pull que falló), tal cual — la barra de
  * estado lo traduce con `describeError`: `sync/` no importa `ui/errors.ts`.
  */

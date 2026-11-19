@@ -5,6 +5,8 @@ import { err, ok, type Result } from '../domain/result.ts';
 import { toZodIssues } from '../domain/zod-issues.ts';
 import type { ConnectorConfig } from './connector-registry.ts';
 import { isAllowedBackendUrl } from './demo-link.ts';
+import { deviceIdForBackend } from './device-id-header.ts';
+import { markDeviceRevoked } from './device-revoked.ts';
 import { errorBodySchema, readJson } from './http-body.ts';
 
 /** Lo que devuelve `POST /portal-links` (4.6.0). Nunca se guarda: si lleva autorización, es un secreto. */
@@ -38,7 +40,7 @@ export async function requestPortalLink(config: ConnectorConfig): Promise<Result
   try {
     response = await fetch(`${config.baseUrl}/portal-links`, {
       method: 'POST',
-      headers: buildHeaders(config),
+      headers: buildHeaders(config, { deviceId: deviceIdForBackend() }),
     });
   } catch (error) {
     return err('sync/request-failed', {
@@ -54,7 +56,12 @@ export async function requestPortalLink(config: ConnectorConfig): Promise<Result
     return err('sync/backend-maintenance', message !== undefined ? { message } : {});
   }
   if (!response.ok) {
-    return failedResponse(response);
+    const failed = await failedResponse(response);
+    // 4.7.0 (#230): la caja se vinculó en otro equipo; lo mismo que si lo descubriera el sync.
+    if (!failed.ok && failed.error === 'sync/device-revoked') {
+      markDeviceRevoked(new Date().toISOString(), failed.meta.message);
+    }
+    return failed;
   }
   const parsed = portalLinkSchema.safeParse(await readJson(response));
   if (!parsed.success) {

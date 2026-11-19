@@ -158,14 +158,21 @@ async function resolveAccountReference(amount: number): Promise<Result<string | 
       amount,
       idempotencyKey: newId(),
     });
-    if (!holdResult.ok) {
+    // 4.7.0 (#230): con la caja vinculada en otro dispositivo, como sin red: se evalúa offline.
+    if (!holdResult.ok && holdResult.error !== 'sync/device-revoked') {
       return holdResult;
     }
-    if (!holdResult.value.approved) {
-      return err('account/hold-rejected', { reasonCode: holdResult.value.reasonCode });
+    if (holdResult.ok) {
+      if (!holdResult.value.approved) {
+        return err('account/hold-rejected', { reasonCode: holdResult.value.reasonCode });
+      }
+      pendingHoldSignal.value = {
+        holdId: holdResult.value.holdId,
+        customerId: customer.id,
+        amount,
+      };
+      return ok(holdResult.value.holdId);
     }
-    pendingHoldSignal.value = { holdId: holdResult.value.holdId, customerId: customer.id, amount };
-    return ok(holdResult.value.holdId);
   }
 
   // El saldo vive aparte del crédito (#101): sin cuenta se rechaza igual, aunque haya saldo a favor.

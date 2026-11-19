@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  raiseDailyCounter,
   collectionDateKey,
   lastDailyNumberOn,
   lastTicketNumberOn,
@@ -62,7 +63,11 @@ describe('ticket-number', () => {
 
   it('mismo día: sigue el contador', () => {
     expect(
-      nextTicketNumber({ date: '2026-09-24', stored: { date: '2026-09-24', last: 5 }, lastLocal: 5 }),
+      nextTicketNumber({
+        date: '2026-09-24',
+        stored: { date: '2026-09-24', last: 5 },
+        lastLocal: 5,
+      }),
     ).toBe(6);
   });
 
@@ -82,7 +87,11 @@ describe('ticket-number', () => {
 
   it('reloj que retrocede: contador de otra fecha, usa lo local de la fecha actual', () => {
     expect(
-      nextTicketNumber({ date: '2026-09-22', stored: { date: '2026-09-24', last: 30 }, lastLocal: 4 }),
+      nextTicketNumber({
+        date: '2026-09-22',
+        stored: { date: '2026-09-24', last: 30 },
+        lastLocal: 4,
+      }),
     ).toBe(5);
   });
 
@@ -99,9 +108,15 @@ describe('ticket-number', () => {
 
   it('nextDailyNumber es la misma regla que la de tickets', () => {
     expect(
-      nextDailyNumber({ date: '2026-09-27', stored: { date: '2026-09-27', last: 4 }, lastLocal: 2 }),
+      nextDailyNumber({
+        date: '2026-09-27',
+        stored: { date: '2026-09-27', last: 4 },
+        lastLocal: 2,
+      }),
     ).toBe(5);
-    expect(nextDailyNumber({ date: '2026-09-27', stored: undefined, lastLocal: undefined })).toBe(1);
+    expect(nextDailyNumber({ date: '2026-09-27', stored: undefined, lastLocal: undefined })).toBe(
+      1,
+    );
   });
 
   it('collectionDateKey usa receipt.date si lo tiene', () => {
@@ -109,5 +124,32 @@ describe('ticket-number', () => {
       collectionDateKey({ createdAt: at(2026, 9, 27), receipt: { date: '2026-09-26', number: 1 } }),
     ).toBe('2026-09-26');
     expect(collectionDateKey({ createdAt: at(2026, 9, 27) })).toBe('2026-09-27');
+  });
+});
+
+describe('raiseDailyCounter (4.7.0, #230)', () => {
+  it('sin contador, toma el número usado', () => {
+    expect(raiseDailyCounter(undefined, { date: '2026-11-19', number: 7 })).toEqual({
+      date: '2026-11-19',
+      last: 7,
+    });
+  });
+
+  it('misma fecha: el mayor, nunca baja', () => {
+    expect(
+      raiseDailyCounter({ date: '2026-11-19', last: 3 }, { date: '2026-11-19', number: 7 }),
+    ).toEqual({ date: '2026-11-19', last: 7 });
+    expect(
+      raiseDailyCounter({ date: '2026-11-19', last: 9 }, { date: '2026-11-19', number: 7 }),
+    ).toEqual({ date: '2026-11-19', last: 9 });
+  });
+
+  it('un contador de una fecha anterior se reemplaza; uno posterior queda', () => {
+    expect(
+      raiseDailyCounter({ date: '2026-11-18', last: 30 }, { date: '2026-11-19', number: 2 }),
+    ).toEqual({ date: '2026-11-19', last: 2 });
+    expect(
+      raiseDailyCounter({ date: '2026-11-20', last: 1 }, { date: '2026-11-19', number: 40 }),
+    ).toEqual({ date: '2026-11-20', last: 1 });
   });
 });

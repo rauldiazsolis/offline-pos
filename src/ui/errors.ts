@@ -181,6 +181,10 @@ export function describeError(failure: Failure): string {
       return 'hay demasiadas demos abiertas en este momento; probá de nuevo en unos minutos';
     case 'terminal/reset-failed':
       return `No se pudieron borrar los datos locales de la terminal (${failure.meta.message}).`;
+    case 'terminal/unlink-in-training':
+      return 'Salí del entrenamiento (/ENTRENAMIENTO) para desvincular la terminal.';
+    case 'storage/hydrate-failed':
+      return `No se pudo guardar la caja que trajo el backend (${failure.meta.message}).`;
     default: {
       const exhaustiveCheck: never = failure;
       return exhaustiveCheck;

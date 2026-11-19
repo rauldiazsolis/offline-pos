@@ -100,3 +100,16 @@ export function saveSyncConfig(config: SyncConfig): Result<void> {
   }
   return ok(undefined);
 }
+
+/**
+ * Borra la conexión de `/CONFIG` (4.7.0, #230, al desvincular la terminal): vuelve a
+ * `unconfigured`. Best-effort como el resto del `localStorage`: si falla, la config queda y el
+ * próximo ciclo recibiría el mismo 409.
+ */
+export function clearSyncConfig(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Best-effort.
+  }
+}

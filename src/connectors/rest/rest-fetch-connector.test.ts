@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Customer } from '../../domain/customer.ts';
 import type { Sale } from '../../domain/sale.ts';
 import type { ConnectorProduct, OutboxBatchItem } from '../../sync/connector.ts';
+import { backendCapabilitiesSignal } from '../../ui/state/sync.ts';
 import { createRestFetchConnector } from './rest-fetch-connector.ts';
 
 const config = { baseUrl: 'https://api.example.com', apiKey: 'secret-key' };
@@ -42,6 +43,7 @@ const customer: Customer = { id: 'c1', name: 'Juan Pérez', createdAt: '2026-01-
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  backendCapabilitiesSignal.value = undefined;
 });
 
 describe('pushBatch', () => {
@@ -469,5 +471,139 @@ describe('contrato 4.0.0 (#99)', () => {
       error: 'sync/request-failed',
       meta: { status: 409 },
     });
+  });
+});
+
+describe('contrato 4.7.0 (#230): X-Device-Id y 409 device-revoked', () => {
+  const emptyPull = { products: { items: [] }, customers: { items: [] }, stock: [], lots: {} };
+
+  /** fetch de mentira que guarda el `X-Device-Id` de cada request, por ruta. */
+  function stubFetch(infoBody: unknown = { contractVersion: '4.7.0', status: 'ok' }) {
+    const seen: { path: string; deviceId: string | null }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init?: RequestInit) => {
+        const path = new URL(url).pathname;
+        seen.push({ path, deviceId: new Headers(init?.headers).get('X-Device-Id') });
+        const body =
+          path === '/info'
+            ? infoBody
+            : path === '/sync/pull'
+              ? emptyPull
+              : path === '/account-holds'
+                ? { approved: true, holdId: 'h1' }
+                : {};
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+      }),
+    );
+    return seen;
+  }
+
+  async function callAll(): Promise<void> {
+    const connector = createRestFetchConnector(config);
+    await connector.pushBatch({ deviceId: 'test-device-id', events: [] }, 'lot-1');
+    await connector.pullBatch({ deviceId: 'test-device-id', cursors: {}, pendingLotIds: [] });
+    await connector.requestAccountHold({ customerId: 'c1', amount: 10 }, 'k1');
+  }
+
+  it('con device-claim guardada, push, pull y holds llevan X-Device-Id', async () => {
+    backendCapabilitiesSignal.value = ['device-claim'];
+    const seen = stubFetch();
+
+    await callAll();
+
+    expect(seen.map((request) => request.deviceId)).toEqual([
+      'test-device-id',
+      'test-device-id',
+      'test-device-id',
+    ]);
+  });
+
+  it('sin la capacidad, o sin saber las capacidades, no va', async () => {
+    backendCapabilitiesSignal.value = ['portal'];
+    const without = stubFetch();
+    await callAll();
+    expect(without.every((request) => request.deviceId === null)).toBe(true);
+
+    backendCapabilitiesSignal.value = undefined;
+    const unknown = stubFetch();
+    await callAll();
+    expect(unknown.every((request) => request.deviceId === null)).toBe(true);
+  });
+
+  it('/info nunca lo lleva', async () => {
+    backendCapabilitiesSignal.value = ['device-claim'];
+    const seen = stubFetch();
+
+    await createRestFetchConnector(config).getInfo();
+
+    expect(seen).toEqual([{ path: '/info', deviceId: null }]);
+  });
+
+  it('las capacidades del getInfo del propio conector mandan sobre las guardadas', async () => {
+    // La prueba de una conexión nueva: lo guardado es de la anterior.
+    backendCapabilitiesSignal.value = ['device-claim'];
+    const seen = stubFetch({ contractVersion: '4.6.0', status: 'ok', capabilities: [] });
+    const connector = createRestFetchConnector(config);
+
+    await connector.getInfo();
+    await connector.pullBatch({ deviceId: 'test-device-id', cursors: {}, pendingLotIds: [] });
+
+    expect(seen[1]).toEqual({ path: '/sync/pull', deviceId: null });
+  });
+
+  it('y al revés: un backend nuevo con device-claim lo recibe aunque lo guardado no lo tenga', async () => {
+    const seen = stubFetch({
+      contractVersion: '4.7.0',
+      status: 'ok',
+      capabilities: ['device-claim'],
+    });
+    const connector = createRestFetchConnector(config);
+
+    await connector.getInfo();
+    await connector.pullBatch({ deviceId: 'test-device-id', cursors: {}, pendingLotIds: [] });
+
+    expect(seen[1]).toEqual({ path: '/sync/pull', deviceId: 'test-device-id' });
+  });
+
+  it('un 409 device-revoked se traduce a sync/device-revoked, con el mensaje', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ code: 'device-revoked', message: 'Otro equipo.' }), {
+            status: 409,
+          }),
+        ),
+      ),
+    );
+
+    const result = await createRestFetchConnector(config).pushBatch(
+      { deviceId: 'd', events: [] },
+      'lot-1',
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'sync/device-revoked',
+      meta: { message: 'Otro equipo.' },
+    });
+  });
+
+  it('sin mensaje, la meta va vacía', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ code: 'device-revoked' }), { status: 409 })),
+      ),
+    );
+
+    const result = await createRestFetchConnector(config).pullBatch({
+      deviceId: 'd',
+      cursors: {},
+      pendingLotIds: [],
+    });
+
+    expect(result).toEqual({ ok: false, error: 'sync/device-revoked', meta: {} });
   });
 });

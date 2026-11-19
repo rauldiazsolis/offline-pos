@@ -125,6 +125,11 @@ export type ErrorMeta = {
 
   // sync/terminal-data.ts (pos.reset() desde la consola)
   'terminal/reset-failed': { message: string };
+  // 4.7.0 (#230): sync/unlink-terminal.ts, desvincular no se hace en entrenamiento (la base
+  // abierta es la de práctica: borraría esa y dejaría la real)
+  'terminal/unlink-in-training': undefined;
+  // 4.7.0 (#230): storage/hydrate-snapshot.ts, la foto de la caja no se pudo guardar
+  'storage/hydrate-failed': { message: string };
 };
 
 export type ErrorCode = keyof ErrorMeta;

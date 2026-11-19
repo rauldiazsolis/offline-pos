@@ -197,8 +197,62 @@ rama `feat/device-claim-and-snapshot`:
   elemento, a tipos del dominio) con `lastTicket`, `lastReceipt`, `recentSales` y
   `recentCustomerPayments` desde el ancla o 24 h (lo más viejo; sin ancla, todo), `cashAnchor?` y
   `cashMovements` desde el ancla. Sin turnos.
-- Hasta ahora solo el contrato y los tipos (bloque 1); el demo-backend y el uso en el POS llegan en
-  los bloques 2 y 3.
+- **En el POS (bloque 3)**:
+  - **Vuelta con `claimToken`** (`demo-link.ts::readConnectReturn`, variante `type: 'rest-claim'`:
+    `{ baseUrl, claimToken, branch?, pointOfSale?, wipeKey? }`, misma regla `isAllowedBackendUrl`,
+    sucursal o caja en blanco = ausentes). Si viene `apiKey` gana el formato de siempre, aunque
+    también traiga `claimToken` (`apiKey: z.never().optional()` en el schema del claim: una vuelta
+    con key mal armada no cae a la del claim). `ui/onboarding.ts::handleClaimReturn` canjea el
+    código **antes de guardar nada** (`sync/device-claim.ts::requestClaim`, con
+    `getDeviceId()`) y sigue el camino de la vuelta del alta (`applyReturnedConnection`: wipe_key o
+    sin datos → prueba y aplica borrando; si no, o si la prueba falla, el wizard precargado **con la
+    key ya canjeada**). La sucursal y la caja del fragmento ganan sobre las del claim. Un error del
+    claim → `failed` sin tocar nada (ni el wipe_key).
+  - **`POST /claim`** (`device-claim.ts`, fuera del puerto, sin `Authorization`, con
+    `X-Device-Id`, sin reintentos): 200 → `claimResponseSchema`; 404 con `claim-not-found` →
+    `claim/not-found`; **404 sin cuerpo o con otro `code` → `claim/not-offered`** (backend sin
+    claim: reemplaza un `GET /info` previo, que es autenticado y antes del claim no hay key); 410 →
+    `claim/expired` (`used` solo con `claim-used`); 400 → `sync/request-failed` con el `message`;
+    409 → incompatible; 503 → `sync/backend-maintenance`.
+  - **`X-Device-Id`** (`device-id-header.ts::deviceIdForBackend`): solo si `supportsCapability(…,
+    'device-claim') === true`; sin capacidades conocidas, no. Lo usan el conector REST (push, pull,
+    holds; nunca `/info`), `portal-link.ts` y `cash-snapshot.ts`; no `demo-session.ts` ni Sheets. El
+    conector REST decide con las capacidades de **su propio** `getInfo` si ya lo hizo, y si no con
+    las guardadas: al probar una conexión nueva las guardadas son de la anterior, y mandarle el
+    header a un backend 4.6 haría fallar la prueba por CORS. El id en memoria vive en
+    `device-id.ts` (sin dependencias; `terminal-identity.ts` lo reexporta) para no armar un ciclo
+    de imports conector → config → registro.
+  - **`409 device-revoked`** (`failedResponse` lo distingue por `code` del de contrato →
+    `sync/device-revoked { message? }`). `device-revoked.ts` (como `demo-revoked.ts`):
+    `markDeviceRevoked` (conserva la primera fecha), `clearDeviceRevoked`, `restoreDeviceRevoked`,
+    `deviceRevokedSignal` (`{ at, message? }` o `undefined`) persistido best-effort en
+    `storageKey('device-revoked')`, compartido con entrenamiento. Lo marcan `noteSyncFailure` (todo
+    fallo de `getInfo`, push y pull), `requestAccountHoldNow`, `requestPortalLink` y
+    `requestCashSnapshot`. Con la marca `withConnectorCycle` no corre nada (ni `getInfo`) y
+    `syncNow` **no** la borra (la caja es de otro equipo: reintentar no cambia nada). El lote en
+    curso queda congelado en el outbox, sin ack ni descarte. La borran `applyConnection` y
+    `unlinkTerminal`; la restaura `bootstrap`. **La reserva de crédito** con la caja revocada no se
+    pide y cae a la evaluación offline (`checkout-controller.ts`, como sin red): el POS nunca se
+    autobloquea. En entrenamiento el push ya está cortado; el pull sí puede descubrirla.
+    `collectDiagnostics` la expone en `deviceRevoked` (opcional).
+  - **Exportar lo pendiente** (`pending-export.ts`): `buildPendingExportFile(now)` →
+    `{ fileName, mimeType, content, data }` (`pendientes-<caja>-<fecha local>.json`, JSON
+    indentado). Dos grupos: `notSent` (los `pending` del outbox, con `lotId` si están en el lote
+    congelado) y `sentUnconfirmed` (los de lotes en espera: el backend dio ack pero no informó
+    `ok`/`issues`), cada uno con su resumen por tipo (cantidad y, en ventas y cobranzas, el total).
+    La conexión sin credenciales. No reusa `exportLocalData` (un volcado opaco para soporte).
+  - **Desvincular** (`unlink-terminal.ts::unlinkTerminal`): borra las tablas, la config
+    (`config.ts::clearSyncConfig`), cursores, lotes, capacidades, empresa, portal, avisos, demo
+    revocada y la marca; deja los signals como sin configurar. **Conserva** el id de dispositivo
+    (es el equipo; borrarlo dispararía el aviso de identidad perdida), los contadores, la impresora
+    y la vista. En entrenamiento devuelve `terminal/unlink-in-training`.
+  - **La foto de la caja** (`cash-snapshot.ts`): `requestCashSnapshot(config)` (`GET /snapshot`;
+    404 → `ok(undefined)`; Sheets → `ok(undefined)`) y `retakeCashFromSnapshot(config,
+    capabilities)`, que solo corre con `cash-snapshot`, con tope de 20 s, nunca falla (lo loguea con
+    `console.info`), sube los contadores con `domain/ticket-number.ts::raiseDailyCounter` (nunca
+    baja uno local más alto; aunque no se hidrate, porque subir no duplica) e hidrata
+    (`storage/hydrate-snapshot.ts`). La llama solo el onboarding después de aplicar una conexión de
+    un claim, con las capacidades de la prueba; `applyConnection` desde `/CONFIG` no hidrata.
 
 **Contrato 4.6.0 (#178)** — aditivo (spec
 `docs/superpowers/specs/2026-10-04-contrato-4-6-portal-design.md`):
@@ -389,7 +443,7 @@ del `AGENTS.md` de la raíz. Módulos:
 
 | Módulo | Qué hace |
 |---|---|
-| `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON; unión discriminada `ConnectReturn`: la vuelta del alta, `type: 'rest'` con `wipeKey` opcional, o la de una planilla, `type: 'google-sheets'` con `webAppUrl` https y, opcionales, `branch` y `pointOfSale` (en blanco cuentan como ausentes), nunca el secreto, #133), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `buildDemoLink` (el link para `/DEMO_NUEVA`, #176), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
+| `sync/demo-link.ts` (puro, Zod) | `readDemoEntry` (`?demo=true&backend=…&template=…`), `readConnectReturn` (`#connect=…`, base64url de JSON; unión discriminada `ConnectReturn`: la vuelta del alta, `type: 'rest'` con `wipeKey` opcional, la de un código de vinculación, `type: 'rest-claim'` (4.7.0, #230), o la de una planilla, `type: 'google-sheets'` con `webAppUrl` https y, opcionales, `branch` y `pointOfSale` (en blanco cuentan como ausentes), nunca el secreto, #133), `buildOnboardingUrl`, `returnUrlFor` (origin + pathname: anda en una subruta), `buildDemoLink` (el link para `/DEMO_NUEVA`, #176), `stripOnboardingParams`, `isAllowedBackendUrl` (`https:`, o `http:` a `localhost`/`127.0.0.1`/`[::1]`; misma regla para `onboarding.url` y el `baseUrl` de la vuelta). Todo `Result`; el único `try/catch` es el decodificado base64/`JSON.parse`. |
 | `sync/demo-session.ts` (adaptador HTTP) | `requestDemoSession(baseUrl, template?)`: `POST /demo-sessions` sin API key y con el header de versión, a `Result` (`demo/unknown-template` con la lista, `demo/not-offered` en 404, `demo/rate-limited` y `demo/capacity` desde 4.6.0, y los errores de red de siempre). No pasa por el puerto `Connector`. |
 | `sync/wipe-key.ts` | `issueWipeKey`/`consumeWipeKey`: token de un solo uso en `offline-pos:pending-wipe-key` (con su fecha), vence a las 2 h. Se consume siempre que vuelva, haga falta o no. |
 | `sync/demo-revoked.ts` | Demo revocada (#176): `isDemoRevokedFailure` (puro: 401/403 con la config en demo), `markDemoRevoked`/`clearDemoRevoked`/`restoreDemoRevoked`, en `demoRevokedSignal` y best-effort en `storageKey('demo-revoked')`. La marca `noteSyncFailure` (por donde pasa todo fallo de `getInfo`, push y pull); con ella `withConnectorCycle` no corre nada, ni el `getInfo`; la borran `syncNow` (vuelve a probar) y `applyConnection`; la restaura `bootstrap`. |

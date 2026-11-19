@@ -4,6 +4,7 @@ import type { ApplyConnectionParams } from '../sync/apply-connection.ts';
 import type { SyncConfig } from '../sync/config.ts';
 import type { ProbeSnapshot } from '../sync/connection.ts';
 import type { DemoSession } from '../sync/demo-session.ts';
+import type { ClaimResponse } from '../sync/claim-schema.ts';
 import { runOnboardingFromUrl, startDemo, type OnboardingDeps } from './onboarding.ts';
 
 const NOW = new Date('2026-09-28T12:00:00.000Z');
@@ -20,6 +21,13 @@ const session: DemoSession = {
 };
 
 const snapshot: ProbeSnapshot = { products: [], stock: [], customers: [], cursors: {} };
+
+const claimed: ClaimResponse = {
+  apiKey: 'key-de-la-caja',
+  branch: 'CENTRAL-CLAIM',
+  pointOfSale: 'Caja claim',
+  register: { name: 'Caja 2' },
+};
 
 const NO_CONFIG: Result<SyncConfig> = err('sync/config-missing', undefined);
 const DEMO_CONFIG: Result<SyncConfig> = ok({
@@ -50,6 +58,8 @@ function makeDeps() {
     probeConnection: vi.fn<OnboardingDeps['probeConnection']>(() => Promise.resolve(ok(snapshot))),
     applyConnection: vi.fn<OnboardingDeps['applyConnection']>(() => Promise.resolve(ok(undefined))),
     consumeWipeKey: vi.fn<OnboardingDeps['consumeWipeKey']>(() => false),
+    requestClaim: vi.fn<OnboardingDeps['requestClaim']>(() => Promise.resolve(ok(claimed))),
+    retakeCash: vi.fn<OnboardingDeps['retakeCash']>(() => Promise.resolve(undefined)),
     now: () => NOW,
   };
 }
@@ -474,5 +484,171 @@ describe('runOnboardingFromUrl — Conectar el POS desde una planilla (#133)', (
       });
       expect(deps.probeConnection).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('runOnboardingFromUrl — vuelta con código de vinculación (4.7.0, #230)', () => {
+  const back = (payload: object) => `https://pos.x/#connect=${encode(payload)}`;
+  const ret = { baseUrl: 'https://b.x', claimToken: 'tok-1' };
+
+  it('canjea el código y aplica borrando con la key recibida y la sucursal/caja del claim', async () => {
+    const outcome = await runOnboardingFromUrl(
+      back(ret),
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+
+    expect(outcome).toEqual({ kind: 'applied' });
+    expect(deps.requestClaim).toHaveBeenCalledWith('https://b.x', 'tok-1');
+    expect(applied()?.local).toBe('wipe');
+    expect(applied()?.candidate).toEqual({
+      type: 'rest',
+      baseUrl: 'https://b.x',
+      apiKey: 'key-de-la-caja',
+      branch: 'CENTRAL-CLAIM',
+      pointOfSale: 'Caja claim',
+    });
+  });
+
+  it('la sucursal y la caja del fragmento ganan sobre las de la respuesta', async () => {
+    await runOnboardingFromUrl(
+      back({ ...ret, branch: 'NORTE', pointOfSale: 'Caja 9' }),
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+
+    expect(applied()?.candidate).toMatchObject({ branch: 'NORTE', pointOfSale: 'Caja 9' });
+  });
+
+  it('conserva el locale de la config anterior', async () => {
+    await runOnboardingFromUrl(
+      back(ret),
+      {
+        config: ok({ type: 'rest', baseUrl: 'https://erp.x', locale: 'es-AR' }),
+        hasUserData: false,
+      },
+      deps,
+    );
+
+    expect(applied()?.candidate).toMatchObject({ locale: 'es-AR' });
+  });
+
+  it('el claim va antes de probar o guardar nada', async () => {
+    const order: string[] = [];
+    deps.requestClaim.mockImplementation(() => {
+      order.push('claim');
+      return Promise.resolve(ok(claimed));
+    });
+    deps.probeConnection.mockImplementation(() => {
+      order.push('probe');
+      return Promise.resolve(ok(snapshot));
+    });
+
+    await runOnboardingFromUrl(back(ret), { config: NO_CONFIG, hasUserData: false }, deps);
+
+    expect(order).toEqual(['claim', 'probe']);
+  });
+
+  it('después de aplicar retoma la caja con las capacidades de la prueba', async () => {
+    deps.probeConnection.mockResolvedValue(
+      ok({ ...snapshot, capabilities: ['device-claim', 'cash-snapshot'] }),
+    );
+
+    await runOnboardingFromUrl(back(ret), { config: NO_CONFIG, hasUserData: false }, deps);
+
+    expect(deps.retakeCash).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: 'key-de-la-caja' }),
+      ['device-claim', 'cash-snapshot'],
+    );
+  });
+
+  it.each([
+    ['claim/not-offered', err('claim/not-offered', undefined)],
+    ['claim/not-found', err('claim/not-found', undefined)],
+    ['claim/expired', err('claim/expired', { reason: 'expired' })],
+    ['claim/expired (usado)', err('claim/expired', { reason: 'used' })],
+    ['sin red', err('sync/request-failed', { message: 'Failed to fetch' })],
+    ['mantenimiento', err('sync/backend-maintenance', {})],
+  ])('un error del claim (%s) → failed, sin tocar nada', async (_name, failure) => {
+    deps.requestClaim.mockResolvedValue(failure);
+
+    const outcome = await runOnboardingFromUrl(
+      back({ ...ret, wipeKey: 'w' }),
+      { config: REAL_CONFIG, hasUserData: true },
+      deps,
+    );
+
+    expect(outcome).toMatchObject({ kind: 'failed' });
+    expect(outcome.kind === 'failed' && outcome.notice).toMatch(
+      /^No se pudo vincular la caja: .+[.?]$/,
+    );
+    expect(deps.consumeWipeKey).not.toHaveBeenCalled();
+    expect(deps.probeConnection).not.toHaveBeenCalled();
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+    expect(deps.retakeCash).not.toHaveBeenCalled();
+  });
+
+  it('con datos del usuario y sin wipe_key: el wizard precargado con la key ya canjeada', async () => {
+    const outcome = await runOnboardingFromUrl(
+      back(ret),
+      { config: REAL_CONFIG, hasUserData: true },
+      deps,
+    );
+
+    expect(outcome).toMatchObject({
+      kind: 'review',
+      candidate: { type: 'rest', baseUrl: 'https://b.x', apiKey: 'key-de-la-caja' },
+    });
+    expect(deps.applyConnection).not.toHaveBeenCalled();
+    expect(deps.retakeCash).not.toHaveBeenCalled();
+  });
+
+  it('con datos y un wipe_key válido: aplica borrando', async () => {
+    deps.consumeWipeKey.mockReturnValue(true);
+
+    const outcome = await runOnboardingFromUrl(
+      back({ ...ret, wipeKey: 'w' }),
+      { config: REAL_CONFIG, hasUserData: true },
+      deps,
+    );
+
+    expect(outcome).toEqual({ kind: 'applied' });
+    expect(deps.consumeWipeKey).toHaveBeenCalledWith('w', NOW);
+  });
+
+  it('si la prueba falla: el wizard precargado, sin retomar la caja', async () => {
+    deps.probeConnection.mockResolvedValue(
+      err('sync/request-failed', { message: 'Failed to fetch' }),
+    );
+
+    const outcome = await runOnboardingFromUrl(
+      back(ret),
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+
+    expect(outcome).toMatchObject({
+      kind: 'review',
+      candidate: { apiKey: 'key-de-la-caja' },
+    });
+    expect(deps.retakeCash).not.toHaveBeenCalled();
+  });
+
+  it('la vuelta con apiKey nunca llama a requestClaim ni retoma la caja', async () => {
+    await runOnboardingFromUrl(
+      back({
+        baseUrl: 'https://b.x',
+        apiKey: 'real',
+        branch: 'A',
+        pointOfSale: 'B',
+        claimToken: 't',
+      }),
+      { config: NO_CONFIG, hasUserData: false },
+      deps,
+    );
+
+    expect(deps.requestClaim).not.toHaveBeenCalled();
+    expect(deps.retakeCash).not.toHaveBeenCalled();
+    expect(applied()?.candidate).toMatchObject({ apiKey: 'real' });
   });
 });

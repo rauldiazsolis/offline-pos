@@ -22,6 +22,7 @@ import { refreshCustomerBalances } from '../ui/state/customer-balance.ts';
 import {
   backendStatusSignal,
   demoRevokedSignal,
+  deviceRevokedSignal,
   lastSyncFailureSignal,
   pushLotIssuesSignal,
   setBackendCheckDue,
@@ -403,7 +404,9 @@ export async function acquireSyncLockWaiting(waitMs: number): Promise<(() => voi
  * ciclos), respeta `/CONFIG` abierto, chequea red y config activa, y que el
  * backend no esté en mantenimiento ni sea incompatible (4.0.0, #99): en ese
  * caso el ciclo hace solo un `getInfo` y, cuando vuelve `ok`, se retoma. Con la demo revocada
- * (#176) no corre nada, ni el `getInfo`: lo reintenta `/SINCRONIZAR`. `run`
+ * (#176) no corre nada, ni el `getInfo`: lo reintenta `/SINCRONIZAR`. Con la caja vinculada en
+ * otro dispositivo (4.7.0, #230) tampoco, y ni `/SINCRONIZAR` la reintenta: el lote en curso
+ * queda congelado en el outbox, sin ack ni descarte, hasta exportarlo o desvincular. `run`
  * recibe el conector ya armado, la hora y la config — así ni `pushPendingLot`
  * ni `runPullCycle` necesitan saber de dónde salió. Devuelve lo que devuelve
  * `run`, o `undefined` si el ciclo no corrió (pausado, cerrojo, sin red o sin config).
@@ -416,6 +419,10 @@ async function withConnectorCycle<T>(
   }
   // #176: con la demo revocada no se golpea al backend con 401 cada ciclo; /SINCRONIZAR reintenta.
   if (demoRevokedSignal.value !== null) {
+    return undefined;
+  }
+  // 4.7.0 (#230): la caja es de otro equipo; cualquier request daría el mismo 409.
+  if (deviceRevokedSignal.value !== undefined) {
     return undefined;
   }
   const release = tryAcquireSyncLock();
@@ -507,7 +514,8 @@ export async function runPullCycleNow(options: { full?: boolean } = {}): Promise
 
 /** `/SINCRONIZAR` (RF-12, bajo demanda): fuerza el push ya (ignora backoff) y un pull completo ya. */
 export async function syncNow(): Promise<void> {
-  // #176: vuelve a probar una demo revocada; si sigue dando 401, se marca de nuevo.
+  // #176: vuelve a probar una demo revocada; si sigue dando 401, se marca de nuevo. La caja
+  // vinculada en otro dispositivo (4.7.0, #230) no se borra acá: reintentar no cambia nada.
   clearDemoRevoked();
   // 4.0.0 (#99): /SINCRONIZAR pregunta primero el estado del backend.
   setBackendCheckDue(true);

@@ -95,3 +95,21 @@ export function nextDailyNumber(params: {
 }
 
 export const nextTicketNumber = nextDailyNumber;
+
+/**
+ * El contador después de conocer un número ya usado en otro lado (4.7.0, #230: el `lastTicket` o
+ * `lastReceipt` de la foto de la caja). Nunca baja: un contador de una fecha posterior, o de la
+ * misma con un número mayor, queda como estaba. Pura.
+ */
+export function raiseDailyCounter(
+  current: DailyCounter | undefined,
+  used: DailyNumber,
+): DailyCounter {
+  if (current === undefined || current.date < used.date) {
+    return { date: used.date, last: used.number };
+  }
+  if (current.date > used.date) {
+    return current;
+  }
+  return { date: current.date, last: Math.max(current.last, used.number) };
+}

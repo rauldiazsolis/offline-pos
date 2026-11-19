@@ -32,6 +32,7 @@ import { withTimeout, type ProbeSnapshot } from './connection.ts';
 import type { Connector } from './connector.ts';
 import { createConnector } from './connector-registry.ts';
 import { clearDemoRevoked } from './demo-revoked.ts';
+import { clearDeviceRevoked } from './device-revoked.ts';
 import { clearSyncCursors, setCustomersCursor, setProductsCursor } from './cursor.ts';
 import { acquireSyncLockWaiting, pushPendingLot } from './engine.ts';
 import { clearPushLotState } from './push-lot.ts';
@@ -175,6 +176,8 @@ export async function applyConnection(params: ApplyConnectionParams): Promise<Re
     });
     // #176: cualquier conexión aplicada deja atrás una demo revocada.
     clearDemoRevoked();
+    // 4.7.0 (#230): y una caja vinculada en otro dispositivo (la conexión nueva es otra key).
+    clearDeviceRevoked();
     setSyncConfigured(true);
     setLastSyncedAt(params.now);
     setLastSyncFailure(null);

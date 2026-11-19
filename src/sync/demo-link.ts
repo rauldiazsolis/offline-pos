@@ -6,7 +6,8 @@ import { toZodIssues } from '../domain/zod-issues.ts';
  * Links del onboarding de demo (#128), lectura pura: la entrada `?demo=true&backend=…&template=…`
  * y la vuelta con la config en el fragmento (`#connect=…`, nunca en la query string: el navegador
  * no manda el fragmento al servidor que sirve el POS). La vuelta es la del alta (REST) o la de
- * "Conectar el POS" desde una planilla de Google Sheets (#133). La orquestación está en
+ * "Conectar el POS" desde una planilla de Google Sheets (#133), o la de un código de vinculación
+ * (`claimToken`, 4.7.0, #230). La orquestación está en
  * `ui/onboarding.ts`.
  */
 
@@ -73,7 +74,22 @@ const sheetsReturnSchema = z.object({
   pointOfSale: z.string().optional(),
 });
 
-const connectReturnSchema = z.union([sheetsReturnSchema, restReturnSchema]);
+// La vuelta con un código de vinculación (4.7.0, #230, capacidad `device-claim`): sin `apiKey`,
+// que el POS recibe al canjear el `claimToken` con `POST /claim`. Si viene `apiKey`, es la vuelta
+// de siempre aunque también traiga `claimToken` (`apiKey: z.never().optional()` impide que una vuelta con
+// key inválida por otro motivo caiga acá). La sucursal y la caja en blanco cuentan como ausentes;
+// si vienen, ganan sobre las de la respuesta del claim (lo decide `ui/onboarding.ts`).
+const claimReturnSchema = z.object({
+  type: z.literal('rest').optional(),
+  baseUrl: allowedUrl,
+  claimToken: z.string().trim().min(1),
+  apiKey: z.never().optional(),
+  branch: z.string().optional(),
+  pointOfSale: z.string().optional(),
+  wipeKey: z.string().min(1).optional(),
+});
+
+const connectReturnSchema = z.union([sheetsReturnSchema, restReturnSchema, claimReturnSchema]);
 
 export type ConnectReturn =
   | {
@@ -84,7 +100,21 @@ export type ConnectReturn =
       pointOfSale: string;
       wipeKey?: string;
     }
-  | { type: 'google-sheets'; webAppUrl: string; branch?: string; pointOfSale?: string };
+  | { type: 'google-sheets'; webAppUrl: string; branch?: string; pointOfSale?: string }
+  | {
+      type: 'rest-claim';
+      baseUrl: string;
+      claimToken: string;
+      branch?: string;
+      pointOfSale?: string;
+      wipeKey?: string;
+    };
+
+/** Sin espacios; en blanco, ausente (la página arma el link con lo que haya tipeado). */
+function presentText(name: 'branch' | 'pointOfSale', value: string | undefined) {
+  const trimmed = value?.trim() ?? '';
+  return trimmed !== '' ? { [name]: trimmed } : {};
+}
 
 /** base64url → JSON: el único borde que lanza (`atob`, `JSON.parse`). */
 function decodeBase64UrlJson(value: string): unknown {
@@ -111,13 +141,21 @@ export function readConnectReturn(href: string): Result<ConnectReturn> | undefin
   }
   const data = parsed.data;
   if (data.type === 'google-sheets') {
-    const branch = data.branch?.trim() ?? '';
-    const pointOfSale = data.pointOfSale?.trim() ?? '';
     return ok({
       type: 'google-sheets',
       webAppUrl: data.webAppUrl,
-      ...(branch !== '' ? { branch } : {}),
-      ...(pointOfSale !== '' ? { pointOfSale } : {}),
+      ...presentText('branch', data.branch),
+      ...presentText('pointOfSale', data.pointOfSale),
+    });
+  }
+  if ('claimToken' in data) {
+    return ok({
+      type: 'rest-claim',
+      baseUrl: data.baseUrl,
+      claimToken: data.claimToken,
+      ...presentText('branch', data.branch),
+      ...presentText('pointOfSale', data.pointOfSale),
+      ...(data.wipeKey !== undefined ? { wipeKey: data.wipeKey } : {}),
     });
   }
   const { baseUrl, apiKey, branch, pointOfSale, wipeKey } = data;

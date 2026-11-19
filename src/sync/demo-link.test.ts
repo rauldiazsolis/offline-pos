@@ -133,6 +133,72 @@ describe('readConnectReturn', () => {
   });
 });
 
+describe('readConnectReturn con claimToken (4.7.0, #230)', () => {
+  const claim = { baseUrl: 'https://b.x', claimToken: 'tok-1' };
+  const read = (value: object) => readConnectReturn(`https://pos.x/#connect=${encode(value)}`);
+
+  it('solo baseUrl y claimToken: la variante rest-claim', () => {
+    expect(read(claim)).toEqual(ok({ type: 'rest-claim', ...claim }));
+  });
+
+  it('con sucursal, caja y wipeKey (y type: rest explícito)', () => {
+    expect(
+      read({ type: 'rest', ...claim, branch: 'CENTRAL', pointOfSale: 'Caja 1', wipeKey: 'w' }),
+    ).toEqual(
+      ok({ type: 'rest-claim', ...claim, branch: 'CENTRAL', pointOfSale: 'Caja 1', wipeKey: 'w' }),
+    );
+  });
+
+  it('una sucursal o caja en blanco cuenta como ausente', () => {
+    expect(read({ ...claim, branch: '  ', pointOfSale: '' })).toEqual(
+      ok({ type: 'rest-claim', ...claim }),
+    );
+  });
+
+  it('con apiKey gana el formato de siempre, aunque traiga claimToken', () => {
+    const withKey = {
+      baseUrl: 'https://b.x',
+      apiKey: 'k',
+      branch: 'CENTRAL',
+      pointOfSale: 'Caja 1',
+      claimToken: 'tok-1',
+    };
+    expect(read(withKey)).toEqual(
+      ok({
+        type: 'rest',
+        baseUrl: 'https://b.x',
+        apiKey: 'k',
+        branch: 'CENTRAL',
+        pointOfSale: 'Caja 1',
+      }),
+    );
+  });
+
+  it('con apiKey pero sin sucursal no cae a la variante del claim: es una vuelta inválida', () => {
+    expect(read({ baseUrl: 'https://b.x', apiKey: 'k', claimToken: 'tok-1' })).toMatchObject({
+      ok: false,
+      error: 'demo/invalid-return',
+    });
+  });
+
+  it('una baseUrl insegura, o el claimToken vacío → demo/invalid-return', () => {
+    expect(read({ baseUrl: 'http://otro.x', claimToken: 'tok-1' })).toMatchObject({
+      ok: false,
+      error: 'demo/invalid-return',
+    });
+    expect(read({ baseUrl: 'https://b.x', claimToken: '' })).toMatchObject({
+      ok: false,
+      error: 'demo/invalid-return',
+    });
+  });
+
+  it('http a localhost se acepta (desarrollo y e2e)', () => {
+    expect(read({ baseUrl: 'http://localhost:4000', claimToken: 'tok-1' })).toEqual(
+      ok({ type: 'rest-claim', baseUrl: 'http://localhost:4000', claimToken: 'tok-1' }),
+    );
+  });
+});
+
 describe('links de ida y limpieza', () => {
   it('buildOnboardingUrl conserva la query del backend', () => {
     expect(buildOnboardingUrl('https://b.x/alta?x=1', 'https://pos.x/app/', 'w1')).toBe(
