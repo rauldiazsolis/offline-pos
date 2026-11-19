@@ -8,6 +8,7 @@ import {
   backendStatusSignal,
   demoRevokedSignal,
   demoSessionSignal,
+  deviceRevokedSignal,
   pendingOutboxCountSignal,
   syncConfiguredSignal,
   syncStatusSignal,
@@ -32,6 +33,10 @@ export function syncPill(): Pill {
     };
   }
   if (!syncConfiguredSignal.value) return { text: 'Sin configurar', tone: 'muted' };
+  // 4.7.0 (#230): solo se ve en entrenamiento (fuera, la pantalla bloqueante tapa todo).
+  if (deviceRevokedSignal.value !== undefined) {
+    return { text: 'Caja vinculada en otro dispositivo', tone: 'error' };
+  }
   if (demoRevokedSignal.value !== null) return { text: 'La demo terminó', tone: 'error' };
   const backend = backendStatusSignal.value;
   if (backend.kind === 'incompatible') {

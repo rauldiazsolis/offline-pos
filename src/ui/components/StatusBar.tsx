@@ -5,6 +5,7 @@ import {
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
+  deviceRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -45,7 +46,8 @@ const NOTICE_COLOR: Record<NoticeSeverity, string> = {
  * vigentes del backend, con el color del más grave; el click abre `/DIAGNOSTICO`. Nunca bloquean.
  * Primero de todos, "Versión nueva (/ACTUALIZAR)" (#54) cuando el service worker ya descargó una:
  * el click la aplica como el comando ("Actualizando…" y deshabilitado mientras tanto).
- * Con la demo revocada (#176), el estado dice "La demo terminó". La marca DEMO y el botón de la
+ * Con la caja vinculada en otro dispositivo (4.7.0, #230; solo se llega a ver en entrenamiento),
+ * "Caja vinculada en otro dispositivo". Con la demo revocada (#176), el estado dice "La demo terminó". La marca DEMO y el botón de la
  * demo viven en el encabezado (`TerminalHeader.tsx`, #193).
  */
 /** Color del punto de estado — misma info que el texto, reforzada visualmente (pase de diseño). */
@@ -54,7 +56,7 @@ function statusColor(): string {
   if (!syncConfiguredSignal.value || status === 'offline') {
     return 'var(--color-chrome-text-muted)';
   }
-  if (demoRevokedSignal.value !== null) {
+  if (demoRevokedSignal.value !== null || deviceRevokedSignal.value !== undefined) {
     return 'var(--color-danger)';
   }
   const backend = backendStatusSignal.value;
@@ -82,6 +84,10 @@ function statusText(): string {
   }
   if (!syncConfiguredSignal.value) {
     return 'Sin configurar — /CONFIG';
+  }
+  // 4.7.0 (#230): solo se ve en entrenamiento (fuera, la pantalla bloqueante tapa todo).
+  if (deviceRevokedSignal.value !== undefined) {
+    return 'Caja vinculada en otro dispositivo';
   }
   // #176: el sync ya no corre; la barra ofrece una demo nueva.
   if (demoRevokedSignal.value !== null) {

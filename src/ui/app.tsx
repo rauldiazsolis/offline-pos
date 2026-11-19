@@ -9,6 +9,7 @@ import { CollectionScreen } from './screens/collection-screen.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
 import { DemoConfirmScreen } from './screens/demo-confirm-screen.tsx';
 import { DemoResetScreen } from './screens/demo-reset-screen.tsx';
+import { DeviceRevokedScreen } from './screens/device-revoked-screen.tsx';
 import { DiagnosticoScreen } from './screens/diagnostico-screen.tsx';
 import { PrinterScreen } from './screens/printer-screen.tsx';
 import { ReceiptScreen } from './screens/receipt-screen.tsx';
@@ -20,7 +21,7 @@ import { demoConfirmSignal } from './state/demo-confirm.ts';
 import { guideSignal } from './state/guide.ts';
 import { activeScreenSignal } from './state/screen.ts';
 import { trainingScreenSignal } from './state/training.ts';
-import { connectionStateSignal } from './state/sync.ts';
+import { connectionStateSignal, deviceRevokedSignal } from './state/sync.ts';
 import { MIN_SUPPORTED_WIDTH_PX, viewportWidthSignal } from './state/viewport.ts';
 
 function ActiveScreen() {
@@ -33,6 +34,12 @@ function ActiveScreen() {
   // conexión en `/CONFIG` (modo requerido: sin Cancelar y Esc no sale).
   if (connectionStateSignal.value !== 'active') {
     return <ConfigScreen />;
+  }
+  // 4.7.0 (#230): la caja es de otro equipo. Bloqueante, como el modo requerido: solo exportar lo
+  // pendiente o desvincular. En entrenamiento no: la base abierta es la de práctica (exportarla no
+  // sirve y desvincular no se puede); se ve al salir, que recarga sobre la real.
+  if (deviceRevokedSignal.value !== undefined && !isTrainingMode()) {
+    return <DeviceRevokedScreen />;
   }
   // #177: entrar o salir del entrenamiento se confirma delante de la pantalla activa.
   if (trainingScreenSignal.value !== null) {

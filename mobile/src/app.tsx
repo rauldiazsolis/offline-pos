@@ -8,7 +8,7 @@ import { toggleTraining } from '../../src/ui/keyboard/training-controller.ts';
 import { appUpdateSignal } from '../../src/ui/state/app-update.ts';
 import { demoConfirmSignal } from '../../src/ui/state/demo-confirm.ts';
 import { activeScreenSignal, type ActiveScreen } from '../../src/ui/state/screen.ts';
-import { connectionStateSignal } from '../../src/ui/state/sync.ts';
+import { connectionStateSignal, deviceRevokedSignal } from '../../src/ui/state/sync.ts';
 import { trainingScreenSignal } from '../../src/ui/state/training.ts';
 import { setUiMode } from '../../src/ui/state/ui-mode.ts';
 import { viewportWidthSignal } from '../../src/ui/state/viewport.ts';
@@ -21,6 +21,7 @@ import { EntryHost } from './keyboards/entry-host.tsx';
 import { CheckoutSheet, CollectionSheet, ReceiptSheet } from './screens/checkout-sheets.tsx';
 import { ConfigScreen } from './screens/config-screen.tsx';
 import { DemoConfirmScreen } from './screens/demo-confirm-screen.tsx';
+import { DeviceRevokedScreen } from './screens/device-revoked-screen.tsx';
 import { MoreScreen } from './screens/more-screen.tsx';
 import { SaleScreen } from './screens/sale-screen.tsx';
 import { startCatalogBrowse } from './state/catalog-browse.ts';
@@ -215,6 +216,8 @@ function Screens() {
   if (demoConfirmSignal.value !== null) return <DemoConfirmScreen />;
   // Sin conexión activa no hay otra pantalla posible (modo requerido, como en escritorio).
   if (connectionStateSignal.value !== 'active') return <ConfigScreen />;
+  // 4.7.0 (#230): la caja es de otro equipo; fuera del entrenamiento, como en escritorio.
+  if (deviceRevokedSignal.value !== undefined && !isTrainingMode()) return <DeviceRevokedScreen />;
   if (trainingScreenSignal.value !== null) return <TrainingScreen />;
   if (activeScreenSignal.value === 'config') return <ConfigScreen />;
   return <Shell />;

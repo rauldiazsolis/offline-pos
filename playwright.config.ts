@@ -60,5 +60,14 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
+    {
+      // Vincular la caja con un código (4.7.0, #230): `e2e/device-claim.spec.ts` apaga y prende
+      // `device-claim` en el panel, un ajuste de todo el backend, así que tiene el suyo.
+      command: 'pnpm --filter demo-backend run start',
+      env: { DEMO_BACKEND_PORT: '4003', DEMO_BACKEND_DB: ':memory:' },
+      url: 'http://localhost:4003/_demo',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
   ],
 });

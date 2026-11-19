@@ -25,7 +25,7 @@ esta etapa, encontrado por el e2e y no por jsdom: `useSignalEffect` corre diferi
 ventana en la que tipear tras un error agregaba texto en vez de reemplazarlo — se usa
 `useLayoutEffect`.
 
-**Tres demo-backends** (`playwright.config.ts`): el de `4000` (archivo `demo-backend/data/demo.sqlite`)
+**Demo-backends** (`playwright.config.ts`): el de `4000` (archivo `demo-backend/data/demo.sqlite`)
 para `minibackend-sync.spec.ts`, otro en `4001`, en memoria (`DEMO_BACKEND_PORT`,
 `DEMO_BACKEND_DB=:memory:`), solo para `e2e/demo-onboarding.spec.ts` (#128), y un tercero en `4002`
 para `e2e/published-site.spec.ts` (#148), por el mismo motivo: cada
@@ -33,6 +33,12 @@ para `e2e/published-site.spec.ts` (#148), por el mismo motivo: cada
 los specs que corren en paralelo. Los tests de ese archivo van en serie (`mode: 'serial'`) por el mismo
 motivo; el de "datos sin enviar" (#176) usa el `test` de `fixtures.ts`, el resto el de Playwright a
 secas. El de la demo revocada la revoca con `POST /_demo/revoke-demos` del panel.
+
+**Vincular la caja con un código** (4.7.0, #230): `e2e/device-claim.spec.ts` usa un cuarto
+demo-backend en memoria, en `4003`, porque apaga `device-claim` en el panel (un ajuste de todo el
+backend) para probar un backend sin la capacidad. Cada "equipo" es un contexto propio
+(`browser.newContext`). Con `E2E_CAPTURAS=<carpeta>` guarda capturas para revisar a mano (también
+`mobile/e2e/device-revoked.spec.ts`); sin la variable no escribe nada.
 
 **Sitio publicado** (#148, #54): `e2e/published-site.spec.ts` corre contra `.site-out/`
 (`pnpm site:build`, con su propio build en `.site-dist/` para no pisar el `dist/` del servidor de

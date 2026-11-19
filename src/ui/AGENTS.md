@@ -519,6 +519,40 @@ Spec: `docs/superpowers/specs/2026-10-02-link-de-demo-con-confirmacion-design.md
   usa `bootstrap`) y vuelve a la venta con el aviso de plantilla; si falla, no se borró nada y el
   motivo va a la barra de comandos o al wizard.
 
+## Caja vinculada en otro dispositivo (4.7.0, #230)
+
+Spec: `docs/superpowers/specs/2026-11-19-contrato-4-7-device-claim-y-snapshot-design.md`; la marca
+(`deviceRevokedSignal`), el `409 device-revoked`, `buildPendingExportFile` y `unlinkTerminal`, en
+"Contrato 4.7.0" de `src/sync/AGENTS.md`.
+
+- **Cuándo**: con la marca, `App` muestra solo `ui/screens/device-revoked-screen.tsx`, bloqueante
+  como el modo requerido: ni venta, ni barra de comandos, ni overlays. Precedencia: la segunda
+  pestaña y el error fatal ganan (están fuera de `App`), después "Abrir una demo" y `/CONFIG`
+  requerido (sin conexión activa no hay caja que revocar), y recién ahí esta. **En entrenamiento no
+  se muestra**: la base abierta es la de práctica (exportarla no sirve y `unlinkTerminal` no se
+  puede); la barra de estado dice "Caja vinculada en otro dispositivo" y la pantalla aparece al
+  salir, que recarga sobre la real. No dispara ningún ciclo de sync.
+- **Qué muestra**: el título, el `message` del backend si dice algo más que el título (si no, la
+  explicación de `device-revoked-model.ts::deviceRevokedText`), "Desde <fecha y hora>"
+  (`format.ts::formatDateTime`) y lo pendiente en dos grupos, "Sin enviar" y "Enviado, sin confirmar
+  por el backend", con ventas y cobranzas y sus totales (`describePendingGroup`). Los cuenta
+  `buildPendingExportFile` al montar (`loadDeviceRevokedPending`, con el reset antes del `await`).
+- **Teclado y mouse**: Enter = "Exportar datos locales pendientes (.json) (Enter)" (`.btn-primary`):
+  arma el archivo y lo baja con `<a download>` (`ui/device-revoked-browser.ts`); debajo, "Descargado:
+  <archivo>" en un slot de alto fijo. "Desvincular esta terminal (Alt+D)" (`.btn-danger`, por la
+  tecla física) abre un segundo paso en la misma pantalla: "Se borran los datos locales… ¿Desvincular?",
+  remarcado en rojo si hay algo pendiente que no se exportó en esta sesión (`describeUnlink`), con
+  "Volver (Esc)" y "Desvincular (Enter)". Un error se muestra ahí (`describeError`). Con éxito
+  **recarga**: el arranque encuentra la terminal sin configurar y abre `/CONFIG` requerido, con todo
+  lo que está en memoria (venta en curso, cliente, movimientos, guía) leído de la base vacía. Sin
+  recarga (`resetSessionAfterWipe` + `openRequiredWizard`, como "Abrir una demo") habría que reponer
+  a mano lo demás que arma `bootstrap` (la invitación a la guía, por ejemplo); recargar es lo mismo
+  que un arranque limpio.
+- **Lógica compartida** con la vista de celular: `ui/keyboard/device-revoked-controller.ts`
+  (dependencias inyectadas), `device-revoked-model.ts` (puro) y `ui/state/device-revoked-screen.ts`
+  (`idle`, `exporting`, `confirming`, `unlinking`). `/DIAGNOSTICO` dice "Caja vinculada en otro
+  dispositivo desde …".
+
 ## `/CONFIG` como wizard
 
 **`/CONFIG` como wizard (Etapa 2 de #94)** — reemplaza para esta pantalla el criterio de #49 ("no un
@@ -608,7 +642,8 @@ mismo, con "Confirmar cobranza (Ctrl+Enter)". **`/CONFIG`** (pasos, opciones y b
 seleccionar + Enter, `void-controller.ts::activateVoidRow`; botones del modal), **comprobante**, **`/DIAGNOSTICO`**,
 **`/DEMO_RESET`**, **`/RESUMEN`** (también los botones de día y Reimprimir), **`/IMPRESORA`**
 (`select`s, campos y botones), **la caja** (campos,
-sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la pantalla y la franja
+sugerencias y botones, Etapa 5), **"Abrir una demo"** (#176, botones), **la caja vinculada en otro dispositivo** (4.7.0, #230,
+botones), **la pantalla y la franja
 de entrenamiento** (#177, botones), **la guía de entrenamiento** (#226: el panel, con F2 para su
 botón principal, y la invitación del carrito vacío) y la **barra de estado** (click =
 `/DIAGNOSTICO`; el aviso de arqueo abre `/ARQUEO`; "Avisos (N)" abre `/DIAGNOSTICO`) y el

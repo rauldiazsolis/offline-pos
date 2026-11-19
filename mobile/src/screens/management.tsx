@@ -18,7 +18,12 @@ import {
   voidOfLabel,
   voidOfReceiptLabel,
 } from '../../../src/ui/format-ticket.ts';
-import { formatQuantity, formatTime, resolveLocale } from '../../../src/ui/format.ts';
+import {
+  formatDateTime,
+  formatQuantity,
+  formatTime,
+  resolveLocale,
+} from '../../../src/ui/format.ts';
 import {
   cancelCash,
   loadCashScreen,
@@ -776,6 +781,14 @@ export function DiagnosticsScreen() {
           <span>Modo sin conexión</span>
           <span>{describeOffline(d.offline)}</span>
         </div>
+        {d.deviceRevoked !== undefined && (
+          <div class="kv">
+            <span>Caja</span>
+            <span class="neg">
+              vinculada en otro dispositivo desde {formatDateTime(d.deviceRevoked.at)}
+            </span>
+          </div>
+        )}
         {d.trainingSince !== null && (
           <div class="kv">
             <span>Entrenamiento</span>

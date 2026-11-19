@@ -53,6 +53,22 @@ export function formatTime(isoDate: string): string {
 }
 
 /**
+ * Fecha y hora locales de un instante ("19/11/2026 10:05" en `es-AR`), con el locale de la
+ * terminal: a diferencia de `formatDate`, en la zona de la terminal, porque dice cuándo pasó algo
+ * acá (4.7.0, #230: desde cuándo la caja está vinculada en otro dispositivo).
+ */
+export function formatDateTime(isoDate: string): string {
+  return new Intl.DateTimeFormat(resolveLocale(), {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(new Date(isoDate));
+}
+
+/**
  * Cantidad vendida, hasta 3 decimales sin ceros de más a la derecha — necesario para
  * productos vendidos por peso, donde puede haber arrastre de punto flotante (ej.
  * `5.9510000000000005`). Con el separador decimal del locale de la terminal (#99: el cajero

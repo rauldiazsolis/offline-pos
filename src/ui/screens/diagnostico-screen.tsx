@@ -5,6 +5,7 @@ import { connectorLabel } from '../../sync/connector-registry.ts';
 import type { NoticeSeverity } from '../../sync/connector.ts';
 import { collectDiagnostics, describeOffline } from '../../sync/diagnostics.ts';
 import { describeError } from '../errors.ts';
+import { formatDateTime } from '../format.ts';
 import {
   formatAwaitingLotStatus,
   formatCleanup,
@@ -168,6 +169,11 @@ export function DiagnosticoScreen() {
                   {`Demo de ${configResult.value.demo.template}`}
                   {diagnostics.demoRevokedAt !== null &&
                     ` · revocada desde ${new Date(diagnostics.demoRevokedAt).toLocaleString()}`}
+                </p>
+              )}
+              {diagnostics.deviceRevoked !== undefined && (
+                <p style={{ margin: 0, fontWeight: 'bold', color: 'var(--color-danger)' }}>
+                  {`Caja vinculada en otro dispositivo desde ${formatDateTime(diagnostics.deviceRevoked.at)}`}
                 </p>
               )}
               {diagnostics.trainingSince !== null && (

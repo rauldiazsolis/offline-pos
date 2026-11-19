@@ -1,12 +1,19 @@
 import { render, screen } from '@testing-library/preact';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setTrainingModeForTests } from '../storage/training-mode.ts';
+import type { PendingExportFile } from '../sync/pending-export.ts';
 import { App } from './app.tsx';
 import { setCatalogRepository } from './state/catalog.ts';
 import { cartSignal } from './state/cart.ts';
 import { setCustomerRepository } from './state/customer-repository.ts';
 import { activeScreenSignal } from './state/screen.ts';
-import { connectionStateSignal } from './state/sync.ts';
+import { connectionStateSignal, deviceRevokedSignal } from './state/sync.ts';
 import { viewportWidthSignal } from './state/viewport.ts';
+
+// La pantalla de la caja vinculada en otro dispositivo cuenta lo pendiente al montarse.
+vi.mock(import('../sync/pending-export.ts'), () => ({
+  buildPendingExportFile: vi.fn(() => new Promise<PendingExportFile>(() => {})),
+}));
 
 beforeEach(() => {
   // La conexión activa es lo normal: sin ella `App` solo muestra `/CONFIG` (Etapa 2b).
@@ -32,6 +39,8 @@ beforeEach(() => {
 
 afterEach(() => {
   viewportWidthSignal.value = 1024;
+  deviceRevokedSignal.value = undefined;
+  setTrainingModeForTests(null);
 });
 
 describe('App (Ciclo 8: ancho mínimo soportado)', () => {
@@ -72,5 +81,32 @@ describe('App (Etapa 2b: bloqueo de arranque)', () => {
 
     expect(screen.getByLabelText('Barra de comandos')).not.toBeNull();
     expect(screen.queryByRole('heading', { name: 'Configurar conexión' })).toBeNull();
+  });
+});
+
+describe('App (4.7.0, #230: caja vinculada en otro dispositivo)', () => {
+  const REVOKED_HEADING = 'Esta caja fue vinculada en otro dispositivo';
+
+  it('con la marca, solo la pantalla bloqueante: ni venta ni barra de comandos', () => {
+    deviceRevokedSignal.value = { at: '2026-11-19T10:00:00.000Z' };
+    activeScreenSignal.value = 'cash-summary';
+    render(<App />);
+    expect(screen.getByRole('heading', { name: REVOKED_HEADING })).not.toBeNull();
+    expect(screen.queryByLabelText('Barra de comandos')).toBeNull();
+  });
+
+  it('sin conexión activa gana /CONFIG requerido', () => {
+    deviceRevokedSignal.value = { at: '2026-11-19T10:00:00.000Z' };
+    connectionStateSignal.value = 'unconfigured';
+    render(<App />);
+    expect(screen.queryByRole('heading', { name: REVOKED_HEADING })).toBeNull();
+  });
+
+  it('en entrenamiento no bloquea: se sigue practicando', () => {
+    deviceRevokedSignal.value = { at: '2026-11-19T10:00:00.000Z' };
+    setTrainingModeForTests({ startedAt: '2026-11-19T09:00:00.000Z' });
+    render(<App />);
+    expect(screen.queryByRole('heading', { name: REVOKED_HEADING })).toBeNull();
+    expect(screen.getByLabelText('Barra de comandos')).not.toBeNull();
   });
 });

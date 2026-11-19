@@ -8,6 +8,7 @@ import {
   backendNoticesSignal,
   backendStatusSignal,
   demoRevokedSignal,
+  deviceRevokedSignal,
   lastPullApplicationSignal,
   lastSyncFailureSignal,
   lastSyncedAtSignal,
@@ -273,5 +274,18 @@ describe('StatusBar — estado del backend (#99)', () => {
     render(<StatusBar />);
 
     expect(screen.getByText('Sin conexión (0)')).not.toBeNull();
+  });
+});
+
+describe('StatusBar — caja vinculada en otro dispositivo (4.7.0, #230)', () => {
+  afterEach(() => {
+    deviceRevokedSignal.value = undefined;
+  });
+
+  it('lo dice (solo se llega a ver en entrenamiento: fuera, la pantalla bloqueante la tapa)', () => {
+    syncStatusSignal.value = 'online-idle';
+    deviceRevokedSignal.value = { at: '2026-11-19T10:00:00.000Z' };
+    render(<StatusBar />);
+    expect(screen.getByText('Caja vinculada en otro dispositivo')).not.toBeNull();
   });
 });

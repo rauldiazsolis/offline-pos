@@ -38,7 +38,7 @@ una sola copia de Preact y de `@preact/signals` (dos copias rompen la reactivida
 | Carpeta           | Qué hay                                                                                                                                                                                                                                                                |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/main.tsx`    | El mismo arranque que escritorio: una sola pestaña (#175), consola `pos.*`, service worker, `bootstrap()` y el render                                                                                                                                                  |
-| `src/app.tsx`     | Qué se ve: "Abrir una demo", la conexión (modo requerido), entrenamiento, y si no, el shell con pestañas Vender, Resumen, Caja y Más. Cobro, cobranza y comprobante son hojas encima de la venta, según `activeScreenSignal`                                           |
+| `src/app.tsx`     | Qué se ve: "Abrir una demo", la conexión (modo requerido), la caja vinculada en otro dispositivo, entrenamiento, y si no, el shell con pestañas Vender, Resumen, Caja y Más. Cobro, cobranza y comprobante son hojas encima de la venta, según `activeScreenSignal`    |
 | `src/keyboards/`  | Los teclados propios (modelos puros) y la API de entradas                                                                                                                                                                                                              |
 | `src/screens/`    | Una vista por pantalla de escritorio, sobre su controller: `config-screen` (el wizard), `sale-screen`, `checkout-sheets` (cobro, cobranza, comprobante), `management` (resumen, caja, anular, diagnóstico, impresora, reiniciar la demo, entrenamiento), `more-screen` |
 | `src/components/` | Hoja inferior, encabezado (comercio, caja, estado de sync, DEMO, portal), ticket y su barra, avisos flotantes                                                                                                                                                          |
@@ -63,6 +63,11 @@ Decisiones:
 - **Cantidad previa**: el chip "× 1" es el `<n>*` de escritorio (con signo, devuelve).
 - **"Sin conexión (N)"** se recuenta al cambiar de pantalla (`state/pending-count.ts`): el motor
   solo cuenta en cada ciclo y sin red no corre ninguno. En escritorio pasa lo mismo.
+- **Caja vinculada en otro dispositivo** (4.7.0, #230; la regla, en "Caja vinculada en otro
+  dispositivo" de `src/ui/AGENTS.md`): `screens/device-revoked-screen.tsx`, a pantalla entera y sin
+  pestañas, con el mismo controller que escritorio; los atajos de teclado no van, la confirmación de
+  "Desvincular" sí. `app.tsx` la pone con la misma precedencia (fuera del entrenamiento) y
+  `e2e/device-revoked.spec.ts` la mira sembrando la marca.
 - **Compartir el comprobante** (Web Share) como texto de 32 columnas (`receipt-text.ts`).
 - **Estilos**: todo `styles.css` va bajo `html.pos-mobile`, y lo que coincidía con escritorio lleva
   `m-` (`m-btn`, `m-btn-primary`, `m-btn-danger`, `m-btn-block`, `m-paper`, `m-spinner` y las
